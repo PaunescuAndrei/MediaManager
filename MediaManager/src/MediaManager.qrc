@@ -1,0 +1,18 @@
+<RCC>
+    <qresource prefix="/shoko">
+        <file>resources/shoko_icon.png</file>
+        <file>resources/shoko_icon_hover.png</file>
+        <file>resources/shoko_icon_pressed.png</file>
+    </qresource>
+    <qresource prefix="/fonts">
+        <file>resources/euphorigenic.ttf</file>
+    </qresource>
+    <qresource prefix="/main">
+        <file>resources/icon.ico</file>
+        <file>resources/star_inactive.png</file>
+        <file>resources/star_active.png</file>
+        <file>resources/star_border_full.png</file>
+        <file>resources/star_border_half.png</file>
+        <file>resources/star_half.png</file>
+    </qresource>
+</RCC>

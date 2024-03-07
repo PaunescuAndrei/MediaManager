@@ -1,0 +1,515 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>qml;cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>qrc;rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Form Files">
+      <UniqueIdentifier>{99349809-55BA-4b9d-BF79-8FDBB0286EB3}</UniqueIdentifier>
+      <Extensions>ui</Extensions>
+    </Filter>
+    <Filter Include="Translation Files">
+      <UniqueIdentifier>{639EADAA-A684-42e4-A9AD-28FC9BCB8F7C}</UniqueIdentifier>
+      <Extensions>ts</Extensions>
+    </Filter>
+    <Filter Include="Source Files\general">
+      <UniqueIdentifier>{af5c0874-cb71-4cb0-af42-5150143d5ae4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\general">
+      <UniqueIdentifier>{df8f9887-0624-410b-aedc-96d8273e95d7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\QtClasses">
+      <UniqueIdentifier>{88a4170c-2319-4224-80ca-9ce1293c6f43}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\QtClasses">
+      <UniqueIdentifier>{adca3af1-8223-4f73-842f-225dd2e01bc1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\thirdparty">
+      <UniqueIdentifier>{d1c9df55-17c3-478c-a502-701f04357c88}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\QtClasses\UI">
+      <UniqueIdentifier>{9df5cfe4-c47c-437a-b80d-43b84ef0fc42}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\QtClasses\Widgets">
+      <UniqueIdentifier>{0851eea7-9657-4e6a-b18c-602b0cb4ba2f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\QtClasses\UI">
+      <UniqueIdentifier>{460af95f-fef3-444d-97ef-c596f50fc275}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\QtClasses\Widgets">
+      <UniqueIdentifier>{09a617a0-75f6-4011-b465-838ee7a482b6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\thirdparty\sqlite3">
+      <UniqueIdentifier>{9dccfffb-dce7-4f59-9b2c-01ebf3870533}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\thirdparty">
+      <UniqueIdentifier>{2c5e1e1d-8af7-4182-96e8-e4cf30f593df}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\thirdparty\sqlite3">
+      <UniqueIdentifier>{eee2a4eb-9586-4bc2-ac6d-03e297d8bf69}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\MainApp.cpp">
+      <Filter>Source Files\QtClasses</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\MainWindow.cpp">
+      <Filter>Source Files\QtClasses</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\stylesQt.cpp">
+      <Filter>Source Files\QtClasses</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\addWatchedDialog.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\DeleteDialog.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\finishDialog.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\InsertDialog.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\ResetDBDialog.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\setCounterDialog.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\SettingsDialog.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\StatsDialog.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\AutoToolTipDelegate.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\ProgressBarQLabel.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\customGraphicsView.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\videosTreeWidget.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\QCustomButton.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\shokoButton.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\QCustomLabel.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\TreeWidgetItem.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\watchedFrame.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\config.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\EventLock.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\utils.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\generateThumbnailThread.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\IconChanger.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\Listener.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\mascotsAnimationsThread.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\mascotsGeneratorThread.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\MusicPlayer.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\shokoDB.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\SoundPlayer.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\sqliteDB.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\taskbar.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\VideoWatcherQt.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\stdafx.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\BlockingQueue.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\thirdparty\sqlite3\sqlite3.c">
+      <Filter>Source Files\thirdparty\sqlite3</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\InsertSettingsDialog.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\generalEventFilter.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\RawInputKeyboard.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\starDelegate.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\starEditorWidget.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\starRating.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\quitEaterEventFilter.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\scrollAreaEventFilter.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\currentVideoQLabel.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\logger.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\LogDialog.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\NotificationDialog.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\FilterDialog.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\FilterSettings.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\flowlayout.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\shokoAPI.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\noRightClickEventFilter.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\importPlaylistDialog.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\colorPaletteExtractor.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\generateThumbnailManager.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\definitions.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\loadBackupDialog.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\QtClasses\stylesQt.h">
+      <Filter>Header Files\QtClasses</Filter>
+    </ClInclude>
+    <ClInclude Include="src\QtClasses\Widgets\TreeWidgetItem.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\BlockingQueue.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\config.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\EventLock.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\utils.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\Listener.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\MusicPlayer.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\shokoDB.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\SoundPlayer.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\sqliteDB.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\taskbar.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\stdafx.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\thirdparty\ini.h">
+      <Filter>Header Files\thirdparty</Filter>
+    </ClInclude>
+    <ClInclude Include="src\version.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\thirdparty\sqlite3\sqlite3.h">
+      <Filter>Header Files\thirdparty\sqlite3</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\RawInputKeyboard.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\QtClasses\UI\starRating.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="src\QtClasses\MainApp.h">
+      <Filter>Header Files\QtClasses</Filter>
+    </ClInclude>
+    <ClInclude Include="src\QtClasses\UI\flowlayout.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\FilterSettings.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\shokoAPI.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\SafeQueue.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\QtClasses\UI\DateItemDelegate.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\asmOpenCV.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\colorPaletteExtractor.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\generateThumbnailManager.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\definitions.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\thirdparty\MpcApi.h">
+      <Filter>Header Files\thirdparty</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <QtRcc Include="src\MediaManager.qrc">
+      <Filter>Resource Files</Filter>
+    </QtRcc>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="src\resources\icon.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <QtUic Include="src\QtClasses\UI\Form Files\addWatchedDialog.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
+    <QtUic Include="src\QtClasses\UI\Form Files\DeleteDialog.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
+    <QtUic Include="src\QtClasses\UI\Form Files\finishDialog.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
+    <QtUic Include="src\QtClasses\UI\Form Files\InsertDialog.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
+    <QtUic Include="src\QtClasses\UI\Form Files\MainWindow.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
+    <QtUic Include="src\QtClasses\UI\Form Files\ResetDBDialog.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
+    <QtUic Include="src\QtClasses\UI\Form Files\setCounterDialog.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
+    <QtUic Include="src\QtClasses\UI\Form Files\SettingsDialog.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
+    <QtUic Include="src\QtClasses\UI\Form Files\StatsDialog.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
+    <QtUic Include="src\QtClasses\UI\Form Files\InsertSettingsDialog.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
+    <QtUic Include="src\QtClasses\UI\Form Files\LogDialog.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
+    <QtUic Include="src\QtClasses\UI\Form Files\NotificationDialog.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
+    <QtUic Include="src\QtClasses\UI\Form Files\FilterDialog.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
+    <QtUic Include="src\QtClasses\UI\Form Files\importPlaylistDialog.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
+    <QtUic Include="src\QtClasses\UI\Form Files\loadBackupDialog.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
+  </ItemGroup>
+  <ItemGroup>
+    <QtMoc Include="src\QtClasses\MainWindow.h">
+      <Filter>Header Files\QtClasses</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\StatsDialog.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\SettingsDialog.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\setCounterDialog.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\ResetDBDialog.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\InsertDialog.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\finishDialog.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\DeleteDialog.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\addWatchedDialog.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\AutoToolTipDelegate.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\ProgressBarQLabel.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\customGraphicsView.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\videosTreeWidget.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\QCustomButton.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\shokoButton.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\QCustomLabel.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\watchedFrame.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="src\general\generateThumbnailThread.h">
+      <Filter>Header Files\general</Filter>
+    </QtMoc>
+    <QtMoc Include="src\general\IconChanger.h">
+      <Filter>Header Files\general</Filter>
+    </QtMoc>
+    <QtMoc Include="src\general\mascotsAnimationsThread.h">
+      <Filter>Header Files\general</Filter>
+    </QtMoc>
+    <QtMoc Include="src\general\mascotsGeneratorThread.h">
+      <Filter>Header Files\general</Filter>
+    </QtMoc>
+    <QtMoc Include="src\general\VideoWatcherQt.h">
+      <Filter>Header Files\general</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\InsertSettingsDialog.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\generalEventFilter.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\starDelegate.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\starEditorWidget.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\quitEaterEventFilter.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\scrollAreaEventFilter.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\LogDialog.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\logger.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\NotificationDialog.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\FilterDialog.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\currentVideoQLabel.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\customScrollArea.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\noRightClickEventFilter.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\importPlaylistDialog.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\loadBackupDialog.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="src\MediaManager.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="src\MediaManager.rc2">
+      <Filter>Resource Files</Filter>
+    </None>
+  </ItemGroup>
+</Project>

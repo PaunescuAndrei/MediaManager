@@ -1,0 +1,6 @@
+x64
+.vs
+Qt deploy app.lnk
+MediaManager/x64
+MediaManager/MediaManager.aps
+MediaManager/MediaManager.vcxproj.user

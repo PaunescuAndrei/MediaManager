@@ -1,0 +1,126 @@
+#include "stdafx.h"
+#include "config.h"
+#include <QtGlobal>
+#include "utils.h"
+#include <QFileInfo>
+
+Config::Config(QString filepath) {
+	this->file = new mINI::INIFile();
+	this->open_config(filepath);
+	this->init_defaults();
+	//if (!std::filesystem::exists(filepath))
+	if (!QFileInfo::exists(filepath))
+		this->save_config();
+	//this->ini["tmp"]["tmp"] = "test";
+
+	//for (auto const& it : this->ini)
+	//{
+	//	auto const& section = it.first;
+	//	auto const& collection = it.second;
+	//	print_debug(section + "\n");
+	//	for (auto const& it2 : collection)
+	//	{
+	//		auto const& key = it2.first;
+	//		auto const& value = it2.second;
+	//		print_debug(key + " " + value + "\n");
+	//	}
+	//}
+}
+
+void Config::init_defaults() {
+	this->ini["DEFAULT"].set({
+		{"single_instance", "False"},
+		{"player_path", ""},
+		{"shoko_path", ""},
+		{"shoko_user",""},
+		{"shoko_password",""},
+		{"shoko_import_playlist",""},
+		{"shoko_import_random_item","True"},
+		{"default_directory", ""},
+		{"plus_category_name", "PLUS"},
+		{"minus_category_name", "MINUS"},
+		{"current_db", "MINUS"},
+		{"video_types",	""},
+		{"sv_type",""},
+		{"animated_icon_flag", "False"},
+		{"animated_icon_fps_modifier", "1.0"},
+		{"random_icon", "False"},
+		{"random_next", "True"},
+		{"get_random_mode", "Normal"},
+		{"headers_minus_visible", "author name path type watched_yes watched_no views rating"},
+		{"headers_plus_visible", "author name path type watched_yes watched_no views rating"},
+		{"sort_column", "PATH_COLUMN"},
+		{"sort_order", "Ascending"},
+		{"music_on", "False"},
+		{"music_volume", "5"},
+		{"music_random_start", "False"},
+		{"music_loop_first", "False"},
+		{"music_init_track_path", ""},
+		{"music_playlist_path", ""},
+		{"mascots", "False"},
+		{"mascots_allfiles_random","False"},
+		{"mascots_mirror", "False"},
+		{"mascots_animated", "False"},
+		{"mascots_random_change", "True"},
+		{"mascots_random_chance", "10"},
+		{"mascots_frequency", "400"},
+		{"mascots_color_theme","False"},
+		{"sound_effects_on","False"},
+		{"sound_effects_volume","3"},
+		{"sound_effects_exit","True"},
+		{"sound_effects_start","True"},
+		{"sound_effects_clicks","True"},
+		{"sound_effects_playpause","True"},
+		{"sound_effects_chance_playpause","50"},
+		{"sound_effects_chain_playpause","True"},
+		{"sound_effects_chain_chance","100"},
+		{"time_watched_limit","600"},
+		{"numlock_only_on","True"}
+	});
+}
+
+void Config::open_config(QString filepath) {
+	this->file->open(filepath.toStdString());
+	this->ini.clear();
+	this->file->read(this->ini);
+}
+
+void Config::save_config() {
+	this->file->write(this->ini);
+}
+
+QString Config::get(QString item) {
+	if (this->ini.has("Settings"))
+	{
+		// we have section, we can access it safely without creating a new one
+		auto& collection = this->ini["Settings"];
+		if (collection.has(item.toStdString()))
+		{
+			// we have key, we can access it safely without creating a new one
+			return QString::fromStdString(collection[item.toStdString()]);
+		}
+	}
+	return QString::fromStdString(this->ini["DEFAULT"][item.toStdString()]);
+}
+
+void Config::set(QString key, QString value) {
+	this->ini["Settings"][key.toStdString()] = value.toStdString();
+}
+
+bool Config::get_bool(QString item) {
+	if (this->ini.has("Settings"))
+	{
+		// we have section, we can access it safely without creating a new one
+		auto& collection = this->ini["Settings"];
+		if (collection.has(item.toStdString()))
+		{
+			// we have key, we can access it safely without creating a new one
+			return utils::text_to_bool(collection[item.toStdString()]);
+		}
+	}
+	return utils::text_to_bool(this->ini["DEFAULT"][item.toStdString()]);
+}
+
+Config::~Config() {
+	delete this->file;
+}

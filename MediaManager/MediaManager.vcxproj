@@ -1,0 +1,350 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="ReleaseDebug|x64">
+      <Configuration>ReleaseDebug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\general\BlockingQueue.cpp" />
+    <ClCompile Include="src\general\colorPaletteExtractor.cpp" />
+    <ClCompile Include="src\general\config.cpp" />
+    <ClCompile Include="src\general\definitions.cpp" />
+    <ClCompile Include="src\general\EventLock.cpp" />
+    <ClCompile Include="src\general\FilterSettings.cpp" />
+    <ClCompile Include="src\general\generateThumbnailManager.cpp" />
+    <ClCompile Include="src\general\utils.cpp" />
+    <ClCompile Include="src\general\generateThumbnailThread.cpp" />
+    <ClCompile Include="src\general\IconChanger.cpp" />
+    <ClCompile Include="src\general\Listener.cpp" />
+    <ClCompile Include="src\general\mascotsAnimationsThread.cpp" />
+    <ClCompile Include="src\general\mascotsGeneratorThread.cpp" />
+    <ClCompile Include="src\general\MusicPlayer.cpp" />
+    <ClCompile Include="src\general\RawInputKeyboard.cpp" />
+    <ClCompile Include="src\general\shokoDB.cpp" />
+    <ClCompile Include="src\general\shokoAPI.cpp" />
+    <ClCompile Include="src\general\SoundPlayer.cpp" />
+    <ClCompile Include="src\general\sqliteDB.cpp" />
+    <ClCompile Include="src\general\taskbar.cpp" />
+    <ClCompile Include="src\general\VideoWatcherQt.cpp" />
+    <ClCompile Include="src\logger.cpp" />
+    <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\QtClasses\MainApp.cpp" />
+    <ClCompile Include="src\QtClasses\MainWindow.cpp" />
+    <ClCompile Include="src\QtClasses\stylesQt.cpp" />
+    <ClCompile Include="src\QtClasses\UI\addWatchedDialog.cpp" />
+    <ClCompile Include="src\QtClasses\UI\DeleteDialog.cpp" />
+    <ClCompile Include="src\QtClasses\UI\FilterDialog.cpp" />
+    <ClCompile Include="src\QtClasses\UI\finishDialog.cpp" />
+    <ClCompile Include="src\QtClasses\UI\flowlayout.cpp" />
+    <ClCompile Include="src\QtClasses\UI\importPlaylistDialog.cpp" />
+    <ClCompile Include="src\QtClasses\UI\InsertDialog.cpp" />
+    <ClCompile Include="src\QtClasses\UI\InsertSettingsDialog.cpp" />
+    <ClCompile Include="src\QtClasses\UI\loadBackupDialog.cpp" />
+    <ClCompile Include="src\QtClasses\UI\LogDialog.cpp" />
+    <ClCompile Include="src\QtClasses\UI\NotificationDialog.cpp" />
+    <ClCompile Include="src\QtClasses\UI\ResetDBDialog.cpp" />
+    <ClCompile Include="src\QtClasses\UI\setCounterDialog.cpp" />
+    <ClCompile Include="src\QtClasses\UI\SettingsDialog.cpp" />
+    <ClCompile Include="src\QtClasses\UI\starDelegate.cpp" />
+    <ClCompile Include="src\QtClasses\UI\starEditorWidget.cpp" />
+    <ClCompile Include="src\QtClasses\UI\starRating.cpp" />
+    <ClCompile Include="src\QtClasses\UI\StatsDialog.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\AutoToolTipDelegate.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\noRightClickEventFilter.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\ProgressBarQLabel.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\currentVideoQLabel.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\customGraphicsView.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\generalEventFilter.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\videosTreeWidget.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\QCustomButton.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\quitEaterEventFilter.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\scrollAreaEventFilter.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\shokoButton.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\QCustomLabel.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\TreeWidgetItem.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\watchedFrame.cpp" />
+    <ClCompile Include="src\stdafx.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="src\thirdparty\sqlite3\sqlite3.c">
+      <MultiProcessorCompilation Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</MultiProcessorCompilation>
+      <MultiProcessorCompilation Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</MultiProcessorCompilation>
+      <MultiProcessorCompilation Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">true</MultiProcessorCompilation>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\general\asmOpenCV.h" />
+    <ClInclude Include="src\general\BlockingQueue.h" />
+    <ClInclude Include="src\general\colorPaletteExtractor.h" />
+    <ClInclude Include="src\general\config.h" />
+    <ClInclude Include="src\general\definitions.h" />
+    <ClInclude Include="src\general\EventLock.h" />
+    <ClInclude Include="src\general\FilterSettings.h" />
+    <ClInclude Include="src\general\generateThumbnailManager.h" />
+    <ClInclude Include="src\general\utils.h" />
+    <ClInclude Include="src\general\Listener.h" />
+    <ClInclude Include="src\general\MusicPlayer.h" />
+    <ClInclude Include="src\general\RawInputKeyboard.h" />
+    <ClInclude Include="src\general\shokoDB.h" />
+    <ClInclude Include="src\general\shokoAPI.h" />
+    <ClInclude Include="src\general\SoundPlayer.h" />
+    <ClInclude Include="src\general\sqliteDB.h" />
+    <ClInclude Include="src\general\taskbar.h" />
+    <QtMoc Include="src\QtClasses\UI\InsertSettingsDialog.h" />
+    <QtMoc Include="src\QtClasses\Widgets\generalEventFilter.h" />
+    <QtMoc Include="src\QtClasses\UI\starDelegate.h" />
+    <QtMoc Include="src\QtClasses\UI\starEditorWidget.h" />
+    <QtMoc Include="src\logger.h" />
+    <QtMoc Include="src\QtClasses\UI\LogDialog.h" />
+    <QtMoc Include="src\QtClasses\UI\NotificationDialog.h" />
+    <QtMoc Include="src\QtClasses\UI\FilterDialog.h" />
+    <ClInclude Include="src\general\SafeQueue.h" />
+    <ClInclude Include="src\QtClasses\UI\DateItemDelegate.h" />
+    <ClInclude Include="src\QtClasses\UI\flowlayout.h" />
+    <QtMoc Include="src\QtClasses\UI\importPlaylistDialog.h" />
+    <QtMoc Include="src\QtClasses\UI\loadBackupDialog.h" />
+    <ClInclude Include="src\QtClasses\UI\starRating.h" />
+    <QtMoc Include="src\QtClasses\Widgets\quitEaterEventFilter.h" />
+    <QtMoc Include="src\QtClasses\Widgets\scrollAreaEventFilter.h" />
+    <QtMoc Include="src\QtClasses\Widgets\currentVideoQLabel.h" />
+    <QtMoc Include="src\QtClasses\Widgets\customScrollArea.h" />
+    <QtMoc Include="src\QtClasses\Widgets\noRightClickEventFilter.h" />
+    <ClInclude Include="src\thirdparty\MpcApi.h" />
+    <ClInclude Include="src\thirdparty\sqlite3\sqlite3.h" />
+    <ClInclude Include="src\version.h" />
+    <QtMoc Include="src\general\VideoWatcherQt.h" />
+    <QtMoc Include="src\general\mascotsGeneratorThread.h" />
+    <QtMoc Include="src\general\mascotsAnimationsThread.h" />
+    <QtMoc Include="src\general\IconChanger.h" />
+    <QtMoc Include="src\general\generateThumbnailThread.h" />
+    <ClInclude Include="src\stdafx.h" />
+    <ClInclude Include="src\QtClasses\stylesQt.h" />
+    <ClInclude Include="src\QtClasses\Widgets\TreeWidgetItem.h" />
+    <QtMoc Include="src\QtClasses\Widgets\watchedFrame.h" />
+    <QtMoc Include="src\QtClasses\Widgets\QCustomLabel.h" />
+    <QtMoc Include="src\QtClasses\Widgets\shokoButton.h" />
+    <QtMoc Include="src\QtClasses\Widgets\QCustomButton.h" />
+    <QtMoc Include="src\QtClasses\Widgets\videosTreeWidget.h" />
+    <QtMoc Include="src\QtClasses\Widgets\customGraphicsView.h" />
+    <QtMoc Include="src\QtClasses\Widgets\ProgressBarQLabel.h" />
+    <QtMoc Include="src\QtClasses\Widgets\AutoToolTipDelegate.h" />
+    <QtMoc Include="src\QtClasses\UI\StatsDialog.h" />
+    <QtMoc Include="src\QtClasses\UI\SettingsDialog.h" />
+    <QtMoc Include="src\QtClasses\UI\setCounterDialog.h" />
+    <QtMoc Include="src\QtClasses\UI\ResetDBDialog.h" />
+    <QtMoc Include="src\QtClasses\UI\InsertDialog.h" />
+    <QtMoc Include="src\QtClasses\UI\finishDialog.h" />
+    <QtMoc Include="src\QtClasses\UI\DeleteDialog.h" />
+    <QtMoc Include="src\QtClasses\UI\addWatchedDialog.h" />
+    <QtMoc Include="src\QtClasses\MainWindow.h" />
+    <ClInclude Include="src\QtClasses\MainApp.h" />
+    <ClInclude Include="src\resource.h" />
+    <ClInclude Include="src\thirdparty\ini.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <QtRcc Include="src\MediaManager.qrc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="src\resources\icon.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <QtUic Include="src\QtClasses\UI\Form Files\addWatchedDialog.ui" />
+    <QtUic Include="src\QtClasses\UI\Form Files\DeleteDialog.ui" />
+    <QtUic Include="src\QtClasses\UI\Form Files\FilterDialog.ui" />
+    <QtUic Include="src\QtClasses\UI\Form Files\finishDialog.ui" />
+    <QtUic Include="src\QtClasses\UI\Form Files\importPlaylistDialog.ui" />
+    <QtUic Include="src\QtClasses\UI\Form Files\InsertDialog.ui" />
+    <QtUic Include="src\QtClasses\UI\Form Files\InsertSettingsDialog.ui" />
+    <QtUic Include="src\QtClasses\UI\Form Files\loadBackupDialog.ui" />
+    <QtUic Include="src\QtClasses\UI\Form Files\LogDialog.ui" />
+    <QtUic Include="src\QtClasses\UI\Form Files\MainWindow.ui" />
+    <QtUic Include="src\QtClasses\UI\Form Files\NotificationDialog.ui" />
+    <QtUic Include="src\QtClasses\UI\Form Files\ResetDBDialog.ui" />
+    <QtUic Include="src\QtClasses\UI\Form Files\setCounterDialog.ui" />
+    <QtUic Include="src\QtClasses\UI\Form Files\SettingsDialog.ui" />
+    <QtUic Include="src\QtClasses\UI\Form Files\StatsDialog.ui" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="src\MediaManager.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="src\MediaManager.rc2" />
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{3591A465-F329-4C7F-9BC1-9D68547A577A}</ProjectGuid>
+    <Keyword>QtVS_v304</Keyword>
+    <WindowsTargetPlatformVersion Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">10.0.22000.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">10.0.22000.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">10.0.22000.0</WindowsTargetPlatformVersion>
+    <QtMsBuild Condition="'$(QtMsBuild)'=='' OR !Exists('$(QtMsBuild)\qt.targets')">$(MSBuildProjectDirectory)\QtMsBuild</QtMsBuild>
+    <ProjectName>MediaManager</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Condition="Exists('$(QtMsBuild)\qt_defaults.props')">
+    <Import Project="$(QtMsBuild)\qt_defaults.props" />
+  </ImportGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="QtSettings">
+    <QtModules>core;gui;widgets;concurrent;multimedia;sql;</QtModules>
+    <QtBuildConfig>debug</QtBuildConfig>
+    <QtDeploy>true</QtDeploy>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="QtSettings">
+    <QtModules>core;gui;widgets;concurrent;multimedia;sql;</QtModules>
+    <QtBuildConfig>release</QtBuildConfig>
+    <QtDeploy>true</QtDeploy>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'" Label="QtSettings">
+    <QtModules>core;gui;widgets;concurrent;multimedia;sql;</QtModules>
+    <QtBuildConfig>release</QtBuildConfig>
+    <QtDeploy>true</QtDeploy>
+  </PropertyGroup>
+  <Target Name="QtMsBuildNotFound" BeforeTargets="CustomBuild;ClCompile" Condition="!Exists('$(QtMsBuild)\qt.targets') or !Exists('$(QtMsBuild)\qt.props')">
+    <Message Importance="High" Text="QtMsBuild: could not locate qt.targets, qt.props; project may not build correctly." />
+  </Target>
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="Shared" />
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(QtMsBuild)\Qt.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(QtMsBuild)\Qt.props" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(QtMsBuild)\Qt.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
+    <IncludePath>$(ProjectDir)src\;$(ProjectDir)src\QtClasses\;$(ProjectDir)src\QtClasses\UI\;$(ProjectDir)src\QtClasses\Widgets\;$(ProjectDir)src\QtClasses\Form Files\;$(ProjectDir)src\thirdparty\;$(ProjectDir)src\thirdparty\sqlite3\;$(ProjectDir)src\general;$(ProjectDir)src\thirdparty\rapidfuzz;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
+    <IncludePath>$(ProjectDir)src\;$(ProjectDir)src\QtClasses\;$(ProjectDir)src\QtClasses\UI\;$(ProjectDir)src\QtClasses\Widgets\;$(ProjectDir)src\QtClasses\Form Files\;$(ProjectDir)src\thirdparty\;$(ProjectDir)src\thirdparty\sqlite3\;$(ProjectDir)src\general;$(ProjectDir)src\thirdparty\rapidfuzz;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">
+    <IncludePath>$(ProjectDir)src\;$(ProjectDir)src\QtClasses\;$(ProjectDir)src\QtClasses\UI\;$(ProjectDir)src\QtClasses\Widgets\;$(ProjectDir)src\QtClasses\Form Files\;$(ProjectDir)src\thirdparty\;$(ProjectDir)src\thirdparty\sqlite3\;$(ProjectDir)src\general;$(ProjectDir)src\thirdparty\rapidfuzz;$(IncludePath)</IncludePath>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <UseStandardPreprocessor>true</UseStandardPreprocessor>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>%(AdditionalDependencies);$(Qt_LIBS_);winmm.lib</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">
+    <ClCompile>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <UseStandardPreprocessor>true</UseStandardPreprocessor>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>%(AdditionalDependencies);$(Qt_LIBS_);winmm.lib</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">
+    <ClCompile>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <UseStandardPreprocessor>true</UseStandardPreprocessor>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>%(AdditionalDependencies);$(Qt_LIBS_);winmm.lib</AdditionalDependencies>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="Configuration">
+    <ClCompile>
+      <TreatWChar_tAsBuiltInType>true</TreatWChar_tAsBuiltInType>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <Optimization>Disabled</Optimization>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="Configuration">
+    <ClCompile>
+      <TreatWChar_tAsBuiltInType>true</TreatWChar_tAsBuiltInType>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <DebugInformationFormat>None</DebugInformationFormat>
+      <Optimization>MaxSpeed</Optimization>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>false</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'" Label="Configuration">
+    <ClCompile>
+      <TreatWChar_tAsBuiltInType>true</TreatWChar_tAsBuiltInType>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <DebugInformationFormat>OldStyle</DebugInformationFormat>
+      <Optimization>MaxSpeed</Optimization>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+  </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">
+    <Import Project="$(QtMsBuild)\qt.targets" />
+  </ImportGroup>
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

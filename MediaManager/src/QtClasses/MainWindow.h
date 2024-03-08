@@ -83,11 +83,13 @@ public:
     void updateProgressBar(QString position, QString duration);
     void updateTotalListLabel(bool force_update = false);
     void changeListenerVideo(std::shared_ptr<Listener> listener, QString path, double position);
-    void setWatchedVisibility(std::string option);
+    void setWatchedVisibility(QString option);
     void refreshVisibility(bool headers = true, bool watched = true);
+    void filterWatchedVisibilityItem(QTreeWidgetItem* item, QString option, QStringList& mixed_done);
     void videosWidgetHeaderContextMenu(QPoint point);
     void videosWidgetContextMenu(QPoint point);
     void setCurrent(QString path, QString name, QString author);
+    QString getWatchedVisibilityOption(bool watched_yes, bool watched_no, bool watched_mixed);
     void DeleteDialogButton(QList<QTreeWidgetItem*> items);
     void setWatched(QString value, QList<QTreeWidgetItem*> items);
     void selectItems(QStringList items, bool clear_selection = true);

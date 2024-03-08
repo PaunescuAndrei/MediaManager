@@ -228,7 +228,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
 
     this->initListDetails();
     this->populateList();
-    this->refreshVisibility();
+    this->refreshVisibility(true,false);
     
     if (!this->initMusic() && this->App->config->get_bool("sound_effects_start") && this->App->soundPlayer && !this->App->soundPlayer->intro_effects.isEmpty()) {
         QString track = *utils::select_randomly(this->App->soundPlayer->intro_effects.begin(), this->App->soundPlayer->intro_effects.end());
@@ -2063,7 +2063,7 @@ void MainWindow::switchCurrentDB(QString db) {
         this->animatedIcon->initIcon();
     this->initListDetails();
     this->refreshVideosWidget();
-    this->refreshVisibility();
+    this->refreshVisibility(true,false);
     if (this->toggleDatesFlag)
         this->toggleDates(false);
     this->App->config->set("current_db", this->App->currentDB);
@@ -2212,6 +2212,19 @@ void MainWindow::populateList(bool selectcurrent) {
     auto itemlist = this->App->db->getVideos(this->App->currentDB);
     this->ui.videosWidget->setSortingEnabled(false);
     this->ui.videosWidget->addTopLevelItems(itemlist);
+
+    QStringList mixed_done = {};
+    QString settings_str = QString();
+    if (this->App->currentDB == "PLUS")
+        settings_str = this->App->config->get("headers_plus_visible");
+    else if (this->App->currentDB == "MINUS")
+        settings_str = this->App->config->get("headers_minus_visible");
+    QStringList settings_list = settings_str.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+    bool watched_yes = settings_list.contains("watched_yes");
+    bool watched_no = settings_list.contains("watched_no");
+    bool watched_mixed = settings_list.contains("watched_mixed");
+    QString option = this->getWatchedVisibilityOption(watched_yes, watched_no, watched_mixed);
+
     for (auto &item : itemlist)
     {
         item->setTextAlignment(ListColumns["WATCHED_COLUMN"], Qt::AlignHCenter);
@@ -2223,6 +2236,7 @@ void MainWindow::populateList(bool selectcurrent) {
             item->setForeground(ListColumns["WATCHED_COLUMN"], QBrush(QColor("#00e640")));
         else if (item->text(ListColumns["WATCHED_COLUMN"]) == "No")
             item->setForeground(ListColumns["WATCHED_COLUMN"], QBrush(QColor("#cf000f")));
+        this->filterWatchedVisibilityItem(item, option, mixed_done);
         //if (this->ui.searchBar->isVisible()) {
         //    this->search_filter_item(item, this->old_search);
         //}
@@ -2274,8 +2288,13 @@ void MainWindow::videosWidgetHeaderContextMenu(QPoint point) {
     watched_no->setCheckable(true);
     if (settings_list.contains("watched_no"))
         watched_no->setChecked(true);
+    QAction* watched_mixed = new QAction("Mixed", watched);
+    watched_mixed->setCheckable(true);
+    if (settings_list.contains("watched_mixed"))
+        watched_mixed->setChecked(true);
     watched->addAction(watched_yes);
     watched->addAction(watched_no);
+    watched->addAction(watched_mixed);
     menu.addMenu(watched);
     QAction* views = new QAction("Views", &menu);
     views->setCheckable(true);
@@ -2326,14 +2345,27 @@ void MainWindow::videosWidgetHeaderContextMenu(QPoint point) {
     else if (menu_click == watched_yes) {
         if (utils::hiddenCheck(settings_list) && !watched_yes->isChecked())
             settings_list.removeAll("watched_yes");
-        else
+        else {
+            settings_list.removeAll("watched_mixed");
             settings_list.append("watched_yes");
+        }
     }
     else if (menu_click == watched_no) {
         if (utils::hiddenCheck(settings_list) && !watched_no->isChecked())
             settings_list.removeAll("watched_no");
-        else
+        else {
+            settings_list.removeAll("watched_mixed");
             settings_list.append("watched_no");
+        }
+    }
+    else if (menu_click == watched_mixed) {
+        if (utils::hiddenCheck(settings_list) && !watched_mixed->isChecked())
+            settings_list.removeAll("watched_mixed");
+        else {
+            settings_list.removeAll("watched_yes");
+            settings_list.removeAll("watched_no");
+            settings_list.append("watched_mixed");
+        }
     }
     else if (menu_click == views) {
         if (utils::hiddenCheck(settings_list) && !views->isChecked())
@@ -2651,6 +2683,21 @@ void MainWindow::setCurrent(QString path, QString name, QString author) {
     qMainApp->logger->log(QString("Setting current Video to \"%1\"").arg(path), "Video",path);
 }
 
+QString MainWindow::getWatchedVisibilityOption(bool watched_yes, bool watched_no, bool watched_mixed) {
+    QString option = "";
+    if (watched_mixed == true)
+        option = "Mixed";
+    else if ((watched_yes == true) && (watched_no == true))
+        option = "All";
+    else if (watched_yes == true)
+        option = "Yes";
+    else if (watched_no == true)
+        option = "No";
+    else
+        option = "All";
+    return option;
+}
+
 void MainWindow::refreshVisibility(bool headers,bool watched) {
     QString settings_str = QString();
     if(this->App->currentDB == "PLUS")
@@ -2658,6 +2705,9 @@ void MainWindow::refreshVisibility(bool headers,bool watched) {
     else if (this->App->currentDB == "MINUS")
         settings_str = this->App->config->get("headers_minus_visible");
     QStringList settings_list = settings_str.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+    bool watched_yes = settings_list.contains("watched_yes");
+    bool watched_no = settings_list.contains("watched_no");
+    bool watched_mixed = settings_list.contains("watched_mixed");
 
     QHeaderView *header = this->ui.videosWidget->header();
     if (headers) {
@@ -2693,37 +2743,45 @@ void MainWindow::refreshVisibility(bool headers,bool watched) {
             header->setSectionHidden(ListColumns["LAST_WATCHED_COLUMN"], false);
         else
             header->setSectionHidden(ListColumns["LAST_WATCHED_COLUMN"], true);
-    }
-
-    if (watched) {
-        bool watched_yes = settings_list.contains("watched_yes");
-        bool watched_no = settings_list.contains("watched_no");
-        if ((watched_yes == true) && (watched_no == true))
-            this->setWatchedVisibility("All");
-        else if ((watched_yes == false) && (watched_no == false))
+        if ((watched_yes == false) && (watched_no == false) && (watched_mixed == false))
             header->setSectionHidden(ListColumns["WATCHED_COLUMN"], true);
-        else if (watched_yes == true) {
+        else if (watched_yes == true || watched_no == true || watched_mixed == true)
             header->setSectionHidden(ListColumns["WATCHED_COLUMN"], false);
-            this->setWatchedVisibility("Yes");
-        }
-        else if (watched_no == true) {
-            header->setSectionHidden(ListColumns["WATCHED_COLUMN"], false);
-            this->setWatchedVisibility("No");
-        }
+    }
+    if (watched) {
+        this->setWatchedVisibility(this->getWatchedVisibilityOption(watched_yes, watched_no, watched_mixed));
     }
 }
 
-void MainWindow::setWatchedVisibility(std::string option) {
+void MainWindow::filterWatchedVisibilityItem(QTreeWidgetItem* item, QString option, QStringList& mixed_done) {
+    if (option == "Mixed" && item->text(ListColumns["WATCHED_COLUMN"]) == "No") {
+        if (mixed_done.contains(item->text(ListColumns["AUTHOR_COLUMN"]))) {
+            return;
+        }
+        auto items = this->ui.videosWidget->findItems(item->text(ListColumns["AUTHOR_COLUMN"]), Qt::MatchExactly, ListColumns["AUTHOR_COLUMN"]);
+        if (!items.isEmpty()) {
+            for (auto& item : items) {
+                item->setHidden(false);
+            }
+            mixed_done.append(item->text(ListColumns["AUTHOR_COLUMN"]));
+        }
+    }
+    else if (option == "Yes" && item->text(ListColumns["WATCHED_COLUMN"]) == option)
+        item->setHidden(false);
+    else if (option == "No" && item->text(ListColumns["WATCHED_COLUMN"]) == option)
+        item->setHidden(false);
+    else if (option == "All")
+        item->setHidden(false);
+    else
+        item->setHidden(true);
+}
+
+void MainWindow::setWatchedVisibility(QString option) {
     QTreeWidgetItemIterator it(this->ui.videosWidget);
+    QStringList mixed_done = {};
     while (*it) {
-        if (option == "Yes" && (*it)->text(ListColumns["WATCHED_COLUMN"]).toStdString() == option)
-            (*it)->setHidden(false);
-        else if (option == "No" && (*it)->text(ListColumns["WATCHED_COLUMN"]).toStdString() == option)
-            (*it)->setHidden(false);
-        else if (option == "All")
-            (*it)->setHidden(false);
-        else
-            (*it)->setHidden(true);
+        // maybe replace the finditems with a local map for faster lookup
+        this->filterWatchedVisibilityItem(*it,option,mixed_done);
         ++it;
     }
 }

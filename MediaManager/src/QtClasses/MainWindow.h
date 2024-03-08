@@ -47,6 +47,8 @@ public:
     finishDialog* finish_dialog = nullptr;
     QList<QStringList> IconsStage = QList<QStringList>({ QStringList(),QStringList(),QStringList() });
     MainWindow(QWidget *parent = nullptr,MainApp *App = nullptr);
+    QString getCategoryName(QString currentdb);
+    QString getCategoryName();
     void UpdateWindowTitle();
     void VideoInfoNotification();
     void resetPalette();

@@ -84,7 +84,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
 
     this->trayIcon = new QSystemTrayIcon(this);
     connect(this->trayIcon, &QSystemTrayIcon::activated, this, &MainWindow::iconActivated);
-    this->trayIcon->setContextMenu(this->trayIconContextMenu(this));
+    //this->trayIcon->setContextMenu(this->trayIconContextMenu(this));
     // to do, implement random to normal icons and dont hard-code it
     this->loadIcons(QString(NORMAL_ICONS_PATH) + "/1");
     this->setIcon(QIcon(":/main/resources/icon.ico"));
@@ -297,13 +297,20 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     //});
 }
 
+QString MainWindow::getCategoryName(QString currentdb) {
+    return currentdb == "PLUS" ? this->App->config->get("plus_category_name") : (currentdb == "MINUS" ? this->App->config->get("minus_category_name") : currentdb);
+}
+
+QString MainWindow::getCategoryName() {
+    return this->getCategoryName(this->App->currentDB);
+}
+
 void MainWindow::UpdateWindowTitle() {
-    QString category_name = this->App->currentDB == "PLUS" ? this->App->config->get("plus_category_name") : (this->App->currentDB == "MINUS" ? this->App->config->get("minus_category_name") : this->App->currentDB);
     if (this->thumbnailManager.work_count <= 0) {
-        this->setWindowTitle(QString("Media Manager %1 %2").arg(category_name).arg(VERSION_TEXT));
+        this->setWindowTitle(QString("Media Manager %1 %2").arg(this->getCategoryName()).arg(VERSION_TEXT));
     }
     else {
-        this->setWindowTitle(QString("Media Manager %1 %2 (%3)").arg(category_name).arg(VERSION_TEXT).arg(this->thumbnailManager.work_count));
+        this->setWindowTitle(QString("Media Manager %1 %2 (%3)").arg(this->getCategoryName()).arg(VERSION_TEXT).arg(this->thumbnailManager.work_count));
     }
 }
 
@@ -664,9 +671,9 @@ void MainWindow::iconActivated(QSystemTrayIcon::ActivationReason reason) {
         break;
     }
     case QSystemTrayIcon::Context: {
-        //QMenu *menu = this->trayIconContextMenu(this);
-        //menu->exec(QCursor::pos());
-        //menu->deleteLater();
+        QMenu *menu = this->trayIconContextMenu(this);
+        menu->popup(QCursor::pos());
+        this->connect(menu, &QMenu::aboutToHide, menu, [menu] {menu->deleteLater(); });
         break;
     }
     default:
@@ -686,9 +693,9 @@ QMenu* MainWindow::trayIconContextMenu(QWidget* parent) {
     traycontextmenu->addAction(this->App->config->get_bool("random_next") ? "Next (R)" : "Next", [this] {
         this->NextButtonClicked();
         });
-    traycontextmenu->addAction(QString("Change (%1)").arg(this->App->currentDB), [this] {
+    traycontextmenu->addAction(QString("Change (%1)").arg(this->getCategoryName()), [this] {
         this->switchCurrentDB();
-        });
+    });
     traycontextmenu->addSeparator();
     traycontextmenu->addAction("Settings", [this] {this->settingsDialogButton(); });
     traycontextmenu->addAction("Stats", [this] {this->openStats(); });
@@ -2057,7 +2064,7 @@ void MainWindow::switchCurrentDB(QString db) {
     else if (this->App->currentDB == "PLUS") {
         this->App->currentDB = "MINUS";
     }
-    qMainApp->logger->log(QString("Switching Current DB to \"%1\"").arg(this->App->currentDB), "Database");
+    qMainApp->logger->log(QString("Switching Current DB to \"%1\"").arg(this->getCategoryName()), "Database");
     this->UpdateWindowTitle();
     if (this->animatedIconFlag)
         this->animatedIcon->initIcon();

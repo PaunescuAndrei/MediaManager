@@ -227,8 +227,8 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     });
 
     this->initListDetails();
+    this->refreshHeadersVisibility();
     this->populateList();
-    this->refreshVisibility(true,false);
     
     if (!this->initMusic() && this->App->config->get_bool("sound_effects_start") && this->App->soundPlayer && !this->App->soundPlayer->intro_effects.isEmpty()) {
         QString track = *utils::select_randomly(this->App->soundPlayer->intro_effects.begin(), this->App->soundPlayer->intro_effects.end());
@@ -250,9 +250,9 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         this->UpdateWindowTitle();
     });
 
-    connect(this->ui.searchButton, &QPushButton::clicked, this, [this] {this->search(this->ui.searchBar->text()); });
+    connect(this->ui.searchButton, &QPushButton::clicked, this, [this] {this->refreshVisibility(this->ui.searchBar->text()); });
     QList<QAction*> actionList = this->ui.searchBar->findChildren<QAction*>();
-    connect(this->ui.searchBar, &QLineEdit::returnPressed, this, [this] {this->search(this->ui.searchBar->text()); });
+    connect(this->ui.searchBar, &QLineEdit::returnPressed, this, [this] {this->refreshVisibility(this->ui.searchBar->text()); });
     if (!actionList.isEmpty()) {
         connect(actionList.first(), &QAction::triggered, this, [this]() {qDebug() << "test"; this->ui.searchBar->setText(""); });
     }
@@ -261,7 +261,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     this->search_timer = new QTimer(this);
     connect(this->search_timer, &QTimer::timeout, this, [this] {
         if(this->ui.searchBar->text() != this->old_search)
-            this->search(this->ui.searchBar->text());
+            this->refreshVisibility(this->ui.searchBar->text());
     });
 
     this->ui.videosWidget->setItemDelegate(new AutoToolTipDelegate(this->ui.videosWidget));
@@ -520,11 +520,11 @@ void MainWindow::toggleSearchBar() {
             this->search_timer->start(500);
         this->ui.searchBar->setFocus();
         if (!this->ui.searchBar->text().isEmpty())
-            this->search(this->ui.searchBar->text());
+            this->refreshVisibility(this->ui.searchBar->text());
     }
     else {
         this->ui.searchWidget->setVisible(false);
-        this->search("");
+        this->refreshVisibility("");
         if (this->search_timer->isActive())
             this->search_timer->stop();
         do {
@@ -586,28 +586,35 @@ void MainWindow::toggleDates(bool scroll) {
     }
 }
 
-void MainWindow::search_filter_item(QTreeWidgetItem* item, QString text) {
-    if (text.isEmpty()) {
-        item->setHidden(false);
-    }
-    else {
-        double score = rapidfuzz::fuzz::partial_ratio(text.toLower().toStdString(), (item->text(ListColumns["PATH_COLUMN"]) % " " % item->text(ListColumns["AUTHOR_COLUMN"]) % " " % item->text(ListColumns["TYPE_COLUMN"])).toLower().toStdString());
-        if (score > 80) {
-            item->setHidden(false);
-        }
-        else {
-            item->setHidden(true);
-        }
-    }
-}
+void MainWindow::refreshVisibility(QString search_text) {
+    QStringList mixed_done = {};
+    QString settings_str = QString();
+    if (this->App->currentDB == "PLUS")
+        settings_str = this->App->config->get("headers_plus_visible");
+    else if (this->App->currentDB == "MINUS")
+        settings_str = this->App->config->get("headers_minus_visible");
+    QStringList settings_list = settings_str.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+    bool watched_yes = settings_list.contains("watched_yes");
+    bool watched_no = settings_list.contains("watched_no");
+    bool watched_mixed = settings_list.contains("watched_mixed");
+    QString option = this->getWatchedVisibilityOption(watched_yes, watched_no, watched_mixed);
 
-void MainWindow::search(QString text) {
     QTreeWidgetItemIterator it(this->ui.videosWidget);
     while (*it) {
-        this->search_filter_item((*it),text);
+        this->filterVisibilityItem(*it, option, mixed_done, search_text);
         ++it;
     }
-    this->old_search = text;
+    this->old_search = search_text;
+}
+
+void MainWindow::refreshVisibility()
+{
+    if (this->ui.searchBar->isVisible()) {
+        this->refreshVisibility(this->old_search);
+    }
+    else {
+        this->refreshVisibility("");
+    }
 }
 
 void MainWindow::init_icons() {
@@ -1058,7 +1065,7 @@ bool MainWindow::NextVideo(bool random, bool increment) {
         if(increment)
             items.first()->setText(ListColumns["VIEWS_COLUMN"], QString::number(items.first()->text(ListColumns["VIEWS_COLUMN"]).toInt() + 1));
         items.first()->setForeground(ListColumns["WATCHED_COLUMN"], QBrush(QColor("#00e640")));
-        this->refreshVisibility(false,true);
+        this->refreshVisibility();
 
         this->App->db->db.transaction();
         if (this->App->currentDB == "MINUS") {
@@ -2070,7 +2077,7 @@ void MainWindow::switchCurrentDB(QString db) {
         this->animatedIcon->initIcon();
     this->initListDetails();
     this->refreshVideosWidget();
-    this->refreshVisibility(true,false);
+    this->refreshHeadersVisibility();
     if (this->toggleDatesFlag)
         this->toggleDates(false);
     this->App->config->set("current_db", this->App->currentDB);
@@ -2215,6 +2222,52 @@ void MainWindow::updateSortConfig() {
     this->App->config->save_config();
 }
 
+void MainWindow::filterVisibilityItem(QTreeWidgetItem *item, QString watched_option, QStringList &mixed_done, QString search_text) {
+
+    bool hidden = false;
+    QList<QTreeWidgetItem*> items = {};
+
+    //watched
+    if (watched_option == "Mixed" && item->text(ListColumns["WATCHED_COLUMN"]) == "No") {
+        if (mixed_done.contains(item->text(ListColumns["AUTHOR_COLUMN"]))) {
+            hidden = false;
+        }
+        else {
+            hidden = false;
+            items = this->ui.videosWidget->findItems(item->text(ListColumns["AUTHOR_COLUMN"]), Qt::MatchExactly, ListColumns["AUTHOR_COLUMN"]);
+            if (!items.isEmpty()) {
+                mixed_done.append(item->text(ListColumns["AUTHOR_COLUMN"]));
+            }
+        }
+    }
+    else if (watched_option == "Yes" && item->text(ListColumns["WATCHED_COLUMN"]) == watched_option)
+        hidden = false;
+    else if (watched_option == "No" && item->text(ListColumns["WATCHED_COLUMN"]) == watched_option)
+        hidden = false;
+    else if (watched_option == "All")
+        hidden = false;
+    else
+        hidden = true;
+
+    //search
+    if(not search_text.isEmpty() and hidden == false) {
+        double score = rapidfuzz::fuzz::partial_ratio(search_text.toLower().toStdString(), (item->text(ListColumns["PATH_COLUMN"]) % " " % item->text(ListColumns["AUTHOR_COLUMN"]) % " " % item->text(ListColumns["TYPE_COLUMN"])).toLower().toStdString());
+        if (score > 80) {
+            hidden = false;
+        }
+        else {
+            hidden = true;
+        }
+    }
+
+    //actually hidding the item/items
+    item->setHidden(hidden);
+    if (not items.isEmpty()) {
+        for (auto& i : items)
+            i->setHidden(hidden);
+    }
+}
+
 void MainWindow::populateList(bool selectcurrent) {
     auto itemlist = this->App->db->getVideos(this->App->currentDB);
     this->ui.videosWidget->setSortingEnabled(false);
@@ -2243,14 +2296,14 @@ void MainWindow::populateList(bool selectcurrent) {
             item->setForeground(ListColumns["WATCHED_COLUMN"], QBrush(QColor("#00e640")));
         else if (item->text(ListColumns["WATCHED_COLUMN"]) == "No")
             item->setForeground(ListColumns["WATCHED_COLUMN"], QBrush(QColor("#cf000f")));
-        this->filterWatchedVisibilityItem(item, option, mixed_done);
-        //if (this->ui.searchBar->isVisible()) {
-        //    this->search_filter_item(item, this->old_search);
-        //}
+        if (this->ui.searchBar->isVisible())
+            this->filterVisibilityItem(item,option,mixed_done,this->old_search);
+        else
+            this->filterVisibilityItem(item, option, mixed_done, "");
     }
-    // dirty fix until maybe qt fixes their shit (above doesnt work)
-    if (this->ui.searchBar->isVisible())
-        QTimer::singleShot(1, [this,itemlist] {this->search(this->old_search);});
+    // not sure if this alternative method is needed anymore
+    //if (this->ui.searchBar->isVisible())
+    //    QTimer::singleShot(1, [this,itemlist] {this->search(this->old_search);});
     this->updateTotalListLabel();
     this->ui.videosWidget->setSortingEnabled(true);
     this->selectCurrentItem(nullptr, selectcurrent);
@@ -2404,6 +2457,7 @@ void MainWindow::videosWidgetHeaderContextMenu(QPoint point) {
             this->App->config->set("headers_plus_visible", settings_list.join(" "));
         else if (this->App->currentDB == "MINUS")
             this->App->config->set("headers_minus_visible", settings_list.join(" "));
+        this->refreshHeadersVisibility();
         this->refreshVisibility();
         if (this->toggleDatesFlag)
             this->toggleDates(false);
@@ -2705,7 +2759,7 @@ QString MainWindow::getWatchedVisibilityOption(bool watched_yes, bool watched_no
     return option;
 }
 
-void MainWindow::refreshVisibility(bool headers,bool watched) {
+void MainWindow::refreshHeadersVisibility() {
     QString settings_str = QString();
     if(this->App->currentDB == "PLUS")
         settings_str = this->App->config->get("headers_plus_visible");
@@ -2717,80 +2771,42 @@ void MainWindow::refreshVisibility(bool headers,bool watched) {
     bool watched_mixed = settings_list.contains("watched_mixed");
 
     QHeaderView *header = this->ui.videosWidget->header();
-    if (headers) {
-        if (settings_list.contains("author"))
-            header->setSectionHidden(ListColumns["AUTHOR_COLUMN"], false);
-        else
-            header->setSectionHidden(ListColumns["AUTHOR_COLUMN"], true);
-        if (settings_list.contains("name"))
-            header->setSectionHidden(ListColumns["NAME_COLUMN"], false);
-        else
-            header->setSectionHidden(ListColumns["NAME_COLUMN"], true);
-        if (settings_list.contains("path"))
-            header->setSectionHidden(ListColumns["PATH_COLUMN"], false);
-        else
-            header->setSectionHidden(ListColumns["PATH_COLUMN"], true);
-        if (settings_list.contains("type"))
-            header->setSectionHidden(ListColumns["TYPE_COLUMN"], false);
-        else
-            header->setSectionHidden(ListColumns["TYPE_COLUMN"], true);
-        if (settings_list.contains("views"))
-            header->setSectionHidden(ListColumns["VIEWS_COLUMN"], false);
-        else
-            header->setSectionHidden(ListColumns["VIEWS_COLUMN"], true);
-        if (settings_list.contains("rating"))
-            header->setSectionHidden(ListColumns["RATING_COLUMN"], false);
-        else
-            header->setSectionHidden(ListColumns["RATING_COLUMN"], true);
-        if (settings_list.contains("date_created"))
-            header->setSectionHidden(ListColumns["DATE_CREATED_COLUMN"], false);
-        else
-            header->setSectionHidden(ListColumns["DATE_CREATED_COLUMN"], true);
-        if (settings_list.contains("last_watched"))
-            header->setSectionHidden(ListColumns["LAST_WATCHED_COLUMN"], false);
-        else
-            header->setSectionHidden(ListColumns["LAST_WATCHED_COLUMN"], true);
-        if ((watched_yes == false) && (watched_no == false) && (watched_mixed == false))
-            header->setSectionHidden(ListColumns["WATCHED_COLUMN"], true);
-        else if (watched_yes == true || watched_no == true || watched_mixed == true)
-            header->setSectionHidden(ListColumns["WATCHED_COLUMN"], false);
-    }
-    if (watched) {
-        this->setWatchedVisibility(this->getWatchedVisibilityOption(watched_yes, watched_no, watched_mixed));
-    }
-}
-
-void MainWindow::filterWatchedVisibilityItem(QTreeWidgetItem* item, QString option, QStringList& mixed_done) {
-    if (option == "Mixed" && item->text(ListColumns["WATCHED_COLUMN"]) == "No") {
-        if (mixed_done.contains(item->text(ListColumns["AUTHOR_COLUMN"]))) {
-            return;
-        }
-        auto items = this->ui.videosWidget->findItems(item->text(ListColumns["AUTHOR_COLUMN"]), Qt::MatchExactly, ListColumns["AUTHOR_COLUMN"]);
-        if (!items.isEmpty()) {
-            for (auto& item : items) {
-                item->setHidden(false);
-            }
-            mixed_done.append(item->text(ListColumns["AUTHOR_COLUMN"]));
-        }
-    }
-    else if (option == "Yes" && item->text(ListColumns["WATCHED_COLUMN"]) == option)
-        item->setHidden(false);
-    else if (option == "No" && item->text(ListColumns["WATCHED_COLUMN"]) == option)
-        item->setHidden(false);
-    else if (option == "All")
-        item->setHidden(false);
+    if (settings_list.contains("author"))
+        header->setSectionHidden(ListColumns["AUTHOR_COLUMN"], false);
     else
-        item->setHidden(true);
-}
-
-void MainWindow::setWatchedVisibility(QString option) {
-    QTreeWidgetItemIterator it(this->ui.videosWidget);
-    QStringList mixed_done = {};
-    while (*it) {
-        // maybe replace the finditems with a local map for faster lookup
-        this->filterWatchedVisibilityItem(*it,option,mixed_done);
-        ++it;
-    }
+        header->setSectionHidden(ListColumns["AUTHOR_COLUMN"], true);
+    if (settings_list.contains("name"))
+        header->setSectionHidden(ListColumns["NAME_COLUMN"], false);
+    else
+        header->setSectionHidden(ListColumns["NAME_COLUMN"], true);
+    if (settings_list.contains("path"))
+        header->setSectionHidden(ListColumns["PATH_COLUMN"], false);
+    else
+        header->setSectionHidden(ListColumns["PATH_COLUMN"], true);
+    if (settings_list.contains("type"))
+        header->setSectionHidden(ListColumns["TYPE_COLUMN"], false);
+    else
+        header->setSectionHidden(ListColumns["TYPE_COLUMN"], true);
+    if (settings_list.contains("views"))
+        header->setSectionHidden(ListColumns["VIEWS_COLUMN"], false);
+    else
+        header->setSectionHidden(ListColumns["VIEWS_COLUMN"], true);
+    if (settings_list.contains("rating"))
+        header->setSectionHidden(ListColumns["RATING_COLUMN"], false);
+    else
+        header->setSectionHidden(ListColumns["RATING_COLUMN"], true);
+    if (settings_list.contains("date_created"))
+        header->setSectionHidden(ListColumns["DATE_CREATED_COLUMN"], false);
+    else
+        header->setSectionHidden(ListColumns["DATE_CREATED_COLUMN"], true);
+    if (settings_list.contains("last_watched"))
+        header->setSectionHidden(ListColumns["LAST_WATCHED_COLUMN"], false);
+    else
+        header->setSectionHidden(ListColumns["LAST_WATCHED_COLUMN"], true);
+    if ((watched_yes == false) && (watched_no == false) && (watched_mixed == false))
+        header->setSectionHidden(ListColumns["WATCHED_COLUMN"], true);
+    else if (watched_yes == true || watched_no == true || watched_mixed == true)
+        header->setSectionHidden(ListColumns["WATCHED_COLUMN"], false);
 }
 
 void MainWindow::updateTotalListLabel(bool force_update) {

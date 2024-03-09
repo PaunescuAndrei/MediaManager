@@ -64,8 +64,6 @@ public:
     void syncItems(QTreeWidgetItem* main_item, QList<QTreeWidgetItem*> items);
     void toggleSearchBar();
     void toggleDates(bool scroll = true);
-    void search_filter_item(QTreeWidgetItem* item, QString text);
-    void search(QString text);
     void init_icons();
     QMenu* trayIconContextMenu(QWidget* parent = nullptr);
     void openStats();
@@ -73,6 +71,7 @@ public:
     void switchNextButtonMode(QCustomButton* nextbutton);
     void switchRandomButtonMode(QCustomButton* randombutton);
     void updateSortConfig();
+    void filterVisibilityItem(QTreeWidgetItem* item, QString watched_option, QStringList& mixed_done, QString search_text);
     void addWatchedDialogButton();
     void switchCurrentDB(QString db = "");
     void refreshVideosWidget(bool selectcurrent = true, bool remember_selected = false);
@@ -85,9 +84,9 @@ public:
     void updateProgressBar(QString position, QString duration);
     void updateTotalListLabel(bool force_update = false);
     void changeListenerVideo(std::shared_ptr<Listener> listener, QString path, double position);
-    void setWatchedVisibility(QString option);
-    void refreshVisibility(bool headers = true, bool watched = true);
-    void filterWatchedVisibilityItem(QTreeWidgetItem* item, QString option, QStringList& mixed_done);
+    void refreshVisibility(QString search_text);
+    void refreshVisibility();
+    void refreshHeadersVisibility();
     void videosWidgetHeaderContextMenu(QPoint point);
     void videosWidgetContextMenu(QPoint point);
     void setCurrent(QString path, QString name, QString author);

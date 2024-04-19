@@ -29,7 +29,7 @@ InsertSettingsDialog::InsertSettingsDialog(QWidget* parent) : QDialog(parent) {
 	connect(this->ui.typeComboBox, &QComboBox::currentTextChanged, [this](const QString& text) {
 		this->update_treewidget(3);
 	});
-	connect(this->ui.showExistingCheckBox, &QCheckBox::stateChanged, [this](int state) {
+	connect(this->ui.showExistingCheckBox, &QCheckBox::checkStateChanged, [this](Qt::CheckState state) {
 		QTreeWidgetItemIterator it = QTreeWidgetItemIterator(this->ui.newFilesTreeWidget);
 		while (*it) {
 			if (state == Qt::Checked) {

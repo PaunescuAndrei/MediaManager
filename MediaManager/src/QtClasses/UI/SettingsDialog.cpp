@@ -188,7 +188,7 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 	}
 	QList<QCheckBox*> checkboxes = this->findChildren<QCheckBox*>();
 	for (auto checkbox : checkboxes) {
-		connect(checkbox, &QCheckBox::stateChanged, this, [this] {this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(true); });
+		connect(checkbox, &QCheckBox::checkStateChanged, this, [this] {this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(true); });
 	}
 	QList<QRadioButton*> radiobuttons = this->findChildren<QRadioButton*>();
 	for (auto radiobutton : radiobuttons) {

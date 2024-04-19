@@ -27,7 +27,7 @@ FilterDialog::FilterDialog(MainWindow* MW, QJsonObject settings, QWidget* parent
     QMap<QString, QCheckBox*> types_map = QMap<QString, QCheckBox*>();
     this->all_types = new QCheckBox("All", this);
     types_map["All"] = all_types;
-    connect(all_types, &QCheckBox::stateChanged, this, &FilterDialog::typesChanged);
+    connect(all_types, &QCheckBox::checkStateChanged, this, &FilterDialog::typesChanged);
     types_flowLayout->addWidget(all_types);
     for (QString& type : types_include) {
         QCheckBox* checkbox;
@@ -36,7 +36,7 @@ FilterDialog::FilterDialog(MainWindow* MW, QJsonObject settings, QWidget* parent
         else
             checkbox = new QCheckBox(type, this);
         types_map[type] = checkbox;
-        connect(checkbox, &QCheckBox::stateChanged, this, &FilterDialog::typesChanged);
+        connect(checkbox, &QCheckBox::checkStateChanged, this, &FilterDialog::typesChanged);
         types_flowLayout->addWidget(checkbox);
     }
     this->ui.types->setLayout(types_flowLayout);
@@ -47,7 +47,7 @@ FilterDialog::FilterDialog(MainWindow* MW, QJsonObject settings, QWidget* parent
     QMap<QString, QCheckBox*> authors_map = QMap<QString, QCheckBox*>();
     this->all_authors = new QCheckBox("All", this);
     authors_map["All"] = all_authors;
-    connect(all_authors, &QCheckBox::stateChanged, this, &FilterDialog::authorsChanged);
+    connect(all_authors, &QCheckBox::checkStateChanged, this, &FilterDialog::authorsChanged);
     authors_flowLayout->addWidget(all_authors);
     for (QString& author : authors){
         QCheckBox* checkbox;
@@ -56,7 +56,7 @@ FilterDialog::FilterDialog(MainWindow* MW, QJsonObject settings, QWidget* parent
         else
             checkbox = new QCheckBox(author, this);
         authors_map[author] = checkbox;
-        connect(checkbox, &QCheckBox::stateChanged, this, &FilterDialog::authorsChanged);
+        connect(checkbox, &QCheckBox::checkStateChanged, this, &FilterDialog::authorsChanged);
         authors_flowLayout->addWidget(checkbox);
     }
     this->ui.authors->setLayout(authors_flowLayout);
@@ -109,7 +109,7 @@ FilterDialog::FilterDialog(MainWindow* MW, QJsonObject settings, QWidget* parent
     this->setFocus();
 }
 
-void FilterDialog::authorsChanged(int state) {
+void FilterDialog::authorsChanged(Qt::CheckState state) {
     QCheckBox* checkbox_sender = qobject_cast<QCheckBox*>(sender());
     if (state == Qt::Checked) {
         if (checkbox_sender->text() == "All") {
@@ -138,7 +138,7 @@ void FilterDialog::authorsChanged(int state) {
     }
 }
 
-void FilterDialog::typesChanged(int state) {
+void FilterDialog::typesChanged(Qt::CheckState state) {
     QCheckBox* checkbox_sender = qobject_cast<QCheckBox*>(sender());
     if (state == Qt::Checked) {
         if (checkbox_sender->text() == "All") {

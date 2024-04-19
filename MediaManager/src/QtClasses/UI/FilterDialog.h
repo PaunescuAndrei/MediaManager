@@ -14,8 +14,8 @@ public:
     QCheckBox* all_authors = nullptr;
     QCheckBox* all_types = nullptr;
     FilterDialog(MainWindow* MW = nullptr,QJsonObject settings = QJsonObject(), QWidget* parent = nullptr);
-    void authorsChanged(int state);
-    void typesChanged(int state);
+    void authorsChanged(Qt::CheckState state);
+    void typesChanged(Qt::CheckState state);
     QJsonObject toJson();
     ~FilterDialog();
     Ui::FilterDialog ui;

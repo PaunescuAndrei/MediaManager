@@ -1872,18 +1872,20 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
     }
 
     QMimeDatabase db;
-    QStringList::iterator newfiles_it = files.begin();
-    while (newfiles_it != files.end()) {
-        QMimeType guess_type = db.mimeTypeForFile((*newfiles_it));
-        QString path = QDir::toNativeSeparators((*newfiles_it));
-        if (!(guess_type.isValid() && guess_type.name().startsWith("video")) || this->App->db->checkIfVideoInDB((*newfiles_it), this->App->currentDB))
-            newfiles_it = files.erase(newfiles_it);
-        else {
-            (*newfiles_it) = path;
-            ++newfiles_it;
+    QList<QPair<QString, bool>> valid_files = QList<QPair<QString, bool>>();
+    int new_files_counter = 0;
+    for (QString& file : files) {
+        QMimeType guess_type = db.mimeTypeForFile(file);
+        QString path = QDir::toNativeSeparators(file);
+        if (guess_type.isValid() && guess_type.name().startsWith("video")) {
+            bool exists_in_db = this->App->db->checkIfVideoInDB(path, this->App->currentDB);
+            valid_files.append({ path,exists_in_db });
+            if (not exists_in_db)
+                new_files_counter++;
         }
     }
-    if (files.isEmpty())
+
+    if (valid_files.isEmpty())
         return false;
 
     QString current_db;
@@ -1920,17 +1922,21 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
     dialog.setWindowState((dialog.windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
     dialog.raise();
     dialog.activateWindow();
-    dialog.ui.newfilesLabel->setText(dialog.ui.newfilesLabel->text() + QString::number(files.length()));
+    dialog.ui.newfilesLabel->setText(dialog.ui.newfilesLabel->text() + QString::number(new_files_counter));
 
     QSet<QString> authors_names = QSet<QString>();
 
-    for (QString& path : files) {
-        QStringList tmp = utils::getDirNames(path);
+    for (QPair<QString,bool>& path_pair : valid_files) {
+        QStringList tmp = utils::getDirNames(path_pair.first);
         QSet<QString> authors_names_(tmp.begin(),tmp.end());
         authors_names += authors_names_;
-        QTreeWidgetItem* item = new TreeWidgetItem({path,"","",""}, 0, nullptr);
+        QTreeWidgetItem* item = new TreeWidgetItem({ path_pair.first,"","",""}, 0, nullptr);
+        item->setDisabled(path_pair.second);
+        item->setData(0, Qt::UserRole, path_pair.second);
         item->setTextAlignment(3, Qt::AlignHCenter);
         dialog.ui.newFilesTreeWidget->addTopLevelItem(item);
+        if (path_pair.second and not dialog.ui.showExistingCheckBox->isChecked())
+            item->setHidden(true);
     }
     dialog.init_authors(QStringList(authors_names.begin(), authors_names.end()));
     dialog.init_namedir(QStringList(authors_names.begin(), authors_names.end()));
@@ -1964,6 +1970,10 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
         if (transaction == false) {
             transaction = true;
             this->App->db->db.transaction();
+        }
+        if ((*it)->isDisabled()) {
+            ++it;
+            continue;
         }
         this->App->db->insertVideo((*it)->text(0), current_db, (*it)->text(2), (*it)->text(1), (*it)->text(3));
         // probably should remove, mostly unused

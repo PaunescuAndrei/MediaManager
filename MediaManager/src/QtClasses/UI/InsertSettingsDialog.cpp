@@ -29,6 +29,21 @@ InsertSettingsDialog::InsertSettingsDialog(QWidget* parent) : QDialog(parent) {
 	connect(this->ui.typeComboBox, &QComboBox::currentTextChanged, [this](const QString& text) {
 		this->update_treewidget(3);
 	});
+	connect(this->ui.showExistingCheckBox, &QCheckBox::stateChanged, [this](int state) {
+		QTreeWidgetItemIterator it = QTreeWidgetItemIterator(this->ui.newFilesTreeWidget);
+		while (*it) {
+			if (state == Qt::Checked) {
+				(*it)->setHidden(false);
+			}
+			else {
+				if((*it)->data(0,Qt::UserRole).toBool())
+					(*it)->setHidden(true);
+				else
+					(*it)->setHidden(false);
+			}
+			++it;
+		}
+	});
 
 	this->ui.newFilesTreeWidget->setItemDelegate(new AutoToolTipDelegate(this->ui.newFilesTreeWidget));
 	this->ui.newFilesTreeWidget->setStyleSheet(get_stylesheet("videoswidget"));

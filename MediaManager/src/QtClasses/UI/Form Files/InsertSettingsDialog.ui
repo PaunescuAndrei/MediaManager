@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Insert Settings</string>
+   <string>Insert Videos</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
@@ -30,7 +30,7 @@
         </font>
        </property>
        <property name="text">
-        <string>Insert Settings</string>
+        <string>Insert Videos</string>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
@@ -164,6 +164,16 @@
            </spacer>
           </item>
          </layout>
+        </item>
+        <item>
+         <widget class="QCheckBox" name="showExistingCheckBox">
+          <property name="text">
+           <string>Show existing files</string>
+          </property>
+          <property name="checked">
+           <bool>true</bool>
+          </property>
+         </widget>
         </item>
         <item>
          <widget class="QLabel" name="newfilesLabel">

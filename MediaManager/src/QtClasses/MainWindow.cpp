@@ -171,7 +171,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         bool all = this->App->config->get("get_random_mode") == "All";
         bool video_changed = this->randomVideo(all);
         if (this->App->VW->mainListener and video_changed) {
-            this->changeListenerVideo(this->App->VW->mainListener, this->ui.currentVideo->path, this->position);
+            this->changeListenerVideo(this->App->VW->mainListener, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
         }
     });
     connect(this->ui.random_button, &QCustomButton::middleClicked, this, [this] {
@@ -1009,7 +1009,7 @@ void MainWindow::NextButtonClicked(bool increment) {
 void MainWindow::NextButtonClicked(std::shared_ptr<Listener> listener, bool increment) {
     bool video_changed = this->NextVideo(this->App->config->get_bool("random_next"), increment);
     if (listener) {
-        this->changeListenerVideo(listener, this->ui.currentVideo->path, 0);
+        this->changeListenerVideo(listener, this->ui.currentVideo->path, this->ui.currentVideo->id, 0);
     }
     if (video_changed) {
         if (this->animatedIconFlag)
@@ -1224,7 +1224,7 @@ bool MainWindow::loadDB(QString path, QWidget* parent) {
             this->refreshVideosWidget(false, true);
             this->updateTotalListLabel();
             if (this->App->VW->mainListener) {
-                this->changeListenerVideo(this->App->VW->mainListener, this->ui.currentVideo->path, this->position);
+                this->changeListenerVideo(this->App->VW->mainListener, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
             }
             if (return_code == 0) {
                 //msg->setIcon(QMessageBox::Information); // they trigger windows notifications sound, stupid
@@ -2093,7 +2093,7 @@ void MainWindow::switchCurrentDB(QString db) {
     this->App->config->set("current_db", this->App->currentDB);
     this->App->config->save_config();
     if(listener != nullptr){
-        this->changeListenerVideo(listener, this->ui.currentVideo->path, this->position);
+        this->changeListenerVideo(listener, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
     }
 }
 
@@ -2538,7 +2538,7 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
         this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]));
         this->selectCurrentItem();
         if (this->App->VW->mainListener) {
-            this->changeListenerVideo(this->App->VW->mainListener, this->ui.currentVideo->path, this->position);
+            this->changeListenerVideo(this->App->VW->mainListener, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
         }
     }
     else if (menu_click == open_location) {
@@ -2599,7 +2599,7 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
                     auto item = items.first();
                     this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(),item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]));
                     if (this->App->VW->mainListener) {
-                        this->changeListenerVideo(this->App->VW->mainListener, this->ui.currentVideo->path, 0);
+                        this->changeListenerVideo(this->App->VW->mainListener, this->ui.currentVideo->path, this->ui.currentVideo->id, 0);
                     }
                 }
             }
@@ -2844,8 +2844,8 @@ void MainWindow::updateTotalListLabel(bool force_update) {
         this->ui.totalListLabel->update();
 }
 
-void MainWindow::changeListenerVideo(std::shared_ptr<Listener> listener, QString path, double position) {
-    QFuture<void> change_video = QtConcurrent::run([this, listener,path,position] {listener->change_video(path, position); });
+void MainWindow::changeListenerVideo(std::shared_ptr<Listener> listener, QString path, int video_id, double position) {
+    QFuture<void> change_video = QtConcurrent::run([this, listener,path, video_id,position] {listener->change_video(path, video_id, position); });
     if (this->finish_dialog) {
         this->finish_dialog->deleteLater();
         this->finish_dialog = nullptr;

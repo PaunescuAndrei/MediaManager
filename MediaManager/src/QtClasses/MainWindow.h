@@ -83,7 +83,7 @@ public:
     void updateProgressBar(double position, double duration, std::shared_ptr<Listener> listener, bool running = false);
     void updateProgressBar(QString position, QString duration);
     void updateTotalListLabel(bool force_update = false);
-    void changeListenerVideo(std::shared_ptr<Listener> listener, QString path, double position);
+    void changeListenerVideo(std::shared_ptr<Listener> listener, QString path, int video_id, double position);
     void refreshVisibility(QString search_text);
     void refreshVisibility();
     void refreshHeadersVisibility();

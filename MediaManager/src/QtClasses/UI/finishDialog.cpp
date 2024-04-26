@@ -46,7 +46,10 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 		});
 		starEditor->setFocusPolicy(Qt::NoFocus);
 		QHBoxLayout *lt = qobject_cast<QHBoxLayout*>(this->ui.ratingBox->layout());
+		double avg_rating = MW->App->db->getAverageRatingAuthor(MW->ui.currentVideo->author, MW->App->currentDB);
+		QLabel* avg_rating_label = new QLabel("Avg. " + QString::number(avg_rating, 'f', 2), this);
 		lt->insertWidget(2, starEditor);
+		lt->insertWidget(3, avg_rating_label);
 	}
 	connect(this->ui.NextButton, &QPushButton::clicked, this, &finishDialog::accept);
 	connect(this->ui.cancelButton, &QPushButton::clicked, this, &finishDialog::reject);

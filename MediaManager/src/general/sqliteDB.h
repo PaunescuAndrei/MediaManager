@@ -24,6 +24,7 @@ public:
     bool checkIfVideoInDB(QString path, QString category);
     int getVideosWatched(QString category, int fallback);
     double getAverageRating(QString category, double fallback);
+    double getAverageRatingAuthor(QString author, QString category, double fallback = 0);
     int loadOrSaveDb(QSqlDatabase db, const char* zFilename, bool backup);
     void setMainInfoValue(QString name, QString category, QString value);
     void deleteVideo(QString path, QString category);

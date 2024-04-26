@@ -200,6 +200,27 @@ double sqliteDB::getAverageRating(QString category, double fallback) {
         return fallback;
 }
 
+double sqliteDB::getAverageRatingAuthor(QString author, QString category, double fallback) {
+    QSqlQuery query = QSqlQuery(this->db);
+    if (category == "ALL")
+        query.prepare(QString("SELECT AVG(NULLIF(rating, 0)) FROM videodetails where rating > 0 and author = ?;"));
+    else {
+        query.prepare(QString("SELECT AVG(NULLIF(rating, 0)) FROM videodetails where rating > 0 and category = ? and author = ?;"));
+        query.addBindValue(category);
+    }
+    query.addBindValue(author);
+    if (!query.exec()) {
+        qDebug() << "getAverageRatingAuthor " << query.lastError().text();
+        if (qApp)
+            qMainApp->showErrorMessage("getAverageRatingAuthor " + query.lastError().text());
+    }
+    bool found = query.first();
+    if (found == true)
+        return query.value(0).toDouble();
+    else
+        return fallback;
+}
+
 void sqliteDB::setMainInfoValue(QString name, QString category, QString value) {
     QSqlQuery query = QSqlQuery(this->db);
     query.prepare(QString("UPDATE maininfo SET value = ? WHERE name = ? AND category = ?"));

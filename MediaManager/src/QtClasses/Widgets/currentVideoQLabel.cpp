@@ -9,7 +9,8 @@ currentVideoQLabel::currentVideoQLabel(QWidget* parent) : QLabel(parent) {
 
 }
 
-void currentVideoQLabel::setValues(QString path, QString name, QString author, bool update) {
+void currentVideoQLabel::setValues(int id, QString path, QString name, QString author, bool update) {
+	this->id = id;
 	this->path = path;
 	this->name = name;
 	this->author = author;
@@ -17,8 +18,8 @@ void currentVideoQLabel::setValues(QString path, QString name, QString author, b
 		this->updateText();
 }
 
-void currentVideoQLabel::setValues(std::tuple<QString, QString, QString> values, bool update) {
-	this->setValues(std::get<0>(values), std::get<1>(values), std::get<2>(values), update);
+void currentVideoQLabel::setValues(std::tuple<int, QString, QString, QString> values, bool update) {
+	this->setValues(std::get<0>(values), std::get<1>(values), std::get<2>(values), std::get<3>(values), update);
 }
 
 void currentVideoQLabel::updateText() {

@@ -217,12 +217,12 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="QtSettings">
     <QtModules>core;gui;widgets;concurrent;multimedia;sql;</QtModules>
     <QtBuildConfig>debug</QtBuildConfig>
-    <QtDeploy>true</QtDeploy>
+    <QtDeploy>false</QtDeploy>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="QtSettings">
     <QtModules>core;gui;widgets;concurrent;multimedia;sql;</QtModules>
     <QtBuildConfig>release</QtBuildConfig>
-    <QtDeploy>true</QtDeploy>
+    <QtDeploy>false</QtDeploy>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'" Label="QtSettings">
     <QtModules>core;gui;widgets;concurrent;multimedia;sql;</QtModules>
@@ -256,6 +256,10 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">
     <IncludePath>$(ProjectDir)src\;$(ProjectDir)src\QtClasses\;$(ProjectDir)src\QtClasses\UI\;$(ProjectDir)src\QtClasses\Widgets\;$(ProjectDir)src\QtClasses\Form Files\;$(ProjectDir)src\thirdparty\;$(ProjectDir)src\thirdparty\sqlite3\;$(ProjectDir)src\general;$(ProjectDir)src\thirdparty\rapidfuzz;$(IncludePath)</IncludePath>
     <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Label="QtDeploy" Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">
+    <QtDeployNoPlugins>
+    </QtDeployNoPlugins>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>

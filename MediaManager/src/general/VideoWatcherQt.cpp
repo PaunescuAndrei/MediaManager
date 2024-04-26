@@ -14,10 +14,10 @@ VideoWatcherQt::VideoWatcherQt(MainApp* App, QObject* parent) : QThread(parent)
 	this->db = new sqliteDB(this->App->db->location, "videowatcher_con");
 }
 
-std::shared_ptr<Listener> VideoWatcherQt::newListener(QString path)
+std::shared_ptr<Listener> VideoWatcherQt::newListener(QString path, int video_id)
 {
 	QMutexLocker lock(&this->data_lock);
-	std::shared_ptr<Listener> newVideo = std::make_shared<Listener>(path,&this->CLASS_COUNT,this->App,this->App);
+	std::shared_ptr<Listener> newVideo = std::make_shared<Listener>(path, video_id,&this->CLASS_COUNT,this->App,this->App);
 	this->Listeners.append(newVideo);
 	this->CLASS_COUNT++;
 	return newVideo;
@@ -31,7 +31,7 @@ void VideoWatcherQt::clearData(bool include_mainlistener) {
 			continue;
 		}
 		if ((*it)->currentPosition != -1) {
-			this->db->updateVideoProgress((*it)->path, this->App->currentDB, (*it)->currentPosition);
+			this->db->updateVideoProgress((*it)->video_id, (*it)->currentPosition);
 		}
 		(*it)->closeWindow();
 		(*it).reset();
@@ -128,7 +128,7 @@ void VideoWatcherQt::run()
 			}
 			if (!listener->is_process_alive()) {
 				if (listener->currentPosition != -1) {
-					this->db->updateVideoProgress(listener->path, this->App->currentDB, listener->currentPosition);
+					this->db->updateVideoProgress(listener->video_id, listener->currentPosition);
 				}
 				if (listener == this->mainListener) {
 					this->clearAfterMainVideoEnd();
@@ -182,7 +182,7 @@ void VideoWatcherQt::run()
 	}
 	for (std::shared_ptr<Listener> listener : this->Listeners) {
 		listener->process->terminate();
-		this->db->updateVideoProgress(listener->path, this->App->currentDB, listener->currentPosition);
+		this->db->updateVideoProgress(listener->video_id, listener->currentPosition);
 	}
 	if (this->fap_time_start != nullptr) {
 		int elapsed = std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->fap_time_start).count();

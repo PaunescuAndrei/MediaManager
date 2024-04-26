@@ -119,7 +119,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
             this->ui.videosWidget->editItem(item, column);
         }
         else
-            this->watchSelected(item->text(ListColumns["PATH_COLUMN"]));
+            this->watchSelected(item->data(ListColumns["PATH_COLUMN"],CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]));
     });
     connect(this->ui.videosWidget, &videosTreeWidget::itemMiddleClicked, this, [this](QTreeWidgetItem* item) { this->openThumbnails(item->text(ListColumns["PATH_COLUMN"]).toStdString()); });
     this->ui.videosWidget->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -414,7 +414,7 @@ void MainWindow::updateRating(QPersistentModelIndex index, double old_value, dou
     if (not item)
         return;
     qMainApp->logger->log(QString("Updating rating from %1 to %2 for \"%3\"").arg(old_value).arg(new_value).arg(item->text(ListColumns["PATH_COLUMN"])), "Stats", item->text(ListColumns["PATH_COLUMN"]));
-    this->App->db->updateRating(item->text(ListColumns["PATH_COLUMN"]), this->App->currentDB, new_value);
+    this->App->db->updateRating(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), new_value);
 }
 
 void MainWindow::updateAuthors(QList<QTreeWidgetItem*> items) {
@@ -424,7 +424,7 @@ void MainWindow::updateAuthors(QList<QTreeWidgetItem*> items) {
         this->App->db->db.transaction();
         for (auto const& item : items) {
             QString author = InsertSettingsDialog::get_author(item->text(ListColumns["PATH_COLUMN"]));
-            this->App->db->updateAuthor(item->text(ListColumns["PATH_COLUMN"]), this->App->currentDB, author);
+            this->App->db->updateAuthor(item->data(ListColumns["PATH_COLUMN"],CustomRoles::id).toInt(), author);
         }
         this->App->db->db.commit();
         this->refreshVideosWidget(false, true);
@@ -439,7 +439,7 @@ void MainWindow::updateAuthors(QString value, QList<QTreeWidgetItem*> items) {
     if (!items.isEmpty()) {
         this->App->db->db.transaction();
         for (auto const& item : items) {
-            this->App->db->updateAuthor(item->text(ListColumns["PATH_COLUMN"]), this->App->currentDB, value);
+            this->App->db->updateAuthor(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), value);
         }
         this->App->db->db.commit();
         this->refreshVideosWidget(false, true);
@@ -455,7 +455,7 @@ void MainWindow::updateNames(QList<QTreeWidgetItem*> items) {
         this->App->db->db.transaction();
         for (auto const& item : items) {
             QString name = InsertSettingsDialog::get_name(item->text(ListColumns["PATH_COLUMN"]));
-            this->App->db->updateName(item->text(ListColumns["PATH_COLUMN"]), this->App->currentDB, name);
+            this->App->db->updateName(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), name);
         }
         this->App->db->db.commit();
         this->refreshVideosWidget(false, true);
@@ -470,7 +470,7 @@ void MainWindow::updateNames(QString value, QList<QTreeWidgetItem*> items) {
     if (!items.isEmpty()) {
         this->App->db->db.transaction();
         for (auto const& item : items) {
-            this->App->db->updateName(item->text(ListColumns["PATH_COLUMN"]), this->App->currentDB, value);
+            this->App->db->updateName(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), value);
         }
         this->App->db->db.commit();
         this->refreshVideosWidget(false, true);
@@ -479,16 +479,16 @@ void MainWindow::updateNames(QString value, QList<QTreeWidgetItem*> items) {
     }
 }
 
-void MainWindow::updatePath(QString old_path, QString new_path) {
+void MainWindow::updatePath(int video_id, QString new_path) {
     QMimeDatabase db;
     QMimeType guess_type = db.mimeTypeForFile(new_path);
     if (guess_type.isValid() && guess_type.name().startsWith("video")) {
         this->App->db->db.transaction();
-        this->App->db->updateItem(old_path, this->App->currentDB, new_path);
+        this->App->db->updateItem(video_id, new_path);
         QString author = InsertSettingsDialog::get_author(new_path);
         QString name = InsertSettingsDialog::get_name(new_path);
-        this->App->db->updateAuthor(new_path, this->App->currentDB, author);
-        this->App->db->updateName(new_path, this->App->currentDB, name);
+        this->App->db->updateAuthor(video_id, author);
+        this->App->db->updateName(video_id, name);
         this->App->db->db.commit();
         this->thumbnailManager.enqueue_work({ new_path, false });
         this->thumbnailManager.start();
@@ -503,7 +503,7 @@ void MainWindow::syncItems(QTreeWidgetItem* main_item, QList<QTreeWidgetItem*> i
     if (!items.isEmpty()) {
         this->App->db->db.transaction();
         for (auto const& item : items) {
-            this->App->db->updateItem(item->text(ListColumns["PATH_COLUMN"]), this->App->currentDB, "", "", "", "", "", "", main_item->text(ListColumns["WATCHED_COLUMN"]), main_item->text(ListColumns["VIEWS_COLUMN"]), main_item->data(ListColumns["RATING_COLUMN"], CustomRoles::rating).toString());
+            this->App->db->updateItem(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), "", "", "", "", "", "", main_item->text(ListColumns["WATCHED_COLUMN"]), main_item->text(ListColumns["VIEWS_COLUMN"]), main_item->data(ListColumns["RATING_COLUMN"], CustomRoles::rating).toString());
         }
         this->App->db->db.commit();
         this->refreshVideosWidget(false, true);
@@ -1026,9 +1026,9 @@ bool MainWindow::NextVideo(bool random, bool increment) {
         this->App->db->db.transaction();
         this->App->db->setMainInfoValue("current",this->App->currentDB,"");
         if(increment)
-            this->App->db->updateWatchedState(items.first()->text(ListColumns["PATH_COLUMN"]),this->App->currentDB,this->position,"Yes",increment);
+            this->App->db->updateWatchedState(items.first()->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), this->position, "Yes", increment);
         else
-            this->App->db->updateWatchedState(items.first()->text(ListColumns["PATH_COLUMN"]), this->App->currentDB, "Yes", increment);
+            this->App->db->updateWatchedState(items.first()->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), "Yes", increment);
         if (random) {
             if (this->App->currentDB == "MINUS") {
                 if (this->sv_count >= this->sv_target_count) {
@@ -1078,7 +1078,7 @@ bool MainWindow::NextVideo(bool random, bool increment) {
             }
         }
         else if (this->App->currentDB == "PLUS" && increment)
-            this->incrementtimeWatchedIncrement(this->App->db->getVideoProgress(items.first()->text(ListColumns["PATH_COLUMN"]),this->App->currentDB,"0").toDouble());
+            this->incrementtimeWatchedIncrement(this->App->db->getVideoProgress(items.first()->data(ListColumns["PATH_COLUMN"],CustomRoles::id).toInt(), "0").toDouble());
         this->updateTotalListLabel();
         this->checktimeWatchedIncrement();
         this->updateWatchedProgressBar();
@@ -1111,7 +1111,7 @@ bool MainWindow::NextVideo(bool random, bool increment) {
                 }
             }
             else {
-                this->setCurrent(items.first()->text(ListColumns["PATH_COLUMN"]), items.first()->text(ListColumns["NAME_COLUMN"]), items.first()->text(ListColumns["AUTHOR_COLUMN"]));
+                this->setCurrent(items.first()->data(ListColumns["PATH_COLUMN"],CustomRoles::id).toInt(), items.first()->text(ListColumns["PATH_COLUMN"]), items.first()->text(ListColumns["NAME_COLUMN"]), items.first()->text(ListColumns["AUTHOR_COLUMN"]));
                 this->selectCurrentItem(items.first());
                 video_changed = true;
             }
@@ -1128,13 +1128,13 @@ bool MainWindow::setNextVideo(QTreeWidgetItem* item) {
             item_below = this->ui.videosWidget->topLevelItem(0);
         }
         if (item == item_below) {
-            this->setCurrent("", "", "");
+            this->setCurrent(-1,"", "", "");
             this->selectCurrentItem(nullptr);
             return false;
             break;
         }
         if (item_below->text(ListColumns["WATCHED_COLUMN"]) == "No") {
-            this->setCurrent(item_below->text(ListColumns["PATH_COLUMN"]), item_below->text(ListColumns["NAME_COLUMN"]), item_below->text(ListColumns["AUTHOR_COLUMN"]));
+            this->setCurrent(item_below->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item_below->text(ListColumns["PATH_COLUMN"]), item_below->text(ListColumns["NAME_COLUMN"]), item_below->text(ListColumns["AUTHOR_COLUMN"]));
             this->selectCurrentItem(item_below);
             return true;
             break;
@@ -1705,12 +1705,12 @@ bool MainWindow::randomVideo(bool watched_all, QStringList vid_type_include, QSt
             }
         }
         if (item != nullptr) {
-            this->setCurrent(item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]));
+            this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]));
             this->selectCurrentItem(item);
             return true;
         }
         else {
-            this->setCurrent("", "", "");
+            this->setCurrent(-1, "", "", "");
             this->selectCurrentItem(nullptr);
         }
     }
@@ -1727,7 +1727,7 @@ void MainWindow::initListDetails() {
     this->ui.counterLabel->setProgress(this->sv_count);
     this->checktimeWatchedIncrement();
     this->updateWatchedProgressBar();
-    this->updateProgressBar(this->App->db->getVideoProgress(this->ui.currentVideo->path,this->App->currentDB,"0"), utils::getVideoDuration(this->ui.currentVideo->path));
+    this->updateProgressBar(this->App->db->getVideoProgress(this->ui.currentVideo->id,"0"), utils::getVideoDuration(this->ui.currentVideo->path));
     this->App->db->db.commit();
 }
 
@@ -1777,7 +1777,7 @@ void MainWindow::updateProgressBar(double position, double duration, std::shared
                     listener->change_in_progress = true;
                     //qDebug() << "clicked" << this->position << listener->currentPosition;
                     if (listener && listener->currentPosition != -1) {
-                        this->App->db->updateVideoProgress(listener->path, this->App->currentDB, listener->currentPosition);
+                        this->App->db->updateVideoProgress(listener->video_id, listener->currentPosition);
                     }
                     listener->currentPosition = -1;
                     this->NextButtonClicked(listener);
@@ -1838,7 +1838,7 @@ void MainWindow::DeleteDialogButton(QList<QTreeWidgetItem*> items) {
                 else if(root) {
                     root->removeChild(item);
                 }
-                this->App->db->deleteVideo(item->text(ListColumns["PATH_COLUMN"]), this->App->currentDB);
+                this->App->db->deleteVideo(item->data(ListColumns["PATH_COLUMN"],CustomRoles::id).toInt());
                 QString suffix = "_" + QString(QCryptographicHash::hash(item->text(ListColumns["PATH_COLUMN"]).toStdString(), QCryptographicHash::Md5).toHex()) + ".jpg";
                 QString cachename = QFileInfo(item->text(ListColumns["PATH_COLUMN"])).completeBaseName() + suffix;
                 QString cachepath = QString(THUMBNAILS_CACHE_PATH) + "/" + cachename;
@@ -1978,7 +1978,7 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
         this->App->db->insertVideo((*it)->text(0), current_db, (*it)->text(2), (*it)->text(1), (*it)->text(3));
         // probably should remove, mostly unused
         if(update_state)
-            this->App->db->updateWatchedState((*it)->text(0), current_db, "No");
+            this->App->db->updateWatchedState((*it)->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), "No");
         count++;
         if (count == 100) {
             this->App->db->db.commit();
@@ -2004,7 +2004,7 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
             QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(first, Qt::MatchExactly, ListColumns["PATH_COLUMN"], 1);
             if (!items.isEmpty()) {
                 QTreeWidgetItem *item = items.first();
-                this->setCurrent(item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]));
+                this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]));
                 this->selectCurrentItem(item,false);
             }
         }
@@ -2014,7 +2014,7 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
 
 void MainWindow::watchCurrent() {
     if (this->App->VW->mainListener == nullptr) {
-        std::shared_ptr<Listener> l = this->App->VW->newListener(this->ui.currentVideo->path);
+        std::shared_ptr<Listener> l = this->App->VW->newListener(this->ui.currentVideo->path, this->ui.currentVideo->id);
         this->App->VW->setMainListener(l);
         double seconds = this->position;
         if (seconds < 0.001)
@@ -2035,9 +2035,9 @@ void MainWindow::watchCurrent() {
     }
 }
 
-void MainWindow::watchSelected(QString path) {
-    std::shared_ptr<Listener> l = this->App->VW->newListener(path);
-    double seconds = this->App->db->getVideoProgress(path, this->App->currentDB).toDouble();
+void MainWindow::watchSelected(int video_id, QString path) {
+    std::shared_ptr<Listener> l = this->App->VW->newListener(path, video_id);
+    double seconds = this->App->db->getVideoProgress(video_id).toDouble();
     if (seconds < 0.001)
         seconds = 0.001;
     l->process->setProgram(this->App->config->get("player_path"));
@@ -2070,7 +2070,7 @@ void MainWindow::switchCurrentDB(QString db) {
     if (this->App->VW->mainListener) {
         listener = this->App->VW->mainListener;
         if (listener->currentPosition != -1)
-            this->App->db->updateVideoProgress(listener->path, this->App->currentDB, listener->currentPosition);
+            this->App->db->updateVideoProgress(listener->video_id, listener->currentPosition);
     }
     if (!db.isEmpty()) {
         this->App->currentDB = db;
@@ -2533,9 +2533,9 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
         return;
 
     if (menu_click == play_video)
-        this->watchSelected(item->text(ListColumns["PATH_COLUMN"]));
+        this->watchSelected(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]));
     else if (menu_click == set_current) {
-        this->setCurrent(item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]));
+        this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]));
         this->selectCurrentItem();
         if (this->App->VW->mainListener) {
             this->changeListenerVideo(this->App->VW->mainListener, this->ui.currentVideo->path, this->position);
@@ -2592,12 +2592,12 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
         QString new_path = QFileDialog::getOpenFileName(this, "Select new path", fileInfo.absolutePath());
         if (!new_path.isEmpty()) {
             new_path = QDir::toNativeSeparators(new_path);
-            this->updatePath(old_path, new_path);
+            this->updatePath(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), new_path);
             if (old_path == this->ui.currentVideo->path) {
                 auto items = this->ui.videosWidget->findItemsCustom(new_path, Qt::MatchFixedString, ListColumns["PATH_COLUMN"], 1);
                 if (not items.isEmpty()) {
                     auto item = items.first();
-                    this->setCurrent(item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]));
+                    this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(),item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]));
                     if (this->App->VW->mainListener) {
                         this->changeListenerVideo(this->App->VW->mainListener, this->ui.currentVideo->path, 0);
                     }
@@ -2628,7 +2628,7 @@ void MainWindow::setType(QString type, QList<QTreeWidgetItem*> items) {
     if (!items.isEmpty()) {
         this->App->db->db.transaction();
         for (auto const& item : items) {
-            this->App->db->updateType(item->text(ListColumns["PATH_COLUMN"]), this->App->currentDB, type);
+            this->App->db->updateType(item->data(ListColumns["PATH_COLUMN"],CustomRoles::id).toInt(), type);
         }
         this->App->db->db.commit();
         this->refreshVideosWidget(false,true);
@@ -2643,7 +2643,7 @@ void MainWindow::setViews(int value, QList<QTreeWidgetItem*> items) {
     if (!items.isEmpty()) {
         this->App->db->db.transaction();
         for (auto const& item : items) {
-            this->App->db->setViews(item->text(ListColumns["PATH_COLUMN"]), this->App->currentDB, value);
+            this->App->db->setViews(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), value);
         }
         this->App->db->db.commit();
         this->refreshVideosWidget(false,true);
@@ -2701,7 +2701,7 @@ void MainWindow::incrementViews(int count, QList<QTreeWidgetItem*> items) {
     if (!items.isEmpty()) {
         this->App->db->db.transaction();
         for (auto const& item : items) {
-            this->App->db->incrementVideoViews(item->text(ListColumns["PATH_COLUMN"]), this->App->currentDB, count);
+            this->App->db->incrementVideoViews(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), count);
         }
         this->App->db->db.commit();
         this->refreshVideosWidget(false,true);
@@ -2716,7 +2716,7 @@ void MainWindow::setWatched(QString value, QList<QTreeWidgetItem*> items) {
     if (!items.isEmpty()) {
         this->App->db->db.transaction();
         for (auto const& item : items) {
-            this->App->db->updateWatchedState(item->text(ListColumns["PATH_COLUMN"]), this->App->currentDB, value);
+            this->App->db->updateWatchedState(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), value);
         }
         this->App->db->db.commit();
         this->refreshVideosWidget(false,true);
@@ -2747,9 +2747,9 @@ void MainWindow::selectItemsDelayed(QStringList items, bool clear_selection) {
     });
 }
 
-void MainWindow::setCurrent(QString path, QString name, QString author) {
-    this->ui.currentVideo->setValues(path,name,author);
-    this->updateProgressBar(this->App->db->getVideoProgress(this->ui.currentVideo->path,this->App->currentDB), utils::getVideoDuration(this->ui.currentVideo->path));
+void MainWindow::setCurrent(int id, QString path, QString name, QString author) {
+    this->ui.currentVideo->setValues(id, path,name,author);
+    this->updateProgressBar(this->App->db->getVideoProgress(this->ui.currentVideo->id), utils::getVideoDuration(this->ui.currentVideo->path));
     this->App->db->setMainInfoValue("current", this->App->currentDB, path);
     qMainApp->logger->log(QString("Setting current Video to \"%1\"").arg(path), "Video",path);
 }

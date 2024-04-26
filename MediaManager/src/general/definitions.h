@@ -9,7 +9,10 @@ extern std::map<int, QString> sortingDict_reversed;
 extern QStringList videoTypes;
 
 namespace CustomRoles {
-	enum roles {rating = Qt::UserRole};
+	enum roles {
+		id = Qt::UserRole,
+		rating = Qt::UserRole+1,
+	};
 }
 
 //Database Paths

@@ -4,10 +4,11 @@
 #include <QDebug>
 #include "MainApp.h"
 
-Listener::Listener(QString path, int *CLASS_COUNT, QObject* parent, MainApp* App)
+Listener::Listener(QString path,int video_id, int *CLASS_COUNT, QObject* parent, MainApp* App)
 {
-    this->App = App;;
+    this->App = App;
     this->path = path;
+    this->video_id = video_id;
 	this->CLASS_COUNT = CLASS_COUNT;
     this->process = new QProcess(parent);
     WNDCLASS windowClass = {};
@@ -177,12 +178,13 @@ void Listener::closeWindow()
     SendMessageTimeout(this->hwnd, WM_CLOSE, 0, 0, 0, 1, NULL);
 }
 
-void Listener::change_path(QString path)
+void Listener::change_path(QString path, int video_id)
 {
     this->change_in_progress = true;
     this->currentPosition = -1;
     this->duration = -1;
     this->path = path;
+    this->video_id = video_id;
     this->first_getcurrentpositon = true;
     this->endvideo = false;
     this->state = 2;
@@ -194,9 +196,9 @@ bool Listener::is_process_alive()
     return !(this->process->state() == QProcess::NotRunning);
 }
 
-void Listener::change_video(QString path, double position)
+void Listener::change_video(QString path, int video_id, double position)
 {
-    this->change_path(path);
+    this->change_path(path, video_id);
     if(position >= 0)
         this->currentPosition = position;
     if (path.isEmpty())

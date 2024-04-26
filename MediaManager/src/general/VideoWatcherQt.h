@@ -22,7 +22,7 @@ public:
     std::chrono::microseconds *fap_time_start = nullptr;
     QList<std::shared_ptr<Listener>> Listeners = QList<std::shared_ptr<Listener>>();
     VideoWatcherQt(MainApp* App, QObject* parent = nullptr);
-    std::shared_ptr<Listener> newListener(QString path);
+    std::shared_ptr<Listener> newListener(QString path, int video_id);
     void clearData(bool include_mainlistener);
     void setMainListener(std::shared_ptr<Listener> listener);
     void clearMainListener();

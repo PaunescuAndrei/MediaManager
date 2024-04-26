@@ -60,7 +60,7 @@ public:
     void updateAuthors(QString value, QList<QTreeWidgetItem*> items);
     void updateNames(QList<QTreeWidgetItem*> items);
     void updateNames(QString value, QList<QTreeWidgetItem*> items);
-    void updatePath(QString old_path, QString new_path);
+    void updatePath(int video_id, QString new_path);
     void syncItems(QTreeWidgetItem* main_item, QList<QTreeWidgetItem*> items);
     void toggleSearchBar();
     void toggleDates(bool scroll = true);
@@ -75,7 +75,7 @@ public:
     void addWatchedDialogButton();
     void switchCurrentDB(QString db = "");
     void refreshVideosWidget(bool selectcurrent = true, bool remember_selected = false);
-    void watchSelected(QString path);
+    void watchSelected(int video_id, QString path);
     void watchCurrent();
     void initListDetails();
     void updateWatchedProgressBar();
@@ -89,7 +89,7 @@ public:
     void refreshHeadersVisibility();
     void videosWidgetHeaderContextMenu(QPoint point);
     void videosWidgetContextMenu(QPoint point);
-    void setCurrent(QString path, QString name, QString author);
+    void setCurrent(int id, QString path, QString name, QString author);
     QString getWatchedVisibilityOption(bool watched_yes, bool watched_no, bool watched_mixed);
     void DeleteDialogButton(QList<QTreeWidgetItem*> items);
     void setWatched(QString value, QList<QTreeWidgetItem*> items);

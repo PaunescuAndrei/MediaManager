@@ -29,7 +29,7 @@ sqliteDB::sqliteDB(QString location,std::string conname) {
 
 QList<QTreeWidgetItem*> sqliteDB::getVideos(QString category) {
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QString("SELECT path,type,watched,views,rating,author,name,date_created,last_watched from videodetails where category = ?"));
+    query.prepare(QString("SELECT id,path,type,watched,views,rating,author,name,date_created,last_watched from videodetails where category = ?"));
     query.addBindValue(category);
     if (!query.exec()) {
         qDebug() << "getVideos " << query.lastError().text();
@@ -38,21 +38,23 @@ QList<QTreeWidgetItem*> sqliteDB::getVideos(QString category) {
     }
     QList<QTreeWidgetItem*> itemlist = QList<QTreeWidgetItem*>();
     while (query.next()) {
-        QString path = query.value(0).toString();
-        QString type = query.value(1).toString();
+        int id = query.value(0).toInt();
+        QString path = query.value(1).toString();
+        QString type = query.value(2).toString();
         if (type.isEmpty()) {
             type = "None";
         }
-        QString watched = query.value(2).toString();
-        QString views = query.value(3).toString();
-        double rating = query.value(4).toDouble();
-        QString author = query.value(5).toString();
-        QString name = query.value(6).toString();
-        QDateTime date_created = query.value(7).toDateTime();
-        QDateTime last_watched = query.value(8).toDateTime();
+        QString watched = query.value(3).toString();
+        QString views = query.value(4).toString();
+        double rating = query.value(5).toDouble();
+        QString author = query.value(6).toString();
+        QString name = query.value(7).toString();
+        QDateTime date_created = query.value(8).toDateTime();
+        QDateTime last_watched = query.value(9).toDateTime();
         TreeWidgetItem *item = new TreeWidgetItem({ author,name,path,type,watched,views }, 0, nullptr);
         item->setData(ListColumns["DATE_CREATED_COLUMN"], Qt::DisplayRole, date_created);
         item->setData(ListColumns["LAST_WATCHED_COLUMN"], Qt::DisplayRole, last_watched);
+        item->setData(ListColumns["PATH_COLUMN"], CustomRoles::id, id);
         item->setData(ListColumns["RATING_COLUMN"], CustomRoles::rating,rating);
         itemlist.append(item);
     }
@@ -125,11 +127,10 @@ QJsonObject sqliteDB::getFilterSettings(QString category) {
         return QJsonObject();
 }
 
-QString sqliteDB::getVideoProgress(QString path, QString category, QString fallback) {
+QString sqliteDB::getVideoProgress(int video_id, QString fallback) {
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QString("SELECT progress from videodetails WHERE path = ? and category = ?"));
-    query.addBindValue(path);
-    query.addBindValue(category);
+    query.prepare(QString("SELECT progress from videodetails WHERE id = ?"));
+    query.addBindValue(video_id);
     if (!query.exec()) {
         qDebug() << "getVideoProgress " << query.lastError().text();
         if (qApp)
@@ -238,11 +239,10 @@ void sqliteDB::setMainInfoValue(QString name, QString category, QString value) {
     }
 }
 
-void sqliteDB::deleteVideo(QString path, QString category) {
+void sqliteDB::deleteVideo(int video_id) {
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QString("DELETE FROM videodetails WHERE path = ? and category = ?"));
-    query.addBindValue(path);
-    query.addBindValue(category);
+    query.prepare(QString("DELETE FROM videodetails WHERE id = ?"));
+    query.addBindValue(video_id);
     if (!query.exec()) {
         qDebug() << "deleteVideo " << query.lastError().text();
         if (qApp)
@@ -250,18 +250,17 @@ void sqliteDB::deleteVideo(QString path, QString category) {
     }
 }
 
-void sqliteDB::updateWatchedState(QString path, QString category, double progress, QString watched, bool increment) {
+void sqliteDB::updateWatchedState(int video_id, double progress, QString watched, bool increment) {
     QSqlQuery query = QSqlQuery(this->db);
     QString main_query_string = "UPDATE videodetails SET progress=?, watched=?";
     QString views_increment_string = increment ? ", views = views + 1" : "";
     QString update_last_watched_string = (watched == "Yes") ? ", last_watched = CURRENT_TIMESTAMP" : "";
-    QString end_query_string = " WHERE path=? and category = ?";
+    QString end_query_string = " WHERE id = ?";
     QString final_string = main_query_string % views_increment_string % update_last_watched_string % end_query_string;
     query.prepare(final_string);
     query.addBindValue(QString::number(progress,'f',4));
     query.addBindValue(watched);
-    query.addBindValue(path);
-    query.addBindValue(category);
+    query.addBindValue(video_id);
     if (!query.exec()) {
         qDebug() << "updateWatchedState " << query.lastError().text();
         if (qApp)
@@ -269,17 +268,16 @@ void sqliteDB::updateWatchedState(QString path, QString category, double progres
     }
 }
 
-void sqliteDB::updateWatchedState(QString path, QString category, QString watched, bool increment) {
+void sqliteDB::updateWatchedState(int video_id, QString watched, bool increment) {
     QSqlQuery query = QSqlQuery(this->db);
     QString main_query_string = "UPDATE videodetails SET watched=?";
     QString views_increment_string = increment ? ", views = views + 1" : "";
     QString update_last_watched_string = (watched == "Yes") ? ", last_watched = CURRENT_TIMESTAMP" : "";
-    QString end_query_string = " WHERE path=? and category = ?";
+    QString end_query_string = " WHERE id = ?";
     QString final_string = main_query_string % views_increment_string % update_last_watched_string % end_query_string;
     query.prepare(final_string);
     query.addBindValue(watched);
-    query.addBindValue(path);
-    query.addBindValue(category);
+    query.addBindValue(video_id);
     if (!query.exec()) {
         qDebug() << "updateWatchedState " << query.lastError().text();
         if (qApp)
@@ -287,12 +285,11 @@ void sqliteDB::updateWatchedState(QString path, QString category, QString watche
     }
 }
 
-void sqliteDB::updateType(QString path, QString category, QString type_val) {
+void sqliteDB::updateType(int video_id, QString type_val) {
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QString("UPDATE videodetails SET type=? WHERE path=? and category = ?"));
+    query.prepare(QString("UPDATE videodetails SET type=? WHERE id = ?"));
     query.addBindValue(type_val);
-    query.addBindValue(path);
-    query.addBindValue(category);
+    query.addBindValue(video_id);
     if (!query.exec()) {
         qDebug() << "updateType " << query.lastError().text();
         if (qApp)
@@ -300,12 +297,11 @@ void sqliteDB::updateType(QString path, QString category, QString type_val) {
     }
 }
 
-void sqliteDB::updateAuthor(QString path, QString category, QString author) {
+void sqliteDB::updateAuthor(int video_id, QString author) {
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QString("UPDATE videodetails SET author=? WHERE path=? and category = ?"));
+    query.prepare(QString("UPDATE videodetails SET author=? WHERE id = ?"));
     query.addBindValue(author);
-    query.addBindValue(path);
-    query.addBindValue(category);
+    query.addBindValue(video_id);
     if (!query.exec()) {
         qDebug() << "updateAuthor " << query.lastError().text();
         if (qApp)
@@ -313,12 +309,11 @@ void sqliteDB::updateAuthor(QString path, QString category, QString author) {
     }
 }
 
-void sqliteDB::updateName(QString path, QString category, QString name) {
+void sqliteDB::updateName(int video_id, QString name) {
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QString("UPDATE videodetails SET name=? WHERE path=? and category = ?"));
+    query.prepare(QString("UPDATE videodetails SET name=? WHERE id = ?"));
     query.addBindValue(name);
-    query.addBindValue(path);
-    query.addBindValue(category);
+    query.addBindValue(video_id);
     if (!query.exec()) {
         qDebug() << "updateName " << query.lastError().text();
         if (qApp)
@@ -326,12 +321,11 @@ void sqliteDB::updateName(QString path, QString category, QString name) {
     }
 }
 
-void sqliteDB::updateRating(QString path, QString category, double rating) {
+void sqliteDB::updateRating(int video_id, double rating) {
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QString("UPDATE videodetails SET rating=? WHERE path=? and category = ?"));
+    query.prepare(QString("UPDATE videodetails SET rating=? WHERE id = ?"));
     query.addBindValue(QString::number(rating));
-    query.addBindValue(path);
-    query.addBindValue(category);
+    query.addBindValue(video_id);
     if (!query.exec()) {
         qDebug() << "updateRating " << query.lastError().text();
         if (qApp)
@@ -339,12 +333,11 @@ void sqliteDB::updateRating(QString path, QString category, double rating) {
     }
 }
 
-void sqliteDB::setViews(QString path, QString category, int value) {
+void sqliteDB::setViews(int video_id, int value) {
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QString("UPDATE videodetails SET views = ? WHERE path=? and category = ?"));
+    query.prepare(QString("UPDATE videodetails SET views = ? WHERE id = ?"));
     query.addBindValue(QString::number(value));
-    query.addBindValue(path);
-    query.addBindValue(category);
+    query.addBindValue(video_id);
     if (!query.exec()) {
         qDebug() << "setViews " << query.lastError().text();
         if (qApp)
@@ -352,12 +345,11 @@ void sqliteDB::setViews(QString path, QString category, int value) {
     }
 }
 
-void sqliteDB::incrementVideoViews(QString path, QString category, int value) {
+void sqliteDB::incrementVideoViews(int video_id, int value) {
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QString("UPDATE videodetails SET views = views + ? WHERE path=? and category = ?"));
+    query.prepare(QString("UPDATE videodetails SET views = views + ? WHERE id = ?"));
     query.addBindValue(QString::number(value));
-    query.addBindValue(path);
-    query.addBindValue(category);
+    query.addBindValue(video_id);
     if (!query.exec()) {
         qDebug() << "incrementVideoViews " << query.lastError().text();
         if (qApp)
@@ -397,9 +389,9 @@ QString sqliteDB::getMainInfoValue(QString name, QString category, QString fallb
         return fallback;
 }
 
-std::tuple<QString, QString, QString> sqliteDB::getCurrentVideo(QString category, std::tuple<QString, QString, QString> fallback) {
+std::tuple<int, QString, QString, QString> sqliteDB::getCurrentVideo(QString category, std::tuple<int, QString, QString, QString> fallback) {
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QString("SELECT t1.value,t2.name,t2.author FROM maininfo t1 LEFT JOIN videodetails t2 ON t1.value = t2.path where t1.category = ? and t1.name = \"current\";"));
+    query.prepare(QString("SELECT t2.id,t1.value,t2.name,t2.author FROM maininfo t1 LEFT JOIN videodetails t2 ON t1.value = t2.path where t1.category = ? and t1.name = \"current\";"));
     query.addBindValue(category);
     if (!query.exec()) {
         qDebug() << "getCurrentVideo " << query.lastError().text();
@@ -408,7 +400,7 @@ std::tuple<QString, QString, QString> sqliteDB::getCurrentVideo(QString category
     }
     bool found = query.first();
     if (found == true)
-        return std::tuple<QString, QString, QString>{query.value(0).toString(), query.value(1).toString(), query.value(2).toString()};
+        return std::tuple<int, QString, QString, QString>{query.value(0).toInt(), query.value(1).toString(), query.value(2).toString(), query.value(3).toString()};
     else
         return fallback;
 }
@@ -530,13 +522,12 @@ QString sqliteDB::getRandomVideo(QString category, QJsonObject settings) {
         return "";
 }
 
-void sqliteDB::updateVideoProgress(QString path,QString category,double progress)
+void sqliteDB::updateVideoProgress(int video_id, double progress)
 {
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QString("UPDATE videodetails SET progress=? WHERE path=? and category = ?"));
+    query.prepare(QString("UPDATE videodetails SET progress=? WHERE id = ?"));
     query.addBindValue(QString::number(progress,'f',4));
-    query.addBindValue(path);
-    query.addBindValue(category);
+    query.addBindValue(video_id);
     if (!query.exec()) {
         qDebug() << "updateVideoProgress " << query.lastError().text();
         if (qApp)
@@ -544,7 +535,7 @@ void sqliteDB::updateVideoProgress(QString path,QString category,double progress
     }
 }
 
-void sqliteDB::updateItem(QString path, QString category, QString new_path, QString new_author, QString new_name, QString new_type, QString new_category, QString new_progress, QString new_watched, QString new_views, QString new_rating) {
+void sqliteDB::updateItem(int video_id, QString new_path, QString new_author, QString new_name, QString new_type, QString new_category, QString new_progress, QString new_watched, QString new_views, QString new_rating) {
     QSqlQuery query = QSqlQuery(this->db);
     QString main_query_string = "UPDATE videodetails SET";
     QStringList mid_string_list = QStringList();
@@ -558,15 +549,14 @@ void sqliteDB::updateItem(QString path, QString category, QString new_path, QStr
     if (!new_watched.isEmpty()) mid_string_list.append(" watched=(:new_watched_)");
     if (!new_views.isEmpty()) mid_string_list.append(" views=(:new_views_)");
     if (!new_rating.isEmpty()) mid_string_list.append(" rating=(:new_rating_)");
-    QString end_query_string = " WHERE path= (:path_) and category = (:category_)";
+    QString end_query_string = " WHERE id = (:video_id_)";
 
     QString mid_string = mid_string_list.join(",");
     if (mid_string.isEmpty())
         return;
     QString final_query_string = main_query_string % mid_string % end_query_string;
     query.prepare(final_query_string);
-    query.bindValue(":path_", path);
-    query.bindValue(":category_", category);
+    query.bindValue(":video_id_", video_id);
     if (!new_path.isEmpty()) query.bindValue(":new_path_", new_path);
     if (!new_author.isEmpty()) query.bindValue(":new_author_", new_author);
     if (!new_name.isEmpty()) query.bindValue(":new_name_", new_name);
@@ -661,7 +651,8 @@ void sqliteDB::resetWatched(QString category, QJsonObject settings, double progr
 }
 
 void sqliteDB::createTables() {
-    std::string videodetails = " CREATE TABLE IF NOT EXISTS videodetails ("
+    QString videodetails = " CREATE TABLE IF NOT EXISTS videodetails ("
+        "id INTEGER NOT NULL,"
         "path TEXT NOT NULL,"
         "author TEXT DEFAULT '',"
         "name TEXT NOT NULL,"
@@ -673,17 +664,24 @@ void sqliteDB::createTables() {
         "rating REAL DEFAULT 0,"
         "date_created DATE DEFAULT CURRENT_TIMESTAMP,"
         "last_watched DATE,"
-        "PRIMARY KEY(path, category));";
-    std::string maininfo = " CREATE TABLE IF NOT EXISTS maininfo ("
+        "PRIMARY KEY(id),"
+        "UNIQUE(path,category);";
+
+    QString maininfo = " CREATE TABLE IF NOT EXISTS maininfo ("
         "name TEXT NOT NULL,"
         "value TEXT,"
         "category TEXT NOT NULL,"
         "PRIMARY KEY(name, category));";
 
+    QString path_category_index = " CREATE INDEX path_category_index ON videodetails (path, category);";
+    QString category_index = " CREATE INDEX category_index ON videodetails (category);";
+
     this->db.transaction();
     QSqlQuery query = QSqlQuery(this->db);
-    query.exec(QString::fromStdString(videodetails));
-    query.exec(QString::fromStdString(maininfo));
+    query.exec(videodetails);
+    query.exec(maininfo);
+    query.exec(path_category_index);
+    query.exec(category_index);
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('current', 'MINUS', '')");
     query.exec("INSERT OR IGNORE INTO maininfo(name,category,value) VALUES('current', 'PLUS', '')");
     query.exec("INSERT OR IGNORE INTO maininfo(name,category,value) VALUES('currentIconPath', 'MINUS', '')");

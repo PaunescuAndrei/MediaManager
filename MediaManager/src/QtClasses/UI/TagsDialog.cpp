@@ -46,6 +46,8 @@ void TagsDialog::contextMenu(const QPoint &point) {
             this->model->removeRow(item.row());
         }
         if (not this->model->submitAll()) {
+            if (qApp)
+                qMainApp->showErrorMessage("Database error: " + this->model->lastError().text());
             this->model->revertAll();
         }
     }

@@ -9,6 +9,7 @@
 LogDialog::LogDialog(QWidget* parent) : QDialog(parent)
 {
 	ui.setupUi(this);
+	this->setWindowModality(Qt::NonModal);
 	this->layout()->setContentsMargins(0, 0, 0, 0);
 	this->layout()->setSpacing(0);
 

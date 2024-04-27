@@ -5,6 +5,7 @@
 
 setCounterDialog::setCounterDialog(QWidget* parent) : QDialog(parent) {
 	ui.setupUi(this);
+	this->setWindowModality(Qt::WindowModal);
 	this->ui.spinBox->setPalette(get_palette("spinbox"));
 	connect(this->ui.SetBtn, &QPushButton::clicked, this, &setCounterDialog::set);
 	connect(this->ui.Addbtn, &QPushButton::clicked, this, &setCounterDialog::add);

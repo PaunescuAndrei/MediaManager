@@ -11,6 +11,7 @@
 
 InsertSettingsDialog::InsertSettingsDialog(QWidget* parent) : QDialog(parent) {
 	ui.setupUi(this);
+	this->setWindowModality(Qt::WindowModal);
 	this->ui.nameDirComboBox->addItem("Auto");
 	this->ui.nameDirComboBox->setCurrentIndex(0);
 	this->ui.authorComboBox->addItem("");

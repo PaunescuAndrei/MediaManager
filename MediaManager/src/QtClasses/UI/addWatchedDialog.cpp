@@ -5,6 +5,7 @@
 
 addWatchedDialog::addWatchedDialog(QWidget* parent) : QDialog(parent) {
 	ui.setupUi(this);
+	this->setWindowModality(Qt::WindowModal);
 	ui.HH->setPalette(get_palette("spinbox"));
 	ui.MM->setPalette(get_palette("spinbox"));
 	ui.SS->setPalette(get_palette("spinbox"));

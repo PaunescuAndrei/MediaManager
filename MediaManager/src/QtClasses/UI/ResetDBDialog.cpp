@@ -6,6 +6,7 @@
 ResetDBDialog::ResetDBDialog(QString defaultDir, QWidget* parent) : QDialog(parent)
 {
 	ui.setupUi(this);
+    this->setWindowModality(Qt::WindowModal);
     connect(this->ui.SetBtn,&QPushButton::clicked,this,&ResetDBDialog::set);
     connect(this->ui.AddBtn, &QPushButton::clicked, this, &ResetDBDialog::add);
     connect(this->ui.CancelBtn, &QPushButton::clicked, this, &ResetDBDialog::reject);

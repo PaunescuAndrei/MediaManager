@@ -16,6 +16,7 @@
 FilterDialog::FilterDialog(MainWindow* MW, QJsonObject settings, QWidget* parent) : QDialog(parent) {
     this->resize(this->width(), 444);
 	ui.setupUi(this);
+    this->setWindowModality(Qt::WindowModal);
     if (settings.isEmpty())
         settings = QJsonObject(MW->filterSettings.json);
     this->ui.viewsSpinBox->setStyleSheet(get_stylesheet("spinbox"));

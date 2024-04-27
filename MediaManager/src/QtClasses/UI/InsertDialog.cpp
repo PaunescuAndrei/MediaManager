@@ -6,6 +6,7 @@
 
 InsertDialog::InsertDialog(QWidget* parent) : QDialog(parent) {
 	ui.setupUi(this);
+	this->setWindowModality(Qt::WindowModal);
 	connect(this->ui.BrowseButton, &QPushButton::clicked,this,&InsertDialog::getFile);
 }
 

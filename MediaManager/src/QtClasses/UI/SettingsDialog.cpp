@@ -15,6 +15,7 @@
 SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 {
 	this->ui.setupUi(this);
+	this->setWindowModality(Qt::WindowModal);
 	this->ui.SVspinBox->setStyleSheet(get_stylesheet("spinbox"));
 	this->ui.mascotsChanceSpinBox->setStyleSheet(get_stylesheet("spinbox"));
 	this->ui.volumeSpinBox->setStyleSheet(get_stylesheet("spinbox"));

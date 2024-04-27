@@ -11,6 +11,7 @@ public:
     QSqlDatabase db;
     QString location;
     sqliteDB(QString location, std::string conname = "");
+    void enableForeignKeys();
     ~sqliteDB();
     void createTables();
     QList<QTreeWidgetItem*> getVideos(QString category);

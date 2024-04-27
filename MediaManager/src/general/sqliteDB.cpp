@@ -22,9 +22,17 @@ sqliteDB::sqliteDB(QString location,std::string conname) {
         if (qApp)
             qMainApp->showErrorMessage("Error oppening database.");
     }
+    this->enableForeignKeys();
     //QSqlQuery query = QSqlQuery("PRAGMA journal_mode = WAL;", this->db);
     //query.exec();
     this->createTables();
+}
+
+void sqliteDB::enableForeignKeys()
+{
+    QSqlQuery query(this->db);
+    query.prepare("PRAGMA foreign_keys = ON;");
+    query.exec();
 }
 
 QList<QTreeWidgetItem*> sqliteDB::getVideos(QString category) {
@@ -700,8 +708,8 @@ void sqliteDB::createTables() {
         "\"id\"	INTEGER NOT NULL,"
         "\"video_id\"	INTEGER NOT NULL,"
         "\"tag_id\"	INTEGER NOT NULL,"
-        "FOREIGN KEY(\"video_id\") REFERENCES \"videodetails\"(\"id\"),"
-        "FOREIGN KEY(\"tag_id\") REFERENCES \"tags\"(\"id\"),"
+        "FOREIGN KEY(\"video_id\") REFERENCES \"videodetails\"(\"id\") ON DELETE CASCADE ON UPDATE CASCADE,"
+        "FOREIGN KEY(\"tag_id\") REFERENCES \"tags\"(\"id\") ON DELETE CASCADE ON UPDATE CASCADE,"
         "PRIMARY KEY(\"id\" AUTOINCREMENT));";
 
     QString tags_priority_index = "CREATE INDEX \"tags_priority_index\" ON \"tags\" (\"display_priority\"	ASC); ";

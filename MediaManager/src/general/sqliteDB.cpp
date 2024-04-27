@@ -29,8 +29,14 @@ sqliteDB::sqliteDB(QString location,std::string conname) {
 
 QList<QTreeWidgetItem*> sqliteDB::getVideos(QString category) {
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QString("SELECT id,path,type,watched,views,rating,author,name,date_created,last_watched from videodetails where category = ?"));
-    query.addBindValue(category);
+
+    QString query_string = "SELECT v.id,v.path,GROUP_CONCAT(t.name, ', ' ORDER BY t.display_priority ASC, t.id) AS tags,v.type,v.watched,v.views,v.rating,v.author,v.name,v.date_created,v.last_watched from videodetails v "
+        "LEFT JOIN tags_relations tr ON v.id = tr.video_id AND v.category = :_category "
+        "LEFT JOIN tags t ON tr.tag_id = t.id "
+        "GROUP BY v.id; ";
+
+    query.prepare(query_string);
+    query.bindValue(":_category",category);
     if (!query.exec()) {
         qDebug() << "getVideos " << query.lastError().text();
         if (qApp)
@@ -40,18 +46,26 @@ QList<QTreeWidgetItem*> sqliteDB::getVideos(QString category) {
     while (query.next()) {
         int id = query.value(0).toInt();
         QString path = query.value(1).toString();
-        QString type = query.value(2).toString();
+        QString tags = query.value(2).toString();
+        QString type = query.value(3).toString();
         if (type.isEmpty()) {
             type = "None";
         }
-        QString watched = query.value(3).toString();
-        QString views = query.value(4).toString();
-        double rating = query.value(5).toDouble();
-        QString author = query.value(6).toString();
-        QString name = query.value(7).toString();
-        QDateTime date_created = query.value(8).toDateTime();
-        QDateTime last_watched = query.value(9).toDateTime();
-        TreeWidgetItem *item = new TreeWidgetItem({ author,name,path,type,watched,views }, 0, nullptr);
+        QString watched = query.value(4).toString();
+        QString views = query.value(5).toString();
+        double rating = query.value(6).toDouble();
+        QString author = query.value(7).toString();
+        QString name = query.value(8).toString();
+        QDateTime date_created = query.value(9).toDateTime();
+        QDateTime last_watched = query.value(10).toDateTime();
+        TreeWidgetItem *item = new TreeWidgetItem(nullptr);
+        item->setData(ListColumns["AUTHOR_COLUMN"], Qt::DisplayRole, author);
+        item->setData(ListColumns["NAME_COLUMN"], Qt::DisplayRole, name);
+        item->setData(ListColumns["PATH_COLUMN"], Qt::DisplayRole, path);
+        item->setData(ListColumns["TAGS_COLUMN"], Qt::DisplayRole, tags);
+        item->setData(ListColumns["TYPE_COLUMN"], Qt::DisplayRole, type);
+        item->setData(ListColumns["WATCHED_COLUMN"], Qt::DisplayRole, watched);
+        item->setData(ListColumns["VIEWS_COLUMN"], Qt::DisplayRole, views);
         item->setData(ListColumns["DATE_CREATED_COLUMN"], Qt::DisplayRole, date_created);
         item->setData(ListColumns["LAST_WATCHED_COLUMN"], Qt::DisplayRole, last_watched);
         item->setData(ListColumns["PATH_COLUMN"], CustomRoles::id, id);
@@ -651,21 +665,21 @@ void sqliteDB::resetWatched(QString category, QJsonObject settings, double progr
 }
 
 void sqliteDB::createTables() {
-    QString videodetails = " CREATE TABLE IF NOT EXISTS videodetails ("
-        "id INTEGER NOT NULL,"
-        "path TEXT NOT NULL,"
-        "author TEXT DEFAULT '',"
-        "name TEXT NOT NULL,"
-        "type TEXT DEFAULT '',"
-        "category TEXT NOT NULL,"
-        "progress REAL DEFAULT 0,"
-        "watched TEXT DEFAULT No,"
-        "views INT DEFAULT 0,"
-        "rating REAL DEFAULT 0,"
-        "date_created DATE DEFAULT CURRENT_TIMESTAMP,"
-        "last_watched DATE,"
-        "PRIMARY KEY(id),"
-        "UNIQUE(path,category);";
+    QString videodetails = " CREATE TABLE \"videodetails\" ("
+        "\"id\"	INTEGER NOT NULL,"
+        "\"path\"	TEXT NOT NULL,"
+        "\"author\"	TEXT DEFAULT '',"
+        "\"name\"	TEXT NOT NULL,"
+        "\"type\"	TEXT DEFAULT '',"
+        "\"category\"	TEXT NOT NULL,"
+        "\"progress\"	REAL DEFAULT 0,"
+        "\"watched\"	TEXT DEFAULT No,"
+        "\"views\"	INT DEFAULT 0,"
+        "\"rating\"	REAL DEFAULT 0,"
+        "\"date_created\"	DATE DEFAULT CURRENT_TIMESTAMP,"
+        "\"last_watched\"	DATE,"
+        "UNIQUE(\"path\", \"category\"),"
+        "PRIMARY KEY(\"id\"));";
 
     QString maininfo = " CREATE TABLE IF NOT EXISTS maininfo ("
         "name TEXT NOT NULL,"
@@ -676,12 +690,31 @@ void sqliteDB::createTables() {
     QString path_category_index = " CREATE INDEX path_category_index ON videodetails (path, category);";
     QString category_index = " CREATE INDEX category_index ON videodetails (category);";
 
+    QString tags = " CREATE TABLE \"tags\" ("
+        "\"id\"	INTEGER NOT NULL,"
+        "\"name\"	TEXT NOT NULL,"
+        "\"display_priority\"	INTEGER NOT NULL DEFAULT 100,"
+        "PRIMARY KEY(\"id\" AUTOINCREMENT));";
+
+    QString tags_relations = " CREATE TABLE \"tags_relations\" ("
+        "\"id\"	INTEGER NOT NULL,"
+        "\"video_id\"	INTEGER NOT NULL,"
+        "\"tag_id\"	INTEGER NOT NULL,"
+        "FOREIGN KEY(\"video_id\") REFERENCES \"videodetails\"(\"id\"),"
+        "FOREIGN KEY(\"tag_id\") REFERENCES \"tags\"(\"id\"),"
+        "PRIMARY KEY(\"id\" AUTOINCREMENT));";
+
+    QString tags_priority_index = "CREATE INDEX \"tags_priority_index\" ON \"tags\" (\"display_priority\"	ASC); ";
+
     this->db.transaction();
     QSqlQuery query = QSqlQuery(this->db);
     query.exec(videodetails);
     query.exec(maininfo);
     query.exec(path_category_index);
     query.exec(category_index);
+    query.exec(tags);
+    query.exec(tags_relations);
+    query.exec(tags_priority_index);
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('current', 'MINUS', '')");
     query.exec("INSERT OR IGNORE INTO maininfo(name,category,value) VALUES('current', 'PLUS', '')");
     query.exec("INSERT OR IGNORE INTO maininfo(name,category,value) VALUES('currentIconPath', 'MINUS', '')");

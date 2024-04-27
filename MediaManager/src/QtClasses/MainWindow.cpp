@@ -134,6 +134,8 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     this->ui.videosWidget->headerItem()->setText(ListColumns["WATCHED_COLUMN"], "W");
     header->setSectionResizeMode(ListColumns["NAME_COLUMN"], QHeaderView::Stretch);
     header->setSectionResizeMode(ListColumns["PATH_COLUMN"], QHeaderView::Stretch);
+    header->setSectionResizeMode(ListColumns["TAGS_COLUMN"], QHeaderView::Fixed);
+    header->resizeSection(ListColumns["TAGS_COLUMN"], 150);
     connect(header, &QHeaderView::sectionClicked, this, [this] { if(!this->toggleDatesFlag) this->updateSortConfig(); });
     connect(this, &MainWindow::fileDropped, this, [this](QStringList files, QWidget *widget) {
         if (files.size() == 1) {
@@ -2299,6 +2301,7 @@ void MainWindow::populateList(bool selectcurrent) {
     {
         item->setTextAlignment(ListColumns["WATCHED_COLUMN"], Qt::AlignHCenter);
         item->setTextAlignment(ListColumns["VIEWS_COLUMN"], Qt::AlignHCenter);
+        item->setTextAlignment(ListColumns["TAGS_COLUMN"], Qt::AlignHCenter);
         item->setTextAlignment(ListColumns["TYPE_COLUMN"], Qt::AlignHCenter);
         item->setTextAlignment(ListColumns["DATE_CREATED_COLUMN"], Qt::AlignHCenter);
         item->setTextAlignment(ListColumns["LAST_WATCHED_COLUMN"], Qt::AlignHCenter);
@@ -2344,6 +2347,11 @@ void MainWindow::videosWidgetHeaderContextMenu(QPoint point) {
     if (settings_list.contains("path"))
         path->setChecked(true);
     menu.addAction(path);
+    QAction* tags = new QAction("Tags", &menu);
+    tags->setCheckable(true);
+    if (settings_list.contains("tags"))
+        tags->setChecked(true);
+    menu.addAction(tags);
     QAction* vid_type = new QAction("Type", &menu);
     vid_type->setCheckable(true);
     if (settings_list.contains("type"))
@@ -2405,6 +2413,12 @@ void MainWindow::videosWidgetHeaderContextMenu(QPoint point) {
             settings_list.removeAll("path");
         else
             settings_list.append("path");
+    }
+    else if (menu_click == tags) {
+        if (utils::hiddenCheck(settings_list) && !tags->isChecked())
+            settings_list.removeAll("tags");
+        else
+            settings_list.append("tags");
     }
     else if (menu_click == vid_type) {
         if (utils::hiddenCheck(settings_list) && !vid_type->isChecked())
@@ -2793,6 +2807,10 @@ void MainWindow::refreshHeadersVisibility() {
         header->setSectionHidden(ListColumns["PATH_COLUMN"], false);
     else
         header->setSectionHidden(ListColumns["PATH_COLUMN"], true);
+    if (settings_list.contains("tags"))
+        header->setSectionHidden(ListColumns["TAGS_COLUMN"], false);
+    else
+        header->setSectionHidden(ListColumns["TAGS_COLUMN"], true);
     if (settings_list.contains("type"))
         header->setSectionHidden(ListColumns["TYPE_COLUMN"], false);
     else

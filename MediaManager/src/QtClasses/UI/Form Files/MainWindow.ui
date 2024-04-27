@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1300</width>
-    <height>700</height>
+    <width>1400</width>
+    <height>750</height>
    </rect>
   </property>
   <property name="sizePolicy">
@@ -128,7 +128,7 @@
                 <string>0</string>
                </property>
                <property name="alignment">
-                <set>Qt::AlignCenter</set>
+                <set>Qt::AlignmentFlag::AlignCenter</set>
                </property>
               </widget>
              </item>
@@ -255,22 +255,22 @@
                     </sizepolicy>
                    </property>
                    <property name="focusPolicy">
-                    <enum>Qt::WheelFocus</enum>
+                    <enum>Qt::FocusPolicy::WheelFocus</enum>
                    </property>
                    <property name="frameShape">
-                    <enum>QFrame::NoFrame</enum>
+                    <enum>QFrame::Shape::NoFrame</enum>
                    </property>
                    <property name="frameShadow">
-                    <enum>QFrame::Plain</enum>
+                    <enum>QFrame::Shadow::Plain</enum>
                    </property>
                    <property name="lineWidth">
                     <number>0</number>
                    </property>
                    <property name="verticalScrollBarPolicy">
-                    <enum>Qt::ScrollBarAlwaysOff</enum>
+                    <enum>Qt::ScrollBarPolicy::ScrollBarAlwaysOff</enum>
                    </property>
                    <property name="horizontalScrollBarPolicy">
-                    <enum>Qt::ScrollBarAlwaysOff</enum>
+                    <enum>Qt::ScrollBarPolicy::ScrollBarAlwaysOff</enum>
                    </property>
                    <property name="widgetResizable">
                     <bool>true</bool>
@@ -283,8 +283,8 @@
                      <rect>
                       <x>0</x>
                       <y>0</y>
-                      <width>497</width>
-                      <height>69</height>
+                      <width>597</width>
+                      <height>68</height>
                      </rect>
                     </property>
                     <property name="sizePolicy">
@@ -294,7 +294,7 @@
                      </sizepolicy>
                     </property>
                     <property name="focusPolicy">
-                     <enum>Qt::WheelFocus</enum>
+                     <enum>Qt::FocusPolicy::WheelFocus</enum>
                     </property>
                     <layout class="QVBoxLayout" name="verticalLayout">
                      <property name="spacing">
@@ -338,7 +338,7 @@
                         <string/>
                        </property>
                        <property name="alignment">
-                        <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignVCenter</set>
+                        <set>Qt::AlignmentFlag::AlignLeading|Qt::AlignmentFlag::AlignLeft|Qt::AlignmentFlag::AlignVCenter</set>
                        </property>
                        <property name="wordWrap">
                         <bool>false</bool>
@@ -358,10 +358,10 @@
                     </sizepolicy>
                    </property>
                    <property name="frameShape">
-                    <enum>QFrame::NoFrame</enum>
+                    <enum>QFrame::Shape::NoFrame</enum>
                    </property>
                    <property name="frameShadow">
-                    <enum>QFrame::Plain</enum>
+                    <enum>QFrame::Shadow::Plain</enum>
                    </property>
                    <property name="lineWidth">
                     <number>0</number>
@@ -382,7 +382,7 @@
                     <item>
                      <spacer name="horizontalSpacer">
                       <property name="orientation">
-                       <enum>Qt::Horizontal</enum>
+                       <enum>Qt::Orientation::Horizontal</enum>
                       </property>
                       <property name="sizeHint" stdset="0">
                        <size>
@@ -431,7 +431,7 @@
                        <number>0</number>
                       </property>
                       <property name="alignment">
-                       <set>Qt::AlignCenter</set>
+                       <set>Qt::AlignmentFlag::AlignCenter</set>
                       </property>
                       <property name="format">
                        <string>00:00 / 00:00</string>
@@ -441,7 +441,7 @@
                     <item>
                      <spacer name="horizontalSpacer_2">
                       <property name="orientation">
-                       <enum>Qt::Horizontal</enum>
+                       <enum>Qt::Orientation::Horizontal</enum>
                       </property>
                       <property name="sizeHint" stdset="0">
                        <size>
@@ -476,7 +476,7 @@
                   <number>0</number>
                  </property>
                  <property name="alignment">
-                  <set>Qt::AlignCenter</set>
+                  <set>Qt::AlignmentFlag::AlignCenter</set>
                  </property>
                  <property name="format">
                   <string>0 / 0</string>
@@ -507,7 +507,7 @@
                 <string>0</string>
                </property>
                <property name="alignment">
-                <set>Qt::AlignCenter</set>
+                <set>Qt::AlignmentFlag::AlignCenter</set>
                </property>
               </widget>
              </item>
@@ -565,16 +565,16 @@
             </sizepolicy>
            </property>
            <property name="focusPolicy">
-            <enum>Qt::NoFocus</enum>
+            <enum>Qt::FocusPolicy::NoFocus</enum>
            </property>
            <property name="contextMenuPolicy">
-            <enum>Qt::CustomContextMenu</enum>
+            <enum>Qt::ContextMenuPolicy::CustomContextMenu</enum>
            </property>
            <property name="alternatingRowColors">
             <bool>true</bool>
            </property>
            <property name="selectionMode">
-            <enum>QAbstractItemView::ExtendedSelection</enum>
+            <enum>QAbstractItemView::SelectionMode::ExtendedSelection</enum>
            </property>
            <property name="rootIsDecorated">
             <bool>false</bool>
@@ -616,6 +616,19 @@
              <font>
               <pointsize>11</pointsize>
              </font>
+            </property>
+           </column>
+           <column>
+            <property name="text">
+             <string>Tags</string>
+            </property>
+            <property name="font">
+             <font>
+              <pointsize>11</pointsize>
+             </font>
+            </property>
+            <property name="textAlignment">
+             <set>AlignCenter</set>
             </property>
            </column>
            <column>

@@ -2263,7 +2263,7 @@ void MainWindow::filterVisibilityItem(QTreeWidgetItem *item, QString watched_opt
 
     //search
     if(not search_text.isEmpty() and hidden == false) {
-        double score = rapidfuzz::fuzz::partial_ratio(search_text.toLower().toStdString(), (item->text(ListColumns["PATH_COLUMN"]) % " " % item->text(ListColumns["AUTHOR_COLUMN"]) % " " % item->text(ListColumns["TYPE_COLUMN"])).toLower().toStdString());
+        double score = rapidfuzz::fuzz::partial_ratio(search_text.toLower().toStdString(), (item->text(ListColumns["PATH_COLUMN"]) % " " % item->text(ListColumns["AUTHOR_COLUMN"]) % " " % item->text(ListColumns["TAGS_COLUMN"]) % " " % item->text(ListColumns["TYPE_COLUMN"])).toLower().toStdString());
         if (score > 80) {
             hidden = false;
         }

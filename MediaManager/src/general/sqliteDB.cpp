@@ -692,7 +692,7 @@ void sqliteDB::createTables() {
 
     QString tags = " CREATE TABLE \"tags\" ("
         "\"id\"	INTEGER NOT NULL,"
-        "\"name\"	TEXT NOT NULL,"
+        "\"name\"	TEXT NOT NULL UNIQUE,"
         "\"display_priority\"	INTEGER NOT NULL DEFAULT 100,"
         "PRIMARY KEY(\"id\" AUTOINCREMENT));";
 

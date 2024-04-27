@@ -204,6 +204,13 @@
                    </widget>
                   </item>
                   <item>
+                   <widget class="QPushButton" name="tags_button">
+                    <property name="text">
+                     <string>Tags</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
                    <widget class="QCustomButton" name="settings_button">
                     <property name="font">
                      <font>

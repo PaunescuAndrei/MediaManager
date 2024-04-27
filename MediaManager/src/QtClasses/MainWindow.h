@@ -106,6 +106,7 @@ public:
     bool randomVideo(bool watched_all = true, QStringList vid_type_include = {}, QStringList vid_type_exclude = {});
     void selectCurrentItem(QTreeWidgetItem* item = nullptr, bool selectcurrent = true);
     void insertDialogButton();
+    void TagsDialogButton();
     void resetDB(QString directory);
     void resetDBDialogButton(QWidget* parent = nullptr);
     bool loadDB(QString path, QWidget * parent = nullptr);

@@ -186,6 +186,7 @@ void MainApp::stopSingleInstanceServer() {
 }
 
 void MainApp::showErrorMessage(QString message) {
+	this->ErrorDialog->setWindowFlags(this->ErrorDialog->windowFlags() | Qt::WindowStaysOnTopHint);
 	this->ErrorDialog->showMessage(message);
 	this->logger->log(message, "Error");
 }

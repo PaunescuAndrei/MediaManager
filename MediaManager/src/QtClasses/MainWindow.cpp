@@ -55,6 +55,7 @@
 #include "DateItemDelegate.h"
 #include "colorPaletteExtractor.h"
 #include "loadBackupDialog.h"
+#include "TagsDialog.h"
 
 #pragma warning(push ,3)
 #include "rapidfuzz_all.hpp"
@@ -68,6 +69,14 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     this->App = App;
     this->initRatingIcons();
     ui.setupUi(this);
+
+    int width = this->frameGeometry().width();
+    int height = this->frameGeometry().height();
+    QScreen* screen = this->App->primaryScreen();
+    int screenWidth = screen->geometry().width();
+    int screenHeight = screen->geometry().height();
+    this->setGeometry((screenWidth / 2) - (width / 2), (screenHeight / 2) - (height / 2), width, height);
+
     this->ui.searchWidget->hide();
     new QShortcut(QKeySequence("F1"), this, [this] {this->switchCurrentDB(); });
     new QShortcut(QKeySequence("F2"), this, [this] {this->toggleSearchBar(); });
@@ -194,6 +203,9 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     });
     connect(this->ui.insert_button, &QPushButton::clicked, this, [this] { 
         this->insertDialogButton(); 
+    });
+    connect(this->ui.tags_button, &QPushButton::clicked, this, [this] {
+        this->TagsDialogButton();
     });
     connect(this->ui.next_button, &QPushButton::clicked, this, [this] {
         this->NextButtonClicked(); 
@@ -1187,6 +1199,26 @@ void MainWindow::insertDialogButton() {
         }
         files += new_files;
         this->InsertVideoFiles(files,false);
+    }
+}
+
+void MainWindow::TagsDialogButton() {
+    TagsDialog dialog = TagsDialog(this->App->db->db,this);
+    dialog.model->database().transaction();
+    int value = dialog.exec();
+    if (value == QDialog::Accepted) {
+        if (dialog.model->submitAll()) {
+            dialog.model->database().commit();
+        }
+        else {
+            dialog.model->database().rollback();
+            if (qApp)
+                qMainApp->showErrorMessage("Database error: " + dialog.model->lastError().text());
+        }
+    }
+    else {
+        dialog.model->revertAll();
+        dialog.model->database().rollback();
     }
 }
 

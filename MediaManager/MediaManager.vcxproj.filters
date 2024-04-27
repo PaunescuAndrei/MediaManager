@@ -239,6 +239,9 @@
     <ClCompile Include="src\QtClasses\UI\loadBackupDialog.cpp">
       <Filter>Source Files\QtClasses\UI</Filter>
     </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\TagsDialog.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\resource.h">
@@ -388,6 +391,9 @@
     <QtUic Include="src\QtClasses\UI\Form Files\loadBackupDialog.ui">
       <Filter>Form Files</Filter>
     </QtUic>
+    <QtUic Include="src\QtClasses\UI\Form Files\TagsDialog.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="src\QtClasses\MainWindow.h">
@@ -499,6 +505,9 @@
       <Filter>Header Files\QtClasses\UI</Filter>
     </QtMoc>
     <QtMoc Include="src\QtClasses\UI\loadBackupDialog.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\TagsDialog.h">
       <Filter>Header Files\QtClasses\UI</Filter>
     </QtMoc>
   </ItemGroup>

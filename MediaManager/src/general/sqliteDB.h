@@ -5,6 +5,7 @@
 #include "sqlite3.h"
 #include "videosTreeWidget.h"
 #include <tuple>
+#include "definitions.h"
 
 class sqliteDB {
 public:
@@ -15,6 +16,10 @@ public:
     ~sqliteDB();
     void createTables();
     QList<QTreeWidgetItem*> getVideos(QString category);
+    QSet<Tag> getAllTags();
+    QSet<Tag> getTags(int video_id);
+    void insertTag(int video_id, int tag_id);
+    void deleteExtraTags(int video_id, QSet<int> tags_id);
     QStringList getAuthors(QString category);
     QStringList getTypes(QString category);
     void setFilterSettings(QString value, QString category);

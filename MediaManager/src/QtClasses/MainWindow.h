@@ -89,6 +89,7 @@ public:
     void refreshHeadersVisibility();
     void videosWidgetHeaderContextMenu(QPoint point);
     void videosWidgetContextMenu(QPoint point);
+    void editTags(QList<QTreeWidgetItem*> items, QWidget* parent = nullptr);
     void setCurrent(int id, QString path, QString name, QString author);
     QString getWatchedVisibilityOption(bool watched_yes, bool watched_no, bool watched_mixed);
     void DeleteDialogButton(QList<QTreeWidgetItem*> items);
@@ -106,7 +107,7 @@ public:
     bool randomVideo(bool watched_all = true, QStringList vid_type_include = {}, QStringList vid_type_exclude = {});
     void selectCurrentItem(QTreeWidgetItem* item = nullptr, bool selectcurrent = true);
     void insertDialogButton();
-    void TagsDialogButton();
+    bool TagsDialogButton();
     void resetDB(QString directory);
     void resetDBDialogButton(QWidget* parent = nullptr);
     bool loadDB(QString path, QWidget * parent = nullptr);

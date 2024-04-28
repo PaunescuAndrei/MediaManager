@@ -56,6 +56,7 @@
 #include "colorPaletteExtractor.h"
 #include "loadBackupDialog.h"
 #include "TagsDialog.h"
+#include "VideosTagsDialog.h"
 
 #pragma warning(push ,3)
 #include "rapidfuzz_all.hpp"
@@ -1202,13 +1203,15 @@ void MainWindow::insertDialogButton() {
     }
 }
 
-void MainWindow::TagsDialogButton() {
+bool MainWindow::TagsDialogButton() {
     TagsDialog dialog = TagsDialog(this->App->db->db,this);
     dialog.model->database().transaction();
     int value = dialog.exec();
     if (value == QDialog::Accepted) {
         if (dialog.model->submitAll()) {
             dialog.model->database().commit();
+            this->refreshVideosWidget(false, true);
+            return true;
         }
         else {
             dialog.model->database().rollback();
@@ -1220,6 +1223,7 @@ void MainWindow::TagsDialogButton() {
         dialog.model->revertAll();
         dialog.model->database().rollback();
     }
+    return false;
 }
 
 void MainWindow::resetDB(QString directory) {
@@ -1802,30 +1806,32 @@ void MainWindow::updateProgressBar(double position, double duration, std::shared
                 listener->endvideo = true;
             if (!this->finish_dialog) {
                 this->finish_dialog = new finishDialog(this);
-                this->finish_dialog->setWindowFlags(Qt::WindowStaysOnTopHint);
+                this->finish_dialog->setWindowFlag(Qt::WindowStaysOnTopHint, true);
                 this->finish_dialog->setWindowState((this->finish_dialog->windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
                 this->finish_dialog->raise();
                 this->finish_dialog->activateWindow();
-                int result = this->finish_dialog->exec();
-                if (result == finishDialog::Accepted) {
-                    listener->change_in_progress = true;
-                    //qDebug() << "clicked" << this->position << listener->currentPosition;
-                    if (listener && listener->currentPosition != -1) {
-                        this->App->db->updateVideoProgress(listener->video_id, listener->currentPosition);
+                this->finish_dialog->open();
+                connect(this->finish_dialog, &finishDialog::finished, this, [this,listener](int result) {
+                    if (result == finishDialog::Accepted) {
+                        listener->change_in_progress = true;
+                        //qDebug() << "clicked" << this->position << listener->currentPosition;
+                        if (listener && listener->currentPosition != -1) {
+                            this->App->db->updateVideoProgress(listener->video_id, listener->currentPosition);
+                        }
+                        listener->currentPosition = -1;
+                        this->NextButtonClicked(listener);
+                        this->position = 0;
                     }
-                    listener->currentPosition = -1;
-                    this->NextButtonClicked(listener);
-                    this->position = 0;
-                }
-                else if (result == finishDialog::Skip) {
-                    //Skip button
-                    listener->change_in_progress = true;
-                    listener->currentPosition = -1;
-                    this->NextButtonClicked(listener, false);
-                    this->position = 0;
-                }
-                delete this->finish_dialog; // using deletelater causes some warning because it is already deleted by qt
-                this->finish_dialog = nullptr;
+                    else if (result == finishDialog::Skip) {
+                        //Skip button
+                        listener->change_in_progress = true;
+                        listener->currentPosition = -1;
+                        this->NextButtonClicked(listener, false);
+                        this->position = 0;
+                    }
+                    delete this->finish_dialog; // using deletelater causes some warning because it is already deleted by qt
+                    this->finish_dialog = nullptr;
+                });
             }
         }
     }
@@ -2551,6 +2557,8 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
     if (items.size() == 1) {
         set_menu->addAction(update_path);
     }
+    QAction* tags_edit = new QAction("Edit Tags", set_menu);
+    set_menu->addAction(tags_edit);
     QMenu* watched_menu = new QMenu("Set Watched as", &menu);
     QAction* watched_yes = new QAction("Yes", watched_menu);
     QAction* watched_no = new QAction("No", watched_menu);
@@ -2651,6 +2659,9 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
             }
         }
     }
+    else if (menu_click == tags_edit) {
+        this->editTags(items);
+    }
     else if (menu_click == sync_items) {
         QMessageBox msgBox;
         msgBox.setWindowTitle("Sync Items?");
@@ -2666,6 +2677,28 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
     }
     else if (menu_click->parent() == category_menu)
         this->setType(menu_click->text(),items);
+}
+
+void MainWindow::editTags(QList<QTreeWidgetItem*> items, QWidget* parent) {
+    if (items.isEmpty())
+        return;
+    VideosTagsDialog dialog = VideosTagsDialog(items, this, parent);
+    int result = dialog.exec();
+    if (result == QDialog::Accepted) {
+        this->App->db->db.transaction();
+        for (auto& video : dialog.items) {
+            int video_id = video.first;
+            QSet<int> tags_id = QSet<int>();
+            for (int i = 0; i < dialog.ui.listWidgetAdded->count(); ++i) {
+                QListWidgetItem* item = dialog.ui.listWidgetAdded->item(i);
+                tags_id.insert(item->data(Qt::UserRole).value<Tag>().id);
+                this->App->db->insertTag(video_id, item->data(Qt::UserRole).value<Tag>().id);
+            }
+            this->App->db->deleteExtraTags(video_id, tags_id);
+        }
+        this->App->db->db.commit();
+        this->refreshVideosWidget(false, true);
+    }
 }
 
 void MainWindow::setType(QString type, QList<QTreeWidgetItem*> items) {

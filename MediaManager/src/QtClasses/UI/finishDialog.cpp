@@ -51,10 +51,26 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 		QLabel* avg_rating_label = new QLabel("Avg. " + QString::number(avg_rating, 'f', 2), this);
 		lt->insertWidget(2, starEditor);
 		lt->insertWidget(3, avg_rating_label);
+
+		connect(this->ui.tagsButton, &QPushButton::clicked, this, [this, MW]() {
+			QList<QTreeWidgetItem*> items = MW->ui.videosWidget->findItems(MW->ui.currentVideo->path, Qt::MatchExactly, ListColumns["PATH_COLUMN"]);
+			if (!items.isEmpty()) {
+				this->timer.stop();
+				Qt::WindowFlags flags = windowFlags();
+				bool isOnTop = flags.testFlag(Qt::WindowStaysOnTopHint);
+				this->setWindowFlag(Qt::WindowStaysOnTopHint, false);
+				this->show();
+				this->hide();
+				MW->editTags({ items.first() }, this);
+				this->setWindowFlag(Qt::WindowStaysOnTopHint, isOnTop);
+				this->show();
+				this->timer.start(250);
+			}
+		});
 	}
-	connect(this->ui.NextButton, &QPushButton::clicked, this, &finishDialog::accept);
-	connect(this->ui.cancelButton, &QPushButton::clicked, this, &finishDialog::reject);
-	connect(this->ui.skipButton, &QPushButton::clicked, this, [this]() { this->done(finishDialog::Skip); });
+	connect(this->ui.NextButton, &QPushButton::clicked, this, [this]() {this->timer.stop(); this->done(finishDialog::Accepted); } );
+	connect(this->ui.cancelButton, &QPushButton::clicked, this, [this]() {this->timer.stop(); this->done(finishDialog::Rejected); });
+	connect(this->ui.skipButton, &QPushButton::clicked, this, [this]() { this->timer.stop(); this->done(finishDialog::Skip); });
 
 	connect(&this->timer, &QTimer::timeout, this, [this] {
 		if (QGuiApplication::queryKeyboardModifiers() & Qt::AltModifier)

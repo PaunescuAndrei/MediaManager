@@ -15,6 +15,6 @@ public:
     void contextMenu(const QPoint& point);
     bool addTag(QString name, int priority);
     ~TagsDialog();
-    Ui::Dialog ui;
+    Ui::TagsDialog ui;
 };
 

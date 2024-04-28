@@ -242,6 +242,9 @@
     <ClCompile Include="src\QtClasses\UI\TagsDialog.cpp">
       <Filter>Source Files\QtClasses\UI</Filter>
     </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\VideosTagsDialog.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\resource.h">
@@ -394,6 +397,9 @@
     <QtUic Include="src\QtClasses\UI\Form Files\TagsDialog.ui">
       <Filter>Form Files</Filter>
     </QtUic>
+    <QtUic Include="src\QtClasses\UI\Form Files\VideosTagsDialog.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="src\QtClasses\MainWindow.h">
@@ -509,6 +515,9 @@
     </QtMoc>
     <QtMoc Include="src\QtClasses\UI\TagsDialog.h">
       <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\VideosTagsDialog.h">
+      <Filter>Source Files\QtClasses\UI</Filter>
     </QtMoc>
   </ItemGroup>
   <ItemGroup>

@@ -60,6 +60,7 @@
     <ClCompile Include="src\QtClasses\UI\starRating.cpp" />
     <ClCompile Include="src\QtClasses\UI\StatsDialog.cpp" />
     <ClCompile Include="src\QtClasses\UI\TagsDialog.cpp" />
+    <ClCompile Include="src\QtClasses\UI\VideosTagsDialog.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\AutoToolTipDelegate.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\noRightClickEventFilter.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\ProgressBarQLabel.cpp" />
@@ -126,6 +127,7 @@
     <QtMoc Include="src\QtClasses\Widgets\customScrollArea.h" />
     <QtMoc Include="src\QtClasses\Widgets\noRightClickEventFilter.h" />
     <QtMoc Include="src\QtClasses\UI\TagsDialog.h" />
+    <QtMoc Include="src\QtClasses\UI\VideosTagsDialog.h" />
     <ClInclude Include="src\thirdparty\MpcApi.h" />
     <ClInclude Include="src\thirdparty\sqlite3\sqlite3.h" />
     <ClInclude Include="src\version.h" />
@@ -181,6 +183,7 @@
     <QtUic Include="src\QtClasses\UI\Form Files\SettingsDialog.ui" />
     <QtUic Include="src\QtClasses\UI\Form Files\StatsDialog.ui" />
     <QtUic Include="src\QtClasses\UI\Form Files\TagsDialog.ui" />
+    <QtUic Include="src\QtClasses\UI\Form Files\VideosTagsDialog.ui" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="src\MediaManager.rc" />

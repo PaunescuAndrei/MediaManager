@@ -1,12 +1,30 @@
 #pragma once
 #include <QString>
 #include <QStringList>
+#include <QMetaType>
 
 extern std::map<QString, int> ListColumns;
 extern std::map<int, QString> ListColumns_reversed;
 extern std::map<QString, int> sortingDict;
 extern std::map<int, QString> sortingDict_reversed;
 extern QStringList videoTypes;
+
+struct Tag {
+	int id;
+	QString name;
+	int display_priority = 100;
+	auto operator<=>(const Tag&) const = default;
+};
+Q_DECLARE_METATYPE(Tag);
+
+uint qHash(const Tag& key);
+
+struct TagRelation {
+	int id;
+	int video_id;
+	int tag_id;
+	auto operator<=>(const TagRelation&) const = default;
+};
 
 namespace CustomRoles {
 	enum roles {

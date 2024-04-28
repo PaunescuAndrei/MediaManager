@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "definitions.h"
+#include <QHash>
 
 std::map<QString, int> ListColumns = {
 	{"AUTHOR_COLUMN" , 0 }, 
@@ -35,3 +36,8 @@ std::map<int, QString> sortingDict_reversed = {
 };
 
 QStringList videoTypes = QStringList();
+
+ uint qHash(const Tag& key)
+ {
+	 return qHash(QPair<int, QPair<QString, int>>(key.id, qMakePair(key.name, key.display_priority)));
+ }

@@ -9,7 +9,6 @@
 #include "MainApp.h"
 #include <QJsonObject>
 #include <QJsonDocument>
-#include "definitions.h"
 
 sqliteDB::sqliteDB(QString location,std::string conname) {
     // In the constructor or initialization function of that object      
@@ -81,6 +80,77 @@ QList<QTreeWidgetItem*> sqliteDB::getVideos(QString category) {
         itemlist.append(item);
     }
     return itemlist;
+}
+
+QSet<Tag> sqliteDB::getAllTags() {
+    QSqlQuery query = QSqlQuery(this->db);
+    QString query_string = "SELECT id, name, display_priority from tags";
+    QSet<Tag> tags = QSet<Tag>();
+
+    query.prepare(query_string);
+    if (!query.exec()) {
+        qDebug() << "getAllTags " << query.lastError().text();
+        if (qApp)
+            qMainApp->showErrorMessage("getAllTags " + query.lastError().text());
+    }
+    while (query.next())
+    {
+        int id = query.value(0).toInt();
+        QString name = query.value(1).toString();
+        int display_priority = query.value(1).toInt();
+        tags.insert({ id,name,display_priority });
+    }
+    return tags;
+}
+
+QSet<Tag> sqliteDB::getTags(int video_id) {
+    QSqlQuery query = QSqlQuery(this->db);
+    QString query_string = "SELECT t.id, t.name, t.display_priority from tags t JOIN tags_relations tr ON t.id = tr.tag_id AND tr.video_id = :video_id ;";
+    //QString query_string_excluded = "SELECT t.id, t.name, t.display_priority from tags t LEFT JOIN tags_relations tr ON t.id = tr.tag_id AND tr.video_id = :video_id WHERE tr.video_id IS NULL; ";
+    QSet<Tag> tags = QSet<Tag>();
+
+    query.prepare(query_string);
+    query.bindValue(":video_id", video_id);
+    if (!query.exec()) {
+        qDebug() << "getTags " << query.lastError().text();
+        if (qApp)
+            qMainApp->showErrorMessage("getTags " + query.lastError().text());
+    }
+    while (query.next()) 
+    {
+        int id = query.value(0).toInt();
+        QString name = query.value(1).toString();
+        int display_priority = query.value(1).toInt();
+        tags.insert({ id,name,display_priority });
+    }
+    return tags;
+}
+
+void sqliteDB::insertTag(int video_id, int tag_id) {
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QString("INSERT OR IGNORE INTO tags_relations(video_id,tag_id) VALUES(?, ?)"));
+    query.addBindValue(video_id);
+    query.addBindValue(tag_id);
+    if (!query.exec()) {
+        qDebug() << "insertTag " << query.lastError().text();
+        if (qApp)
+            qMainApp->showErrorMessage("insertTag " + query.lastError().text());
+    }
+}
+
+void sqliteDB::deleteExtraTags(int video_id, QSet<int> tags_id) {
+    QSqlQuery query = QSqlQuery(this->db);
+    QStringList tags_id_stringlist = QStringList();
+    for (auto& tag_id : tags_id) {
+        tags_id_stringlist << QString("\'%1\'").arg(QString::number(tag_id));
+    }
+    query.prepare(QString("DELETE FROM tags_relations WHERE video_id = ? AND tag_id NOT IN (%1)").arg(tags_id_stringlist.join(",")));
+    query.addBindValue(video_id);
+    if (!query.exec()) {
+        qDebug() << "deleteExtraTags " << query.lastError().text();
+        if (qApp)
+            qMainApp->showErrorMessage("deleteExtraTags " + query.lastError().text());
+    }
 }
 
 QStringList sqliteDB::getAuthors(QString category) {
@@ -710,6 +780,7 @@ void sqliteDB::createTables() {
         "\"tag_id\"	INTEGER NOT NULL,"
         "FOREIGN KEY(\"video_id\") REFERENCES \"videodetails\"(\"id\") ON DELETE CASCADE ON UPDATE CASCADE,"
         "FOREIGN KEY(\"tag_id\") REFERENCES \"tags\"(\"id\") ON DELETE CASCADE ON UPDATE CASCADE,"
+        "UNIQUE(\"video_id\",\"tag_id\"),"
         "PRIMARY KEY(\"id\" AUTOINCREMENT));";
 
     QString tags_priority_index = "CREATE INDEX \"tags_priority_index\" ON \"tags\" (\"display_priority\"	ASC); ";

@@ -541,9 +541,10 @@ QString sqliteDB::getRandomVideo(QString category, QString watched, QStringList 
 
 QString sqliteDB::getRandomVideo(QString category, QJsonObject settings) {
     QSqlQuery query = QSqlQuery(this->db);
-    QString main_query_string = "SELECT path FROM videodetails WHERE category == :cat_bound_value";
-    QString rating_query_string = QString(" AND (rating %1 %2 %3)").arg(settings.value("rating_mode").toString(),settings.value("rating").toString(), utils::text_to_bool(settings.value("include_unrated").toString().toStdString()) ? "OR rating == 0" : "");
-    QString views_query_string = QString(" AND views %1 %2").arg(settings.value("views_mode").toString(), settings.value("views").toString());
+    QString main_query_string = "SELECT v.path FROM videodetails v";
+    QString category_query_string = " WHERE v.category == :cat_bound_value";
+    QString rating_query_string = QString(" AND (v.rating %1 %2 %3)").arg(settings.value("rating_mode").toString(),settings.value("rating").toString(), utils::text_to_bool(settings.value("include_unrated").toString().toStdString()) ? "OR rating == 0" : "");
+    QString views_query_string = QString(" AND v.views %1 %2").arg(settings.value("views_mode").toString(), settings.value("views").toString());
     QString end_query_string = " ORDER BY RANDOM() LIMIT 1";
 
     QString authors_query_string;
@@ -559,7 +560,35 @@ QString sqliteDB::getRandomVideo(QString category, QJsonObject settings) {
     if (authors.isEmpty())
         authors_query_string = "";
     else
-        authors_query_string = QString(" AND author in (%1)").arg(authors.join(","));
+        authors_query_string = QString(" AND v.author in (%1)").arg(authors.join(","));
+
+    QString tags_query_string_join;
+    QString tags_query_string_where;
+    QJsonArray tags_values = settings.value("tags").toArray();
+    QStringList tags;
+    bool no_tags = false;
+    for (QJsonValue value : tags_values) {
+        if (value == "All") {
+            tags.clear();
+            break;
+        }
+        if (value == "None") {
+            no_tags = true;
+            continue;
+        }
+        tags << QString("\'%1\'").arg(value.toString());
+    }
+    if (tags.isEmpty()) {
+        tags_query_string_join = "";
+        tags_query_string_where = "";
+
+    }
+    else {
+        tags_query_string_join = " LEFT JOIN tags_relations tr ON v.id = tr.video_id";
+        QString no_tags_query = (no_tags) ? "OR tr.tag_id IS NULL" : "";
+        tags_query_string_where = QString(" AND (tr.tag_id in (%1) %2)").arg(tags.join(","), no_tags_query);
+        qDebug() << no_tags << no_tags_query << tags_query_string_where;
+    }
 
     QString types_query_string;
     QJsonArray types_include_values = settings.value("types_include").toArray();
@@ -579,9 +608,9 @@ QString sqliteDB::getRandomVideo(QString category, QJsonObject settings) {
     if (types_include.isEmpty())
         types_query_string = "";
     else
-        types_query_string = QString(" AND type in (%1)").arg(types_include.join(","));
+        types_query_string = QString(" AND v.type in (%1)").arg(types_include.join(","));
     if (not types_exclude.isEmpty()) {
-        types_query_string += QString(" AND type not in (%1)").arg(types_exclude.join(","));
+        types_query_string += QString(" AND v.type not in (%1)").arg(types_exclude.join(","));
     }
 
     QString watched_query_string;
@@ -597,9 +626,9 @@ QString sqliteDB::getRandomVideo(QString category, QJsonObject settings) {
     if (watched.isEmpty())
         watched_query_string = "";
     else
-        watched_query_string = QString(" AND watched in (%1)").arg(watched.join(","));
+        watched_query_string = QString(" AND v.watched in (%1)").arg(watched.join(","));
 
-    QString final_query_string = main_query_string % authors_query_string % types_query_string % watched_query_string % rating_query_string % views_query_string % end_query_string;
+    QString final_query_string = main_query_string % tags_query_string_join % category_query_string % tags_query_string_where % authors_query_string % types_query_string % watched_query_string % rating_query_string % views_query_string % end_query_string;
     query.prepare(final_query_string);
     query.bindValue(":cat_bound_value", category);
     if (!query.exec()) {

@@ -1735,6 +1735,7 @@ bool MainWindow::randomVideo(bool watched_all, QStringList vid_type_include, QSt
             else {
                 item_name = this->App->db->getRandomVideo(this->App->currentDB, "No", vid_type_include, vid_type_exclude);
             }
+            qDebug() << "tt " << item_name;
             if (!item_name.isEmpty()) {
                 QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(item_name, Qt::MatchExactly, ListColumns["PATH_COLUMN"], 1);
                 if (!items.isEmpty())

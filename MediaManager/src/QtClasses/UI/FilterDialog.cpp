@@ -62,10 +62,39 @@ FilterDialog::FilterDialog(MainWindow* MW, QJsonObject settings, QWidget* parent
     }
     this->ui.authors->setLayout(authors_flowLayout);
 
+    //Tags
+    FlowLayout* tags_flowLayout = new FlowLayout;
+    tags_flowLayout->setContentsMargins(0, 0, 0, 0);
+    QSet<Tag> tags = MW->App->db->getAllTags();
+    QMap<QString, QCheckBox*> tags_map = QMap<QString, QCheckBox*>();
+    this->all_tags = new QCheckBox("All", this);
+    QCheckBox* no_tags= new QCheckBox("None", this);
+    tags_map["All"] = this->all_tags;
+    tags_map["None"] = no_tags;
+    connect(this->all_tags, &QCheckBox::checkStateChanged, this, &FilterDialog::tagsChanged);
+    connect(no_tags, &QCheckBox::checkStateChanged, this, &FilterDialog::tagsChanged);
+    tags_flowLayout->addWidget(this->all_tags);
+    tags_flowLayout->addWidget(no_tags);
+    for (const Tag& tag : tags) {
+        QCheckBox* checkbox;
+        checkbox = new QCheckBox(tag.name, this);
+        checkbox->setProperty("tag", QVariant::fromValue(tag));
+        tags_map[QString::number(tag.id)] = checkbox;
+        connect(checkbox, &QCheckBox::checkStateChanged, this, &FilterDialog::tagsChanged);
+        tags_flowLayout->addWidget(checkbox);
+    }
+    this->ui.tags->setLayout(tags_flowLayout);
+
     //init values from settings
     QJsonArray authors_arr = settings.value("authors").toArray();
     for (QJsonValue auth : authors_arr) {
         QCheckBox* chckbox = authors_map.value(auth.toString(), nullptr);
+        if (chckbox)
+            chckbox->setChecked(true);
+    }
+    QJsonArray tags_arr = settings.value("tags").toArray();
+    for (QJsonValue tag : tags_arr) {
+        QCheckBox* chckbox = tags_map.value(tag.toString(), nullptr);
         if (chckbox)
             chckbox->setChecked(true);
     }
@@ -139,6 +168,35 @@ void FilterDialog::authorsChanged(Qt::CheckState state) {
     }
 }
 
+void FilterDialog::tagsChanged(Qt::CheckState state) {
+    QCheckBox* checkbox_sender = qobject_cast<QCheckBox*>(sender());
+    if (state == Qt::Checked) {
+        if (checkbox_sender->text() == "All") {
+            QList<QCheckBox*> all_tags = this->ui.tags->findChildren<QCheckBox*>();
+            all_tags.removeOne(checkbox_sender);
+            for (QCheckBox* tag : all_tags) {
+                tag->setChecked(true);
+            }
+        }
+    }
+    else if (state == Qt::Unchecked) {
+        if (checkbox_sender->text() == "All") {
+            QList<QCheckBox*> all_tags = this->ui.tags->findChildren<QCheckBox*>();
+            all_tags.removeOne(checkbox_sender);
+            for (QCheckBox* tag : all_tags) {
+                tag->setChecked(false);
+            }
+        }
+        else {
+            if (this->all_tags->isChecked()) {
+                bool oldState = this->all_tags->blockSignals(true);
+                this->all_tags->setChecked(false);
+                this->all_tags->blockSignals(oldState);
+            }
+        }
+    }
+}
+
 void FilterDialog::typesChanged(Qt::CheckState state) {
     QCheckBox* checkbox_sender = qobject_cast<QCheckBox*>(sender());
     if (state == Qt::Checked) {
@@ -207,6 +265,25 @@ QJsonObject FilterDialog::toJson()
         }
     }
     json.insert("authors", authors);
+    //Tags
+    QList<QCheckBox*> all_tags = this->ui.tags->findChildren<QCheckBox*>();
+    QJsonArray tags = {};
+    for (QCheckBox* tag : all_tags) {
+        if (tag->isChecked()) {
+            if (tag->text() == "All") {
+                tags = { "All" };
+                break;
+            }else if (tag->text() == "None") {
+                tags.append(tag->text());
+                continue;
+            }
+            else {
+                Tag t = tag->property("tag").value<Tag>();
+                tags.append(QString::number(t.id));
+            }
+        }
+    }
+    json.insert("tags", tags);
     //Views
     json.insert("views_mode", this->ui.viewsComboBox->currentText());
     json.insert("views", QString::number(this->ui.viewsSpinBox->value()));

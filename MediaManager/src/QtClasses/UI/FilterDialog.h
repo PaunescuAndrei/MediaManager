@@ -11,10 +11,12 @@ class FilterDialog :
 {
     Q_OBJECT
 public:
-    QCheckBox* all_authors = nullptr;
     QCheckBox* all_types = nullptr;
+    QCheckBox* all_authors = nullptr;
+    QCheckBox* all_tags = nullptr;
     FilterDialog(MainWindow* MW = nullptr,QJsonObject settings = QJsonObject(), QWidget* parent = nullptr);
     void authorsChanged(Qt::CheckState state);
+    void tagsChanged(Qt::CheckState state);
     void typesChanged(Qt::CheckState state);
     QJsonObject toJson();
     ~FilterDialog();

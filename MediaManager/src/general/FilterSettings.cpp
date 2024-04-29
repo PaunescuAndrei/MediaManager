@@ -22,6 +22,7 @@ void FilterSettings::initJson()
 	this->json.insert("views_mode", ">=");
 	this->json.insert("views", "0");
 	this->json.insert("authors", QJsonArray{ "All" });
+	this->json.insert("tags", QJsonArray{ "All" });
 	this->json.insert("types_include", QJsonArray{ "All" });
 	this->json.insert("types_exclude", QJsonArray{ "All" });
 	this->json.insert("watched", QJsonArray{ "No" });

@@ -53,8 +53,10 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 		lt->insertWidget(2, starEditor);
 		lt->insertWidget(3, avg_rating_label);
 
+		this->ui.tags_label->setText(items.first()->text(ListColumns["TAGS_COLUMN"]));
+
 		connect(this->ui.tagsButton, &QPushButton::clicked, this, [this, MW]() {
-			QList<QTreeWidgetItem*> items = MW->ui.videosWidget->findItems(MW->ui.currentVideo->path, Qt::MatchExactly, ListColumns["PATH_COLUMN"]);
+			QList<QTreeWidgetItem*> items = MW->ui.videosWidget->findItemsCustom(MW->ui.currentVideo->path, Qt::MatchExactly, ListColumns["PATH_COLUMN"],1);
 			if (!items.isEmpty()) {
 				this->timer.stop();
 				Qt::WindowFlags flags = windowFlags();
@@ -63,11 +65,15 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 				this->show();
 				VideosTagsDialog* dialog = MW->editTags({ items.first() }, nullptr);
 				if (dialog) {
-					connect(dialog, &finishDialog::finished, this, [this, isOnTop](int result) {
+					connect(dialog, &finishDialog::finished, this, [this,MW, isOnTop](int result) {
 						if (this) {
 							this->setWindowFlag(Qt::WindowStaysOnTopHint, isOnTop);
 							this->show();
 							this->timer.start(250);
+							QList<QTreeWidgetItem*> items = MW->ui.videosWidget->findItemsCustom(MW->ui.currentVideo->path, Qt::MatchExactly, ListColumns["PATH_COLUMN"],1);
+							if (!items.isEmpty()) {
+								this->ui.tags_label->setText(items.first()->text(ListColumns["TAGS_COLUMN"]));
+							}
 						}
 					});
 				}

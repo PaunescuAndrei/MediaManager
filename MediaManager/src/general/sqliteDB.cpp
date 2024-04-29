@@ -816,7 +816,7 @@ void sqliteDB::createTables() {
         "\"date_created\"	DATE DEFAULT CURRENT_TIMESTAMP,"
         "\"last_watched\"	DATE,"
         "UNIQUE(\"path\", \"category\"),"
-        "PRIMARY KEY(\"id\"));";
+        "PRIMARY KEY(\"id\" AUTOINCREMENT));";
 
     QString maininfo = " CREATE TABLE IF NOT EXISTS maininfo ("
         "name TEXT NOT NULL,"

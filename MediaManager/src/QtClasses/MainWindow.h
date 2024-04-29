@@ -14,6 +14,7 @@
 #include "NotificationDialog.h"
 #include "finishDialog.h"
 #include "SafeQueue.h"
+#include "VideosTagsDialog.h"
 
 class MainApp;
 
@@ -89,7 +90,7 @@ public:
     void refreshHeadersVisibility();
     void videosWidgetHeaderContextMenu(QPoint point);
     void videosWidgetContextMenu(QPoint point);
-    void editTags(QList<QTreeWidgetItem*> items, QWidget* parent = nullptr);
+    VideosTagsDialog* editTags(QList<QTreeWidgetItem*> items, QWidget* parent = nullptr);
     void setCurrent(int id, QString path, QString name, QString author);
     QString getWatchedVisibilityOption(bool watched_yes, bool watched_no, bool watched_mixed);
     void DeleteDialogButton(QList<QTreeWidgetItem*> items);

@@ -56,7 +56,6 @@
 #include "colorPaletteExtractor.h"
 #include "loadBackupDialog.h"
 #include "TagsDialog.h"
-#include "VideosTagsDialog.h"
 
 #pragma warning(push ,3)
 #include "rapidfuzz_all.hpp"
@@ -2679,26 +2678,30 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
         this->setType(menu_click->text(),items);
 }
 
-void MainWindow::editTags(QList<QTreeWidgetItem*> items, QWidget* parent) {
+VideosTagsDialog* MainWindow::editTags(QList<QTreeWidgetItem*> items, QWidget* parent) {
     if (items.isEmpty())
-        return;
-    VideosTagsDialog dialog = VideosTagsDialog(items, this, parent);
-    int result = dialog.exec();
-    if (result == QDialog::Accepted) {
-        this->App->db->db.transaction();
-        for (auto& video : dialog.items) {
-            int video_id = video.first;
-            QSet<int> tags_id = QSet<int>();
-            for (int i = 0; i < dialog.ui.listWidgetAdded->count(); ++i) {
-                QListWidgetItem* item = dialog.ui.listWidgetAdded->item(i);
-                tags_id.insert(item->data(Qt::UserRole).value<Tag>().id);
-                this->App->db->insertTag(video_id, item->data(Qt::UserRole).value<Tag>().id);
+        return nullptr;
+    VideosTagsDialog *dialog = new VideosTagsDialog(items, this, parent);
+    dialog->open();
+    connect(dialog, &VideosTagsDialog::finished, this, [this, dialog](int result) {
+        if (result == QDialog::Accepted) {
+            this->App->db->db.transaction();
+            for (auto& video : dialog->items) {
+                int video_id = video.first;
+                QSet<int> tags_id = QSet<int>();
+                for (int i = 0; i < dialog->ui.listWidgetAdded->count(); ++i) {
+                    QListWidgetItem* item = dialog->ui.listWidgetAdded->item(i);
+                    tags_id.insert(item->data(Qt::UserRole).value<Tag>().id);
+                    this->App->db->insertTag(video_id, item->data(Qt::UserRole).value<Tag>().id);
+                }
+                this->App->db->deleteExtraTags(video_id, tags_id);
             }
-            this->App->db->deleteExtraTags(video_id, tags_id);
+            this->App->db->db.commit();
+            this->refreshVideosWidget(false, true);
         }
-        this->App->db->db.commit();
-        this->refreshVideosWidget(false, true);
-    }
+        dialog->deleteLater();
+    });
+    return dialog;
 }
 
 void MainWindow::setType(QString type, QList<QTreeWidgetItem*> items) {

@@ -8,11 +8,12 @@
 #include "starEditorWidget.h"
 #include "scrollAreaEventFilter.h"
 #include <QPersistentModelIndex>
+#include "VideosTagsDialog.h"
 
 finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 {
 	ui.setupUi(this);
-	this->setWindowModality(Qt::WindowModal);
+	this->setWindowModality(Qt::NonModal);
 	this->ui.NextButton->setText(MW->App->config->get_bool("random_next") ? "Next (R)" : "Next");
 	connect(this->ui.NextButton, &QCustomButton::rightClicked, this, [this,MW] {
 		if (MW) {
@@ -60,11 +61,29 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 				bool isOnTop = flags.testFlag(Qt::WindowStaysOnTopHint);
 				this->setWindowFlag(Qt::WindowStaysOnTopHint, false);
 				this->show();
-				this->hide();
-				MW->editTags({ items.first() }, this);
-				this->setWindowFlag(Qt::WindowStaysOnTopHint, isOnTop);
-				this->show();
-				this->timer.start(250);
+				VideosTagsDialog* dialog = MW->editTags({ items.first() }, nullptr);
+				if (dialog) {
+					connect(dialog, &finishDialog::finished, this, [this, isOnTop](int result) {
+						if (this) {
+							this->setWindowFlag(Qt::WindowStaysOnTopHint, isOnTop);
+							this->show();
+							this->timer.start(250);
+						}
+					});
+				}
+				else {
+					this->setWindowFlag(Qt::WindowStaysOnTopHint, isOnTop);
+					this->show();
+					this->timer.start(250);
+				}
+				QTimer::singleShot(0, [dialog] {
+					if (dialog) {
+						utils::bring_hwnd_to_foreground_uiautomation_method(qMainApp->uiAutomation, (HWND)dialog->winId());
+						dialog->raise();
+						dialog->show();
+						dialog->activateWindow();
+					}
+				});
 			}
 		});
 	}

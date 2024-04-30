@@ -14,7 +14,6 @@ struct ThumbnailCommand {
 class generateThumbnailManager
 {
 public:
-    QTimer thumbs_timer = QTimer();
     SafeQueue<ThumbnailCommand> queue = SafeQueue<ThumbnailCommand>();
     QList<generateThumbnailThread*> threadList = QList<generateThumbnailThread*>();
     QMutex data_lock = QMutex();

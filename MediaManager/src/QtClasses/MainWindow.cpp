@@ -257,12 +257,10 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     connect(this->ui.leftImg, &customGraphicsView::mouseClicked, this, [this](Qt::MouseButton button) {this->flipMascotDebug(this->ui.leftImg, button); });
     connect(this->ui.rightImg, &customGraphicsView::mouseClicked, this, [this](Qt::MouseButton button) {this->flipMascotDebug(this->ui.rightImg, button); });
 
-    connect(&this->thumbnailManager.thumbs_timer, &QTimer::timeout, this, [this] {
-        if (this->thumbnailManager.work_count <= 0) { 
-            this->thumbnailManager.thumbs_timer.stop();
-        } 
+    connect(&this->update_title_timer, &QTimer::timeout, this, [this] {
         this->UpdateWindowTitle();
     });
+    this->update_title_timer.start(1000);
 
     connect(this->ui.searchButton, &QPushButton::clicked, this, [this] {this->refreshVisibility(this->ui.searchBar->text()); });
     QList<QAction*> actionList = this->ui.searchBar->findChildren<QAction*>();
@@ -320,12 +318,16 @@ QString MainWindow::getCategoryName() {
 }
 
 void MainWindow::UpdateWindowTitle() {
-    if (this->thumbnailManager.work_count <= 0) {
-        this->setWindowTitle(QString("Media Manager %1 %2").arg(this->getCategoryName()).arg(VERSION_TEXT));
+    QString elapsed_time;
+    QString thumb_work_count;
+    QString main_title = QString("Media Manager %1 %2").arg(this->getCategoryName()).arg(VERSION_TEXT);
+    if (this->App->VW and this->App->VW->mainListener_time_start) {
+        elapsed_time = " [" % QString::fromStdString(utils::formatSeconds(std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->App->VW->mainListener_time_start).count())) % "]";
     }
-    else {
-        this->setWindowTitle(QString("Media Manager %1 %2 (%3)").arg(this->getCategoryName()).arg(VERSION_TEXT).arg(this->thumbnailManager.work_count));
+    if (this->thumbnailManager.work_count > 0) {
+        thumb_work_count = " (" % QString::number(this->thumbnailManager.work_count) % ")";
     }
+    this->setWindowTitle(main_title % thumb_work_count % elapsed_time);
 }
 
 void MainWindow::VideoInfoNotification() {

@@ -143,11 +143,10 @@ void VideoWatcherQt::run()
 				emit updateMusicPlayerSignal(false);
 			if (this->watching == false) {
 				this->watching = true;
-				if (this->fap_time_start != nullptr) {
-					delete this->fap_time_start;
-					this->fap_time_start = nullptr;
+				if (this->mainListener_time_start != nullptr) {
+					this->mainListener_time_start.reset();
 				}
-				this->fap_time_start = new std::chrono::microseconds(utils::QueryUnbiasedInterruptTimeChrono());
+				this->mainListener_time_start = std::make_shared<std::chrono::microseconds>(utils::QueryUnbiasedInterruptTimeChrono());
 			}
 		}
 		else {
@@ -155,11 +154,10 @@ void VideoWatcherQt::run()
 				emit updateMusicPlayerSignal(true);
 			if (this->watching == true) {
 				this->watching = false;
-				int elapsed = std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->fap_time_start).count();
+				int elapsed = std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->mainListener_time_start).count();
 				this->incrementTimeWatchedTotal(elapsed);
-				if (this->fap_time_start != nullptr) {
-					delete this->fap_time_start;
-					this->fap_time_start = nullptr;
+				if (this->mainListener_time_start != nullptr) {
+					this->mainListener_time_start.reset();
 				}
 			}
 
@@ -184,11 +182,10 @@ void VideoWatcherQt::run()
 		listener->process->terminate();
 		this->db->updateVideoProgress(listener->video_id, listener->currentPosition);
 	}
-	if (this->fap_time_start != nullptr) {
-		int elapsed = std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->fap_time_start).count();
+	if (this->mainListener_time_start != nullptr) {
+		int elapsed = std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->mainListener_time_start).count();
 		this->incrementTimeWatchedTotal(elapsed);
-		delete this->fap_time_start;
-		this->fap_time_start = nullptr;
+		this->mainListener_time_start.reset();
 	}
 	this->clearAfterMainVideoEnd();
 }
@@ -200,11 +197,10 @@ VideoWatcherQt::~VideoWatcherQt()
 		item.reset();
 	}
 
-	if (this->fap_time_start != nullptr) {
-		int elapsed = std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->fap_time_start).count();
+	if (this->mainListener_time_start != nullptr) {
+		int elapsed = std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->mainListener_time_start).count();
 		this->incrementTimeWatchedTotal(elapsed);
-		delete this->fap_time_start;
-		this->fap_time_start = nullptr;
+		this->mainListener_time_start.reset();
 	}
 
 	delete this->db;

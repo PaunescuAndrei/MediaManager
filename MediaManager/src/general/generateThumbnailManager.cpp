@@ -31,7 +31,6 @@ void generateThumbnailManager::set_work_count(int value)
 }
 
 void generateThumbnailManager::start() {
-    this->thumbs_timer.start(500);
     while (this->threadList.size() < this->threads_number) {
         generateThumbnailThread* t = new generateThumbnailThread(&this->queue, this);
         t->connect(t, &generateThumbnailThread::finished, [this, t] {t->deleteLater(); this->threadList.removeOne(t); });

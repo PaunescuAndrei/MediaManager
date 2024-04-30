@@ -29,6 +29,7 @@ public:
     IconChanger* animatedIcon = nullptr;
     QSystemTrayIcon* trayIcon;
     QTimer* search_timer = nullptr;
+    QTimer update_title_timer = QTimer();
     double position = 0;
     double duration = 0;
     int sv_count = 0;

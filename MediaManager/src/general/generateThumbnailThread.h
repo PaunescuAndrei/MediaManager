@@ -19,6 +19,9 @@ public:
     generateThumbnailThread(SafeQueue<ThumbnailCommand> *queue, generateThumbnailManager* manager = nullptr, QObject* parent = nullptr);
     void run() override;
     static void generateThumbnail(QProcess& process, QString suffix, QString path);
+    static void deleteThumbnail(QString path);
+    static QString getThumbnailSuffix(QString path);
+    static QString getThumbnailFilename(QString path);
     ~generateThumbnailThread();
 };
 

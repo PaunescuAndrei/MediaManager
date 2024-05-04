@@ -143,7 +143,7 @@ public:
     void setRightMascot(QString path);
     void setMascots(bool cache = true);
     void setThemeHighlightColor(QColor color);
-    void openThumbnails(std::string path);
+    void openThumbnails(QString path);
     void flipMascots();
     void showMascots();
     void hideMascots();

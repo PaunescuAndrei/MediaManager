@@ -32,7 +32,6 @@
 #include "ResetDBDialog.h"
 #include <QFileInfo>
 #include <QMessageBox>
-#include <QCryptographicHash>
 #include <QDesktopServices>
 #include "generateThumbnailThread.h"
 #include "AutoToolTipDelegate.h"
@@ -130,7 +129,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         else
             this->watchSelected(item->data(ListColumns["PATH_COLUMN"],CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]));
     });
-    connect(this->ui.videosWidget, &videosTreeWidget::itemMiddleClicked, this, [this](QTreeWidgetItem* item) { this->openThumbnails(item->text(ListColumns["PATH_COLUMN"]).toStdString()); });
+    connect(this->ui.videosWidget, &videosTreeWidget::itemMiddleClicked, this, [this](QTreeWidgetItem* item) { this->openThumbnails(item->text(ListColumns["PATH_COLUMN"])); });
     this->ui.videosWidget->setContextMenuPolicy(Qt::CustomContextMenu);
     this->ui.videosWidget->header()->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(this->ui.videosWidget, &QTreeWidget::customContextMenuRequested, this, &MainWindow::videosWidgetContextMenu);
@@ -928,9 +927,9 @@ void MainWindow::setThemeHighlightColor(QColor color) {
     this->changePalette(p);
 }
 
-void MainWindow::openThumbnails(std::string path) {
-    QString suffix = "_" + QString(QCryptographicHash::hash(path, QCryptographicHash::Md5).toHex()) + ".jpg";
-    QString cachename = QFileInfo(QString::fromStdString(path)).completeBaseName() + suffix;
+void MainWindow::openThumbnails(QString path) {
+    QString suffix = generateThumbnailThread::getThumbnailSuffix(path);
+    QString cachename = generateThumbnailThread::getThumbnailFilename(path);
     QString cachepath = QString(THUMBNAILS_CACHE_PATH) + "/" + cachename;
     QFileInfo file(cachepath);
     if (file.exists()) {
@@ -938,7 +937,7 @@ void MainWindow::openThumbnails(std::string path) {
     }
     else {
         QProcess *process = new QProcess();
-        generateThumbnailThread::generateThumbnail(*process, suffix, QString::fromStdString(path));
+        generateThumbnailThread::generateThumbnail(*process, suffix, path);
         process->start();
         connect(process, &QProcess::finished, this, [this,file, process](int exitCode, QProcess::ExitStatus exitStatus) {
             process->deleteLater(); 
@@ -1881,13 +1880,7 @@ void MainWindow::DeleteDialogButton(QList<QTreeWidgetItem*> items) {
                     root->removeChild(item);
                 }
                 this->App->db->deleteVideo(item->data(ListColumns["PATH_COLUMN"],CustomRoles::id).toInt());
-                QString suffix = "_" + QString(QCryptographicHash::hash(item->text(ListColumns["PATH_COLUMN"]).toStdString(), QCryptographicHash::Md5).toHex()) + ".jpg";
-                QString cachename = QFileInfo(item->text(ListColumns["PATH_COLUMN"])).completeBaseName() + suffix;
-                QString cachepath = QString(THUMBNAILS_CACHE_PATH) + "/" + cachename;
-                QFile file(cachepath);
-                if (file.exists()) {
-                    file.remove();
-                }
+                generateThumbnailThread::deleteThumbnail(item->text(ListColumns["PATH_COLUMN"]));
                 if (item == this->ui.videosWidget->last_selected)
                     this->ui.videosWidget->last_selected = nullptr;
                 delete item;
@@ -2648,6 +2641,7 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
         QString new_path = QFileDialog::getOpenFileName(this, "Select new path", fileInfo.absolutePath());
         if (!new_path.isEmpty()) {
             new_path = QDir::toNativeSeparators(new_path);
+            generateThumbnailThread::deleteThumbnail(old_path);
             this->updatePath(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), new_path);
             if (old_path == this->ui.currentVideo->path) {
                 auto items = this->ui.videosWidget->findItemsCustom(new_path, Qt::MatchFixedString, ListColumns["PATH_COLUMN"], 1);

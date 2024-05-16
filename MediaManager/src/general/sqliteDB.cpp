@@ -235,6 +235,23 @@ QString sqliteDB::getVideoProgress(int video_id, QString fallback) {
         return fallback;
 }
 
+int sqliteDB::getVideoId(QString path, QString category) {
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QString("SELECT id from videodetails WHERE path = ? and category = ?"));
+    query.addBindValue(path);
+    query.addBindValue(category);
+    if (!query.exec()) {
+        qDebug() << "getVideoId " << query.lastError().text();
+        if (qApp)
+            qMainApp->showErrorMessage("getVideoId " + query.lastError().text());
+    }
+    bool found = query.first();
+    if (found == true)
+        return query.value(0).toInt();
+    else
+        return -1;
+}
+
 bool sqliteDB::checkIfVideoInDB(QString path, QString category) {
     QSqlQuery query = QSqlQuery(this->db);
     query.prepare(QString("SELECT path from videodetails WHERE path = ? and category = ?"));

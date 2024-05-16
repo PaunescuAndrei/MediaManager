@@ -1907,15 +1907,15 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
     }
 
     QMimeDatabase db;
-    QList<QPair<QString, bool>> valid_files = QList<QPair<QString, bool>>();
+    QList<QPair<QString, int>> valid_files = QList<QPair<QString, int>>();
     int new_files_counter = 0;
     for (QString& file : files) {
         QMimeType guess_type = db.mimeTypeForFile(file);
         QString path = QDir::toNativeSeparators(file);
         if (guess_type.isValid() && guess_type.name().startsWith("video")) {
-            bool exists_in_db = this->App->db->checkIfVideoInDB(path, this->App->currentDB);
-            valid_files.append({ path,exists_in_db });
-            if (not exists_in_db)
+            int video_id_if_exists = this->App->db->getVideoId(path, this->App->currentDB);
+            valid_files.append({ path,video_id_if_exists });
+            if (video_id_if_exists == -1)
                 new_files_counter++;
         }
     }
@@ -1949,6 +1949,7 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
     QString type_ = "";
 
     InsertSettingsDialog dialog(this);
+    dialog.ui.ResetWatchedCheckBox->setChecked(update_state);
 
     if (!type.isEmpty()) {
         type_detected = type;
@@ -1961,16 +1962,16 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
 
     QSet<QString> authors_names = QSet<QString>();
 
-    for (QPair<QString,bool>& path_pair : valid_files) {
+    for (QPair<QString,int>& path_pair : valid_files) {
         QStringList tmp = utils::getDirNames(path_pair.first);
         QSet<QString> authors_names_(tmp.begin(),tmp.end());
         authors_names += authors_names_;
         QTreeWidgetItem* item = new TreeWidgetItem({ path_pair.first,"","",""}, 0, nullptr);
-        item->setDisabled(path_pair.second);
-        item->setData(0, Qt::UserRole, path_pair.second);
+        item->setDisabled(path_pair.second != -1);
+        item->setData(0, CustomRoles::id, path_pair.second);
         item->setTextAlignment(3, Qt::AlignHCenter);
         dialog.ui.newFilesTreeWidget->addTopLevelItem(item);
-        if (path_pair.second and not dialog.ui.showExistingCheckBox->isChecked())
+        if (path_pair.second != -1 and not dialog.ui.showExistingCheckBox->isChecked())
             item->setHidden(true);
     }
     dialog.init_authors(QStringList(authors_names.begin(), authors_names.end()));
@@ -1998,6 +1999,7 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
     int batch_size = 100;
     int count = 0;
     bool transaction = false;
+    bool updated = false;
     QStringList files_inserted = QStringList();
 
     it = QTreeWidgetItemIterator(dialog.ui.newFilesTreeWidget);
@@ -2007,13 +2009,14 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
             this->App->db->db.transaction();
         }
         if ((*it)->isDisabled()) {
+            if (dialog.ui.ResetWatchedCheckBox->isChecked()) {
+                this->App->db->updateWatchedState((*it)->data(0, CustomRoles::id).toInt(), "No");
+                updated = true;
+            }
             ++it;
             continue;
         }
         this->App->db->insertVideo((*it)->text(0), current_db, (*it)->text(2), (*it)->text(1), (*it)->text(3));
-        // probably should remove, mostly unused
-        if(update_state)
-            this->App->db->updateWatchedState((*it)->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), "No");
         count++;
         if (count == 100) {
             this->App->db->db.commit();
@@ -2043,6 +2046,9 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
                 this->selectCurrentItem(item,false);
             }
         }
+    }
+    else if (updated) {
+        this->refreshVideosWidget(false, true);
     }
     return true;
 }

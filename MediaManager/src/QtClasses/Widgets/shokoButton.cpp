@@ -52,7 +52,7 @@ void shokoButton::update_new_watching(QString ptw_playlist, bool random) {
             return;
         }
         QStringList files = qMainApp->shoko_API->get_files(item_type_id[1],item_type_id[0]);
-        bool inserted = this->MW->InsertVideoFiles(files, false, "PLUS", "HT");
+        bool inserted = this->MW->InsertVideoFiles(files, true, "PLUS", "HT");
         if (inserted) {
             qMainApp->shoko_API->update_playlist_items("1. Watching", new_watching_items);
             qMainApp->shoko_API->update_playlist_items(ptw_playlist, new_ptw_items.second);

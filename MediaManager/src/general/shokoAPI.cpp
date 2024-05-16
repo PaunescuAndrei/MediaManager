@@ -217,6 +217,7 @@ QString shokoAPI::combine_items(QString old_items_input,QString new_items_input)
     QStringList old_items = old_items_input.split("|");
     QStringList new_items = new_items_input.split("|");
     old_items += new_items;
+    old_items.removeDuplicates();
     return old_items.join("|");
 }
 

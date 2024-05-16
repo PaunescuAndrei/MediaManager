@@ -2482,8 +2482,11 @@ void MainWindow::videosWidgetHeaderContextMenu(QPoint point) {
         }
     }
     else if (menu_click == watched_mixed) {
-        if (utils::hiddenCheck(settings_list) && !watched_mixed->isChecked())
+        if (!watched_mixed->isChecked()) {
             settings_list.removeAll("watched_mixed");
+            settings_list.append("watched_yes");
+            settings_list.append("watched_no");
+        }
         else {
             settings_list.removeAll("watched_yes");
             settings_list.removeAll("watched_no");

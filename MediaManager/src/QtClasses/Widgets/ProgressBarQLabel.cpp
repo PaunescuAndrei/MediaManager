@@ -7,7 +7,7 @@
 #include "MainApp.h"
 #include <QStyleOptionProgressBar>
 
-ProgressBarQLabel::ProgressBarQLabel(QWidget* parent) : QCustomLabel(parent) {
+ProgressBarQLabel::ProgressBarQLabel(QWidget* parent) : customQLabel(parent) {
 	this->w = 1.0 / 25;
 	this->scaled_mode = true;
 	this->setBrush(this->palette().color(QPalette::WindowText));

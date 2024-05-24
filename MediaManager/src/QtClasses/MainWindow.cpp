@@ -44,7 +44,7 @@
 #include <QInputDialog>
 #include "InsertSettingsDialog.h"
 #include "generalEventFilter.h"
-#include "QCustomButton.h"
+#include "customQButton.h"
 #include "scrollAreaEventFilter.h"
 #include "TreeWidgetItem.h"
 #include "ProgressBarQLabel.h"
@@ -184,7 +184,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
             this->changeListenerVideo(this->App->VW->mainListener, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
         }
     });
-    connect(this->ui.random_button, &QCustomButton::middleClicked, this, [this] {
+    connect(this->ui.random_button, &customQButton::middleClicked, this, [this] {
         FilterDialog dialog = FilterDialog(this,this->filterSettings.json,this);
         int value = dialog.exec();
         if (value == QDialog::Accepted) {
@@ -193,8 +193,8 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
             this->App->db->setFilterSettings(QJsonDocument(dialog.toJson()).toJson(QJsonDocument::Compact), this->App->currentDB);
         }
     });
-    connect(this->ui.random_button, &QCustomButton::rightClicked, this, [this] {
-        QCustomButton* buttonSender = qobject_cast<QCustomButton*>(sender());
+    connect(this->ui.random_button, &customQButton::rightClicked, this, [this] {
+        customQButton* buttonSender = qobject_cast<customQButton*>(sender());
         this->switchRandomButtonMode(buttonSender);
      });
     connect(this->ui.watch_button, &QPushButton::clicked, this, [this] { 
@@ -209,17 +209,17 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     connect(this->ui.next_button, &QPushButton::clicked, this, [this] {
         this->NextButtonClicked(); 
     });
-    connect(this->ui.next_button, &QCustomButton::middleClicked, this, [this] {
+    connect(this->ui.next_button, &customQButton::middleClicked, this, [this] {
         this->NextButtonClicked(false);
     });
-    connect(this->ui.next_button, &QCustomButton::rightClicked, this, [this] {
-        QCustomButton* buttonSender = qobject_cast<QCustomButton*>(sender());
+    connect(this->ui.next_button, &customQButton::rightClicked, this, [this] {
+        customQButton* buttonSender = qobject_cast<customQButton*>(sender());
         this->switchNextButtonMode(buttonSender);
      });
     connect(this->ui.settings_button, &QPushButton::clicked, this, [this] {
         this->settingsDialogButton(); 
     });
-    connect(this->ui.settings_button, &QCustomButton::rightClicked, this, [this] { 
+    connect(this->ui.settings_button, &customQButton::rightClicked, this, [this] { 
         this->openStats();
     });
 
@@ -345,6 +345,10 @@ void MainWindow::VideoInfoNotification() {
     this->notification_dialog->ui.counterLabel->copy(this->ui.counterLabel);
     this->notification_dialog->ui.name->setText(this->ui.currentVideo->name);
     this->notification_dialog->ui.author->setText(this->ui.currentVideo->author);
+    if (this->ui.currentVideo->tags.isEmpty())
+        this->notification_dialog->ui.tags->hide();
+    else
+        this->notification_dialog->ui.tags->setText(this->ui.currentVideo->tags);
     StarRating starRating = StarRating(this->active, this->halfactive, this->inactive, 0, 5.0);
     if (this->ui.videosWidget->last_selected) {
         starRating.setStarCount(this->ui.videosWidget->last_selected->data(ListColumns["RATING_COLUMN"], CustomRoles::rating).toDouble());
@@ -1126,7 +1130,7 @@ bool MainWindow::NextVideo(bool random, bool increment) {
                 }
             }
             else {
-                this->setCurrent(items.first()->data(ListColumns["PATH_COLUMN"],CustomRoles::id).toInt(), items.first()->text(ListColumns["PATH_COLUMN"]), items.first()->text(ListColumns["NAME_COLUMN"]), items.first()->text(ListColumns["AUTHOR_COLUMN"]));
+                this->setCurrent(items.first()->data(ListColumns["PATH_COLUMN"],CustomRoles::id).toInt(), items.first()->text(ListColumns["PATH_COLUMN"]), items.first()->text(ListColumns["NAME_COLUMN"]), items.first()->text(ListColumns["AUTHOR_COLUMN"]), items.first()->text(ListColumns["TAGS_COLUMN"]));
                 this->selectCurrentItem(items.first());
                 video_changed = true;
             }
@@ -1143,13 +1147,13 @@ bool MainWindow::setNextVideo(QTreeWidgetItem* item) {
             item_below = this->ui.videosWidget->topLevelItem(0);
         }
         if (item == item_below) {
-            this->setCurrent(-1,"", "", "");
+            this->setCurrent(-1, "", "", "", "");
             this->selectCurrentItem(nullptr);
             return false;
             break;
         }
         if (item_below->text(ListColumns["WATCHED_COLUMN"]) == "No") {
-            this->setCurrent(item_below->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item_below->text(ListColumns["PATH_COLUMN"]), item_below->text(ListColumns["NAME_COLUMN"]), item_below->text(ListColumns["AUTHOR_COLUMN"]));
+            this->setCurrent(item_below->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item_below->text(ListColumns["PATH_COLUMN"]), item_below->text(ListColumns["NAME_COLUMN"]), item_below->text(ListColumns["AUTHOR_COLUMN"]), item_below->text(ListColumns["TAGS_COLUMN"]));
             this->selectCurrentItem(item_below);
             return true;
             break;
@@ -1211,6 +1215,7 @@ bool MainWindow::TagsDialogButton() {
         if (dialog.model->submitAll()) {
             dialog.model->database().commit();
             this->refreshVideosWidget(false, true);
+            this->refreshCurrentVideo();
             return true;
         }
         else {
@@ -1638,19 +1643,19 @@ void MainWindow::setDebugMode(bool debug) {
         }
         QPushButton* btn2 = this->ui.MenuButtons->findChild<QPushButton*>("changeThemeBtn");
         if (!btn2) {
-            QCustomButton* btn2 = new QCustomButton(this->ui.centralwidget);
+            customQButton* btn2 = new customQButton(this->ui.centralwidget);
             btn2->setObjectName("changeThemeBtn");
             btn2->setText("Theme");
-            connect(btn2, &QCustomButton::clicked, this, [this] {
+            connect(btn2, &customQButton::clicked, this, [this] {
                 QPalette p = this->App->palette();
                 p.setColor(QPalette::Highlight, QColor(utils::randint(0, 255), utils::randint(0, 255), utils::randint(0, 255)));
                 this->changePalette(p);
             });
-            connect(btn2, &QCustomButton::rightClicked, this, [this] {
+            connect(btn2, &customQButton::rightClicked, this, [this] {
                 QPalette p = this->App->style()->standardPalette();
                 this->changePalette(p);
             });
-            connect(btn2, &QCustomButton::middleClicked, this, [this] {
+            connect(btn2, &customQButton::middleClicked, this, [this] {
                 QColorDialog d = QColorDialog();
                 connect(&d, &QColorDialog::currentColorChanged, this, [this](const QColor& color) {
                     if (color.isValid()) {
@@ -1744,21 +1749,25 @@ bool MainWindow::randomVideo(bool watched_all, QStringList vid_type_include, QSt
             }
         }
         if (item != nullptr) {
-            this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]));
+            this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]), item->text(ListColumns["TAGS_COLUMN"]));
             this->selectCurrentItem(item);
             return true;
         }
         else {
-            this->setCurrent(-1, "", "", "");
+            this->setCurrent(-1, "", "", "", "");
             this->selectCurrentItem(nullptr);
         }
     }
     return false;
 }
 
+void MainWindow::refreshCurrentVideo() {
+    this->ui.currentVideo->setValues(this->App->db->getCurrentVideo(this->App->currentDB));
+}
+
 void MainWindow::initListDetails() {
     this->App->db->db.transaction();
-    this->ui.currentVideo->setValues(this->App->db->getCurrentVideo(this->App->currentDB));
+    this->refreshCurrentVideo();
     this->ui.counterLabel->setText(this->App->db->getMainInfoValue("counterVar", "ALL", "0"));
     this->sv_count = this->App->db->getMainInfoValue("sv_count","ALL", "0").toInt();
     this->sv_target_count = this->App->db->getMainInfoValue("sv_target_count", "ALL", "0").toInt();
@@ -2042,7 +2051,7 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
             QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(first, Qt::MatchExactly, ListColumns["PATH_COLUMN"], 1);
             if (!items.isEmpty()) {
                 QTreeWidgetItem *item = items.first();
-                this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]));
+                this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]), item->text(ListColumns["TAGS_COLUMN"]));
                 this->selectCurrentItem(item,false);
             }
         }
@@ -2227,7 +2236,7 @@ int MainWindow::getCounterVar() {
     return this->App->db->getMainInfoValue("counterVar", "ALL", "0").toInt();
 }
 
-void MainWindow::switchNextButtonMode(QCustomButton* nextbutton) {
+void MainWindow::switchNextButtonMode(customQButton* nextbutton) {
     this->App->config->set("random_next", utils::bool_to_text_qt(!this->App->config->get_bool("random_next")));
     if(nextbutton != this->ui.next_button)
         this->ui.next_button->setText(this->App->config->get_bool("random_next") ? "Next (R)" : "Next");
@@ -2235,7 +2244,7 @@ void MainWindow::switchNextButtonMode(QCustomButton* nextbutton) {
     this->App->config->save_config();
 }
 
-void MainWindow::switchRandomButtonMode(QCustomButton* randombutton) {
+void MainWindow::switchRandomButtonMode(customQButton* randombutton) {
     QString mode = this->App->config->get("get_random_mode");
     if (mode == "Normal")
         mode = "Filtered";
@@ -2593,7 +2602,7 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
     if (menu_click == play_video)
         this->watchSelected(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]));
     else if (menu_click == set_current) {
-        this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]));
+        this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]), item->text(ListColumns["TAGS_COLUMN"]));
         this->selectCurrentItem();
         if (this->App->VW->mainListener) {
             this->changeListenerVideo(this->App->VW->mainListener, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
@@ -2656,7 +2665,7 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
                 auto items = this->ui.videosWidget->findItemsCustom(new_path, Qt::MatchFixedString, ListColumns["PATH_COLUMN"], 1);
                 if (not items.isEmpty()) {
                     auto item = items.first();
-                    this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(),item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]));
+                    this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(),item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]), item->text(ListColumns["TAGS_COLUMN"]));
                     if (this->App->VW->mainListener) {
                         this->changeListenerVideo(this->App->VW->mainListener, this->ui.currentVideo->path, this->ui.currentVideo->id, 0);
                     }
@@ -2704,6 +2713,7 @@ VideosTagsDialog* MainWindow::editTags(QList<QTreeWidgetItem*> items, QWidget* p
             }
             this->App->db->db.commit();
             this->refreshVideosWidget(false, true);
+            this->refreshCurrentVideo();
         }
         dialog->deleteLater();
     });
@@ -2835,8 +2845,8 @@ void MainWindow::selectItemsDelayed(QStringList items, bool clear_selection) {
     });
 }
 
-void MainWindow::setCurrent(int id, QString path, QString name, QString author) {
-    this->ui.currentVideo->setValues(id, path,name,author);
+void MainWindow::setCurrent(int id, QString path, QString name, QString author, QString tags) {
+    this->ui.currentVideo->setValues(id, path, name, author, tags);
     this->updateProgressBar(this->App->db->getVideoProgress(this->ui.currentVideo->id), utils::getVideoDuration(this->ui.currentVideo->path));
     this->App->db->setMainInfoValue("current", this->App->currentDB, path);
     qMainApp->logger->log(QString("Setting current Video to \"%1\"").arg(path), "Video",path);

@@ -2,14 +2,14 @@
 #include <QPushButton>
 #include <QWidget>
 
-class QCustomButton : public QPushButton
+class customQButton : public QPushButton
 {
     Q_OBJECT //don't forget this macro, or your signals/slots won't work
 public:
-    QCustomButton(QWidget* parent = nullptr);
-    QCustomButton(const QString& text, QWidget* parent = nullptr);
+    customQButton(QWidget* parent = nullptr);
+    customQButton(const QString& text, QWidget* parent = nullptr);
     void mouseReleaseEvent(QMouseEvent* e) override;
-    ~QCustomButton();
+    ~customQButton();
 signals:
     void rightClicked();
     void middleClicked();

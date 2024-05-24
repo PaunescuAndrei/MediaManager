@@ -168,7 +168,7 @@
                    </widget>
                   </item>
                   <item>
-                   <widget class="QCustomButton" name="next_button">
+                   <widget class="customQButton" name="next_button">
                     <property name="font">
                      <font>
                       <pointsize>10</pointsize>
@@ -180,7 +180,7 @@
                    </widget>
                   </item>
                   <item>
-                   <widget class="QCustomButton" name="random_button">
+                   <widget class="customQButton" name="random_button">
                     <property name="font">
                      <font>
                       <pointsize>10</pointsize>
@@ -211,7 +211,7 @@
                    </widget>
                   </item>
                   <item>
-                   <widget class="QCustomButton" name="settings_button">
+                   <widget class="customQButton" name="settings_button">
                     <property name="font">
                      <font>
                       <pointsize>10</pointsize>
@@ -772,9 +772,9 @@
    <header>shokoButton.h</header>
   </customwidget>
   <customwidget>
-   <class>QCustomButton</class>
+   <class>customQButton</class>
    <extends>QPushButton</extends>
-   <header>qcustombutton.h</header>
+   <header>customqbutton.h</header>
   </customwidget>
   <customwidget>
    <class>ProgressBarQLabel</class>

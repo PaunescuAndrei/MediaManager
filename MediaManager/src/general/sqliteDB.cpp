@@ -498,9 +498,16 @@ QString sqliteDB::getMainInfoValue(QString name, QString category, QString fallb
         return fallback;
 }
 
-std::tuple<int, QString, QString, QString> sqliteDB::getCurrentVideo(QString category, std::tuple<int, QString, QString, QString> fallback) {
+std::tuple<int, QString, QString, QString, QString> sqliteDB::getCurrentVideo(QString category, std::tuple<int, QString, QString, QString, QString> fallback) {
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QString("SELECT t2.id,t1.value,t2.name,t2.author FROM maininfo t1 LEFT JOIN videodetails t2 ON t1.value = t2.path where t1.category = ? and t1.name = \"current\";"));
+    
+    QString query_string = "SELECT vd.id, mi.value, vd.name, vd.author, GROUP_CONCAT(t.name, ', ' ORDER BY t.display_priority ASC, t.id) AS tags FROM maininfo mi "
+        "LEFT JOIN videodetails vd ON mi.value = vd.path "
+        "LEFT JOIN tags_relations tr ON vd.id = tr.video_id "
+        "LEFT JOIN tags t ON tr.tag_id = t.id "
+        "WHERE mi.category = ? and mi.name = \'current\';";
+
+    query.prepare(query_string);
     query.addBindValue(category);
     if (!query.exec()) {
         qDebug() << "getCurrentVideo " << query.lastError().text();
@@ -509,7 +516,7 @@ std::tuple<int, QString, QString, QString> sqliteDB::getCurrentVideo(QString cat
     }
     bool found = query.first();
     if (found == true)
-        return std::tuple<int, QString, QString, QString>{query.value(0).toInt(), query.value(1).toString(), query.value(2).toString(), query.value(3).toString()};
+        return std::tuple<int, QString, QString, QString, QString>{query.value(0).toInt(), query.value(1).toString(), query.value(2).toString(), query.value(3).toString(), query.value(4).toString()};
     else
         return fallback;
 }

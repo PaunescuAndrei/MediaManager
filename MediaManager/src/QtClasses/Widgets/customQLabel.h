@@ -4,15 +4,15 @@
 
 class MainWindow;
 
-class QCustomLabel :public QLabel
+class customQLabel :public QLabel
 {
     Q_OBJECT
 
 public:
-    QCustomLabel(QWidget* parent = nullptr);
+    customQLabel(QWidget* parent = nullptr);
     void mousePressEvent(QMouseEvent* e) override;
     void wheelEvent(QWheelEvent* e) override;
-    ~QCustomLabel();
+    ~customQLabel();
 signals:
     void clicked();
     void rightClicked();

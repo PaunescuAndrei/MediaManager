@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>600</width>
-    <height>174</height>
+    <height>196</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -383,7 +383,7 @@
           </spacer>
          </item>
          <item>
-          <widget class="QCustomButton" name="NextButton">
+          <widget class="customQButton" name="NextButton">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
              <horstretch>0</horstretch>
@@ -458,9 +458,9 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>QCustomButton</class>
+   <class>customQButton</class>
    <extends>QPushButton</extends>
-   <header>qcustombutton.h</header>
+   <header>customqbutton.h</header>
   </customwidget>
   <customwidget>
    <class>ProgressBarQLabel</class>

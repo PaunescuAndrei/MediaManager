@@ -68,11 +68,11 @@
     <ClCompile Include="src\QtClasses\Widgets\customGraphicsView.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\generalEventFilter.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\videosTreeWidget.cpp" />
-    <ClCompile Include="src\QtClasses\Widgets\QCustomButton.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\customQButton.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\quitEaterEventFilter.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\scrollAreaEventFilter.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\shokoButton.cpp" />
-    <ClCompile Include="src\QtClasses\Widgets\QCustomLabel.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\customQLabel.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\TreeWidgetItem.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\watchedFrame.cpp" />
     <ClCompile Include="src\stdafx.cpp">
@@ -140,9 +140,9 @@
     <ClInclude Include="src\QtClasses\stylesQt.h" />
     <ClInclude Include="src\QtClasses\Widgets\TreeWidgetItem.h" />
     <QtMoc Include="src\QtClasses\Widgets\watchedFrame.h" />
-    <QtMoc Include="src\QtClasses\Widgets\QCustomLabel.h" />
+    <QtMoc Include="src\QtClasses\Widgets\customQLabel.h" />
     <QtMoc Include="src\QtClasses\Widgets\shokoButton.h" />
-    <QtMoc Include="src\QtClasses\Widgets\QCustomButton.h" />
+    <QtMoc Include="src\QtClasses\Widgets\customQButton.h" />
     <QtMoc Include="src\QtClasses\Widgets\videosTreeWidget.h" />
     <QtMoc Include="src\QtClasses\Widgets\customGraphicsView.h" />
     <QtMoc Include="src\QtClasses\Widgets\ProgressBarQLabel.h" />
@@ -223,17 +223,17 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="QtSettings">
     <QtModules>core;gui;widgets;concurrent;multimedia;sql;</QtModules>
     <QtBuildConfig>debug</QtBuildConfig>
-    <QtDeploy>false</QtDeploy>
+    <QtDeploy>true</QtDeploy>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="QtSettings">
     <QtModules>core;gui;widgets;concurrent;multimedia;sql;</QtModules>
     <QtBuildConfig>release</QtBuildConfig>
-    <QtDeploy>false</QtDeploy>
+    <QtDeploy>true</QtDeploy>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'" Label="QtSettings">
     <QtModules>core;gui;widgets;concurrent;multimedia;sql;</QtModules>
     <QtBuildConfig>release</QtBuildConfig>
-    <QtDeploy>false</QtDeploy>
+    <QtDeploy>true</QtDeploy>
   </PropertyGroup>
   <Target Name="QtMsBuildNotFound" BeforeTargets="CustomBuild;ClCompile" Condition="!Exists('$(QtMsBuild)\qt.targets') or !Exists('$(QtMsBuild)\qt.props')">
     <Message Importance="High" Text="QtMsBuild: could not locate qt.targets, qt.props; project may not build correctly." />

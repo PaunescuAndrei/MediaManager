@@ -1,5 +1,5 @@
 #pragma once
-#include "QCustomLabel.h"
+#include "customQLabel.h"
 #include <QEvent>
 #include <QBrush>
 #include <QPen>
@@ -7,7 +7,7 @@
 
 class MainWindow;
 
-class ProgressBarQLabel :public QCustomLabel
+class ProgressBarQLabel :public customQLabel
 {
     Q_OBJECT
 

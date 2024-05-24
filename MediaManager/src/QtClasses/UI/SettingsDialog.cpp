@@ -56,7 +56,7 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 	connect(this->ui.cacheIconButton, &QPushButton::clicked, this, [mw, this] {mw->animatedIcon->rebuildIconCacheNonBlocking(); });
 	connect(this->ui.cacheBeatsButton, &QPushButton::clicked, this, [mw, this] {mw->App->MascotsAnimation->rebuildBeatsCacheNonBlocking(); });
 	connect(this->ui.cacheThumbsButton, &QPushButton::clicked, this, [mw, this] {mw->thumbnailManager.rebuildThumbnailCache(mw->App->db->db,true); });
-	connect(this->ui.cacheThumbsButton, &QCustomButton::rightClicked, this, [mw, this] {mw->thumbnailManager.rebuildThumbnailCache(mw->App->db->db, false); });
+	connect(this->ui.cacheThumbsButton, &customQButton::rightClicked, this, [mw, this] {mw->thumbnailManager.rebuildThumbnailCache(mw->App->db->db, false); });
 	if (mw->App->config->get_bool("music_on"))
 		this->ui.musicOnOff->setCheckState(Qt::CheckState::Checked);
 	else

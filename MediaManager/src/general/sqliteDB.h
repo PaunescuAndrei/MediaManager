@@ -25,7 +25,7 @@ public:
     void setFilterSettings(QString value, QString category);
     QJsonObject getFilterSettings(QString category);
     QString getMainInfoValue(QString name, QString category, QString fallback = "");
-    std::tuple<int, QString, QString,QString> getCurrentVideo(QString category, std::tuple<int, QString, QString, QString> fallback = {-1,"","",""});
+    std::tuple<int, QString, QString, QString, QString> getCurrentVideo(QString category, std::tuple<int, QString, QString, QString, QString> fallback = {-1,"","","",""});
     QString getVideoProgress(int video_id, QString fallback = "");
     int getVideoId(QString path, QString category);
     bool checkIfVideoInDB(QString path, QString category);

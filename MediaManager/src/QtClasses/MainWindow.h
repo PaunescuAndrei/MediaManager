@@ -70,8 +70,8 @@ public:
     QMenu* trayIconContextMenu(QWidget* parent = nullptr);
     void openStats();
     void populateList(bool selectcurrent = true);
-    void switchNextButtonMode(QCustomButton* nextbutton);
-    void switchRandomButtonMode(QCustomButton* randombutton);
+    void switchNextButtonMode(customQButton* nextbutton);
+    void switchRandomButtonMode(customQButton* randombutton);
     void updateSortConfig();
     void filterVisibilityItem(QTreeWidgetItem* item, QString watched_option, QStringList& mixed_done, QString search_text);
     void addWatchedDialogButton();
@@ -92,7 +92,7 @@ public:
     void videosWidgetHeaderContextMenu(QPoint point);
     void videosWidgetContextMenu(QPoint point);
     VideosTagsDialog* editTags(QList<QTreeWidgetItem*> items, QWidget* parent = nullptr);
-    void setCurrent(int id, QString path, QString name, QString author);
+    void setCurrent(int id, QString path, QString name, QString author, QString tags);
     QString getWatchedVisibilityOption(bool watched_yes, bool watched_no, bool watched_mixed);
     void DeleteDialogButton(QList<QTreeWidgetItem*> items);
     void setWatched(QString value, QList<QTreeWidgetItem*> items);
@@ -107,6 +107,7 @@ public:
     int getCounterVar();
     void setCounterVar(int value);
     bool randomVideo(bool watched_all = true, QStringList vid_type_include = {}, QStringList vid_type_exclude = {});
+    void refreshCurrentVideo();
     void selectCurrentItem(QTreeWidgetItem* item = nullptr, bool selectcurrent = true);
     void insertDialogButton();
     bool TagsDialogButton();

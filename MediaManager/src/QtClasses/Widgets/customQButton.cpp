@@ -1,17 +1,17 @@
 #include "stdafx.h"
-#include "QCustomButton.h"
+#include "customQButton.h"
 #include <QEvent>
 #include <Qt>
 
-QCustomButton::QCustomButton(QWidget* parent) : QPushButton(parent)
+customQButton::customQButton(QWidget* parent) : QPushButton(parent)
 {
 }
 
-QCustomButton::QCustomButton(const QString& text, QWidget* parent) : QPushButton(parent)
+customQButton::customQButton(const QString& text, QWidget* parent) : QPushButton(parent)
 {
 }
 
-void QCustomButton::mouseReleaseEvent(QMouseEvent* e)
+void customQButton::mouseReleaseEvent(QMouseEvent* e)
 {
     QPushButton::mouseReleaseEvent(e);
     if (e->button() == Qt::RightButton) {
@@ -22,6 +22,6 @@ void QCustomButton::mouseReleaseEvent(QMouseEvent* e)
     }
 }
 
-QCustomButton::~QCustomButton()
+customQButton::~customQButton()
 {
 }

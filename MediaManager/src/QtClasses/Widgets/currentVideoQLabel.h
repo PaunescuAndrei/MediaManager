@@ -12,10 +12,11 @@ public:
     QString name = "";
     QString path = "";
     QString author = "";
+    QString tags = "";
     bool toggled_path = false;
     currentVideoQLabel(QWidget* parent = nullptr);
-    void setValues(int id, QString path, QString name = "", QString author = "", bool update = true);
-    void setValues(std::tuple<int, QString, QString, QString> values, bool update = true);
+    void setValues(int id, QString path, QString name = "", QString author = "", QString tags = "", bool update = true);
+    void setValues(std::tuple<int, QString, QString, QString, QString> values, bool update = true);
     void updateText();
     void mousePressEvent(QMouseEvent* e) override;
     ~currentVideoQLabel();

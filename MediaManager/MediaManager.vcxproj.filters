@@ -107,13 +107,13 @@
     <ClCompile Include="src\QtClasses\Widgets\videosTreeWidget.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
-    <ClCompile Include="src\QtClasses\Widgets\QCustomButton.cpp">
+    <ClCompile Include="src\QtClasses\Widgets\customQButton.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
     <ClCompile Include="src\QtClasses\Widgets\shokoButton.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
-    <ClCompile Include="src\QtClasses\Widgets\QCustomLabel.cpp">
+    <ClCompile Include="src\QtClasses\Widgets\customQLabel.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
     <ClCompile Include="src\QtClasses\Widgets\TreeWidgetItem.cpp">
@@ -441,13 +441,13 @@
     <QtMoc Include="src\QtClasses\Widgets\videosTreeWidget.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
-    <QtMoc Include="src\QtClasses\Widgets\QCustomButton.h">
+    <QtMoc Include="src\QtClasses\Widgets\customQButton.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
     <QtMoc Include="src\QtClasses\Widgets\shokoButton.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
-    <QtMoc Include="src\QtClasses\Widgets\QCustomLabel.h">
+    <QtMoc Include="src\QtClasses\Widgets\customQLabel.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
     <QtMoc Include="src\QtClasses\Widgets\watchedFrame.h">

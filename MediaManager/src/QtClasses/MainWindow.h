@@ -93,7 +93,7 @@ public:
     void videosWidgetContextMenu(QPoint point);
     VideosTagsDialog* editTags(QList<QTreeWidgetItem*> items, QWidget* parent = nullptr);
     void setCurrent(int id, QString path, QString name, QString author, QString tags);
-    QString getWatchedVisibilityOption(bool watched_yes, bool watched_no, bool watched_mixed);
+    QString getWatchedVisibilityOption(bool watched_yes, bool watched_no, bool watched_mixed, bool search_bar_visible, bool visible_only_checkbox);
     void DeleteDialogButton(QList<QTreeWidgetItem*> items);
     void setWatched(QString value, QList<QTreeWidgetItem*> items);
     void selectItems(QStringList items, bool clear_selection = true);

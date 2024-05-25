@@ -267,6 +267,9 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     if (!actionList.isEmpty()) {
         connect(actionList.first(), &QAction::triggered, this, [this]() {qDebug() << "test"; this->ui.searchBar->setText(""); });
     }
+    connect(this->ui.visibleOnlyCheckBox, &QCheckBox::checkStateChanged, this, [this](Qt::CheckState state) {
+        this->refreshVisibility(this->ui.searchBar->text());
+    });
     //connect(this->ui.searchBar, &QLineEdit::textChanged, this, [this] {this->search(this->ui.searchBar->text()); });
 
     this->search_timer = new QTimer(this);
@@ -607,15 +610,18 @@ void MainWindow::toggleDates(bool scroll) {
 
 void MainWindow::refreshVisibility(QString search_text) {
     QStringList mixed_done = {};
-    QString settings_str = QString();
-    if (this->App->currentDB == "PLUS")
-        settings_str = this->App->config->get("headers_plus_visible");
-    else if (this->App->currentDB == "MINUS")
-        settings_str = this->App->config->get("headers_minus_visible");
-    QStringList settings_list = settings_str.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
-    bool watched_yes = settings_list.contains("watched_yes");
-    bool watched_no = settings_list.contains("watched_no");
-    bool watched_mixed = settings_list.contains("watched_mixed");
+    bool watched_yes = true, watched_no = true, watched_mixed = false;
+    if (not (this->ui.searchBar->isVisible() and not this->ui.visibleOnlyCheckBox->isChecked())) {
+        QString settings_str = QString();
+        if (this->App->currentDB == "PLUS")
+            settings_str = this->App->config->get("headers_plus_visible");
+        else if (this->App->currentDB == "MINUS")
+            settings_str = this->App->config->get("headers_minus_visible");
+        QStringList settings_list = settings_str.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+        watched_yes = settings_list.contains("watched_yes");
+        watched_no = settings_list.contains("watched_no");
+        watched_mixed = settings_list.contains("watched_mixed");
+    }
     QString option = this->getWatchedVisibilityOption(watched_yes, watched_no, watched_mixed);
 
     QTreeWidgetItemIterator it(this->ui.videosWidget);

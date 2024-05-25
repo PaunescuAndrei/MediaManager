@@ -552,6 +552,13 @@
                </widget>
               </item>
               <item>
+               <widget class="QCheckBox" name="visibleOnlyCheckBox">
+                <property name="text">
+                 <string>Visible Only</string>
+                </property>
+               </widget>
+              </item>
+              <item>
                <widget class="QPushButton" name="searchButton">
                 <property name="text">
                  <string>Search</string>

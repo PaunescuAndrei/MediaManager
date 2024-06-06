@@ -62,7 +62,7 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 				Qt::WindowFlags flags = windowFlags();
 				bool isOnTop = flags.testFlag(Qt::WindowStaysOnTopHint);
 				this->setWindowFlag(Qt::WindowStaysOnTopHint, false);
-				this->show();
+				this->hide();
 				VideosTagsDialog* dialog = MW->editTags({ items.first() }, nullptr);
 				if (dialog) {
 					connect(dialog, &finishDialog::finished, this, [this,MW, isOnTop](int result) {
@@ -82,7 +82,7 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 					this->show();
 					this->timer.start(250);
 				}
-				QTimer::singleShot(0, [dialog] {
+				QTimer::singleShot(100, [dialog] {
 					if (dialog) {
 						utils::bring_hwnd_to_foreground_uiautomation_method(qMainApp->uiAutomation, (HWND)dialog->winId());
 						dialog->raise();

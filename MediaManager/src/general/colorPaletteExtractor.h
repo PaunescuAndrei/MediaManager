@@ -15,7 +15,7 @@ struct lessVec4b
 
 struct color_area {
     QColor color;
-    float area_percent;
+    float area_percent = 0;
 };
 bool less_color_area(const color_area& first, const color_area& second);
 bool greater_color_area(const color_area& first, const color_area& second);

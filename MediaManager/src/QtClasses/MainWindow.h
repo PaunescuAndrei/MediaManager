@@ -118,6 +118,7 @@ public:
     bool backupDB(QString path, QWidget * parent = nullptr);
     bool backupDB(QWidget* parent = nullptr);
     void resetWatchedDB(QWidget* parent = nullptr);
+    void handleMascotClickEvents(customGraphicsView* mascot, Qt::MouseButton button, Qt::KeyboardModifiers modifiers);
     void applySettings(SettingsDialog* dialog);
     void setDebugMode(bool debug);
     void settingsDialogButton();
@@ -136,13 +137,16 @@ public:
     void setIcon(QIcon icon);
     void closeEvent(QCloseEvent* event) override;
     void initMascotAnimation();
-    void flipMascotDebug(customGraphicsView* sender, Qt::MouseButton button);
     void setMascotDebug(QString path, customGraphicsView* sender);
     void setLeftMascot(QString path, QPixmap pixmap);
     void setRightMascot(QString path, QPixmap pixmap);
     void setLeftMascot(QString path);
     void setRightMascot(QString path);
-    void setMascots(bool cache = true);
+    void setLeftMascot(ImageData data);
+    void setRightMascot(ImageData data);
+    void updateMascot(customGraphicsView* mascot, bool use_cache, bool update_highlight_color);
+    void updateMascots(bool use_cache = true, bool forced_mirror = false);
+    void updateThemeHighlightColorFromMascot(customGraphicsView* mascot, bool weighted = true, bool regen_colors_if_missing = true);
     void setThemeHighlightColor(QColor color);
     void openThumbnails(QString path);
     void flipMascots();

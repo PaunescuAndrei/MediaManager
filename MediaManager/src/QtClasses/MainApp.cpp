@@ -79,7 +79,7 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 
 	connect(this->MascotsAnimation, &mascotsAnimationsThread::updateMascotsSignal, this, [this] {
 		if(this->mainWindow->ui.leftImg->isVisible() and utils::IsMyWindowVisible(this->mainWindow))
-			this->mainWindow->setMascots(); 
+			this->mainWindow->updateMascots();
 	});
 	connect(this->MascotsAnimation, &mascotsAnimationsThread::updateMascotsAnimationSignal, this, [this] {
 		if (this->mainWindow->ui.leftImg->isVisible() and utils::IsMyWindowVisible(this->mainWindow))

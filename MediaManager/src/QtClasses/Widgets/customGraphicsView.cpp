@@ -59,7 +59,7 @@ void customGraphicsView::resizeEvent(QResizeEvent* e) {
 }
 void customGraphicsView::mouseReleaseEvent(QMouseEvent* event)
 {
-    emit mouseClicked(event->button());
+    emit mouseClicked(event->button(),event->modifiers());
     QGraphicsView::mouseReleaseEvent(event);
 }
 void customGraphicsView::setPixmap(QPixmap pixmap) {
@@ -85,7 +85,44 @@ void customGraphicsView::flipPixmap() {
     this->setSceneRect(this->pixmap_item->sceneBoundingRect());
     this->horizontalScrollBar()->setValue((this->pixmap_item->pixmap().width() - this->width()) / 2);
 }
+
+color_area customGraphicsView::getColor(bool weighted) {
+    color_area color;
+    if (weighted) {
+        if (!this->accepted_colors.isEmpty())
+            color = utils::get_weighted_random_color(this->accepted_colors);
+        else if (this->rejected_colors.isEmpty())
+            color = *utils::select_randomly(this->rejected_colors.begin(), this->rejected_colors.end());
+    }
+    else {
+        for (color_area& c : this->accepted_colors) {
+            if (c.area_percent > color.area_percent)
+                color = color_area(c);
+        }
+        for (color_area& c : this->rejected_colors) {
+            if (c.area_percent > color.area_percent)
+                color = color_area(c);
+        }
+    }
+    return color;
+}
+
+void customGraphicsView::setImage(ImageData data, bool flip) {
+    this->clearColors();
+    this->imgpath = data.path;
+    this->accepted_colors = data.accepted_colors;
+    this->rejected_colors = data.rejected_colors;
+    //delete this->original_pixmap;
+    QPixmap img = utils::openImage(this->imgpath);
+    if (flip) {
+        img = img.transformed(QTransform().scale(-1, 1));
+    }
+    this->original_pixmap = img;
+    this->resizeImage();
+}
+
 void customGraphicsView::setImage(QString path, bool flip) {
+    this->clearColors();
     this->imgpath = path;
     //delete this->original_pixmap;
     QPixmap img = utils::openImage(path);
@@ -96,8 +133,8 @@ void customGraphicsView::setImage(QString path, bool flip) {
     this->resizeImage();
 }
 
-
 void customGraphicsView::setImage(QPixmap pixmap, bool flip) {
+    this->clearColors();
     //delete this->original_pixmap;
     if (flip) {
         pixmap = pixmap.transformed(QTransform().scale(-1, 1));
@@ -107,8 +144,14 @@ void customGraphicsView::setImage(QPixmap pixmap, bool flip) {
 }
 
 void customGraphicsView::setImage(QString path, QPixmap pixmap, bool flip) {
+    this->clearColors();
     this->imgpath = path;
     this->setImage(pixmap, flip);
+}
+
+void customGraphicsView::clearColors() {
+    this->accepted_colors.clear();
+    this->rejected_colors.clear();
 }
 
 void customGraphicsView::resizeImage(){

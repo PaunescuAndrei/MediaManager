@@ -7,7 +7,7 @@
 #include <QColor>
 #include <QPair>
 
-void mascotsGeneratorThread::init_mascots_paths(QString mascots_path)
+void mascotsGeneratorThread::initMascotsPaths(QString mascots_path)
 {
 	//for (std::string i : getDirs(mascots_path)) {
 	//	this->mascots_paths += getDirs(i);
@@ -16,18 +16,19 @@ void mascotsGeneratorThread::init_mascots_paths(QString mascots_path)
 	this->mascots_allpaths = utils::getFilesQt(mascots_path, true);
 }
 
-void mascotsGeneratorThread::init_run()
+void mascotsGeneratorThread::initRun()
 {
 	for (int i = 0; i < 4; i++) {
-		this->load_img();
+		this->loadImage();
 	}
 }
 
-QString mascotsGeneratorThread::get_random_imgpath() {
-	return this->get_random_imgpath(allfiles_random);
+ImageData mascotsGeneratorThread::getRandomImagePath() {
+	return this->getRandomImagePath(allfiles_random);
 }
 
-QString mascotsGeneratorThread::get_random_imgpath(bool allfiles_random) {
+ImageData mascotsGeneratorThread::getRandomImagePath(bool allfiles_random) {
+	ImageData data;
 	QString imgpath = QString();
 ;	if (allfiles_random) {
 		if(!this->mascots_allpaths.isEmpty())
@@ -41,19 +42,24 @@ QString mascotsGeneratorThread::get_random_imgpath(bool allfiles_random) {
 				imgpath = *utils::select_randomly(imgfiles.begin(), imgfiles.end());
 		}
 	}
-	return imgpath;
+	data.path = imgpath;
+	return data;
 }
 
-ImageData mascotsGeneratorThread::get_img() {
+ImageData mascotsGeneratorThread::getImage() {
 	if (this->mascots_pixmap->size() > 0)
 		return this->mascots_pixmap->pop();
 	else
 		return ImageData();
 }
 
-void mascotsGeneratorThread::load_img()
+QPair<QList<color_area>, QList<color_area>> mascotsGeneratorThread::extractColors(QPixmap& img) {
+	return palette_extractor(img, 20, 300);
+}
+
+void mascotsGeneratorThread::loadImage()
 {
-	QString imgpath = get_random_imgpath();
+	QString imgpath = getRandomImagePath().path;
 	if (imgpath.isEmpty()) {
 		this->running = false;
 		return;
@@ -61,7 +67,7 @@ void mascotsGeneratorThread::load_img()
 	QPixmap img = utils::openImage(imgpath);
 	if (!img.isNull()) {
 		if (this->App->MascotsExtractColor) {
-			QPair<QList<color_area>, QList<color_area>> color_palette = palette_extractor(img, 20, 300);
+			QPair<QList<color_area>, QList<color_area>> color_palette = this->extractColors(img);
 			this->mascots_pixmap->push(ImageData{imgpath, img, color_palette.first, color_palette.second});
 		}
 		else {
@@ -79,14 +85,14 @@ mascotsGeneratorThread::mascotsGeneratorThread(MainApp* App, QString mascots_pat
 	this->mascots_path = mascots_path;
 	this->allfiles_random = allfiles_random;
 	this->mascots_pixmap = new BlockingQueue<ImageData>(10);
-	this->init_mascots_paths(this->mascots_path);
-	this->init_run();
+	this->initMascotsPaths(this->mascots_path);
+	this->initRun();
 	this->running = true;
 }
 
 void mascotsGeneratorThread::run() {
 	while (this->running) {
-		this->load_img();
+		this->loadImage();
 	}
 }
 

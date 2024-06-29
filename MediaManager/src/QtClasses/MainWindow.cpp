@@ -250,11 +250,11 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     
     this->initMascotAnimation();
     if (this->App->config->get_bool("mascots"))
-        this->setMascots();
+        this->updateMascots();
     else
         this->hideMascots();
-    connect(this->ui.leftImg, &customGraphicsView::mouseClicked, this, [this](Qt::MouseButton button) {this->flipMascotDebug(this->ui.leftImg, button); });
-    connect(this->ui.rightImg, &customGraphicsView::mouseClicked, this, [this](Qt::MouseButton button) {this->flipMascotDebug(this->ui.rightImg, button); });
+    connect(this->ui.leftImg, &customGraphicsView::mouseClicked, this, [this](Qt::MouseButton button, Qt::KeyboardModifiers modifiers) { this->handleMascotClickEvents(this->ui.leftImg, button, modifiers); });
+    connect(this->ui.rightImg, &customGraphicsView::mouseClicked, this, [this](Qt::MouseButton button, Qt::KeyboardModifiers modifiers) { this->handleMascotClickEvents(this->ui.rightImg, button, modifiers); });
 
     connect(&this->update_title_timer, &QTimer::timeout, this, [this] {
         this->UpdateWindowTitle();
@@ -827,15 +827,6 @@ void MainWindow::initMascotAnimation()
     }
 }
 
-void MainWindow::flipMascotDebug(customGraphicsView* sender, Qt::MouseButton button) {
-    if (this->App->debug_mode) {
-        if (button == Qt::LeftButton)
-            sender->flipPixmap();
-        else if(button == Qt::RightButton)
-            this->flipMascots();
-    }
-}
-
 void MainWindow::setMascotDebug(QString path, customGraphicsView* sender) {
     if (this->App->debug_mode) {
         sender->setImage(path);
@@ -844,6 +835,9 @@ void MainWindow::setMascotDebug(QString path, customGraphicsView* sender) {
                 this->ui.rightImg->setImage(path, true);
             else
                 this->ui.leftImg->setImage(path, true);
+        }
+        if (this->App->MascotsExtractColor) {
+            this->updateThemeHighlightColorFromMascot(sender);
         }
     }
 }
@@ -876,56 +870,77 @@ void MainWindow::setRightMascot(QString path) {
         this->ui.rightImg->setImage(path);
 }
 
-void MainWindow::setMascots(bool cache)
+void MainWindow::setLeftMascot(ImageData data) {
+    if (utils::getParentDirectoryName(data.path, 1) == "right")
+        this->ui.leftImg->setImage(data, true);
+    else
+        this->ui.leftImg->setImage(data);
+}
+
+void MainWindow::setRightMascot(ImageData data) {
+    if (utils::getParentDirectoryName(data.path, 1) == "left")
+        this->ui.rightImg->setImage(data, true);
+    else
+        this->ui.rightImg->setImage(data);
+}
+
+void MainWindow::updateMascot(customGraphicsView* mascot, bool use_cache, bool update_highlight_color) {
+    if (this->App->MascotsGenerator->mascots_paths.isEmpty()) {
+        this->App->MascotsGenerator->initMascotsPaths(MASCOTS_PATH);
+    }
+    ImageData img_data;
+    if (use_cache)
+        img_data = this->App->MascotsGenerator->getImage();
+    else
+        img_data = this->App->MascotsGenerator->getRandomImagePath();
+
+    if (!img_data.pixmap.isNull()) {
+        if(mascot == this->ui.leftImg)
+            this->setLeftMascot(img_data);
+        if (mascot == this->ui.rightImg)
+            this->setRightMascot(img_data);
+    }
+    else if (!img_data.path.isEmpty()) {
+        if (mascot == this->ui.leftImg)
+            this->setLeftMascot(img_data.path);
+        if (mascot == this->ui.rightImg)
+            this->setRightMascot(img_data.path);
+    }
+    if (update_highlight_color and this->App->MascotsExtractColor) {
+        this->updateThemeHighlightColorFromMascot(mascot);
+    }
+}
+
+void MainWindow::updateMascots(bool use_cache, bool forced_mirror)
 {
     try {
-        if (this->App->MascotsGenerator->mascots_paths.isEmpty()) {
-            this->App->MascotsGenerator->init_mascots_paths(MASCOTS_PATH);
-        }
-        if (cache) {
-            ImageData leftimg_data;
-            ImageData rightimg_data;
-            leftimg_data = this->App->MascotsGenerator->get_img();
-            if (this->App->config->get_bool("mascots_mirror")) {
-                rightimg_data = leftimg_data;
-            }
-            else {
-                rightimg_data = this->App->MascotsGenerator->get_img();
-            }
-            if (!leftimg_data.pixmap.isNull())
-                this->setLeftMascot(leftimg_data.path, leftimg_data.pixmap);
-            if (!rightimg_data.pixmap.isNull())
-                this->setRightMascot(rightimg_data.path, rightimg_data.pixmap);
-            if (this->App->MascotsExtractColor) {
-                color_area color;
-                if (!leftimg_data.accepted_colors.isEmpty())
-                    color = utils::get_weighted_random_color(leftimg_data.accepted_colors);
-                else if(!leftimg_data.rejected_colors.isEmpty())
-                    color = *utils::select_randomly(leftimg_data.rejected_colors.begin(), leftimg_data.rejected_colors.end());
-                if(color.color.isValid())
-                    this->setThemeHighlightColor(color.color);
-            }
+        this->updateMascot(this->ui.leftImg, use_cache, false);
+        if (this->App->config->get_bool("mascots_mirror") or forced_mirror) {
+            ImageData img_data = {this->ui.leftImg->imgpath, this->ui.leftImg->original_pixmap, this->ui.leftImg->accepted_colors, this->ui.leftImg->rejected_colors };
+            this->setRightMascot(img_data);
         }
         else {
-            QString leftimg = "";
-            QString rightimg = "";
-            leftimg = this->App->MascotsGenerator->get_random_imgpath();
-            if (this->App->config->get_bool("mascots_mirror")) {
-                rightimg = leftimg;
-            }
-            else {
-                rightimg = this->App->MascotsGenerator->get_random_imgpath();
-            }
-            if (!leftimg.isEmpty())
-                this->setLeftMascot(leftimg);
-            if (!rightimg.isEmpty())
-                this->setRightMascot(rightimg);
+            this->updateMascot(this->ui.rightImg, use_cache, false);
+        }
+        if (this->App->MascotsExtractColor) {
+            this->updateThemeHighlightColorFromMascot(this->ui.leftImg);
         }
     }
     catch (...) {
         this->hideMascots();
         qDebug("Set Mascots exception.");
     }
+}
+
+void MainWindow::updateThemeHighlightColorFromMascot(customGraphicsView* mascot, bool weighted, bool regen_colors_if_missing) {
+    if (mascot->accepted_colors.isEmpty() and mascot->rejected_colors.isEmpty() and regen_colors_if_missing) {
+        auto colors_pair = mascotsGeneratorThread::extractColors(mascot->original_pixmap);
+        mascot->accepted_colors = colors_pair.first;
+        mascot->rejected_colors = colors_pair.second;
+    }
+    color_area color = mascot->getColor(weighted);
+    if (color.color.isValid())
+        this->setThemeHighlightColor(color.color);
 }
 
 void MainWindow::setThemeHighlightColor(QColor color) {
@@ -1038,7 +1053,7 @@ void MainWindow::NextButtonClicked(std::shared_ptr<Listener> listener, bool incr
         if (this->animatedIconFlag)
             this->animatedIcon->setRandomIcon(true);
         if (this->App->config->get_bool("mascots"))
-            this->setMascots();
+            this->updateMascots();
     }
 }
 
@@ -1386,6 +1401,41 @@ void MainWindow::resetWatchedDB(QWidget* parent) {
     }
 }
 
+void MainWindow::handleMascotClickEvents(customGraphicsView* mascot, Qt::MouseButton button, Qt::KeyboardModifiers modifiers) {
+    if (modifiers.testFlag(Qt::ControlModifier)) {
+        switch (button)
+        {
+        case Qt::LeftButton:
+            this->updateThemeHighlightColorFromMascot(mascot, true);
+            break;
+        case Qt::RightButton:
+            this->updateThemeHighlightColorFromMascot(mascot, false);
+            break;
+        case Qt::MiddleButton:
+            if (this->App->config->get_bool("mascots_mirror")) {
+                if (modifiers.testFlag(Qt::ShiftModifier))
+                    this->updateMascot(mascot, true, true);
+                else 
+                    this->updateMascots(true, false);
+            }
+            else {
+                if (modifiers.testFlag(Qt::ShiftModifier))
+                    this->updateMascots(true, true);
+                else
+                    this->updateMascot(mascot, true, true);
+            }
+            break;
+        default:
+            break;
+        }
+    }else if (this->App->debug_mode or modifiers.testFlag(Qt::ShiftModifier)) {
+        if (button == Qt::LeftButton)
+            mascot->flipPixmap();
+        else if (button == Qt::RightButton)
+            this->flipMascots();
+    }
+}
+
 void MainWindow::applySettings(SettingsDialog* dialog) {
     Config* config = this->App->config;
     if (dialog->ui.volumeSpinBox->value() != dialog->oldVolume) {
@@ -1444,7 +1494,7 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     if (dialog->ui.mascotsOnOff->checkState() == Qt::CheckState::Checked) {
         config->set("mascots", "True");
         if (this->ui.leftImg->isHidden()) {
-            this->setMascots();
+            this->updateMascots();
             this->showMascots();
             this->App->MascotsAnimation->start_running();
         }
@@ -1469,14 +1519,14 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         bool mascot_mirror_flag = config->get_bool("mascots_mirror");
         config->set("mascots_mirror", "True");
         if (!mascot_mirror_flag) {
-            this->setMascots();
+            this->updateMascots();
         }
     }
     else if (dialog->ui.mascotsMirror->checkState() == Qt::CheckState::Unchecked) {
         bool mascot_mirror_flag = config->get_bool("mascots_mirror");
         config->set("mascots_mirror", "False");
         if (mascot_mirror_flag) {
-            this->setMascots();
+            this->updateMascots();
         }
     }
     if (dialog->ui.mascotsAnimated->checkState() == Qt::CheckState::Checked) {

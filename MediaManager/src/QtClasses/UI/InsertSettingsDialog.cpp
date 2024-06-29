@@ -37,7 +37,7 @@ InsertSettingsDialog::InsertSettingsDialog(QWidget* parent) : QDialog(parent) {
 				(*it)->setHidden(false);
 			}
 			else {
-				if((*it)->data(0,Qt::UserRole).toBool())
+				if((*it)->data(0, CustomRoles::id).toInt() != -1)
 					(*it)->setHidden(true);
 				else
 					(*it)->setHidden(false);

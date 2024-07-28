@@ -2256,7 +2256,7 @@ void MainWindow::addWatchedDialogButton() {
 }
 
 void MainWindow::incrementtimeWatchedIncrement(double value) {
-    if(value > 0)
+    if (value > 0)
         qMainApp->logger->log(QString("Increasing time watched by %1").arg(utils::formatSecondsQt(value)), "Stats");
     double time = this->App->db->getMainInfoValue("timeWatchedIncrement", "ALL", "0.0").toDouble();
     time += value;
@@ -2273,7 +2273,7 @@ void MainWindow::checktimeWatchedIncrement() {
 }
 
 void MainWindow::incrementCounterVar(int value) {
-    if(value >= 0)
+    if (value >= 0)
         qMainApp->logger->log(QString("Increasing Counter by %1").arg(value), "Stats");
     else
         qMainApp->logger->log(QString("Decreasing Counter by %1").arg(value), "Stats");
@@ -2292,7 +2292,7 @@ int MainWindow::getCounterVar() {
 
 void MainWindow::switchNextButtonMode(customQButton* nextbutton) {
     this->App->config->set("random_next", utils::bool_to_text_qt(!this->App->config->get_bool("random_next")));
-    if(nextbutton != this->ui.next_button)
+    if (nextbutton != this->ui.next_button)
         this->ui.next_button->setText(this->App->config->get_bool("random_next") ? "Next (R)" : "Next");
     nextbutton->setText(this->App->config->get_bool("random_next") ? "Next (R)" : "Next");
     this->App->config->save_config();
@@ -2336,23 +2336,24 @@ void MainWindow::updateSortConfig() {
     this->App->config->save_config();
 }
 
-void MainWindow::filterVisibilityItem(QTreeWidgetItem *item, QString watched_option, QStringList &mixed_done, QString search_text) {
-
+void MainWindow::filterVisibilityItem(QTreeWidgetItem* item, QString watched_option, QStringList& mixed_done, QString search_text) {
     bool hidden = false;
     QList<QTreeWidgetItem*> items = {};
 
     //watched
-    if (watched_option == "Mixed" && item->text(ListColumns["WATCHED_COLUMN"]) == "No") {
+    if (watched_option == "Mixed") {
         if (mixed_done.contains(item->text(ListColumns["AUTHOR_COLUMN"]))) {
             hidden = false;
         }
-        else {
+        else if(item->text(ListColumns["WATCHED_COLUMN"]) == "No"){
             hidden = false;
             items = this->ui.videosWidget->findItems(item->text(ListColumns["AUTHOR_COLUMN"]), Qt::MatchExactly, ListColumns["AUTHOR_COLUMN"]);
             if (!items.isEmpty()) {
                 mixed_done.append(item->text(ListColumns["AUTHOR_COLUMN"]));
             }
         }
+        else
+            hidden = true;
     }
     else if (watched_option == "Yes" && item->text(ListColumns["WATCHED_COLUMN"]) == watched_option)
         hidden = false;
@@ -2376,7 +2377,7 @@ void MainWindow::filterVisibilityItem(QTreeWidgetItem *item, QString watched_opt
 
     //actually hidding the item/items
     item->setHidden(hidden);
-    if (not items.isEmpty()) {
+    if (not items.isEmpty() and search_text.isEmpty()) {
         for (auto& i : items)
             i->setHidden(hidden);
     }

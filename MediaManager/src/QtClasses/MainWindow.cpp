@@ -280,7 +280,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
 
     this->ui.videosWidget->setItemDelegate(new AutoToolTipDelegate(this->ui.videosWidget));
     
-    this->animatedIcon = new IconChanger(this->App, this->App->config->get_bool("random_icon_start"));
+    this->animatedIcon = new IconChanger(this->App, this->App->config->get_bool("random_icon"));
     connect(this->animatedIcon, &IconChanger::animatedIconSignal, this, [this](QIcon icon) {
         if (this->animatedIconFlag)
             this->setIcon(icon);
@@ -641,8 +641,12 @@ void MainWindow::refreshVisibility()
 }
 
 void MainWindow::init_icons() {
-    if (this->animatedIconFlag && this->animatedIcon)
-        this->animatedIcon->showFirstIcon();
+    if (this->animatedIconFlag && this->animatedIcon && this->App->config->get_bool("default_icon_not_watching")) {
+        this->animatedIcon->initIcon(false);
+    }
+    else if (this->animatedIconFlag && this->animatedIcon && not this->App->config->get_bool("default_icon_not_watching")) {
+        this->animatedIcon->initIcon(true);
+    }
     else {
         this->setIcon(this->getIconByStage(0));
     }
@@ -781,8 +785,12 @@ void MainWindow::updateIconByWatchingState() {
     if (this->animatedIconFlag and this->animatedIcon) {
         if (this->iconWatchingState == true)
             this->animatedIcon->animatedIconEvent.set();
-        else
+        else {
             this->animatedIcon->animatedIconEvent.clear();
+            if (this->App->config->get_bool("default_icon_not_watching")) {
+                this->setIcon(this->getIconByStage(2));
+            }
+        }
     }
     else {
         if (this->iconWatchingState == true)
@@ -1051,7 +1059,7 @@ void MainWindow::NextButtonClicked(std::shared_ptr<Listener> listener, bool incr
     }
     if (video_changed) {
         if (this->animatedIconFlag)
-            this->animatedIcon->setRandomIcon(true);
+            this->animatedIcon->setRandomIcon(not this->App->config->get_bool("default_icon_not_watching"));
         if (this->App->config->get_bool("mascots"))
             this->updateMascots();
     }
@@ -1285,6 +1293,7 @@ bool MainWindow::loadDB(QString path, QWidget* parent) {
             this->initListDetails();
             this->refreshVideosWidget(false, true);
             this->updateTotalListLabel();
+            this->init_icons();
             if (this->App->VW->mainListener) {
                 this->changeListenerVideo(this->App->VW->mainListener, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
             }
@@ -1477,18 +1486,26 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         this->animatedIconFlag = false;
         this->updateIconByWatchingState();
     }
+    if (dialog->ui.defaultIconNotWatching->checkState() == Qt::CheckState::Checked) {
+        config->set("default_icon_not_watching", "True");
+        this->updateIconByWatchingState();
+    }
+    else if (dialog->ui.defaultIconNotWatching->checkState() == Qt::CheckState::Unchecked) {
+        config->set("default_icon_not_watching", "False");
+        this->updateIconByWatchingState();
+    }
     if (dialog->ui.randomIcon->checkState() == Qt::CheckState::Checked) {
         config->set("random_icon", "True");
         if (this->animatedIcon != nullptr) {
             this->animatedIcon->random_icon = true;
-            this->animatedIcon->initIcon();
+            this->init_icons();
         }
     }
     else if (dialog->ui.randomIcon->checkState() == Qt::CheckState::Unchecked) {
         config->set("random_icon", "False");
         if (this->animatedIcon != nullptr) {
             this->animatedIcon->random_icon = false;
-            this->animatedIcon->initIcon();
+            this->init_icons();
         }
     }
     if (dialog->ui.mascotsOnOff->checkState() == Qt::CheckState::Checked) {
@@ -1795,7 +1812,6 @@ bool MainWindow::randomVideo(bool watched_all, QStringList vid_type_include, QSt
             else {
                 item_name = this->App->db->getRandomVideo(this->App->currentDB, "No", vid_type_include, vid_type_exclude);
             }
-            qDebug() << "tt " << item_name;
             if (!item_name.isEmpty()) {
                 QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(item_name, Qt::MatchExactly, ListColumns["PATH_COLUMN"], 1);
                 if (!items.isEmpty())
@@ -2187,8 +2203,7 @@ void MainWindow::switchCurrentDB(QString db) {
     }
     qMainApp->logger->log(QString("Switching Current DB to \"%1\"").arg(this->getCategoryName()), "Database");
     this->UpdateWindowTitle();
-    if (this->animatedIconFlag)
-        this->animatedIcon->initIcon();
+    this->init_icons();
     this->initListDetails();
     this->refreshVideosWidget();
     this->refreshHeadersVisibility();

@@ -20,18 +20,18 @@ IconChanger::IconChanger(MainApp* App,bool random_icon, QObject* parent) : QThre
 	this->setIconArchiveFiles(ANIMATED_ICONS_PATH);
 }
 
-void IconChanger::initIcon()
+void IconChanger::initIcon(bool instant)
 {
 	if (this->random_icon) {
-		this->setRandomIcon(false, false);
+		this->setRandomIcon(instant, false);
 		return;
 	}
 	this->currentIconPath = this->db->getMainInfoValue("currentIconPath",this->App->currentDB);
 	if (this->currentIconPath.isEmpty() || !QFileInfo::exists(this->currentIconPath)) {
-		this->setRandomIcon(false,true);
+		this->setRandomIcon(instant, true);
 	}
 	else {
-		this->setIconNonBlocking(this->currentIconPath,true,true);
+		this->setIconNonBlocking(this->currentIconPath,true, instant);
 	}
 		
 }
@@ -191,9 +191,7 @@ void IconChanger::setRandomIcon(bool instant, bool updatedb)
 	if (!this->archiveFiles.isEmpty()) {
 		int index = utils::randint(0, this->archiveFiles.size() - 1);
 		this->currentIconPath = this->archiveFiles.at(index);
-		this->setIconNonBlocking(this->currentIconPath);
-		if (instant && !this->icon.isEmpty())
-			emit animatedIconSignal(this->icon.first());
+		this->setIconNonBlocking(this->currentIconPath, true, instant);
 		if(updatedb)
 			this->db->setMainInfoValue("currentIconPath", this->App->currentDB, this->currentIconPath);
 	}
@@ -274,7 +272,7 @@ void IconChanger::showFirstIcon()
 
 void IconChanger::run()
 {
-	this->initIcon();
+	this->initIcon(false);
 
 	QMap<QString, QIcon> _icon = QMap<QString, QIcon>(this->icon);
 	QMap<QString, QString> _frame_dict = QMap<QString, QString>(this->frame_dict);
@@ -307,10 +305,6 @@ void IconChanger::run()
 						this->update_copies = false;
 						break;
 					}
-					if (this->App->mainWindow->iconWatchingState == false && running == true) {
-						this->animatedIconEvent.clear();
-						this->animatedIconEvent.wait();
-					}
 					if (!i.first.isEmpty() && !_frame_dict.value(i.first).isEmpty()) {
 						emit animatedIconSignal(_icon.value(_frame_dict.value(i.first)));
 						this->msleep(lround(((1.0 / this->fps)*this->fps_modifier) * 1000) * i.second);
@@ -318,11 +312,17 @@ void IconChanger::run()
 					else {
 						break;
 					}
+					if (this->App->mainWindow->iconWatchingState == false && running == true) {
+						this->animatedIconEvent.clear();
+						this->animatedIconEvent.wait();
+					}
 				}
 			}
 			else {
 				this->setIcon_lock.wait();
 				for (const QString &i : _ordered_filenames) {
+					if (!this->setIcon_lock.isSet() || running == false)
+						break;
 					if (this->update_copies == true) {
 						_icon = QMap<QString, QIcon>(this->icon);
 						_frame_dict = QMap<QString, QString>(this->frame_dict);
@@ -331,18 +331,16 @@ void IconChanger::run()
 						this->update_copies = false;
 						break;
 					}
-					if (!this->setIcon_lock.isSet() || running == false)
-						break;
-					if (this->App->mainWindow->iconWatchingState == false && running == true) {
-						this->animatedIconEvent.clear();
-						this->animatedIconEvent.wait();
-					}
 					if (!i.isEmpty()) {
 						emit animatedIconSignal(_icon.value(i));
 						this->msleep(lround(((1.0 / this->fps) * this->fps_modifier) * 1000));
 					}
 					else {
 						break;
+					}
+					if (this->App->mainWindow->iconWatchingState == false && running == true) {
+						this->animatedIconEvent.clear();
+						this->animatedIconEvent.wait();
 					}
 				}
 			}

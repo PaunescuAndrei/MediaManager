@@ -35,7 +35,7 @@ public:
     MainApp* App = nullptr;
     sqliteDB* db = nullptr;
     IconChanger(MainApp* App,bool random_icon = false, QObject* parent = nullptr);
-    void initIcon();
+    void initIcon(bool instant= true);
     void setIcon(QString path,bool cache_check=true,bool instant = true);
     void setIconNonBlocking(QString path, bool cache_check = true,bool instant = true);
     void rebuildIconCacheNonBlocking();

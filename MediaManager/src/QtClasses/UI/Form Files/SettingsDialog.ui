@@ -29,9 +29,9 @@
       <property name="geometry">
        <rect>
         <x>0</x>
-        <y>0</y>
+        <y>-229</y>
         <width>693</width>
-        <height>691</height>
+        <height>719</height>
        </rect>
       </property>
       <layout class="QHBoxLayout" name="horizontalLayout_8">
@@ -596,6 +596,13 @@
              <widget class="QCheckBox" name="randomIcon">
               <property name="text">
                <string>Random Icon</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="defaultIconNotWatching">
+              <property name="text">
+               <string>Default Icon when not watching</string>
               </property>
              </widget>
             </item>

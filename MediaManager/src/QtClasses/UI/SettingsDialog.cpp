@@ -80,6 +80,10 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 		this->ui.randomIcon->setCheckState(Qt::CheckState::Checked);
 	else
 		this->ui.randomIcon->setCheckState(Qt::CheckState::Unchecked);
+	if (mw->App->config->get_bool("default_icon_not_watching"))
+		this->ui.defaultIconNotWatching->setCheckState(Qt::CheckState::Checked);
+	else
+		this->ui.defaultIconNotWatching->setCheckState(Qt::CheckState::Unchecked);
 	if (mw->App->config->get_bool("mascots"))
 		this->ui.mascotsOnOff->setCheckState(Qt::CheckState::Checked);
 	else

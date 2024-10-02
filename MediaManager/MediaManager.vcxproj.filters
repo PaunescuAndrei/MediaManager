@@ -517,7 +517,7 @@
       <Filter>Header Files\QtClasses\UI</Filter>
     </QtMoc>
     <QtMoc Include="src\QtClasses\UI\VideosTagsDialog.h">
-      <Filter>Source Files\QtClasses\UI</Filter>
+      <Filter>Header Files\QtClasses\UI</Filter>
     </QtMoc>
   </ItemGroup>
   <ItemGroup>

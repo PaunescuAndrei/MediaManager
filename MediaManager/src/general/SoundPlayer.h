@@ -14,7 +14,8 @@ public:
 	QObject* parent = nullptr;
 	qreal volume;
 	bool running = false;
-	QStringList soundEffects;
+	QStringList sound_effects;
+	QStringList sound_effects_special;
 	QStringList intro_effects;
 	QStringList end_effects;
 	bool effects_playpause = true;
@@ -29,10 +30,12 @@ public:
 	//void playSoundEffectChain();
 	//void playSoundEffectChain(double chance);
 	QMediaPlayer* get_player();
-	QMediaPlayer* play(QString sound_path, bool log = true);
-	QMediaPlayer* play(QMediaPlayer* player, QString sound_path, bool log = true);
+	QMediaPlayer* play(QString sound_path, bool auto_delete, bool log);
+	QMediaPlayer* play(QMediaPlayer* player, QString sound_path, bool auto_delete, bool log);
 	QMediaPlayer* playSoundEffect();
 	QMediaPlayer* playSoundEffect(QMediaPlayer* player);
+	QMediaPlayer* playSpecialSoundEffect();
+	QMediaPlayer* playSpecialSoundEffect(QMediaPlayer* player);
 	void playSoundEffectChain();
 	void playSoundEffectChain(double chance);
 	void playSoundEffectChain_continue(double chance, QMediaPlayer* player = nullptr);

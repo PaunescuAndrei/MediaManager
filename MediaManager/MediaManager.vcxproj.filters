@@ -331,10 +331,10 @@
     <ClInclude Include="src\general\generateThumbnailManager.h">
       <Filter>Header Files\general</Filter>
     </ClInclude>
-    <ClInclude Include="src\general\definitions.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="src\thirdparty\MpcApi.h">
+      <Filter>Header Files\thirdparty</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\definitions.h">
       <Filter>Header Files\thirdparty</Filter>
     </ClInclude>
   </ItemGroup>

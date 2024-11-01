@@ -21,6 +21,7 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 	this->ui.volumeSpinBox->setStyleSheet(get_stylesheet("spinbox"));
 	this->ui.mascotsFreqSpinBox->setStyleSheet(get_stylesheet("spinbox"));
 	this->ui.soundEffectsVolume->setStyleSheet(get_stylesheet("spinbox"));
+	this->ui.specialSoundEffectsVolume->setStyleSheet(get_stylesheet("spinbox"));
 	this->ui.soundEffectsChance->setStyleSheet(get_stylesheet("spinbox"));
 	this->ui.soundEffectsChainChance->setStyleSheet(get_stylesheet("spinbox"));
 	this->ui.MinutesSpinBox->setStyleSheet(get_stylesheet("spinbox"));
@@ -146,6 +147,11 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 	else
 		this->ui.soundEffectsOnOff->setCheckState(Qt::CheckState::Unchecked);
 	this->ui.soundEffectsVolume->setValue(mw->App->config->get("sound_effects_volume").toInt());
+	if (mw->App->config->get_bool("sound_effects_special_on"))
+		this->ui.specialSoundEffectsOnOff->setCheckState(Qt::CheckState::Checked);
+	else
+		this->ui.specialSoundEffectsOnOff->setCheckState(Qt::CheckState::Unchecked);
+	this->ui.specialSoundEffectsVolume->setValue(mw->App->config->get("sound_effects_special_volume").toInt());
 	if (mw->App->config->get_bool("sound_effects_exit"))
 		this->ui.soundEffectsExit->setCheckState(Qt::CheckState::Checked);
 	else

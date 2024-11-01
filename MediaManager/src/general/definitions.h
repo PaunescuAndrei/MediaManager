@@ -56,5 +56,6 @@ constexpr auto MASCOTS_PATH = "res/mascots";
 
 //Sound Paths
 constexpr auto SOUND_EFFECTS_PATH = "res/sound/effects";
+constexpr auto SOUND_EFFECTS_SPECIAL_PATH = "res/sound/special";
 constexpr auto SOUND_EFFECTS_INTRO_PATH = "res/sound/intro";
 constexpr auto SOUND_EFFECTS_END_PATH = "res/sound/end";

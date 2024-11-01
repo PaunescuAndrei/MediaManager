@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "MusicPlayer.h"
 #include "MainApp.h"
+#include "MainWindow.h"
 #include <QUrl>
 #include "utils.h"
 #include <QMimeType>
@@ -142,6 +143,8 @@ void MusicPlayer::mediaStatusChanged(QMediaPlayer::MediaStatus status)
 	if (status == QMediaPlayer::EndOfMedia) {
 		if (this->startingSoundFlag) {
 			this->startingSoundFlag = false;
+			if(this->App)
+				this->App->mainWindow->intro_played = true;
 			if (!this->initTrack.isEmpty()) {
 				this->playTrack(this->initTrack);
 			}

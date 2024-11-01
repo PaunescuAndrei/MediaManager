@@ -43,7 +43,7 @@ LogDialog::LogDialog(QWidget* parent) : QDialog(parent)
 		if (!extra_data.isEmpty()) {
 			qMainApp->clipboard()->setText(extra_data);
 			if (item->text(1) == "SoundEffect") {
-				qMainApp->soundPlayer->play(extra_data, false);
+				qMainApp->soundPlayer->play(extra_data, true, false);
 			}
 		}
 		else

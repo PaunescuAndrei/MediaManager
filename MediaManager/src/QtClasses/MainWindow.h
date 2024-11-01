@@ -15,6 +15,7 @@
 #include "finishDialog.h"
 #include "SafeQueue.h"
 #include "VideosTagsDialog.h"
+#include <QMediaPlayer>
 
 class MainApp;
 
@@ -38,6 +39,7 @@ public:
     bool iconWatchingState = false;
     bool animatedIconFlag = false;
     bool toggleDatesFlag = false;
+    bool intro_played = true;
     QList<QPair<QString,int>> lastScrolls = QList<QPair<QString, int>>();
     QString old_search = "";
     QString last_backup = "";
@@ -48,6 +50,7 @@ public:
     NotificationDialog* notification_dialog = nullptr;
     finishDialog* finish_dialog = nullptr;
     QList<QStringList> IconsStage = QList<QStringList>({ QStringList(),QStringList(),QStringList() });
+    QMediaPlayer* special_effects_player = nullptr;
     MainWindow(QWidget *parent = nullptr,MainApp *App = nullptr);
     QString getCategoryName(QString currentdb);
     QString getCategoryName();
@@ -160,6 +163,8 @@ public:
     void dragEnterEvent(QDragEnterEvent* e) override;
     void dragMoveEvent(QDragMoveEvent* e) override;
     void dropEvent(QDropEvent* e) override;
+    bool event(QEvent* e) override;
+    void playSpecialSoundEffect();
     ~MainWindow();
 signals:
     void fileDropped(QStringList files, QWidget* widget = nullptr);

@@ -89,6 +89,14 @@ LRESULT RawInputKeyboard::OnCopyData(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 			//	raw->data.keyboard.ExtraInformation,
 			//	raw->data.keyboard.Message,
 			//	raw->data.keyboard.VKey);
+            
+            //qDebug() << QString("Kbd: make=%1 Flags=%2 Reserved=%3 ExtraInformation=%4, msg=%5 VK=%6")
+            //    .arg(raw->data.keyboard.MakeCode, 4, 16, QChar('0'))
+            //    .arg(raw->data.keyboard.Flags, 4, 16, QChar('0'))
+            //    .arg(raw->data.keyboard.Reserved, 4, 16, QChar('0'))
+            //    .arg(raw->data.keyboard.ExtraInformation, 8, 16, QChar('0'))
+            //    .arg(raw->data.keyboard.Message, 4, 16, QChar('0'))
+            //    .arg(raw->data.keyboard.VKey, 4, 16, QChar('0'));
 
 			Event = raw->data.keyboard.Message;
 			this->keyScanCode = MapVirtualKey(raw->data.keyboard.VKey, MAPVK_VK_TO_VSC);
@@ -107,6 +115,10 @@ LRESULT RawInputKeyboard::OnCopyData(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
                         this->App->VW->toggle_window();
                         this->cooldown_start = std::chrono::steady_clock::now();
                     }
+                }
+                if (this->App != nullptr && this->App->numlock_only_on == true && raw->data.keyboard.VKey == VK_F8) {
+                    if(this->App->mainWindow->iconWatchingState)
+                        this->App->mainWindow->playSpecialSoundEffect();
                 }
 			}
             break;

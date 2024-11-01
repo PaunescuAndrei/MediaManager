@@ -21,7 +21,7 @@ QMediaPlayer* SoundPlayer::get_player()
     return player;
 }
 
-QMediaPlayer* SoundPlayer::play(QString sound_path, bool log)
+QMediaPlayer* SoundPlayer::play(QString sound_path, bool auto_delete, bool log)
 {
     if (this->running && !sound_path.isEmpty()) {
         if (log)
@@ -30,23 +30,20 @@ QMediaPlayer* SoundPlayer::play(QString sound_path, bool log)
         QAudioOutput* audioOutput = new QAudioOutput(player);
         audioOutput->setVolume(this->volume);
         player->setAudioOutput(audioOutput);
-        QObject::connect(player, &QMediaPlayer::mediaStatusChanged, [player](QMediaPlayer::MediaStatus status) {if (status == QMediaPlayer::EndOfMedia) { player->deleteLater(); } });
-        QObject::connect(player, &QMediaPlayer::errorOccurred, [player](QMediaPlayer::Error error, const QString& errorString) {qDebug() << errorString; player->deleteLater(); });
-        player->setSource(QUrl::fromLocalFile(sound_path));
-        player->play();
-        return player;
+        return this->play(player, sound_path, auto_delete, log);
     }
     return nullptr;
 }
 
-QMediaPlayer* SoundPlayer::play(QMediaPlayer* player,QString sound_path, bool log)
+QMediaPlayer* SoundPlayer::play(QMediaPlayer* player, QString sound_path, bool auto_delete, bool log)
 {
     if (this->running && !sound_path.isEmpty()) {
         if (log)
             qMainApp->logger->log(QString("Playing SoundEffect \"%1\"").arg(sound_path), "SoundEffect", sound_path);
-        player->audioOutput()->setVolume(this->volume);
-        QObject::connect(player, &QMediaPlayer::mediaStatusChanged, [player](QMediaPlayer::MediaStatus status) {if (status == QMediaPlayer::EndOfMedia) { player->deleteLater(); } });
-        QObject::connect(player, &QMediaPlayer::errorOccurred, [player](QMediaPlayer::Error error, const QString& errorString) {qDebug() << errorString; player->deleteLater(); });
+        if (auto_delete) {
+            QObject::connect(player, &QMediaPlayer::mediaStatusChanged, [player](QMediaPlayer::MediaStatus status) {if (status == QMediaPlayer::EndOfMedia) { player->deleteLater(); } });
+            QObject::connect(player, &QMediaPlayer::errorOccurred, [player](QMediaPlayer::Error error, const QString& errorString) {qDebug() << errorString; player->deleteLater(); });
+        }
         player->setSource(QUrl::fromLocalFile(sound_path));
         player->play();
         return player;
@@ -56,17 +53,18 @@ QMediaPlayer* SoundPlayer::play(QMediaPlayer* player,QString sound_path, bool lo
 
 QMediaPlayer* SoundPlayer::playSoundEffect() {
     QString sound_path = "";
-    if (!this->soundEffects.isEmpty()) {
-        sound_path = *utils::select_randomly(this->soundEffects.begin(), this->soundEffects.end());
+    if (!this->sound_effects.isEmpty()) {
+        sound_path = *utils::select_randomly(this->sound_effects.begin(), this->sound_effects.end());
     }
-    return this->play(sound_path);
+    return this->play(sound_path, true, true);
 }
+
 QMediaPlayer* SoundPlayer::playSoundEffect(QMediaPlayer* player) {
     QString sound_path = "";
-    if (!this->soundEffects.isEmpty()) {
-        sound_path = *utils::select_randomly(this->soundEffects.begin(), this->soundEffects.end());
+    if (!this->sound_effects.isEmpty()) {
+        sound_path = *utils::select_randomly(this->sound_effects.begin(), this->sound_effects.end());
     }
-    return this->play(player, sound_path);
+    return this->play(player, sound_path, true, true);
 }
 
 void SoundPlayer::playSoundEffectChain() {
@@ -110,8 +108,25 @@ void SoundPlayer::playSoundEffectChain_continue(double chance, QMediaPlayer* pla
     }
 }
 
+QMediaPlayer* SoundPlayer::playSpecialSoundEffect() {
+    QString sound_path = "";
+    if (!this->sound_effects_special.isEmpty()) {
+        sound_path = *utils::select_randomly(this->sound_effects_special.begin(), this->sound_effects_special.end());
+    }
+    return this->play(sound_path, false, true);
+}
+
+QMediaPlayer* SoundPlayer::playSpecialSoundEffect(QMediaPlayer* player) {
+    QString sound_path = "";
+    if (!this->sound_effects_special.isEmpty()) {
+        sound_path = *utils::select_randomly(this->sound_effects_special.begin(), this->sound_effects_special.end());
+    }
+    return this->play(player, sound_path, false, true);
+}
+
 void SoundPlayer::loadSoundEffects() {
-    this->soundEffects = utils::getFilesQt(SOUND_EFFECTS_PATH, true);
+    this->sound_effects = utils::getFilesQt(SOUND_EFFECTS_PATH, true);
+    this->sound_effects_special = utils::getFilesQt(SOUND_EFFECTS_SPECIAL_PATH, true);
     this->intro_effects = utils::getFilesQt(SOUND_EFFECTS_INTRO_PATH, true);
     this->end_effects = utils::getFilesQt(SOUND_EFFECTS_END_PATH, true);
 }

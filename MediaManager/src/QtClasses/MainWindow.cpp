@@ -81,6 +81,10 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     new QShortcut(QKeySequence("F2"), this, [this] {this->toggleSearchBar(); });
     new QShortcut(QKeySequence("F3"), this, [this] {this->toggleDates(); });
     QShortcut *shortcutLogs = new QShortcut(QKeySequence("F4"), this, [this] {this->App->toggleLogWindow(); });
+    QShortcut* shortcutSSE = new QShortcut(QKeySequence("F8"), this, [this] {
+        this->playSpecialSoundEffect();
+    });
+    shortcutSSE->setContext(Qt::ApplicationShortcut);
     shortcutLogs->setContext(Qt::ApplicationShortcut);
     new QShortcut(QKeySequence("ESC"), this->ui.searchBar, [this] {this->ui.searchBar->setText(""); });
     this->UpdateWindowTitle();
@@ -97,6 +101,10 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     this->loadIcons(QString(NORMAL_ICONS_PATH) + "/1");
     this->setIcon(QIcon(":/main/resources/icon.ico"));
     this->trayIcon->show();
+
+    this->intro_played = !this->App->config->get_bool("sound_effects_start");
+    this->special_effects_player = this->App->soundPlayer->get_player();
+    this->special_effects_player->audioOutput()->setVolume(utils::volume_convert(this->App->config->get("sound_effects_special_volume").toInt()));
 
     this->initStyleSheets();
     this->ui.currentVideoScrollArea->installEventFilter(new scrollAreaEventFilter(this->ui.currentVideoScrollArea));
@@ -157,13 +165,13 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
             }
             if (guess_type.name().startsWith("audio/", Qt::CaseInsensitive)) {
                 if (this->App->soundPlayer) {
-                    this->App->soundPlayer->play(files[0]);
+                    this->App->soundPlayer->play(files[0], true, true);
                 }
                 return;
             }
             if (guess_type.name().startsWith("audio/", Qt::CaseInsensitive)) {
                 if (this->App->soundPlayer) {
-                    this->App->soundPlayer->play(files[0]);
+                    this->App->soundPlayer->play(files[0], true, true);
                 }
                 return;
             }
@@ -245,7 +253,9 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     
     if (!this->initMusic() && this->App->config->get_bool("sound_effects_start") && this->App->soundPlayer && !this->App->soundPlayer->intro_effects.isEmpty()) {
         QString track = *utils::select_randomly(this->App->soundPlayer->intro_effects.begin(), this->App->soundPlayer->intro_effects.end());
-        this->App->soundPlayer->play(track);
+        QMediaPlayer *intro_player = this->App->soundPlayer->play(track, true, true);
+        QObject::connect(intro_player, &QMediaPlayer::mediaStatusChanged, [this](QMediaPlayer::MediaStatus status) {if (status == QMediaPlayer::EndOfMedia) { this->intro_played = true; } });
+        QObject::connect(intro_player, &QMediaPlayer::errorOccurred, [this](QMediaPlayer::Error error, const QString& errorString) {qDebug() << errorString; this->intro_played = true; });
     }
     
     this->initMascotAnimation();
@@ -1642,6 +1652,17 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     }
     config->set("sound_effects_volume", QString::number(dialog->ui.soundEffectsVolume->value()));
     this->App->soundPlayer->setVolume(dialog->ui.soundEffectsVolume->value());
+    if (dialog->ui.specialSoundEffectsOnOff->checkState() == Qt::CheckState::Checked) {
+        config->set("sound_effects_special_on", "True");
+    }
+    else if (dialog->ui.specialSoundEffectsOnOff->checkState() == Qt::CheckState::Unchecked) {
+        config->set("sound_effects_special_on", "False");
+        this->special_effects_player->stop();
+    }
+    config->set("sound_effects_special_volume", QString::number(dialog->ui.specialSoundEffectsVolume->value()));
+    if(this->special_effects_player and this->special_effects_player->audioOutput()){
+        this->special_effects_player->audioOutput()->setVolume(utils::volume_convert(dialog->ui.specialSoundEffectsVolume->value()));
+    }
     if (dialog->ui.soundEffectsExit->checkState() == Qt::CheckState::Checked) {
         config->set("sound_effects_exit", "True");
     }
@@ -2869,6 +2890,22 @@ void MainWindow::dropEvent(QDropEvent* e) {
     }
     else {
         e->ignore();
+    }
+}
+
+bool MainWindow::event(QEvent* e)
+{
+    if (e->type() == QEvent::WindowActivate && this->isActiveWindow()) {
+        if (this->intro_played) {
+            this->playSpecialSoundEffect();
+        }
+    }
+    return QMainWindow::event(e);
+}
+
+void MainWindow::playSpecialSoundEffect() {
+    if (this->App->config->get_bool("sound_effects_special_on")) {
+        this->App->soundPlayer->playSpecialSoundEffect(this->special_effects_player);
     }
 }
 

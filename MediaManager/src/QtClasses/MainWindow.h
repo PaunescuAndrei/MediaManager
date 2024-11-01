@@ -123,9 +123,9 @@ public:
     void setDebugMode(bool debug);
     void settingsDialogButton();
     void quit();
-    void NextButtonClicked(bool increment = true);
-    void NextButtonClicked(std::shared_ptr<Listener> listener, bool increment = true);
-    bool NextVideo(bool random = true, bool increment = true);
+    void NextButtonClicked(bool increment, bool update_watched_state);
+    void NextButtonClicked(std::shared_ptr<Listener> listener, bool increment, bool update_watched_state);
+    bool NextVideo(bool random, bool increment, bool update_watched_state);
     bool setNextVideo(QTreeWidgetItem* item);
     int calculate_sv_target();
     void setCounterDialogButton();

@@ -207,10 +207,10 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         this->TagsDialogButton();
     });
     connect(this->ui.next_button, &QPushButton::clicked, this, [this] {
-        this->NextButtonClicked(); 
+        this->NextButtonClicked(true, this->App->config->get_bool("update_watched_state"));
     });
     connect(this->ui.next_button, &customQButton::middleClicked, this, [this] {
-        this->NextButtonClicked(false);
+        this->NextButtonClicked(false, this->App->config->get_bool("update_watched_state"));
     });
     connect(this->ui.next_button, &customQButton::rightClicked, this, [this] {
         customQButton* buttonSender = qobject_cast<customQButton*>(sender());
@@ -725,8 +725,8 @@ QMenu* MainWindow::trayIconContextMenu(QWidget* parent) {
         this->watchCurrent();
         });
     traycontextmenu->addAction(this->App->config->get_bool("random_next") ? "Next (R)" : "Next", [this] {
-        this->NextButtonClicked();
-        });
+        this->NextButtonClicked(true, this->App->config->get_bool("update_watched_state"));
+    });
     traycontextmenu->addAction(QString("Change (%1)").arg(this->getCategoryName()), [this] {
         this->switchCurrentDB();
     });
@@ -1048,12 +1048,12 @@ void MainWindow::resize_center(int w, int h)
     }
 }
 
-void MainWindow::NextButtonClicked(bool increment) {
-    this->NextButtonClicked(this->App->VW->mainListener, increment);
+void MainWindow::NextButtonClicked(bool increment, bool update_watched_state) {
+    this->NextButtonClicked(this->App->VW->mainListener, increment, update_watched_state);
 }
 
-void MainWindow::NextButtonClicked(std::shared_ptr<Listener> listener, bool increment) {
-    bool video_changed = this->NextVideo(this->App->config->get_bool("random_next"), increment);
+void MainWindow::NextButtonClicked(std::shared_ptr<Listener> listener, bool increment, bool update_watched_state) {
+    bool video_changed = this->NextVideo(this->App->config->get_bool("random_next"), increment, update_watched_state);
     if (listener) {
         this->changeListenerVideo(listener, this->ui.currentVideo->path, this->ui.currentVideo->id, 0);
     }
@@ -1065,16 +1065,17 @@ void MainWindow::NextButtonClicked(std::shared_ptr<Listener> listener, bool incr
     }
 }
 
-bool MainWindow::NextVideo(bool random, bool increment) {
+bool MainWindow::NextVideo(bool random, bool increment, bool update_watched_state) {
     QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(this->ui.currentVideo->path, Qt::MatchFixedString, ListColumns["PATH_COLUMN"], 1);
     bool video_changed = false;
     if (!items.isEmpty()) {
         this->App->db->db.transaction();
         this->App->db->setMainInfoValue("current",this->App->currentDB,"");
+        QString watched = (update_watched_state) ? "Yes" : items.first()->text(ListColumns["WATCHED_COLUMN"]);
         if(increment)
-            this->App->db->updateWatchedState(items.first()->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), this->position, "Yes", increment);
+            this->App->db->updateWatchedState(items.first()->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), this->position, watched, increment);
         else
-            this->App->db->updateWatchedState(items.first()->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), "Yes", increment);
+            this->App->db->updateWatchedState(items.first()->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), watched, increment);
         if (random) {
             if (this->App->currentDB == "MINUS") {
                 if (this->sv_count >= this->sv_target_count) {
@@ -1107,10 +1108,12 @@ bool MainWindow::NextVideo(bool random, bool increment) {
 
         QDateTime currenttime = QDateTime::currentDateTime();
         items.first()->setData(ListColumns["LAST_WATCHED_COLUMN"], Qt::DisplayRole, currenttime);
-        items.first()->setText(ListColumns["WATCHED_COLUMN"], "Yes");
         if(increment)
             items.first()->setText(ListColumns["VIEWS_COLUMN"], QString::number(items.first()->text(ListColumns["VIEWS_COLUMN"]).toInt() + 1));
-        items.first()->setForeground(ListColumns["WATCHED_COLUMN"], QBrush(QColor("#00e640")));
+        if (update_watched_state) {
+            items.first()->setText(ListColumns["WATCHED_COLUMN"], "Yes");
+            items.first()->setForeground(ListColumns["WATCHED_COLUMN"], QBrush(QColor("#00e640")));
+        }
         this->refreshVisibility();
 
         this->App->db->db.transaction();
@@ -1597,6 +1600,12 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         this->App->numlock_only_on = false;
         config->set("numlock_only_on", "False");
     }
+    if (dialog->ui.updateWatchedState->checkState() == Qt::CheckState::Checked) {
+        config->set("update_watched_state", "True");
+    }
+    else if (dialog->ui.updateWatchedState->checkState() == Qt::CheckState::Unchecked) {
+        config->set("update_watched_state", "False");
+    }
     if (dialog->ui.SVspinBox->value() != dialog->oldSVmax) {
         this->App->db->setMainInfoValue("sv_target_count", "ALL", QString::number(dialog->ui.SVspinBox->value()));
         this->sv_target_count = dialog->ui.SVspinBox->value();
@@ -1899,14 +1908,14 @@ void MainWindow::updateProgressBar(double position, double duration, std::shared
                             this->App->db->updateVideoProgress(listener->video_id, listener->currentPosition);
                         }
                         listener->currentPosition = -1;
-                        this->NextButtonClicked(listener);
+                        this->NextButtonClicked(listener,true, this->App->config->get_bool("update_watched_state"));
                         this->position = 0;
                     }
                     else if (result == finishDialog::Skip) {
                         //Skip button
                         listener->change_in_progress = true;
                         listener->currentPosition = -1;
-                        this->NextButtonClicked(listener, false);
+                        this->NextButtonClicked(listener, false, this->App->config->get_bool("update_watched_state"));
                         this->position = 0;
                     }
                     delete this->finish_dialog; // using deletelater causes some warning because it is already deleted by qt

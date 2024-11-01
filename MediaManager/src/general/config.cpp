@@ -42,6 +42,7 @@ void Config::init_defaults() {
 		{"current_db", "MINUS"},
 		{"video_types",	""},
 		{"sv_type",""},
+		{"update_watched_state", "True"},
 		{"animated_icon_flag", "False"},
 		{"animated_icon_fps_modifier", "1.0"},
 		{"random_icon", "False"},

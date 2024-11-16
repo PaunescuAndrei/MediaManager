@@ -1083,9 +1083,9 @@ bool MainWindow::NextVideo(bool random, bool increment, bool update_watched_stat
         this->App->db->setMainInfoValue("current",this->App->currentDB,"");
         QString watched = (update_watched_state) ? "Yes" : items.first()->text(ListColumns["WATCHED_COLUMN"]);
         if(increment)
-            this->App->db->updateWatchedState(items.first()->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), this->position, watched, increment);
+            this->App->db->updateWatchedState(items.first()->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), this->position, watched, true, true);
         else
-            this->App->db->updateWatchedState(items.first()->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), watched, increment);
+            this->App->db->updateWatchedState(items.first()->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), watched, false, false);
         if (random) {
             if (this->App->currentDB == "MINUS") {
                 if (this->sv_count >= this->sv_target_count) {
@@ -2119,7 +2119,7 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
         }
         if ((*it)->isDisabled()) {
             if (dialog.ui.ResetWatchedCheckBox->isChecked()) {
-                this->App->db->updateWatchedState((*it)->data(0, CustomRoles::id).toInt(), "No");
+                this->App->db->updateWatchedState((*it)->data(0, CustomRoles::id).toInt(), "No", false, false);
                 updated = true;
             }
             ++it;
@@ -2929,8 +2929,9 @@ void MainWindow::setWatched(QString value, QList<QTreeWidgetItem*> items) {
     int lastScroll = this->ui.videosWidget->verticalScrollBar()->value();
     if (!items.isEmpty()) {
         this->App->db->db.transaction();
+        bool update_date = (value == "Yes") ? true : false;
         for (auto const& item : items) {
-            this->App->db->updateWatchedState(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), value);
+            this->App->db->updateWatchedState(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), value, false, update_date);
         }
         this->App->db->db.commit();
         this->refreshVideosWidget(false,true);

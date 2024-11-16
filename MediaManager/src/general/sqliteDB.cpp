@@ -359,11 +359,11 @@ void sqliteDB::deleteVideo(int video_id) {
     }
 }
 
-void sqliteDB::updateWatchedState(int video_id, double progress, QString watched, bool increment) {
+void sqliteDB::updateWatchedState(int video_id, double progress, QString watched, bool increment, bool update_last_watched) {
     QSqlQuery query = QSqlQuery(this->db);
     QString main_query_string = "UPDATE videodetails SET progress=?, watched=?";
     QString views_increment_string = increment ? ", views = views + 1" : "";
-    QString update_last_watched_string = (watched == "Yes") ? ", last_watched = CURRENT_TIMESTAMP" : "";
+    QString update_last_watched_string = (update_last_watched) ? ", last_watched = CURRENT_TIMESTAMP" : "";
     QString end_query_string = " WHERE id = ?";
     QString final_string = main_query_string % views_increment_string % update_last_watched_string % end_query_string;
     query.prepare(final_string);
@@ -377,11 +377,11 @@ void sqliteDB::updateWatchedState(int video_id, double progress, QString watched
     }
 }
 
-void sqliteDB::updateWatchedState(int video_id, QString watched, bool increment) {
+void sqliteDB::updateWatchedState(int video_id, QString watched, bool increment, bool update_last_watched) {
     QSqlQuery query = QSqlQuery(this->db);
     QString main_query_string = "UPDATE videodetails SET watched=?";
     QString views_increment_string = increment ? ", views = views + 1" : "";
-    QString update_last_watched_string = (watched == "Yes") ? ", last_watched = CURRENT_TIMESTAMP" : "";
+    QString update_last_watched_string = (update_last_watched) ? ", last_watched = CURRENT_TIMESTAMP" : "";
     QString end_query_string = " WHERE id = ?";
     QString final_string = main_query_string % views_increment_string % update_last_watched_string % end_query_string;
     query.prepare(final_string);

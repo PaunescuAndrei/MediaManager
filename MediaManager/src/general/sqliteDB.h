@@ -35,8 +35,8 @@ public:
     int loadOrSaveDb(QSqlDatabase db, const char* zFilename, bool backup);
     void setMainInfoValue(QString name, QString category, QString value);
     void deleteVideo(int video_id);
-    void updateWatchedState(int video_id, QString watched, bool increment = false);
-    void updateWatchedState(int video_id, double progress, QString watched,bool increment = false);
+    void updateWatchedState(int video_id, QString watched, bool increment = false, bool update_last_watched = false);
+    void updateWatchedState(int video_id, double progress, QString watched,bool increment = false, bool update_last_watched = false);
     void incrementVideoViews(int video_id, int value);
     void updateType(int video_id, QString type_val);
     void updateAuthor(int video_id, QString author);

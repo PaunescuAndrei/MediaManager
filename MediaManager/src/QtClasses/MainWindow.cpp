@@ -82,7 +82,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     new QShortcut(QKeySequence("F3"), this, [this] {this->toggleDates(); });
     QShortcut *shortcutLogs = new QShortcut(QKeySequence("F4"), this, [this] {this->App->toggleLogWindow(); });
     QShortcut* shortcutSSE = new QShortcut(QKeySequence("F8"), this, [this] {
-        this->playSpecialSoundEffect();
+        this->playSpecialSoundEffect(true);
     });
     shortcutSSE->setContext(Qt::ApplicationShortcut);
     shortcutLogs->setContext(Qt::ApplicationShortcut);
@@ -2659,6 +2659,8 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
     menu.addAction(generate_author);
     QAction* generate_name = new QAction("Generate Name", &menu);
     menu.addAction(generate_name);
+    QAction* generate_thumbnails = new QAction("Generate Thumbnails", &menu);
+    menu.addAction(generate_thumbnails);
     QMenu* set_menu = new QMenu("Set", &menu);
     QAction* set_current = new QAction("Set as current", set_menu);
     set_menu->addAction(set_current);
@@ -2734,6 +2736,12 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
     }
     else if (menu_click == generate_name) {
         this->updateNames(items);
+    }
+    else if (menu_click == generate_thumbnails) {
+        for (auto const& item : items) {
+            this->thumbnailManager.enqueue_work({ item->text(ListColumns["PATH_COLUMN"]), true });
+            this->thumbnailManager.start();
+        }
     }
     else if (menu_click == author_edit) {
         bool ok;
@@ -2903,9 +2911,10 @@ bool MainWindow::event(QEvent* e)
     return QMainWindow::event(e);
 }
 
-void MainWindow::playSpecialSoundEffect() {
+void MainWindow::playSpecialSoundEffect(bool force_play) {
     if (this->App->config->get_bool("sound_effects_special_on")) {
-        this->App->soundPlayer->playSpecialSoundEffect(this->special_effects_player);
+        if(force_play or not this->special_effects_player->isPlaying())
+            this->App->soundPlayer->playSpecialSoundEffect(this->special_effects_player);
     }
 }
 

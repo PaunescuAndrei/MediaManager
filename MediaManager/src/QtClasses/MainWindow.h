@@ -164,7 +164,7 @@ public:
     void dragMoveEvent(QDragMoveEvent* e) override;
     void dropEvent(QDropEvent* e) override;
     bool event(QEvent* e) override;
-    void playSpecialSoundEffect();
+    void playSpecialSoundEffect(bool force_play = false);
     ~MainWindow();
 signals:
     void fileDropped(QStringList files, QWidget* widget = nullptr);

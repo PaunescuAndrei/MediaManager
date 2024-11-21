@@ -104,6 +104,7 @@ public:
     void incrementViews(int count, QList<QTreeWidgetItem*> items);
     void setType(QString type, QList<QTreeWidgetItem*> items);
     bool InsertVideoFiles(QStringList files,bool update_state = true, QString currentdb = "", QString type = "");
+    void openEmptyVideoPlayer();
     void incrementtimeWatchedIncrement(double value);
     void checktimeWatchedIncrement();
     void incrementCounterVar(int value = 1);

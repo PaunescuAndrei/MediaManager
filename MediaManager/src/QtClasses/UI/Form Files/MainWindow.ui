@@ -156,7 +156,7 @@
                    <number>0</number>
                   </property>
                   <item>
-                   <widget class="QPushButton" name="watch_button">
+                   <widget class="customQButton" name="watch_button">
                     <property name="font">
                      <font>
                       <pointsize>10</pointsize>

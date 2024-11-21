@@ -208,6 +208,9 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     connect(this->ui.watch_button, &QPushButton::clicked, this, [this] { 
         this->watchCurrent(); 
     });
+    connect(this->ui.watch_button, &customQButton::rightClicked, this, [this] {
+        this->openEmptyVideoPlayer();
+    });
     connect(this->ui.insert_button, &QPushButton::clicked, this, [this] { 
         this->insertDialogButton(); 
     });
@@ -2160,6 +2163,23 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
         this->refreshVideosWidget(false, true);
     }
     return true;
+}
+
+void MainWindow::openEmptyVideoPlayer() {
+    if (this->App->VW->mainListener == nullptr) {
+        std::shared_ptr<Listener> l = this->App->VW->newListener("",-1);
+        this->App->VW->setMainListener(l);
+        l->process->setProgram(this->App->config->get("player_path"));
+        l->process->setArguments({ "/slave",QString::number((unsigned long long int)l->hwnd) });
+        qint64 pid = 0;
+        l->process->start();
+        l->pid = l->process->processId();
+        this->VideoInfoNotification();
+        qMainApp->logger->log(QString("Opening empty Video Player."),"Video");
+    }
+    else {
+        utils::bring_hwnd_to_foreground_uiautomation_method(this->App->uiAutomation, this->App->VW->mainListener->mpchc_hwnd);
+    }
 }
 
 void MainWindow::watchCurrent() {

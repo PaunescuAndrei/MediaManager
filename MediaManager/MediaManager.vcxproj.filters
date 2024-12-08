@@ -137,9 +137,6 @@
     <ClCompile Include="src\general\IconChanger.cpp">
       <Filter>Source Files\general</Filter>
     </ClCompile>
-    <ClCompile Include="src\general\Listener.cpp">
-      <Filter>Source Files\general</Filter>
-    </ClCompile>
     <ClCompile Include="src\general\mascotsAnimationsThread.cpp">
       <Filter>Source Files\general</Filter>
     </ClCompile>
@@ -245,6 +242,12 @@
     <ClCompile Include="src\QtClasses\UI\VideosTagsDialog.cpp">
       <Filter>Source Files\QtClasses\UI</Filter>
     </ClCompile>
+    <ClCompile Include="src\general\BasePlayer.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\MpcPlayer.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\resource.h">
@@ -266,9 +269,6 @@
       <Filter>Header Files\general</Filter>
     </ClInclude>
     <ClInclude Include="src\general\utils.h">
-      <Filter>Header Files\general</Filter>
-    </ClInclude>
-    <ClInclude Include="src\general\Listener.h">
       <Filter>Header Files\general</Filter>
     </ClInclude>
     <ClInclude Include="src\general\MusicPlayer.h">
@@ -336,6 +336,9 @@
     </ClInclude>
     <ClInclude Include="src\general\definitions.h">
       <Filter>Header Files\thirdparty</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\PlayerCommands.h">
+      <Filter>Header Files\general</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -518,6 +521,12 @@
     </QtMoc>
     <QtMoc Include="src\QtClasses\UI\VideosTagsDialog.h">
       <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\general\MpcPlayer.h">
+      <Filter>Header Files\general</Filter>
+    </QtMoc>
+    <QtMoc Include="src\general\BasePlayer.h">
+      <Filter>Header Files\general</Filter>
     </QtMoc>
   </ItemGroup>
   <ItemGroup>

@@ -188,8 +188,8 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     connect(this->ui.random_button, &QPushButton::clicked, this, [this] {
         bool all = this->App->config->get("get_random_mode") == "All";
         bool video_changed = this->randomVideo(all);
-        if (this->App->VW->mainListener and video_changed) {
-            this->changeListenerVideo(this->App->VW->mainListener, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
+        if (this->App->VW->mainPlayer and video_changed) {
+            this->changePlayerVideo(this->App->VW->mainPlayer, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
         }
     });
     connect(this->ui.random_button, &customQButton::middleClicked, this, [this] {
@@ -336,8 +336,8 @@ void MainWindow::UpdateWindowTitle() {
     QString elapsed_time;
     QString thumb_work_count;
     QString main_title = QString("Media Manager %1 %2").arg(this->getCategoryName()).arg(VERSION_TEXT);
-    if (this->App->VW and this->App->VW->mainListener_time_start) {
-        elapsed_time = " [" % QString::fromStdString(utils::formatSeconds(std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->App->VW->mainListener_time_start).count())) % "]";
+    if (this->App->VW and this->App->VW->mainPlayer_time_start) {
+        elapsed_time = " [" % QString::fromStdString(utils::formatSeconds(std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->App->VW->mainPlayer_time_start).count())) % "]";
     }
     if (this->thumbnailManager.work_count > 0) {
         thumb_work_count = " (" % QString::number(this->thumbnailManager.work_count) % ")";
@@ -1062,13 +1062,13 @@ void MainWindow::resize_center(int w, int h)
 }
 
 void MainWindow::NextButtonClicked(bool increment, bool update_watched_state) {
-    this->NextButtonClicked(this->App->VW->mainListener, increment, update_watched_state);
+    this->NextButtonClicked(this->App->VW->mainPlayer, increment, update_watched_state);
 }
 
-void MainWindow::NextButtonClicked(std::shared_ptr<Listener> listener, bool increment, bool update_watched_state) {
+void MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state) {
     bool video_changed = this->NextVideo(this->App->config->get_bool("random_next"), increment, update_watched_state);
-    if (listener) {
-        this->changeListenerVideo(listener, this->ui.currentVideo->path, this->ui.currentVideo->id, 0);
+    if (player) {
+        this->changePlayerVideo(player, this->ui.currentVideo->path, this->ui.currentVideo->id, 0);
     }
     if (video_changed) {
         if (this->animatedIconFlag)
@@ -1310,8 +1310,8 @@ bool MainWindow::loadDB(QString path, QWidget* parent) {
             this->refreshVideosWidget(false, true);
             this->updateTotalListLabel();
             this->init_icons();
-            if (this->App->VW->mainListener) {
-                this->changeListenerVideo(this->App->VW->mainListener, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
+            if (this->App->VW->mainPlayer) {
+                this->changePlayerVideo(this->App->VW->mainPlayer, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
             }
             if (return_code == 0) {
                 //msg->setIcon(QMessageBox::Information); // they trigger windows notifications sound, stupid
@@ -1908,49 +1908,43 @@ void MainWindow::updateProgressBar(double position, double duration) {
     this->ui.progressBar->setFormat(QString::fromStdString(std::format("{} / {}", utils::formatSeconds(this->position), utils::formatSeconds(this->duration))));
 }
 
-void MainWindow::updateProgressBar(double position, double duration, std::shared_ptr<Listener> listener, bool running)
+void MainWindow::updateProgressBar(double position, double duration, QSharedPointer<BasePlayer> player, bool running)
 {
-    //qDebug() << "current" << this->position << listener->currentPosition << this->duration << listener->change_in_progress;
-    if(!listener->change_in_progress)
+    if(not player->change_in_progress)
         this->updateProgressBar(position, duration);
-    if (!listener->path.isEmpty() && this->position >= this->duration - 0.5) {
-        if (listener && listener->endvideo == false && !listener->change_in_progress) {
-            if(listener)
-                listener->endvideo = true;
-            if (!this->finish_dialog) {
-                this->finish_dialog = new finishDialog(this);
-                this->finish_dialog->setWindowFlag(Qt::WindowStaysOnTopHint, true);
-                this->finish_dialog->setWindowState((this->finish_dialog->windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
-                this->finish_dialog->raise();
-                this->finish_dialog->activateWindow();
-                this->finish_dialog->open();
-                connect(this->finish_dialog, &finishDialog::finished, this, [this,listener](int result) {
-                    if (result == finishDialog::Accepted) {
-                        listener->change_in_progress = true;
-                        //qDebug() << "clicked" << this->position << listener->currentPosition;
-                        if (listener && listener->currentPosition != -1) {
-                            this->App->db->updateVideoProgress(listener->video_id, listener->currentPosition);
-                        }
-                        listener->currentPosition = -1;
-                        this->NextButtonClicked(listener,true, this->App->config->get_bool("update_watched_state"));
-                        this->position = 0;
+}
+
+void MainWindow::showEndOfVideoDialog() {
+    if (this->App->VW->mainPlayer and not this->App->VW->mainPlayer->video_path.isEmpty() and this->App->VW->mainPlayer->end_of_video == true and this->App->VW->mainPlayer->change_in_progress == false) {
+        if (not this->finish_dialog) {
+            this->finish_dialog = new finishDialog(this);
+            this->finish_dialog->setWindowFlag(Qt::WindowStaysOnTopHint, true);
+            this->finish_dialog->setWindowState((this->finish_dialog->windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
+            this->finish_dialog->raise();
+            this->finish_dialog->activateWindow();
+            this->finish_dialog->open();
+            connect(this->finish_dialog, &finishDialog::finished, this, [this](int result) {
+                if (result == finishDialog::Accepted) {
+                    this->App->VW->mainPlayer->change_in_progress = true;
+                    //qDebug() << "clicked" << this->position << this->App->VW->mainPlayer->currentPosition;
+                    if (this->App->VW->mainPlayer && this->App->VW->mainPlayer->position != -1) {
+                        this->App->db->updateVideoProgress(this->App->VW->mainPlayer->video_id, this->App->VW->mainPlayer->position);
                     }
-                    else if (result == finishDialog::Skip) {
-                        //Skip button
-                        listener->change_in_progress = true;
-                        listener->currentPosition = -1;
-                        this->NextButtonClicked(listener, false, this->App->config->get_bool("update_watched_state"));
-                        this->position = 0;
-                    }
-                    delete this->finish_dialog; // using deletelater causes some warning because it is already deleted by qt
-                    this->finish_dialog = nullptr;
+                    this->App->VW->mainPlayer->position = -1;
+                    this->NextButtonClicked(this->App->VW->mainPlayer, true, this->App->config->get_bool("update_watched_state"));
+                    this->position = 0;
+                }
+                else if (result == finishDialog::Skip) {
+                    //Skip button
+                    this->App->VW->mainPlayer->change_in_progress = true;
+                    this->App->VW->mainPlayer->position = -1;
+                    this->NextButtonClicked(this->App->VW->mainPlayer, false, this->App->config->get_bool("update_watched_state"));
+                    this->position = 0;
+                }
+                delete this->finish_dialog; // using deletelater causes some warning because it is already deleted by qt
+                this->finish_dialog = nullptr;
                 });
-            }
         }
-    }
-    else {
-        if(listener && !listener->change_in_progress)
-            listener->endvideo = false;
     }
 }
 
@@ -2166,57 +2160,41 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
 }
 
 void MainWindow::openEmptyVideoPlayer() {
-    if (this->App->VW->mainListener == nullptr) {
-        std::shared_ptr<Listener> l = this->App->VW->newListener("",-1);
-        this->App->VW->setMainListener(l);
-        l->process->setProgram(this->App->config->get("player_path"));
-        l->process->setArguments({ "/slave",QString::number((unsigned long long int)l->hwnd) });
-        qint64 pid = 0;
-        l->process->start();
-        l->pid = l->process->processId();
+    if (this->App->VW->mainPlayer == nullptr) {
+        QSharedPointer<BasePlayer> l = this->App->VW->newPlayer("",-1);
+        this->App->VW->setMainPlayer(l);
+        l->openPlayer(l->video_path, l->position);
         this->VideoInfoNotification();
         qMainApp->logger->log(QString("Opening empty Video Player."),"Video");
     }
     else {
-        utils::bring_hwnd_to_foreground_uiautomation_method(this->App->uiAutomation, this->App->VW->mainListener->mpchc_hwnd);
+        utils::bring_hwnd_to_foreground_uiautomation_method(this->App->uiAutomation, this->App->VW->mainPlayer->player_hwnd);
     }
 }
 
 void MainWindow::watchCurrent() {
-    if (this->App->VW->mainListener == nullptr) {
-        std::shared_ptr<Listener> l = this->App->VW->newListener(this->ui.currentVideo->path, this->ui.currentVideo->id);
-        this->App->VW->setMainListener(l);
+    if (this->App->VW->mainPlayer == nullptr) {
+        QSharedPointer<BasePlayer> l = this->App->VW->newPlayer(this->ui.currentVideo->path, this->ui.currentVideo->id);
+        this->App->VW->setMainPlayer(l);
         double seconds = this->position;
         if (seconds < 0.001)
             seconds = 0.001;
-        l->process->setProgram(this->App->config->get("player_path"));
-        if(this->ui.currentVideo->path.isEmpty())
-            l->process->setArguments({"/slave",QString::number((unsigned long long int)l->hwnd) });
-        else
-            l->process->setArguments({ "/open", this->ui.currentVideo->path, "/start", QString::number(seconds * 1000, 'f',4), "/slave",QString::number((unsigned long long int)l->hwnd)});
-        qint64 pid = 0;
-        l->process->start();
-        l->pid = l->process->processId();
+        l->openPlayer(this->ui.currentVideo->path, seconds);
+        connect(l.data(), &BasePlayer::endOfVideoSignal, this, &MainWindow::showEndOfVideoDialog);
         this->VideoInfoNotification();
         qMainApp->logger->log(QString("Playing Current Video \"%1\" from %2").arg(this->ui.currentVideo->path).arg(utils::formatSecondsQt(seconds)), "Video", this->ui.currentVideo->path);
     }
     else {
-        utils::bring_hwnd_to_foreground_uiautomation_method(this->App->uiAutomation, this->App->VW->mainListener->mpchc_hwnd);
+        utils::bring_hwnd_to_foreground_uiautomation_method(this->App->uiAutomation, this->App->VW->mainPlayer->player_hwnd);
     }
 }
 
 void MainWindow::watchSelected(int video_id, QString path) {
-    std::shared_ptr<Listener> l = this->App->VW->newListener(path, video_id);
+    QSharedPointer<BasePlayer> l = this->App->VW->newPlayer(path, video_id);
     double seconds = this->App->db->getVideoProgress(video_id).toDouble();
     if (seconds < 0.001)
         seconds = 0.001;
-    l->process->setProgram(this->App->config->get("player_path"));
-    if (path.isEmpty())
-        l->process->setArguments({"/slave",QString::number((unsigned long long int)l->hwnd) });
-    else
-        l->process->setArguments({"/open", path, "/start", QString::number(seconds * 1000, 'f',4), "/slave",QString::number((unsigned long long int)l->hwnd) });
-    l->process->start();
-    l->pid = l->process->processId();
+    l->openPlayer(path, seconds);
     qMainApp->logger->log(QString("Playing Video \"%1\" from %2").arg(path).arg(utils::formatSecondsQt(seconds)), "Video", path);
 }
 
@@ -2236,11 +2214,11 @@ void MainWindow::refreshVideosWidget(bool selectcurrent, bool remember_selected)
 void MainWindow::switchCurrentDB(QString db) {
     this->App->VW->clearData(false);
     this->lastScrolls.clear();
-    std::shared_ptr<Listener> listener = nullptr;
-    if (this->App->VW->mainListener) {
-        listener = this->App->VW->mainListener;
-        if (listener->currentPosition != -1)
-            this->App->db->updateVideoProgress(listener->video_id, listener->currentPosition);
+    QSharedPointer<BasePlayer> player = nullptr;
+    if (this->App->VW->mainPlayer) {
+        player = this->App->VW->mainPlayer;
+        if (player->position != -1)
+            this->App->db->updateVideoProgress(player->video_id, player->position);
     }
     if (!db.isEmpty()) {
         this->App->currentDB = db;
@@ -2261,8 +2239,8 @@ void MainWindow::switchCurrentDB(QString db) {
         this->toggleDates(false);
     this->App->config->set("current_db", this->App->currentDB);
     this->App->config->save_config();
-    if(listener != nullptr){
-        this->changeListenerVideo(listener, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
+    if(player != nullptr){
+        this->changePlayerVideo(player, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
     }
 }
 
@@ -2726,8 +2704,8 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
     else if (menu_click == set_current) {
         this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]), item->text(ListColumns["TAGS_COLUMN"]));
         this->selectCurrentItem();
-        if (this->App->VW->mainListener) {
-            this->changeListenerVideo(this->App->VW->mainListener, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
+        if (this->App->VW->mainPlayer) {
+            this->changePlayerVideo(this->App->VW->mainPlayer, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
         }
     }
     else if (menu_click == open_location) {
@@ -2794,8 +2772,8 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
                 if (not items.isEmpty()) {
                     auto item = items.first();
                     this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(),item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]), item->text(ListColumns["TAGS_COLUMN"]));
-                    if (this->App->VW->mainListener) {
-                        this->changeListenerVideo(this->App->VW->mainListener, this->ui.currentVideo->path, this->ui.currentVideo->id, 0);
+                    if (this->App->VW->mainPlayer) {
+                        this->changePlayerVideo(this->App->VW->mainPlayer, this->ui.currentVideo->path, this->ui.currentVideo->id, 0);
                     }
                 }
             }
@@ -3094,13 +3072,14 @@ void MainWindow::updateTotalListLabel(bool force_update) {
         this->ui.totalListLabel->update();
 }
 
-void MainWindow::changeListenerVideo(std::shared_ptr<Listener> listener, QString path, int video_id, double position) {
-    QFuture<void> change_video = QtConcurrent::run([this, listener,path, video_id,position] {listener->change_video(path, video_id, position); });
+void MainWindow::changePlayerVideo(QSharedPointer<BasePlayer> player, QString path, int video_id, double position) {
+    player->changeVideo(path, video_id, position);
     if (this->finish_dialog) {
         this->finish_dialog->deleteLater();
         this->finish_dialog = nullptr;
     }
     this->VideoInfoNotification();
+    qMainApp->logger->log(QString("Changing Video to \"%1\"").arg(path), "Video", path);
 }
 
 MainWindow::~MainWindow()

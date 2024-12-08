@@ -2,7 +2,7 @@
 #ifndef SAFE_QUEUE
 #define SAFE_QUEUE
 
-#include <queue>
+#include <deque>
 #include <mutex>
 //#include <condition_variable>
 #include <optional>
@@ -25,7 +25,7 @@ public:
     void enqueue(T t)
     {
         std::lock_guard<std::mutex> lock(m);
-        q.push(t);
+        q.push_back(t);
         //c.notify_one();
     }
 
@@ -45,7 +45,27 @@ public:
             return std::nullopt;
 
         T val = q.front();
-        q.pop();
+        q.pop_front();
+        return std::optional<T>{val};
+    }
+    std::optional<T> front(void)
+    {
+        std::lock_guard<std::mutex> lock(m);
+
+        if (q.empty())
+            return std::nullopt;
+
+        T val = q.front();
+        return std::optional<T>{val};
+    }
+    std::optional<T> back(void)
+    {
+        std::lock_guard<std::mutex> lock(m);
+
+        if (q.empty())
+            return std::nullopt;
+
+        T val = q.back();
         return std::optional<T>{val};
     }
     inline bool isEmpty() {
@@ -57,11 +77,9 @@ public:
     void clear() {
         std::lock_guard<std::mutex> lock(m);
         while (!this->isEmpty())
-            this->q.pop();
+            this->q.pop_front();
     }
-
-private:
-    std::queue<T> q;
+    std::deque<T> q;
     mutable std::mutex m;
     //std::condition_variable c;
 };

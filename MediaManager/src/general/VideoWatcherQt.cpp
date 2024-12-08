@@ -14,44 +14,45 @@ VideoWatcherQt::VideoWatcherQt(MainApp* App, QObject* parent) : QThread(parent)
 	this->db = new sqliteDB(this->App->db->location, "videowatcher_con");
 }
 
-std::shared_ptr<Listener> VideoWatcherQt::newListener(QString path, int video_id)
+QSharedPointer<BasePlayer> VideoWatcherQt::newPlayer(QString path, int video_id)
 {
 	QMutexLocker lock(&this->data_lock);
-	std::shared_ptr<Listener> newVideo = std::make_shared<Listener>(path, video_id,&this->CLASS_COUNT,this->App,this->App);
-	this->Listeners.append(newVideo);
+	QSharedPointer<BasePlayer> newVideo = QSharedPointer<MpcPlayer>::create(path, video_id,&this->CLASS_COUNT,this->App,this->App);
+	this->Players.append(newVideo);
 	this->CLASS_COUNT++;
+	newVideo->start();
 	return newVideo;
 }
 
-void VideoWatcherQt::clearData(bool include_mainlistener) {
-	QList<std::shared_ptr<Listener>>::iterator it = this->Listeners.begin();
-	while (it != this->Listeners.end()) {
-		if (!include_mainlistener && (*it) != nullptr && (*it) == this->mainListener) {
+void VideoWatcherQt::clearData(bool include_mainplayer) {
+	QList<QSharedPointer<BasePlayer>>::iterator it = this->Players.begin();
+	while (it != this->Players.end()) {
+		if (!include_mainplayer && (*it) != nullptr && (*it) == this->mainPlayer) {
 			++it;
 			continue;
 		}
-		if ((*it)->currentPosition != -1) {
-			this->db->updateVideoProgress((*it)->video_id, (*it)->currentPosition);
+		if ((*it)->position != -1) {
+			this->db->updateVideoProgress((*it)->video_id, (*it)->position);
 		}
-		(*it)->closeWindow();
+		(*it)->drop();
 		(*it).reset();
-		it = this->Listeners.erase(it);
+		it = this->Players.erase(it);
 	}
-	if(include_mainlistener)
+	if(include_mainplayer)
 		this->clearAfterMainVideoEnd();
 }
 
-void VideoWatcherQt::setMainListener(std::shared_ptr<Listener> listener) {
-	this->mainListener = listener;
+void VideoWatcherQt::setMainPlayer(QSharedPointer<BasePlayer> player) {
+	this->mainPlayer = player;
 }
 
-void VideoWatcherQt::clearMainListener() {
-	this->mainListener = nullptr;
+void VideoWatcherQt::clearMainPlayer() {
+	this->mainPlayer = nullptr;
 }
 
 void VideoWatcherQt::clearAfterMainVideoEnd()
 {
-	this->clearMainListener();
+	this->clearMainPlayer();
 	if (this->App) {
 		if (this->App->mainWindow->finish_dialog) {
 			this->App->mainWindow->finish_dialog->deleteLater();
@@ -62,10 +63,10 @@ void VideoWatcherQt::clearAfterMainVideoEnd()
 
 void VideoWatcherQt::toggle_window()
 {
-	if (!this->Listeners.isEmpty() && this->mainListener != nullptr) {
-		std::shared_ptr<Listener> listener = this->mainListener;
-		bool fullscreen = utils::is_hwnd_full_screen(listener->mpchc_hwnd);
-		QList<HWND> hwnds = utils::get_hwnds_for_pid(listener->pid);
+	if (!this->Players.isEmpty() && this->mainPlayer != nullptr) {
+		QSharedPointer<BasePlayer> player = this->mainPlayer;
+		bool fullscreen = utils::is_hwnd_full_screen(player->player_hwnd);
+		QList<HWND> hwnds = utils::get_hwnds_for_pid(player->pid);
 		bool is_foreground = false;
 		HWND foreground_window = GetForegroundWindow();
 		for (HWND& hwnd : hwnds) {
@@ -75,9 +76,9 @@ void VideoWatcherQt::toggle_window()
 			}
 		}
 		if (is_foreground) {
-			listener->send_message(CMD_PAUSE);
+			player->setPaused(true,true);
 			if (fullscreen)
-				listener->send_message(CMD_TOGGLEFULLSCREEN);
+				player->toggleFullScreen(true);
 			if (this->old_foreground_window) {
 				utils::bring_hwnd_to_foreground_uiautomation_method(this->App->uiAutomation, this->old_foreground_window);
 				if (GetForegroundWindow() != this->old_foreground_window)
@@ -97,17 +98,17 @@ void VideoWatcherQt::toggle_window()
 			is_foreground = false;
 			int tries = 0;
 			while (!is_foreground && tries < 10) {
-				utils::bring_hwnd_to_foreground_uiautomation_method(this->App->uiAutomation,listener->mpchc_hwnd);
+				utils::bring_hwnd_to_foreground_uiautomation_method(this->App->uiAutomation,player->player_hwnd);
 				tries++;
-				QList<HWND> hwnds = utils::get_hwnds_for_pid(listener->pid);
+				QList<HWND> hwnds = utils::get_hwnds_for_pid(player->pid);
 				if (hwnds.contains(GetForegroundWindow()))
 					is_foreground = true;
 			}
 			if (!fullscreen) {
-				listener->send_message(CMD_TOGGLEFULLSCREEN);
+				player->toggleFullScreen(true);
 			}
-			listener->send_message(CMD_PLAY);
-			listener->send_osd_message(QString("%1 / %2").arg(utils::formatSecondsQt(listener->currentPosition), utils::formatSecondsQt(listener->duration)), 3000);
+			player->setPaused(false,true);
+			player->displayOsdMessage(QString("%1 / %2").arg(utils::formatSecondsQt(player->position), utils::formatSecondsQt(player->duration)), 3000,true);
 		}
 	}
 }
@@ -121,32 +122,31 @@ void VideoWatcherQt::incrementTimeWatchedTotal(int value) {
 void VideoWatcherQt::run()
 {
 	while (this->running) {
-		for (std::shared_ptr<Listener> listener : this->Listeners) {
-			listener->send_message(CMD_GETCURRENTPOSITION);
-			if (listener->path == this->App->mainWindow->ui.currentVideo->path) {
-				emit updateProgressBarSignal(listener->currentPosition,listener->duration, listener,true);
+		for (QSharedPointer<BasePlayer> player : this->Players) {
+			if (player->video_path == this->App->mainWindow->ui.currentVideo->path) {
+				emit updateProgressBarSignal(player->position,player->duration, player, true);
 			}
-			if (!listener->is_process_alive()) {
-				if (listener->currentPosition != -1) {
-					this->db->updateVideoProgress(listener->video_id, listener->currentPosition);
+			if (!player->isProcessAlive()) {
+				if (player->position != -1) {
+					this->db->updateVideoProgress(player->video_id, player->position);
 				}
-				if (listener == this->mainListener) {
+				if (player == this->mainPlayer) {
 					this->clearAfterMainVideoEnd();
 				}
-				listener->closeWindow();
-				this->Listeners.removeOne(listener);
-				listener.reset();
+				player->drop();
+				this->Players.removeOne(player);
+				player.reset();
 			}
 		}
-		if (!this->Listeners.isEmpty()) {
+		if (!this->Players.isEmpty()) {
 			if (this->App->musicPlayer && this->App->musicPlayer->player->playbackState() == QMediaPlayer::PlayingState)
 				emit updateMusicPlayerSignal(false);
 			if (this->watching == false) {
 				this->watching = true;
-				if (this->mainListener_time_start != nullptr) {
-					this->mainListener_time_start.reset();
+				if (this->mainPlayer_time_start != nullptr) {
+					this->mainPlayer_time_start.reset();
 				}
-				this->mainListener_time_start = std::make_shared<std::chrono::microseconds>(utils::QueryUnbiasedInterruptTimeChrono());
+				this->mainPlayer_time_start = std::make_shared<std::chrono::microseconds>(utils::QueryUnbiasedInterruptTimeChrono());
 			}
 		}
 		else {
@@ -154,10 +154,10 @@ void VideoWatcherQt::run()
 				emit updateMusicPlayerSignal(true);
 			if (this->watching == true) {
 				this->watching = false;
-				int elapsed = std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->mainListener_time_start).count();
+				int elapsed = std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->mainPlayer_time_start).count();
 				this->incrementTimeWatchedTotal(elapsed);
-				if (this->mainListener_time_start != nullptr) {
-					this->mainListener_time_start.reset();
+				if (this->mainPlayer_time_start != nullptr) {
+					this->mainPlayer_time_start.reset();
 				}
 			}
 
@@ -178,29 +178,29 @@ void VideoWatcherQt::run()
 		}
 		this->msleep(100);
 	}
-	for (std::shared_ptr<Listener> listener : this->Listeners) {
-		listener->process->terminate();
-		this->db->updateVideoProgress(listener->video_id, listener->currentPosition);
+	for (QSharedPointer<BasePlayer> player : this->Players) {
+		player->process->terminate();
+		this->db->updateVideoProgress(player->video_id, player->position);
 	}
-	if (this->mainListener_time_start != nullptr) {
-		int elapsed = std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->mainListener_time_start).count();
+	if (this->mainPlayer_time_start != nullptr) {
+		int elapsed = std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->mainPlayer_time_start).count();
 		this->incrementTimeWatchedTotal(elapsed);
-		this->mainListener_time_start.reset();
+		this->mainPlayer_time_start.reset();
 	}
 	this->clearAfterMainVideoEnd();
 }
 
 VideoWatcherQt::~VideoWatcherQt()
 {
-	for (std::shared_ptr<Listener> item : this->Listeners) {
+	for (QSharedPointer<BasePlayer> item : this->Players) {
 		item->process->terminate();
 		item.reset();
 	}
 
-	if (this->mainListener_time_start != nullptr) {
-		int elapsed = std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->mainListener_time_start).count();
+	if (this->mainPlayer_time_start != nullptr) {
+		int elapsed = std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->mainPlayer_time_start).count();
 		this->incrementTimeWatchedTotal(elapsed);
-		this->mainListener_time_start.reset();
+		this->mainPlayer_time_start.reset();
 	}
 
 	delete this->db;

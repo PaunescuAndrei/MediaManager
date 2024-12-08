@@ -4,7 +4,6 @@
 #include <QPoint>
 #include <QTreeWidgetItem>
 #include "IconChanger.h"
-#include "Listener.h"
 #include <QQueue>
 #include "generateThumbnailManager.h"
 #include "generateThumbnailThread.h"
@@ -16,6 +15,8 @@
 #include "SafeQueue.h"
 #include "VideosTagsDialog.h"
 #include <QMediaPlayer>
+#include "BasePlayer.h"
+#include "MpcPlayer.h"
 
 class MainApp;
 
@@ -85,10 +86,11 @@ public:
     void initListDetails();
     void updateWatchedProgressBar();
     void updateProgressBar(double position, double duration);
-    void updateProgressBar(double position, double duration, std::shared_ptr<Listener> listener, bool running = false);
+    void updateProgressBar(double position, double duration, QSharedPointer<BasePlayer> player, bool running = false);
+    void showEndOfVideoDialog();
     void updateProgressBar(QString position, QString duration);
     void updateTotalListLabel(bool force_update = false);
-    void changeListenerVideo(std::shared_ptr<Listener> listener, QString path, int video_id, double position);
+    void changePlayerVideo(QSharedPointer<BasePlayer> player, QString path, int video_id, double position);
     void refreshVisibility(QString search_text);
     void refreshVisibility();
     void refreshHeadersVisibility();
@@ -128,12 +130,11 @@ public:
     void settingsDialogButton();
     void quit();
     void NextButtonClicked(bool increment, bool update_watched_state);
-    void NextButtonClicked(std::shared_ptr<Listener> listener, bool increment, bool update_watched_state);
+    void NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state);
     bool NextVideo(bool random, bool increment, bool update_watched_state);
     bool setNextVideo(QTreeWidgetItem* item);
     int calculate_sv_target();
     void setCounterDialogButton();
-    // to do implement random to normal icons and dont hard-code it
     void loadIcons(QString path);
     QIcon getIconByStage(int stage);
     void setIconWatchingState(bool watching);

@@ -15,6 +15,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="src\general\BasePlayer.cpp" />
     <ClCompile Include="src\general\BlockingQueue.cpp" />
     <ClCompile Include="src\general\colorPaletteExtractor.cpp" />
     <ClCompile Include="src\general\config.cpp" />
@@ -22,10 +23,10 @@
     <ClCompile Include="src\general\EventLock.cpp" />
     <ClCompile Include="src\general\FilterSettings.cpp" />
     <ClCompile Include="src\general\generateThumbnailManager.cpp" />
+    <ClCompile Include="src\general\MpcPlayer.cpp" />
     <ClCompile Include="src\general\utils.cpp" />
     <ClCompile Include="src\general\generateThumbnailThread.cpp" />
     <ClCompile Include="src\general\IconChanger.cpp" />
-    <ClCompile Include="src\general\Listener.cpp" />
     <ClCompile Include="src\general\mascotsAnimationsThread.cpp" />
     <ClCompile Include="src\general\mascotsGeneratorThread.cpp" />
     <ClCompile Include="src\general\MusicPlayer.cpp" />
@@ -91,6 +92,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\general\asmOpenCV.h" />
+    <QtMoc Include="src\general\BasePlayer.h" />
     <ClInclude Include="src\general\BlockingQueue.h" />
     <ClInclude Include="src\general\colorPaletteExtractor.h" />
     <ClInclude Include="src\general\config.h" />
@@ -98,8 +100,9 @@
     <ClInclude Include="src\general\EventLock.h" />
     <ClInclude Include="src\general\FilterSettings.h" />
     <ClInclude Include="src\general\generateThumbnailManager.h" />
+    <QtMoc Include="src\general\MpcPlayer.h" />
+    <ClInclude Include="src\general\PlayerCommands.h" />
     <ClInclude Include="src\general\utils.h" />
-    <ClInclude Include="src\general\Listener.h" />
     <ClInclude Include="src\general\MusicPlayer.h" />
     <ClInclude Include="src\general\RawInputKeyboard.h" />
     <ClInclude Include="src\general\shokoDB.h" />

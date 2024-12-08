@@ -1,8 +1,10 @@
 #pragma once
 #include <QThread>
 #include <QMutex>
-#include "Listener.h"
 #include "sqliteDB.h"
+#include "BasePlayer.h"
+#include "MpcPlayer.h"
+#include <QSharedPointer>
 
 class MainApp;
 
@@ -18,21 +20,21 @@ public:
     MainApp *App = nullptr;
     sqliteDB* db = nullptr;
     HWND old_foreground_window = nullptr;
-    std::shared_ptr<Listener> mainListener = nullptr;
-    std::shared_ptr <std::chrono::microseconds> mainListener_time_start = nullptr;
-    QList<std::shared_ptr<Listener>> Listeners = QList<std::shared_ptr<Listener>>();
+    QSharedPointer<BasePlayer> mainPlayer = nullptr;
+    std::shared_ptr <std::chrono::microseconds> mainPlayer_time_start = nullptr;
+    QList<QSharedPointer<BasePlayer>> Players = QList<QSharedPointer<BasePlayer>>();
     VideoWatcherQt(MainApp* App, QObject* parent = nullptr);
-    std::shared_ptr<Listener> newListener(QString path, int video_id);
-    void clearData(bool include_mainlistener);
-    void setMainListener(std::shared_ptr<Listener> listener);
-    void clearMainListener();
+    QSharedPointer<BasePlayer> newPlayer(QString path, int video_id);
+    void clearData(bool include_mainplayer);
+    void setMainPlayer(QSharedPointer<BasePlayer> player);
+    void clearMainPlayer();
     void clearAfterMainVideoEnd();
     void toggle_window();
     void incrementTimeWatchedTotal(int value);
     void run() override;
     ~VideoWatcherQt();
 signals:
-    void updateProgressBarSignal(double position,double duration, std::shared_ptr<Listener> listener, bool running);
+    void updateProgressBarSignal(double position,double duration, QSharedPointer<BasePlayer> player, bool running);
     void updateTaskbarIconSignal(bool watching);
     void updateMusicPlayerSignal(bool flag);
 };

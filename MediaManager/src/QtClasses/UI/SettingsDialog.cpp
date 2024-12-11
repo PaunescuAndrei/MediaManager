@@ -109,10 +109,6 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 		this->ui.minusCatRadioBtn->setChecked(true);
 	else if(mw->App->config->get("current_db") == "PLUS")
 		this->ui.plusCatRadioBtn->setChecked(true);
-	if (mw->App->config->get_bool("random_next"))
-		this->ui.randomNext->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.randomNext->setCheckState(Qt::CheckState::Unchecked);
 	if (mw->App->config->get_bool("single_instance"))
 		this->ui.singleInstance->setCheckState(Qt::CheckState::Checked);
 	else
@@ -121,10 +117,6 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 		this->ui.numlockOnly->setCheckState(Qt::CheckState::Checked);
 	else
 		this->ui.numlockOnly->setCheckState(Qt::CheckState::Unchecked);
-	if (mw->App->config->get_bool("update_watched_state"))
-		this->ui.updateWatchedState->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.updateWatchedState->setCheckState(Qt::CheckState::Unchecked);
 	this->ui.SVspinBox->setValue(mw->App->db->getMainInfoValue("sv_target_count", "ALL","0").toInt());
 	this->oldSVmax = this->ui.SVspinBox->value();
 	connect(this->ui.CalculateSVcountButton, &QPushButton::clicked, this, [mw, this] {

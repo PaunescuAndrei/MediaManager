@@ -205,6 +205,11 @@
                   </item>
                   <item>
                    <widget class="QPushButton" name="tags_button">
+                    <property name="font">
+                     <font>
+                      <pointsize>10</pointsize>
+                     </font>
+                    </property>
                     <property name="text">
                      <string>Tags</string>
                     </property>
@@ -219,6 +224,33 @@
                     </property>
                     <property name="text">
                      <string>Settings</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QToolButton" name="update_watched_button">
+                    <property name="minimumSize">
+                     <size>
+                      <width>0</width>
+                      <height>26</height>
+                     </size>
+                    </property>
+                    <property name="font">
+                     <font>
+                      <pointsize>10</pointsize>
+                     </font>
+                    </property>
+                    <property name="toolTip">
+                     <string>Update Watched to &quot;Yes&quot;</string>
+                    </property>
+                    <property name="text">
+                     <string>UW</string>
+                    </property>
+                    <property name="checkable">
+                     <bool>true</bool>
+                    </property>
+                    <property name="toolButtonStyle">
+                     <enum>Qt::ToolButtonStyle::ToolButtonTextOnly</enum>
                     </property>
                    </widget>
                   </item>
@@ -291,7 +323,7 @@
                       <x>0</x>
                       <y>0</y>
                       <width>597</width>
-                      <height>68</height>
+                      <height>69</height>
                      </rect>
                     </property>
                     <property name="sizePolicy">

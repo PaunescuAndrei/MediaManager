@@ -110,16 +110,10 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     this->ui.currentVideoScrollArea->installEventFilter(new scrollAreaEventFilter(this->ui.currentVideoScrollArea));
 
     this->ui.watchedTimeFrame->setMainWindow(this);
-    this->ui.next_button->setText(this->App->config->get_bool("random_next") ? "Next (R)" : "Next");
-    if (this->App->config->get("get_random_mode") == "All") {
-        this->ui.random_button->setText("Get Random (All)");
-    }
-    else if (this->App->config->get("get_random_mode") == "Filtered") {
-        this->ui.random_button->setText("Get Random (F)");
-    }
-    else {
-        this->ui.random_button->setText("Get Random");
-    }
+    this->initNextButtonMode(this->ui.next_button);
+    this->initRandomButtonMode(this->ui.random_button);
+    connect(this->ui.update_watched_button, &QToolButton::toggled, this, &MainWindow::setCheckedUpdateWatchedToggleButton);
+    this->initUpdateWatchedToggleButton();
     this->ui.shoko_button->setMainWindow(this);
 
     DateItemDelegate* datedelegate = new DateItemDelegate(this->ui.videosWidget,"dd/MM/yyyy hh:mm");
@@ -186,7 +180,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     });
 
     connect(this->ui.random_button, &QPushButton::clicked, this, [this] {
-        bool all = this->App->config->get("get_random_mode") == "All";
+        bool all = this->App->config->get(this->getRandomButtonConfigKey()) == "All";
         bool video_changed = this->randomVideo(all);
         if (this->App->VW->mainPlayer and video_changed) {
             this->changePlayerVideo(this->App->VW->mainPlayer, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
@@ -218,10 +212,10 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         this->TagsDialogButton();
     });
     connect(this->ui.next_button, &QPushButton::clicked, this, [this] {
-        this->NextButtonClicked(true, this->App->config->get_bool("update_watched_state"));
+        this->NextButtonClicked(true, this->getCheckedUpdateWatchedToggleButton());
     });
     connect(this->ui.next_button, &customQButton::middleClicked, this, [this] {
-        this->NextButtonClicked(false, this->App->config->get_bool("update_watched_state"));
+        this->NextButtonClicked(false, this->getCheckedUpdateWatchedToggleButton());
     });
     connect(this->ui.next_button, &customQButton::rightClicked, this, [this] {
         customQButton* buttonSender = qobject_cast<customQButton*>(sender());
@@ -737,8 +731,8 @@ QMenu* MainWindow::trayIconContextMenu(QWidget* parent) {
     traycontextmenu->addAction("Watch", [this] {
         this->watchCurrent();
         });
-    traycontextmenu->addAction(this->App->config->get_bool("random_next") ? "Next (R)" : "Next", [this] {
-        this->NextButtonClicked(true, this->App->config->get_bool("update_watched_state"));
+    traycontextmenu->addAction(this->App->config->get_bool(this->getNextButtonConfigKey()) ? "Next (R)" : "Next", [this] {
+        this->NextButtonClicked(true, this->getCheckedUpdateWatchedToggleButton());
     });
     traycontextmenu->addAction(QString("Change (%1)").arg(this->getCategoryName()), [this] {
         this->switchCurrentDB();
@@ -1066,7 +1060,7 @@ void MainWindow::NextButtonClicked(bool increment, bool update_watched_state) {
 }
 
 void MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state) {
-    bool video_changed = this->NextVideo(this->App->config->get_bool("random_next"), increment, update_watched_state);
+    bool video_changed = this->NextVideo(this->App->config->get_bool(this->getNextButtonConfigKey()), increment, update_watched_state);
     if (player) {
         this->changePlayerVideo(player, this->ui.currentVideo->path, this->ui.currentVideo->id, 0);
     }
@@ -1589,10 +1583,6 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         config->set("current_db", "MINUS");
     if (dialog->ui.plusCatRadioBtn->isChecked())
         config->set("current_db", "PLUS");
-    if (dialog->ui.randomNext->checkState() == Qt::CheckState::Checked)
-        config->set("random_next", "True");
-    else if (dialog->ui.randomNext->checkState() == Qt::CheckState::Unchecked)
-        config->set("random_next", "False");
     if (dialog->ui.singleInstance->checkState() == Qt::CheckState::Checked) {
         if (this->App->instanceServer == nullptr) {
             this->App->startSingleInstanceServer(QString::fromStdString(utils::getAppId(VERSION_TEXT)));
@@ -1612,12 +1602,6 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     else if (dialog->ui.numlockOnly->checkState() == Qt::CheckState::Unchecked) {
         this->App->numlock_only_on = false;
         config->set("numlock_only_on", "False");
-    }
-    if (dialog->ui.updateWatchedState->checkState() == Qt::CheckState::Checked) {
-        config->set("update_watched_state", "True");
-    }
-    else if (dialog->ui.updateWatchedState->checkState() == Qt::CheckState::Unchecked) {
-        config->set("update_watched_state", "False");
     }
     if (dialog->ui.SVspinBox->value() != dialog->oldSVmax) {
         this->App->db->setMainInfoValue("sv_target_count", "ALL", QString::number(dialog->ui.SVspinBox->value()));
@@ -1707,7 +1691,6 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     }
     config->set("sound_effects_chain_chance", QString::number(dialog->ui.soundEffectsChainChance->value()));
     this->App->soundPlayer->effect_chain_chance = dialog->ui.soundEffectsChainChance->value() / 100.0;
-    this->ui.next_button->setText(config->get_bool("random_next") ? "Next (R)" : "Next");
 
     int new_time_watched_limit = (dialog->ui.MinutesSpinBox->value() * 60) + dialog->ui.SecondsSpinBox->value();
     if (this->time_watched_limit != new_time_watched_limit) {
@@ -1839,7 +1822,7 @@ bool MainWindow::randomVideo(bool watched_all, QStringList vid_type_include, QSt
                     settings.insert("types_exclude", QJsonArray::fromStringList(vid_type_exclude));
             }
             QString item_name;
-            if (this->App->config->get("get_random_mode") == "Filtered") {
+            if (this->App->config->get(this->getRandomButtonConfigKey()) == "Filtered") {
                 item_name = this->App->db->getRandomVideo(this->App->currentDB, settings);
             }
             else {
@@ -1931,14 +1914,14 @@ void MainWindow::showEndOfVideoDialog() {
                         this->App->db->updateVideoProgress(this->App->VW->mainPlayer->video_id, this->App->VW->mainPlayer->position);
                     }
                     this->App->VW->mainPlayer->position = -1;
-                    this->NextButtonClicked(this->App->VW->mainPlayer, true, this->App->config->get_bool("update_watched_state"));
+                    this->NextButtonClicked(this->App->VW->mainPlayer, true, this->getCheckedUpdateWatchedToggleButton());
                     this->position = 0;
                 }
                 else if (result == finishDialog::Skip) {
                     //Skip button
                     this->App->VW->mainPlayer->change_in_progress = true;
                     this->App->VW->mainPlayer->position = -1;
-                    this->NextButtonClicked(this->App->VW->mainPlayer, false, this->App->config->get_bool("update_watched_state"));
+                    this->NextButtonClicked(this->App->VW->mainPlayer, false, this->getCheckedUpdateWatchedToggleButton());
                     this->position = 0;
                 }
                 delete this->finish_dialog; // using deletelater causes some warning because it is already deleted by qt
@@ -2233,6 +2216,9 @@ void MainWindow::switchCurrentDB(QString db) {
     this->UpdateWindowTitle();
     this->init_icons();
     this->initListDetails();
+    this->initNextButtonMode(this->ui.next_button);
+    this->initRandomButtonMode(this->ui.random_button);
+    this->initUpdateWatchedToggleButton();
     this->refreshVideosWidget();
     this->refreshHeadersVisibility();
     if (this->toggleDatesFlag)
@@ -2242,6 +2228,33 @@ void MainWindow::switchCurrentDB(QString db) {
     if(player != nullptr){
         this->changePlayerVideo(player, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
     }
+}
+
+void MainWindow::initUpdateWatchedToggleButton() {
+    QString config_key = this->getUpdateWatchedToggleButtonConfigKey();
+    this->ui.update_watched_button->setChecked(this->App->config->get_bool(config_key));
+}
+
+void MainWindow::setCheckedUpdateWatchedToggleButton(bool checked) {
+    QString config_key = this->getUpdateWatchedToggleButtonConfigKey();
+    this->App->config->set(config_key, utils::bool_to_text_qt(checked));
+    this->ui.update_watched_button->setChecked(checked);
+    this->App->config->save_config();
+}
+
+QString MainWindow::getUpdateWatchedToggleButtonConfigKey() {
+    if (this->App->currentDB == "PLUS") {
+        return "plus_update_watched";
+    }
+    else if (this->App->currentDB == "MINUS") {
+        return "minus_update_watched";
+    }
+    return "";
+}
+
+bool MainWindow::getCheckedUpdateWatchedToggleButton() {
+    QString config_key = this->getUpdateWatchedToggleButtonConfigKey();
+    return this->App->config->get_bool(config_key);
 }
 
 void MainWindow::selectCurrentItem(QTreeWidgetItem* item,bool selectcurrent) {
@@ -2333,43 +2346,77 @@ int MainWindow::getCounterVar() {
     return this->App->db->getMainInfoValue("counterVar", "ALL", "0").toInt();
 }
 
+void MainWindow::initNextButtonMode(customQButton* nextbutton) {
+    QString config_key = this->getNextButtonConfigKey();
+    nextbutton->setText(this->App->config->get_bool(config_key) ? "Next (R)" : "Next");
+}
+
+bool MainWindow::isNextButtonRandom() {
+    if (this->App->currentDB == "PLUS") {
+        return this->App->config->get_bool("plus_random_next");
+    }
+    else if (this->App->currentDB == "MINUS") {
+        return this->App->config->get_bool("minus_random_next");
+    }
+    return true;
+}
+
+QString MainWindow::getNextButtonConfigKey() {
+    if (this->App->currentDB == "PLUS") {
+        return "plus_random_next";
+    }
+    else if (this->App->currentDB == "MINUS") {
+        return "minus_random_next";
+    }
+    return "";
+}
+
 void MainWindow::switchNextButtonMode(customQButton* nextbutton) {
-    this->App->config->set("random_next", utils::bool_to_text_qt(!this->App->config->get_bool("random_next")));
+    QString config_key = this->getNextButtonConfigKey();
+    this->App->config->set(config_key, utils::bool_to_text_qt(not this->App->config->get_bool(config_key)));
     if (nextbutton != this->ui.next_button)
-        this->ui.next_button->setText(this->App->config->get_bool("random_next") ? "Next (R)" : "Next");
-    nextbutton->setText(this->App->config->get_bool("random_next") ? "Next (R)" : "Next");
+        this->initNextButtonMode(this->ui.next_button);
+    this->initNextButtonMode(nextbutton);
     this->App->config->save_config();
 }
 
+QString MainWindow::getRandomButtonConfigKey() {
+    if (this->App->currentDB == "PLUS") {
+        return "plus_get_random_mode";
+    }
+    else if (this->App->currentDB == "MINUS") {
+        return "minus_get_random_mode";
+    }
+    return "";
+}
+
+void MainWindow::initRandomButtonMode(customQButton* randombutton) {
+    QString config_key = this->getRandomButtonConfigKey();
+    if (this->App->config->get(config_key) == "All") {
+        randombutton->setText("Get Random (All)");
+    }
+    else if (this->App->config->get(config_key) == "Filtered") {
+        randombutton->setText("Get Random (F)");
+    }
+    else {
+        randombutton->setText("Get Random");
+    }
+}
+
 void MainWindow::switchRandomButtonMode(customQButton* randombutton) {
-    QString mode = this->App->config->get("get_random_mode");
+    QString config_key = this->getRandomButtonConfigKey();
+    QString mode = this->App->config->get(config_key);
     if (mode == "Normal")
         mode = "Filtered";
     else if (mode == "Filtered")
         mode = "All";
     else
         mode = "Normal";
-    this->App->config->set("get_random_mode", mode);
+    this->App->config->set(config_key, mode);
     if (randombutton != this->ui.random_button) {
-        if (this->App->config->get("get_random_mode") == "All") {
-            this->ui.random_button->setText("Get Random (All)");
-        }
-        else if (this->App->config->get("get_random_mode") == "Filtered") {
-            this->ui.random_button->setText("Get Random (F)");
-        }
-        else {
-            this->ui.random_button->setText("Get Random");
-        }
+        this->initRandomButtonMode(this->ui.random_button);
     }
-    if (this->App->config->get("get_random_mode") == "All") {
-        randombutton->setText("Get Random (All)");
-    }
-    else if (this->App->config->get("get_random_mode") == "Filtered") {
-        randombutton->setText("Get Random (F)");
-    }
-    else {
-        randombutton->setText("Get Random");
-    }
+    this->initRandomButtonMode(randombutton);
     this->App->config->save_config();
 }
 

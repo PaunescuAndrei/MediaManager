@@ -29,9 +29,9 @@
       <property name="geometry">
        <rect>
         <x>0</x>
-        <y>-206</y>
+        <y>0</y>
         <width>690</width>
-        <height>697</height>
+        <height>645</height>
        </rect>
       </property>
       <layout class="QHBoxLayout" name="horizontalLayout_8">
@@ -92,13 +92,6 @@
                </widget>
               </item>
              </layout>
-            </item>
-            <item>
-             <widget class="QCheckBox" name="randomNext">
-              <property name="text">
-               <string>Random Next</string>
-              </property>
-             </widget>
             </item>
             <item>
              <widget class="QWidget" name="widget" native="true">
@@ -203,13 +196,6 @@
              <widget class="QCheckBox" name="numlockOnly">
               <property name="text">
                <string>Numlock Only Hotkey</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QCheckBox" name="updateWatchedState">
-              <property name="text">
-               <string>Update Watched state to &quot;Yes&quot; when pressing Next</string>
               </property>
              </widget>
             </item>

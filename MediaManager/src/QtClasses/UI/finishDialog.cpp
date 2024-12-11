@@ -14,7 +14,7 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 {
 	ui.setupUi(this);
 	this->setWindowModality(Qt::NonModal);
-	this->ui.NextButton->setText(MW->App->config->get_bool("random_next") ? "Next (R)" : "Next");
+	MW->initNextButtonMode(this->ui.NextButton);
 	connect(this->ui.NextButton, &customQButton::rightClicked, this, [this,MW] {
 		if (MW) {
 			customQButton* buttonSender = qobject_cast<customQButton*>(sender());

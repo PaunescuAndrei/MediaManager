@@ -75,11 +75,17 @@ public:
     void openStats();
     void populateList(bool selectcurrent = true);
     void switchNextButtonMode(customQButton* nextbutton);
+    QString getRandomButtonConfigKey();
+    void initRandomButtonMode(customQButton* randombutton);
     void switchRandomButtonMode(customQButton* randombutton);
     void updateSortConfig();
     void filterVisibilityItem(QTreeWidgetItem* item, QString watched_option, QStringList& mixed_done, QString search_text);
     void addWatchedDialogButton();
     void switchCurrentDB(QString db = "");
+    void initUpdateWatchedToggleButton();
+    void setCheckedUpdateWatchedToggleButton(bool checked);
+    QString getUpdateWatchedToggleButtonConfigKey();
+    bool getCheckedUpdateWatchedToggleButton();
     void refreshVideosWidget(bool selectcurrent = true, bool remember_selected = false);
     void watchSelected(int video_id, QString path);
     void watchCurrent();
@@ -111,6 +117,9 @@ public:
     void checktimeWatchedIncrement();
     void incrementCounterVar(int value = 1);
     int getCounterVar();
+    void initNextButtonMode(customQButton* nextbutton);
+    bool isNextButtonRandom();
+    QString getNextButtonConfigKey();
     void setCounterVar(int value);
     bool randomVideo(bool watched_all = true, QStringList vid_type_include = {}, QStringList vid_type_exclude = {});
     void refreshCurrentVideo();

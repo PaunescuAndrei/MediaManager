@@ -2,6 +2,7 @@
 #include <QMediaPlayer>
 #include <QAudioOutput>
 #include <QStringList>
+#include <QMediaDevices>
 
 class MainApp;
 
@@ -11,6 +12,7 @@ public:
 	MainApp* App = nullptr;
 	QMediaPlayer *player = nullptr;
 	QAudioOutput *audioOutput = nullptr;
+	QMediaDevices* media_devices = nullptr;
 	bool startingSoundFlag = true;
 	bool loop = false;
 	QStringList playlist = QStringList();

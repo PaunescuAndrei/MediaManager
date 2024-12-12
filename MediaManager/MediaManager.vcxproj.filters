@@ -277,9 +277,6 @@
     <ClInclude Include="src\general\shokoDB.h">
       <Filter>Header Files\general</Filter>
     </ClInclude>
-    <ClInclude Include="src\general\SoundPlayer.h">
-      <Filter>Header Files\general</Filter>
-    </ClInclude>
     <ClInclude Include="src\general\sqliteDB.h">
       <Filter>Header Files\general</Filter>
     </ClInclude>
@@ -338,6 +335,9 @@
       <Filter>Header Files\thirdparty</Filter>
     </ClInclude>
     <ClInclude Include="src\general\PlayerCommands.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\SoundPlayer.h">
       <Filter>Header Files\general</Filter>
     </ClInclude>
   </ItemGroup>

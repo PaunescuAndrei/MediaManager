@@ -5,12 +5,14 @@
 #include <QObject>
 #include <QMediaPlayer>
 #include <QStringList>
+#include <QMediaDevices>
 
 class QSoundEffect;
 
 class SoundPlayer
 {
 public:
+	QMediaDevices* media_devices = nullptr;
 	QObject* parent = nullptr;
 	qreal volume;
 	bool running = false;

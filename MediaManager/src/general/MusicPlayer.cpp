@@ -15,7 +15,9 @@ MusicPlayer::MusicPlayer(MainApp* App)
 {
 	this->App = App;
 	this->player = new QMediaPlayer(App);
+	this->media_devices = new QMediaDevices(App);
 	this->audioOutput = new QAudioOutput(App);
+	this->audioOutput->setDevice(QMediaDevices::defaultAudioOutput());
 	this->audioOutput->setMuted(true);
 	this->player->setAudioOutput(this->audioOutput);
 	this->audioOutput->setVolume(utils::volume_convert(5));
@@ -23,6 +25,12 @@ MusicPlayer::MusicPlayer(MainApp* App)
 	QObject::connect(this->player, &QMediaPlayer::mediaStatusChanged, [=](QMediaPlayer::MediaStatus status) {this->mediaStatusChanged(status); });
 	QObject::connect(this->player, &QMediaPlayer::durationChanged, [=](qint64 duration) {this->length = duration/1000.0; });
 	//QObject::connect(this->player, &QMediaPlayer::positionChanged, [=](qint64 position) {this->position = position / 1000.0; });
+	QObject::connect(this->media_devices, &QMediaDevices::audioOutputsChanged, [this]() {
+		QAudioDevice default_device = QMediaDevices::defaultAudioOutput();
+		if (this->player and this->player->audioOutput() and this->player->audioOutput()->device() != default_device) {
+			this->player->audioOutput()->setDevice(default_device);
+		}
+	});
 }
 
 void MusicPlayer::init(QString initTrack, QString trackPlaylistFolder, bool loop,bool random_start, bool startingSoundEffect)
@@ -170,4 +178,5 @@ MusicPlayer::~MusicPlayer()
 {
 	delete this->player;
 	delete this->audioOutput;
+	this->media_devices->deleteLater();
 }

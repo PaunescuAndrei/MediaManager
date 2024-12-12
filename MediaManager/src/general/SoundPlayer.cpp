@@ -7,6 +7,7 @@
 #include "definitions.h"
 
 SoundPlayer::SoundPlayer(QObject* parent ,int volume) {
+    this->media_devices = new QMediaDevices(this->parent);
 	this->parent = parent;
     this->volume = utils::volume_convert(volume);
     this->loadSoundEffects();
@@ -16,6 +17,13 @@ QMediaPlayer* SoundPlayer::get_player()
 {
     QMediaPlayer* player = new QMediaPlayer(this->parent);
     QAudioOutput* audioOutput = new QAudioOutput(player);
+    audioOutput->setDevice(QMediaDevices::defaultAudioOutput());
+    QObject::connect(this->media_devices, &QMediaDevices::audioOutputsChanged, player, [player]() {
+        QAudioDevice default_device = QMediaDevices::defaultAudioOutput();
+        if (player and player->audioOutput() and player->audioOutput()->device() != default_device) {
+            player->audioOutput()->setDevice(default_device);
+        }
+    });
     audioOutput->setVolume(this->volume);
     player->setAudioOutput(audioOutput);
     return player;
@@ -26,10 +34,7 @@ QMediaPlayer* SoundPlayer::play(QString sound_path, bool auto_delete, bool log)
     if (this->running && !sound_path.isEmpty()) {
         if (log)
             qMainApp->logger->log(QString("Playing SoundEffect \"%1\"").arg(sound_path), "SoundEffect", sound_path);
-        QMediaPlayer* player = new QMediaPlayer(this->parent);
-        QAudioOutput* audioOutput = new QAudioOutput(player);
-        audioOutput->setVolume(this->volume);
-        player->setAudioOutput(audioOutput);
+        QMediaPlayer* player = this->get_player();
         return this->play(player, sound_path, auto_delete, log);
     }
     return nullptr;
@@ -187,4 +192,5 @@ void SoundPlayer::start()
 
 SoundPlayer::~SoundPlayer()
 {
+    this->media_devices->deleteLater();
 }

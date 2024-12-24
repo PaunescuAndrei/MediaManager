@@ -96,7 +96,7 @@ LRESULT MpcPlayer::OnCopyData(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
                         this->video_path = items.value(3);
                         QString val = items.value(4);
                         if (!val.isEmpty()) {
-                            this->duration = val.toDouble();
+                            this->duration = val.toDouble(); // this doesnt work when changing video to the same video
                         }
                     }
                     this->nowplaying = nowplaying;
@@ -270,8 +270,10 @@ void MpcPlayer::run() {
                     this->target_video_path = command->video_path;
                     this->video_id = command->video_id;
                     this->position = -1;
-                    this->duration = -1;
-                    this->paused = false;
+                    if (this->video_path != this->target_video_path) { // dirty fix, this wont work if the file has changed and we try to load it again
+                        this->duration = -1;
+                        this->paused = false;
+                    }
                 }
                 if (command->video_path.isEmpty()) {
                     this->send_message(CMD_CLOSEFILE);
@@ -290,11 +292,15 @@ void MpcPlayer::run() {
                         this->msleep(250);
                         continue;
                     }
-                    if (command->position >= 0 and abs(this->position - command->position) > 0.5) {
+                    if (command->position >= 0 and abs(this->position - command->position) > 0.1) {
                         this->change_in_progress_seek = true;
                         this->send_message(CMD_SETPOSITION, QString::number(command->position));
                         this->msleep(250);
                         continue;
+                    }
+                    else if (this->change_in_progress_seek == true and abs(this->position - command->position) <= 0.1) {
+                        // fix if change_in_progress_seek == true and mpc notify seek event wasnt sent causing infinite loop
+                        this->change_in_progress_seek = false;
                     }
                     if (this->change_in_progress_video == false and this->change_in_progress_pause == false and this->change_in_progress_seek == false) {
                         this->change_in_progress = false;

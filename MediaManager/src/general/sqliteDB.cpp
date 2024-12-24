@@ -37,7 +37,7 @@ void sqliteDB::enableForeignKeys()
 QList<QTreeWidgetItem*> sqliteDB::getVideos(QString category) {
     QSqlQuery query = QSqlQuery(this->db);
 
-    QString query_string = "SELECT v.id,v.path,GROUP_CONCAT(t.name, ', ' ORDER BY t.display_priority ASC, t.id) AS tags,v.type,v.watched,v.views,v.rating,v.author,v.name,v.date_created,v.last_watched from videodetails v "
+    QString query_string = "SELECT v.id,v.path,GROUP_CONCAT(t.name, ', ' ORDER BY t.display_priority ASC, t.id) AS tags,v.type,v.watched,v.views,v.rating,v.author,v.name, datetime(v.date_created, 'localtime'), datetime(v.last_watched, 'localtime') from videodetails v "
         "LEFT JOIN tags_relations tr ON v.id = tr.video_id "
         "LEFT JOIN tags t ON tr.tag_id = t.id WHERE v.category = :category "
         "GROUP BY v.id; ";

@@ -406,6 +406,13 @@
           </widget>
          </item>
          <item>
+          <widget class="QPushButton" name="replayButton">
+           <property name="text">
+            <string>Replay</string>
+           </property>
+          </widget>
+         </item>
+         <item>
           <widget class="QPushButton" name="tagsButton">
            <property name="text">
             <string>Tags</string>

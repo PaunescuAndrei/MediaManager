@@ -37,7 +37,7 @@ public:
     void deleteVideo(int video_id);
     void updateWatchedState(int video_id, QString watched, bool increment = false, bool update_last_watched = false);
     void updateWatchedState(int video_id, double progress, QString watched,bool increment = false, bool update_last_watched = false);
-    void incrementVideoViews(int video_id, int value);
+    void incrementVideoViews(int video_id, int value, bool update_last_watched = false);
     void updateType(int video_id, QString type_val);
     void updateAuthor(int video_id, QString author);
     void updateName(int video_id, QString name);

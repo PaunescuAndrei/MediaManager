@@ -1909,12 +1909,21 @@ void MainWindow::showEndOfVideoDialog() {
             connect(this->finish_dialog, &finishDialog::finished, this, [this](int result) {
                 if (result == finishDialog::Accepted) {
                     this->App->VW->mainPlayer->change_in_progress = true;
-                    //qDebug() << "clicked" << this->position << this->App->VW->mainPlayer->currentPosition;
                     if (this->App->VW->mainPlayer && this->App->VW->mainPlayer->position != -1) {
                         this->App->db->updateVideoProgress(this->App->VW->mainPlayer->video_id, this->App->VW->mainPlayer->position);
                     }
                     this->App->VW->mainPlayer->position = -1;
                     this->NextButtonClicked(this->App->VW->mainPlayer, true, this->getCheckedUpdateWatchedToggleButton());
+                    this->position = 0;
+                }
+                else if (result == finishDialog::Replay) {
+                    //Replay button
+                    this->App->VW->mainPlayer->queue.enqueue(std::make_shared<MpcDirectCommand>(CMD_SETPOSITION, "0"));
+                    this->App->db->incrementVideoViews(this->App->VW->mainPlayer->video_id, 1, true);
+                    if (this->ui.videosWidget->last_selected and this->ui.videosWidget->last_selected->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt() == this->App->VW->mainPlayer->video_id) {
+                        this->ui.videosWidget->last_selected->setText(ListColumns["VIEWS_COLUMN"], QString::number(this->ui.videosWidget->last_selected->text(ListColumns["VIEWS_COLUMN"]).toInt() + 1));
+                        this->ui.videosWidget->last_selected->setData(ListColumns["LAST_WATCHED_COLUMN"], Qt::DisplayRole, QDateTime::currentDateTime());
+                    }
                     this->position = 0;
                 }
                 else if (result == finishDialog::Skip) {

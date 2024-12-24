@@ -14,6 +14,9 @@ public:
     void wheelEvent(QWheelEvent* event) override;
     QTimer timer;
     Ui::finishDialog ui;
-    enum CustomDialogCode {Skip=100};
+    enum CustomDialogCode {
+        Skip = 100,
+        Replay = 101
+    };
 };
 

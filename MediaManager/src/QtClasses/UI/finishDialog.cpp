@@ -96,6 +96,7 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 	connect(this->ui.NextButton, &QPushButton::clicked, this, [this]() {this->timer.stop(); this->done(finishDialog::Accepted); } );
 	connect(this->ui.cancelButton, &QPushButton::clicked, this, [this]() {this->timer.stop(); this->done(finishDialog::Rejected); });
 	connect(this->ui.skipButton, &QPushButton::clicked, this, [this]() { this->timer.stop(); this->done(finishDialog::Skip); });
+	connect(this->ui.replayButton, &QPushButton::clicked, this, [this]() {this->timer.stop(); this->done(finishDialog::Replay); });
 
 	connect(&this->timer, &QTimer::timeout, this, [this] {
 		if (QGuiApplication::queryKeyboardModifiers() & Qt::AltModifier)

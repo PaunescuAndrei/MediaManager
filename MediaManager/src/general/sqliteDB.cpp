@@ -454,9 +454,14 @@ void sqliteDB::setViews(int video_id, int value) {
     }
 }
 
-void sqliteDB::incrementVideoViews(int video_id, int value) {
+void sqliteDB::incrementVideoViews(int video_id, int value, bool update_last_watched) {
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QString("UPDATE videodetails SET views = views + ? WHERE id = ?"));
+    QString main_query_string = "UPDATE videodetails SET views = views + ?";
+    QString update_last_watched_string = (update_last_watched) ? ", last_watched = CURRENT_TIMESTAMP" : "";
+    QString end_query_string = " WHERE id = ?";
+    QString final_string = main_query_string % update_last_watched_string % end_query_string;
+    query.prepare(final_string);
+
     query.addBindValue(QString::number(value));
     query.addBindValue(video_id);
     if (!query.exec()) {

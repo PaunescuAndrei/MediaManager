@@ -121,7 +121,7 @@ QPen& ProgressBarQLabel::pen()
 	return this->pen_;
 }
 bool ProgressBarQLabel::highlight_check() {
-	if (this->highlight_mode && this->progress() == this->maximum())
+	if (this->highlight_mode && this->progress() >= this->maximum())
 		return true;
 	else
 		return false;

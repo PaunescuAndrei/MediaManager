@@ -1918,12 +1918,25 @@ void MainWindow::showEndOfVideoDialog() {
                 }
                 else if (result == finishDialog::Replay) {
                     //Replay button
-                    this->App->VW->mainPlayer->queue.enqueue(std::make_shared<MpcDirectCommand>(CMD_SETPOSITION, "0"));
-                    this->App->db->incrementVideoViews(this->App->VW->mainPlayer->video_id, 1, true);
+                    this->App->db->db.transaction();
+                    if (this->App->currentDB == "MINUS") {
+                        this->incrementCounterVar(-1);
+                        this->sv_count++;
+                        this->ui.counterLabel->setProgress(sv_count);
+                        this->App->db->setMainInfoValue("sv_count", "ALL", QString::number(this->sv_count));
+                    }
+                    else if (this->App->currentDB == "PLUS") {
+                        this->incrementtimeWatchedIncrement(std::max(0.0, this->App->VW->mainPlayer->position));
+                        this->checktimeWatchedIncrement();
+                        this->updateWatchedProgressBar();
+                    }
                     if (this->ui.videosWidget->last_selected and this->ui.videosWidget->last_selected->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt() == this->App->VW->mainPlayer->video_id) {
                         this->ui.videosWidget->last_selected->setText(ListColumns["VIEWS_COLUMN"], QString::number(this->ui.videosWidget->last_selected->text(ListColumns["VIEWS_COLUMN"]).toInt() + 1));
                         this->ui.videosWidget->last_selected->setData(ListColumns["LAST_WATCHED_COLUMN"], Qt::DisplayRole, QDateTime::currentDateTime());
                     }
+                    this->App->db->incrementVideoViews(this->App->VW->mainPlayer->video_id, 1, true);
+                    this->App->db->db.commit();
+                    this->App->VW->mainPlayer->queue.enqueue(std::make_shared<MpcDirectCommand>(CMD_SETPOSITION, "0"));
                     this->position = 0;
                 }
                 else if (result == finishDialog::Skip) {

@@ -69,12 +69,37 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     this->initRatingIcons();
     ui.setupUi(this);
 
-    int width = this->frameGeometry().width();
-    int height = this->frameGeometry().height();
+    // scale main window
+    // Define variables for aspect ratio and screen size fraction
+    float aspectRatioWidth = 16.0f;
+    float aspectRatioHeight = 9.0f;
+    float screenSizeFraction = 3.0f / 4.0f;
+
+    // Get screen geometry (size)
     QScreen* screen = this->App->primaryScreen();
     int screenWidth = screen->geometry().width();
     int screenHeight = screen->geometry().height();
-    this->setGeometry((screenWidth / 2) - (width / 2), (screenHeight / 2) - (height / 2), width, height);
+
+    // Calculate desired width and height based on aspect ratio and screen size fraction
+    int newWidth = screenWidth * screenSizeFraction;  // Fraction of screen width
+    int newHeight = newWidth * aspectRatioHeight / aspectRatioWidth;  // Maintain aspect ratio
+
+    // Ensure the height doesn't exceed the screen's height (in case of small screens)
+    if (newHeight > screenHeight * screenSizeFraction) {
+        newHeight = screenHeight * screenSizeFraction;
+        newWidth = newHeight * aspectRatioWidth / aspectRatioHeight;  // Adjust width to maintain aspect ratio
+    }
+
+    // Set the window geometry (position and size)
+    this->setGeometry(
+        (screenWidth / 2) - (newWidth / 2), // Center the window horizontally
+        (screenHeight / 2) - (newHeight / 2), // Center the window vertically
+        newWidth, // Set the new width
+        newHeight  // Set the new height
+    );
+    //scale mascots
+    //this->ui.leftImg->setMinimumWidth(newWidth / 6.6);
+    //this->ui.rightImg->setMinimumWidth(newWidth / 6.6);
 
     this->ui.searchWidget->hide();
     new QShortcut(QKeySequence("F1"), this, [this] {this->switchCurrentDB(); });
@@ -1692,6 +1717,28 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     config->set("sound_effects_chain_chance", QString::number(dialog->ui.soundEffectsChainChance->value()));
     this->App->soundPlayer->effect_chain_chance = dialog->ui.soundEffectsChainChance->value() / 100.0;
 
+    config->set("random_seed", dialog->ui.seedLineEdit->text());
+    if (dialog->ui.seedCheckBox->checkState() == Qt::CheckState::Checked) {
+        config->set("random_use_seed", "True");
+    }
+    else if (dialog->ui.seedCheckBox->checkState() == Qt::CheckState::Unchecked) {\
+        config->set("random_use_seed", "False");
+    }
+
+    if (dialog->ui.weightedRandGroupBox->isChecked()) {
+        config->set("weighted_random", "True");
+    }
+    else {
+        config->set("weighted_random", "False");
+    }
+    config->set("random_general_bias", QString::number(dialog->ui.generalBiasSpinBox->value()));
+    config->set("random_views_bias", QString::number(dialog->ui.viewsBiasSpinBox->value()));
+    config->set("random_rating_bias", QString::number(dialog->ui.ratingBiasSpinBox->value()));
+    config->set("random_tags_bias", QString::number(dialog->ui.tagsBiasSpinBox->value()));
+    config->set("random_no_views_weight", QString::number(dialog->ui.noViewsSpinBox->value()));
+    config->set("random_no_ratings_weight", QString::number(dialog->ui.noRatingSpinBox->value()));
+    config->set("random_no_tags_weight", QString::number(dialog->ui.noTagsSpinBox->value()));
+
     int new_time_watched_limit = (dialog->ui.MinutesSpinBox->value() * 60) + dialog->ui.SecondsSpinBox->value();
     if (this->time_watched_limit != new_time_watched_limit) {
         this->time_watched_limit = new_time_watched_limit;
@@ -1803,13 +1850,47 @@ void MainWindow::settingsDialogButton()
     }
 }
 
+QString MainWindow::saltSeed(QString seed) {
+    seed = seed % this->ui.currentVideo->path % this->ui.totalListLabel->text() % this->ui.counterLabel->text();
+    if (this->ui.videosWidget->last_selected) {
+        seed = seed % this->ui.videosWidget->last_selected->text(ListColumns["VIEWS_COLUMN"]) % this->ui.videosWidget->last_selected->data(ListColumns["RATING_COLUMN"], CustomRoles::rating).toString();
+    }
+    return seed;
+}
+
+QString MainWindow::getRandomVideo(QString seed, bool weighted_random, QJsonObject settings) {
+    QList<VideoWeightedData> videos = this->App->db->getVideos(this->App->currentDB, settings);
+    if (!videos.isEmpty()) {
+        QRandomGenerator generator;
+        if (seed.isEmpty()) {
+            generator.seed(QRandomGenerator::global()->generate());
+        }
+        else {
+            generator.seed(utils::stringToSeed(this->saltSeed(seed)));
+        }
+        double biasGeneral = this->App->config->get("random_general_bias").toDouble();
+        double biasViews = this->App->config->get("random_views_bias").toDouble();
+        double biasRating = this->App->config->get("random_rating_bias").toDouble();
+        double biasTags = this->App->config->get("random_tags_bias").toDouble();
+        double noViewsWeight = this->App->config->get("random_no_views_weight").toDouble();
+        double noRatingWeight = this->App->config->get("random_no_ratings_weight").toDouble();
+        double noTagsWeight = this->App->config->get("random_no_tags_weight").toDouble();
+
+        if (not weighted_random) {
+            biasGeneral = 0;
+        }
+        return utils::weightedRandomChoice(videos, generator, biasViews, biasRating, biasTags, biasGeneral, noViewsWeight, noRatingWeight, noTagsWeight);
+    }
+    return "";
+}
+
 bool MainWindow::randomVideo(bool watched_all, QStringList vid_type_include, QStringList vid_type_exclude) {
     QTreeWidgetItem* root = this->ui.videosWidget->invisibleRootItem();
     QTreeWidgetItem* item = nullptr;
     int videos_count = root->childCount();
     if (videos_count > 0) {
         if (watched_all) {
-            int index = utils::randint(0, videos_count - 1);
+            int index = utils::randint(0, videos_count - 1, !this->App->config->get("random_seed").isEmpty() ? utils::stringToSeed(this->saltSeed(this->App->config->get("random_seed"))) : 0);
             item = root->child(index);
         }
         else {
@@ -1823,10 +1904,14 @@ bool MainWindow::randomVideo(bool watched_all, QStringList vid_type_include, QSt
             }
             QString item_name;
             if (this->App->config->get(this->getRandomButtonConfigKey()) == "Filtered") {
-                item_name = this->App->db->getRandomVideo(this->App->currentDB, settings);
+                item_name = this->getRandomVideo(this->App->config->get("random_seed"), this->App->config->get_bool("weighted_random"), settings);
             }
             else {
-                item_name = this->App->db->getRandomVideo(this->App->currentDB, "No", vid_type_include, vid_type_exclude);
+                FilterSettings default_settings = FilterSettings();
+                default_settings.json.insert("watched", QJsonArray{ "No" });
+                default_settings.json.insert("types_include", QJsonArray::fromStringList(vid_type_include));
+                default_settings.json.insert("types_exclude", QJsonArray::fromStringList(vid_type_exclude));
+                item_name = item_name = this->getRandomVideo(this->App->config->get("random_seed"), this->App->config->get_bool("weighted_random"), settings);
             }
             if (!item_name.isEmpty()) {
                 QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(item_name, Qt::MatchExactly, ListColumns["PATH_COLUMN"], 1);
@@ -2974,6 +3059,14 @@ bool MainWindow::event(QEvent* e)
         if (this->intro_played) {
             this->playSpecialSoundEffect();
         }
+    }
+    if (e->type() == QEvent::Resize) {
+        //scale mascots
+        QResizeEvent* resizeEvent = static_cast<QResizeEvent*>(e);
+        int windowWidth = resizeEvent->size().width();
+        int windowHeight = resizeEvent->size().height();
+        this->ui.leftImg->setMinimumWidth(windowWidth / 6.6);
+        this->ui.rightImg->setMinimumWidth(windowWidth / 6.6);
     }
     return QMainWindow::event(e);
 }

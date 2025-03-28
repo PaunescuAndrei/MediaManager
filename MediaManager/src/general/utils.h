@@ -17,6 +17,7 @@
 #include <QColor>
 #include "colorPaletteExtractor.h"
 #include <QStringList>
+#include <definitions.h>
 
 class MainApp;
 
@@ -33,8 +34,8 @@ namespace utils {
 	std::string formatSeconds(double total_seconds);
 	QString formatSecondsQt(double total_seconds);
 	bool hiddenCheck(QStringList &settings);
-	int randint(int start,int stop);
-	double randfloat(double start, double stop);
+	int randint(int start,int stop, quint32 seed = 0);
+	double randfloat(double start, double stop, quint32 seed = 0);
 	QList<std::string> getFiles(std::string directory,bool recursive = false);
 	QStringList getFilesQt(QString directory,bool recursive = false);
 	QList<std::string> getDirs(std::string directory, bool recursive = false);
@@ -66,6 +67,7 @@ namespace utils {
 	double get_luminance(QColor& color);
 	QColor complementary_color(QColor& color);
 	color_area& get_weighted_random_color(QList<color_area>& colors);
+	void measureExecutionTime(std::function<void()> func, const QString& message);
 
 	template <typename T>
 	inline void shuffle_qlist(QList<T>& list) {
@@ -86,4 +88,9 @@ namespace utils {
 		static std::mt19937 gen(rd());
 		return select_randomly(start, end, gen);
 	}
+
+	inline long double normalize(long double x, long double maxVal);
+	QList<long double> calculateWeights(const QList<VideoWeightedData>& items, double biasViews, double biasRating, double biasTags, double biasGeneral, long double maxViews, long double maxRating, long double maxTagsWeight, long double no_views_weight = 0, long double no_rating_weight = 0, long double no_tags_weight = 0);
+	QString weightedRandomChoice(const QList<VideoWeightedData>& items, QRandomGenerator& generator, double biasViews, double biasRating, double biasTags, double biasGeneral, long double no_views_weight = 0, long double no_rating_weight = 0, long double no_tags_weight = 0);
+	quint32 stringToSeed(const QString& textSeed);
 }

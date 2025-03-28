@@ -82,7 +82,17 @@ void Config::init_defaults() {
 		{"sound_effects_chain_playpause","True"},
 		{"sound_effects_chain_chance","100"},
 		{"time_watched_limit","600"},
-		{"numlock_only_on","True"}
+		{"numlock_only_on","True"},
+		{"random_use_seed","False"},
+		{"random_seed",""},
+		{"weighted_random","True"},
+		{"random_general_bias","2.0"},
+		{"random_views_bias","1.0"},
+		{"random_rating_bias","1.0"},
+		{"random_tags_bias","1.0"},
+		{"random_no_views_weight","1.0"},
+		{"random_no_ratings_weight","1.0"},
+		{"random_no_tags_weight","0.0"},
 	});
 }
 

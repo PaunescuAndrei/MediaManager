@@ -63,17 +63,29 @@ QString utils::getParentDirectoryName(QString path, int depth) {
 	return mainpath.dirName();
 }
 
-int utils::randint(int start, int stop) {
-	std::random_device seed;
-	std::mt19937 gen{ seed() };
-	std::uniform_int_distribution<int> distribution(start, stop);
+int utils::randint(int start, int stop, quint32 seed) {
+	QRandomGenerator generator;
+	if (seed == 0) {
+		generator.seed(QRandomGenerator::global()->generate());
+	}
+	else {
+		generator.seed(seed);
+	}
+	std::mt19937 gen{ generator.generate()};
+	std::uniform_int_distribution<> distribution(start, stop);
 	return distribution(gen);
 }
 
-double utils::randfloat(double start, double stop)
+double utils::randfloat(double start, double stop, quint32 seed)
 {
-	std::random_device seed;
-	std::mt19937 gen{ seed() };
+	QRandomGenerator generator;
+	if (seed == 0) {
+		generator.seed(QRandomGenerator::global()->generate());
+	}
+	else {
+		generator.seed(seed);
+	}
+	std::mt19937 gen{ generator.generate() };
 	std::uniform_real_distribution<> distribution(start, stop);
 	return distribution(gen);
 }
@@ -610,4 +622,80 @@ color_area& utils::get_weighted_random_color(QList<color_area>& colors) {
 	}
 	assert(!"should never get here");
 	return colors.first();
+}
+
+void utils::measureExecutionTime(std::function<void()> func, const QString& message) {
+	auto start = std::chrono::high_resolution_clock::now();
+
+	func();
+
+	auto end = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double, std::milli> elapsed = end - start;
+
+	qDebug() << message << "Elapsed Time:" << elapsed.count() << "ms";
+}
+
+long double utils::normalize(long double x, long double maxVal)
+{
+	return (maxVal > 0) ? x / maxVal : 0.0;
+}
+
+QList<long double> utils::calculateWeights(const QList<VideoWeightedData>& items, double biasViews, double biasRating, double biasTags, double biasGeneral, long double maxViews, long double maxRating, long double maxTagsWeight, long double no_views_weight, long double no_rating_weight, long double no_tags_weight)
+{
+	QList<long double> weights;
+	weights.reserve(items.size());
+
+	for (const auto& item : items) {
+		long double viewWeight = (item.views == 0) ? no_views_weight : normalize(item.views, maxViews);
+		long double ratingWeight = (item.rating == 0) ? no_rating_weight : normalize(item.rating, maxRating);
+		long double tagsWeight = (item.tagsWeight == 0) ? no_tags_weight : normalize(item.tagsWeight, maxTagsWeight);
+
+		long double weight = (biasViews * viewWeight) + (biasRating * ratingWeight) + (biasTags * tagsWeight);
+		weight = powl(weight, biasGeneral); // Apply general bias
+		weights.append(weight);
+	}
+
+	return weights;
+}
+
+QString utils::weightedRandomChoice(const QList<VideoWeightedData>& items, QRandomGenerator& generator, double biasViews, double biasRating, double biasTags, double biasGeneral, long double no_views_weight, long double no_rating_weight, long double no_tags_weight) {
+	if (items.empty()) return "";
+	// Calculate weights
+	QList<long double> weights;
+	if (biasGeneral == 0) {
+		weights.fill(0, items.size());
+	}
+	else {
+		long double maxViews = 0, maxRating = 0, maxTagWeight = 0;
+		for (size_t i = 0; i < items.size(); ++i) {
+			maxViews = std::max(maxViews, (long double)items[i].views);
+			maxRating = std::max(maxRating, (long double)items[i].rating);
+			maxTagWeight = std::max(maxTagWeight, (long double)items[i].tagsWeight);
+		}
+		weights = utils::calculateWeights(items, biasViews, biasRating, biasTags, biasGeneral, maxViews, maxRating, maxTagWeight, no_views_weight, no_rating_weight, no_tags_weight);
+	}
+
+	// Compute prefix sum for binary search
+	QList<long double> prefixSum(weights.size());
+	std::partial_sum(weights.begin(), weights.end(), prefixSum.begin());
+	long double totalWeight = prefixSum.back();
+
+	if (totalWeight == 0) return items[generator.bounded(int(items.size()))].path;
+
+	// Generate a random number and perform binary search
+	long double r = static_cast<long double>(generator.generateDouble()) * totalWeight;
+	auto it = std::lower_bound(prefixSum.begin(), prefixSum.end(), r);
+	size_t index = std::distance(prefixSum.begin(), it);
+	//qDebug() << (double)weights[index] << items[index].path;
+	return items[index].path;
+}
+
+quint32 utils::stringToSeed(const QString& textSeed) {
+	QByteArray hash = QCryptographicHash::hash(textSeed.toUtf8(), QCryptographicHash::Md5);
+	quint32 seed = 0;
+	// Convert first 4 bytes of hash into a number
+	for (int i = 0; i < 4; i++) {
+		seed = (seed << 8) | (static_cast<quint32>(hash[i]) & 0xFF);
+	}
+	return seed;
 }

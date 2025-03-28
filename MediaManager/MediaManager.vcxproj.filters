@@ -248,6 +248,9 @@
     <ClCompile Include="src\general\MpcPlayer.cpp">
       <Filter>Source Files\general</Filter>
     </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\WheelEventFilter.cpp">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\resource.h">
@@ -527,6 +530,9 @@
     </QtMoc>
     <QtMoc Include="src\general\BasePlayer.h">
       <Filter>Header Files\general</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\WheelEventFilter.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
   </ItemGroup>
   <ItemGroup>

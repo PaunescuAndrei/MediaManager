@@ -46,8 +46,7 @@ public:
     void insertVideo(QString path, QString category, QString name , QString author = "", QString type = "");
     void updateVideoProgress(int video_id, double progress);
     void updateItem(int video_id, QString new_path = "", QString new_author = "", QString new_name = "", QString new_type = "", QString new_category = "", QString new_progress = "", QString new_watched = "", QString new_views = "", QString new_rating = "");
-    QString getRandomVideo(QString category, QString watched, QStringList vid_type_include = {}, QStringList vid_type_exclude = {});
-    QString getRandomVideo(QString category, QJsonObject settings);
+    QList<VideoWeightedData> getVideos(QString category, QJsonObject settings);
     void resetDB(QString category = "ALL");
     void resetWatched(QString category, double progress = 0, QString watched = "No");
     void resetWatched(QString category, QJsonObject settings, double progress = 0, QString watched = "No");

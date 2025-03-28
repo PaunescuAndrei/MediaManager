@@ -11,6 +11,7 @@
 #include <QSpinBox>
 #include <QSignalBlocker>
 #include "definitions.h"
+#include "WheelEventFilter.h"
 
 SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 {
@@ -202,12 +203,109 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 		connect(radiobutton, &QRadioButton::toggled, this, [this] {this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(true); });
 	}
 
+	if (mw->App->config->get_bool("random_use_seed"))
+		this->ui.seedCheckBox->setCheckState(Qt::CheckState::Checked);
+	else
+		this->ui.seedCheckBox->setCheckState(Qt::CheckState::Unchecked);
+	this->ui.seedLineEdit->setText(mw->App->config->get("random_seed"));
+	this->ui.weightedRandGroupBox->setChecked(mw->App->config->get_bool("weighted_random"));
+	WheelEventFilter* filter = new WheelEventFilter(this);
+	this->ui.generalBiasSlider->installEventFilter(filter);
+	connect(this->ui.generalBiasSlider, &QSlider::valueChanged, this, [this](int value) {
+		this->ui.generalBiasSpinBox->blockSignals(true);
+		this->ui.generalBiasSpinBox->setValue(value / 100.0); 
+		this->ui.generalBiasSpinBox->blockSignals(false);
+	});
+	connect(this->ui.generalBiasSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+		this->ui.generalBiasSlider->blockSignals(true);
+		this->ui.generalBiasSlider->setValue(value * 100);
+		this->ui.generalBiasSlider->blockSignals(false);
+	});
+	this->ui.generalBiasSpinBox->setValue(mw->App->config->get("random_general_bias").toDouble());
+
+	this->ui.viewsBiasSlider->installEventFilter(filter);
+	connect(this->ui.viewsBiasSlider, &QSlider::valueChanged, this, [this](int value) {
+		this->ui.viewsBiasSpinBox->blockSignals(true);
+		this->ui.viewsBiasSpinBox->setValue(value / 100.0);
+		this->ui.viewsBiasSpinBox->blockSignals(false);
+	});
+	connect(this->ui.viewsBiasSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+		this->ui.viewsBiasSlider->blockSignals(true);
+		this->ui.viewsBiasSlider->setValue(value * 100);
+		this->ui.viewsBiasSlider->blockSignals(false);
+	});
+	this->ui.viewsBiasSpinBox->setValue(mw->App->config->get("random_views_bias").toDouble());
+
+	this->ui.ratingBiasSlider->installEventFilter(filter);
+	connect(this->ui.ratingBiasSlider, &QSlider::valueChanged, this, [this](int value) {
+		this->ui.ratingBiasSpinBox->blockSignals(true);
+		this->ui.ratingBiasSpinBox->setValue(value / 100.0);
+		this->ui.ratingBiasSpinBox->blockSignals(false);
+	});
+	connect(this->ui.ratingBiasSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+		this->ui.ratingBiasSlider->blockSignals(true);
+		this->ui.ratingBiasSlider->setValue(value * 100);
+		this->ui.ratingBiasSlider->blockSignals(false);
+	});
+	this->ui.ratingBiasSpinBox->setValue(mw->App->config->get("random_rating_bias").toDouble());
+
+	this->ui.tagsBiasSlider->installEventFilter(filter);
+	connect(this->ui.tagsBiasSlider, &QSlider::valueChanged, this, [this](int value) {
+		this->ui.tagsBiasSpinBox->blockSignals(true);
+		this->ui.tagsBiasSpinBox->setValue(value / 100.0);
+		this->ui.tagsBiasSpinBox->blockSignals(false);
+	});
+	connect(this->ui.tagsBiasSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+		this->ui.tagsBiasSlider->blockSignals(true);
+		this->ui.tagsBiasSlider->setValue(value * 100);
+		this->ui.tagsBiasSlider->blockSignals(false);
+	});
+	this->ui.tagsBiasSpinBox->setValue(mw->App->config->get("random_tags_bias").toDouble());
+
+	this->ui.noViewsSlider->installEventFilter(filter);
+	connect(this->ui.noViewsSlider, &QSlider::valueChanged, this, [this](int value) {
+		this->ui.noViewsSpinBox->blockSignals(true);
+		this->ui.noViewsSpinBox->setValue(value / 100.0);
+		this->ui.noViewsSpinBox->blockSignals(false);
+	});
+	connect(this->ui.noViewsSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+		this->ui.noViewsSlider->blockSignals(true);
+		this->ui.noViewsSlider->setValue(value * 100);
+		this->ui.noViewsSlider->blockSignals(false);
+	});
+	this->ui.noViewsSpinBox->setValue(mw->App->config->get("random_no_views_weight").toDouble());
+
+	this->ui.noRatingSlider->installEventFilter(filter);
+	connect(this->ui.noRatingSlider, &QSlider::valueChanged, this, [this](int value) {
+		this->ui.noRatingSpinBox->blockSignals(true);
+		this->ui.noRatingSpinBox->setValue(value / 100.0);
+		this->ui.noRatingSpinBox->blockSignals(false);
+	});
+	connect(this->ui.noRatingSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+		this->ui.noRatingSlider->blockSignals(true);
+		this->ui.noRatingSlider->setValue(value * 100);
+		this->ui.noRatingSlider->blockSignals(false);
+	});
+	this->ui.noRatingSpinBox->setValue(mw->App->config->get("random_no_ratings_weight").toDouble());
+
+	this->ui.noTagsSlider->installEventFilter(filter);
+	connect(this->ui.noTagsSlider, &QSlider::valueChanged, this, [this](int value) {
+		this->ui.noTagsSpinBox->blockSignals(true);
+		this->ui.noTagsSpinBox->setValue(value / 100.0);
+		this->ui.noTagsSpinBox->blockSignals(false);
+	});
+	connect(this->ui.noTagsSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+		this->ui.noTagsSlider->blockSignals(true);
+		this->ui.noTagsSlider->setValue(value * 100);
+		this->ui.noTagsSlider->blockSignals(false);
+	});
+	this->ui.noTagsSpinBox->setValue(mw->App->config->get("random_no_tags_weight").toDouble());
 }
 
 bool SettingsDialog::eventFilter(QObject* o, QEvent* e)
 {
 	const QWidget* widget = static_cast<QWidget*>(o);
-	if (e->type() == QEvent::Wheel && widget && !widget->hasFocus())
+	if (e->type() == QEvent::Wheel && widget && !widget->hasFocus())  
 	{
 		e->ignore();
 		return true;

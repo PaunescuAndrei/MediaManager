@@ -526,55 +526,15 @@ std::tuple<int, QString, QString, QString, QString> sqliteDB::getCurrentVideo(QS
         return fallback;
 }
 
-QString sqliteDB::getRandomVideo(QString category, QString watched, QStringList vid_type_include, QStringList vid_type_exclude) {
+QList<VideoWeightedData> sqliteDB::getVideos(QString category, QJsonObject settings) {
     QSqlQuery query = QSqlQuery(this->db);
-    QString main_query_string = "SELECT path FROM videodetails WHERE category = :cat_bound_value and watched = :watched_bound_value";
-    QString types_query_string = "";
-    QString end_query_string = " ORDER BY RANDOM() LIMIT 1";
-
-    QStringList types_include;
-    QStringList types_exclude;
-    for (QString value : vid_type_include) {
-        if (value == "All") {
-            types_include.clear();
-            break;
-        }
-        types_include << QString("\'%1\'").arg(value);
-    }
-    for (QString value : vid_type_exclude) {
-        types_exclude << QString("\'%1\'").arg(value);
-    }
-    if (types_include.isEmpty())
-        types_query_string = "";
-    else
-        types_query_string = QString(" AND type in (%1)").arg(types_include.join(","));
-    if (not types_exclude.isEmpty()) {
-        types_query_string += QString(" AND type not in (%1)").arg(types_exclude.join(","));
-    }
-
-    QString final_query_string = main_query_string % types_query_string % end_query_string;
-    query.prepare(final_query_string);
-    query.bindValue(":cat_bound_value", category);
-    query.bindValue(":watched_bound_value", watched);
-    if (!query.exec()) {
-        qDebug() << "getRandomVideo " << query.lastError().text();
-        if (qApp)
-            qMainApp->showErrorMessage("getRandomVideo " + query.lastError().text());
-    }
-    bool found = query.first();
-    if (found == true)
-        return query.value(0).toString();
-    else
-        return "";
-}
-
-QString sqliteDB::getRandomVideo(QString category, QJsonObject settings) {
-    QSqlQuery query = QSqlQuery(this->db);
-    QString main_query_string = "SELECT v.path FROM videodetails v";
+    QString main_query_string = "SELECT  v.id,v.path,SUM(t.weight) AS tags, v.views, v.rating FROM videodetails v";
+    QString join_query_string = " LEFT JOIN tags_relations tr ON v.id = tr.video_id "
+                               "LEFT JOIN tags t ON tr.tag_id = t.id";
     QString category_query_string = " WHERE v.category == :cat_bound_value";
-    QString rating_query_string = QString(" AND (v.rating %1 %2 %3)").arg(settings.value("rating_mode").toString(),settings.value("rating").toString(), utils::text_to_bool(settings.value("include_unrated").toString().toStdString()) ? "OR rating == 0" : "");
+    QString rating_query_string = QString(" AND (v.rating %1 %2 %3)").arg(settings.value("rating_mode").toString(), settings.value("rating").toString(), utils::text_to_bool(settings.value("include_unrated").toString().toStdString()) ? "OR rating == 0" : "");
     QString views_query_string = QString(" AND v.views %1 %2").arg(settings.value("views_mode").toString(), settings.value("views").toString());
-    QString end_query_string = " ORDER BY RANDOM() LIMIT 1";
+    QString end_query_string =" GROUP BY v.id; ";
 
     QString authors_query_string;
     QJsonArray authors_values = settings.value("authors").toArray();
@@ -613,7 +573,7 @@ QString sqliteDB::getRandomVideo(QString category, QJsonObject settings) {
 
     }
     else {
-        tags_query_string_join = " LEFT JOIN tags_relations tr ON v.id = tr.video_id";
+        //tags_query_string_join = " LEFT JOIN tags_relations tr ON v.id = tr.video_id";
         QString no_tags_query = (no_tags) ? "OR tr.tag_id IS NULL" : "";
         tags_query_string_where = QString(" AND (tr.tag_id in (%1) %2)").arg(tags.join(","), no_tags_query);
     }
@@ -656,19 +616,25 @@ QString sqliteDB::getRandomVideo(QString category, QJsonObject settings) {
     else
         watched_query_string = QString(" AND v.watched in (%1)").arg(watched.join(","));
 
-    QString final_query_string = main_query_string % tags_query_string_join % category_query_string % tags_query_string_where % authors_query_string % types_query_string % watched_query_string % rating_query_string % views_query_string % end_query_string;
+    QString final_query_string = main_query_string % join_query_string % tags_query_string_join % category_query_string % tags_query_string_where % authors_query_string % types_query_string % watched_query_string % rating_query_string % views_query_string % end_query_string;
     query.prepare(final_query_string);
     query.bindValue(":cat_bound_value", category);
     if (!query.exec()) {
-        qDebug() << "getRandomVideo " << query.lastError().text();
+        qDebug() << "getVideos " << query.lastError().text();
         if (qApp)
-            qMainApp->showErrorMessage("getRandomVideo " + query.lastError().text());
+            qMainApp->showErrorMessage("getVideos " + query.lastError().text());
     }
-    bool found = query.first();
-    if (found == true)
-        return query.value(0).toString();
-    else
-        return "";
+    QList<VideoWeightedData> videolist = QList<VideoWeightedData>();
+    while (query.next()) {
+        VideoWeightedData video;
+        video.id = query.value(0).toInt();
+        video.path = query.value(1).toString();
+        video.views = query.value(3).toDouble();
+        video.rating = query.value(4).toDouble();
+        video.tagsWeight = query.value(2).toDouble();
+        videolist.append(video);
+    }
+    return videolist;
 }
 
 void sqliteDB::updateVideoProgress(int video_id, double progress)
@@ -860,7 +826,9 @@ void sqliteDB::createTables() {
         "\"id\"	INTEGER NOT NULL,"
         "\"name\"	TEXT NOT NULL UNIQUE,"
         "\"display_priority\"	INTEGER NOT NULL DEFAULT 100,"
-        "PRIMARY KEY(\"id\" AUTOINCREMENT));";
+        "\"weight\"	REAL NOT NULL DEFAULT 0.0,"
+        "PRIMARY KEY(\"id\" AUTOINCREMENT)),"
+        "CHECK(weight BETWEEN 0 AND 1);";
 
     QString tags_relations = " CREATE TABLE \"tags_relations\" ("
         "\"id\"	INTEGER NOT NULL,"

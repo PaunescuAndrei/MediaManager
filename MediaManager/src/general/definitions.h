@@ -9,6 +9,14 @@ extern std::map<QString, int> sortingDict;
 extern std::map<int, QString> sortingDict_reversed;
 extern QStringList videoTypes;
 
+struct VideoWeightedData {
+	int id;
+	QString path;
+	double views;
+	double rating;
+	double tagsWeight;
+};
+
 struct Tag {
 	int id;
 	QString name;

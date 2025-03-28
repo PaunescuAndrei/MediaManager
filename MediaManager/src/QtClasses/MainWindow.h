@@ -53,6 +53,7 @@ public:
     QList<QStringList> IconsStage = QList<QStringList>({ QStringList(),QStringList(),QStringList() });
     QMediaPlayer* special_effects_player = nullptr;
     MainWindow(QWidget *parent = nullptr,MainApp *App = nullptr);
+    //void resizeEvent(QResizeEvent* event) override;
     QString getCategoryName(QString currentdb);
     QString getCategoryName();
     void UpdateWindowTitle();
@@ -121,6 +122,7 @@ public:
     bool isNextButtonRandom();
     QString getNextButtonConfigKey();
     void setCounterVar(int value);
+    QString getRandomVideo(QString seed, bool weighted_random, QJsonObject settings);
     bool randomVideo(bool watched_all = true, QStringList vid_type_include = {}, QStringList vid_type_exclude = {});
     void refreshCurrentVideo();
     void selectCurrentItem(QTreeWidgetItem* item = nullptr, bool selectcurrent = true);
@@ -137,6 +139,7 @@ public:
     void applySettings(SettingsDialog* dialog);
     void setDebugMode(bool debug);
     void settingsDialogButton();
+    QString saltSeed(QString seed);
     void quit();
     void NextButtonClicked(bool increment, bool update_watched_state);
     void NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state);

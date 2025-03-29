@@ -1725,19 +1725,35 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         config->set("random_use_seed", "False");
     }
 
-    if (dialog->ui.weightedRandGroupBox->isChecked()) {
-        config->set("weighted_random", "True");
+    //MINUS Weighted settings
+    if (dialog->ui.weightedRandMinusGroupBox->isChecked()) {
+        config->set("weighted_random_minus", "True");
     }
     else {
-        config->set("weighted_random", "False");
+        config->set("weighted_random_minus", "False");
     }
-    config->set("random_general_bias", QString::number(dialog->ui.generalBiasSpinBox->value()));
-    config->set("random_views_bias", QString::number(dialog->ui.viewsBiasSpinBox->value()));
-    config->set("random_rating_bias", QString::number(dialog->ui.ratingBiasSpinBox->value()));
-    config->set("random_tags_bias", QString::number(dialog->ui.tagsBiasSpinBox->value()));
-    config->set("random_no_views_weight", QString::number(dialog->ui.noViewsSpinBox->value()));
-    config->set("random_no_ratings_weight", QString::number(dialog->ui.noRatingSpinBox->value()));
-    config->set("random_no_tags_weight", QString::number(dialog->ui.noTagsSpinBox->value()));
+    config->set("random_general_bias_minus", QString::number(dialog->ui.generalBiasMinusSpinBox->value()));
+    config->set("random_views_bias_minus", QString::number(dialog->ui.viewsBiasMinusSpinBox->value()));
+    config->set("random_rating_bias_minus", QString::number(dialog->ui.ratingBiasMinusSpinBox->value()));
+    config->set("random_tags_bias_minus", QString::number(dialog->ui.tagsBiasMinusSpinBox->value()));
+    config->set("random_no_views_weight_minus", QString::number(dialog->ui.noViewsMinusSpinBox->value()));
+    config->set("random_no_ratings_weight_minus", QString::number(dialog->ui.noRatingMinusSpinBox->value()));
+    config->set("random_no_tags_weight_minus", QString::number(dialog->ui.noTagsMinusSpinBox->value()));
+
+    //PLUS Weighted settings
+    if (dialog->ui.weightedRandPlusGroupBox->isChecked()) {
+        config->set("weighted_random_plus", "True");
+    }
+    else {
+        config->set("weighted_random_plus", "False");
+    }
+    config->set("random_general_bias_plus", QString::number(dialog->ui.generalBiasPlusSpinBox->value()));
+    config->set("random_views_bias_plus", QString::number(dialog->ui.viewsBiasPlusSpinBox->value()));
+    config->set("random_rating_bias_plus", QString::number(dialog->ui.ratingBiasPlusSpinBox->value()));
+    config->set("random_tags_bias_plus", QString::number(dialog->ui.tagsBiasPlusSpinBox->value()));
+    config->set("random_no_views_weight_plus", QString::number(dialog->ui.noViewsPlusSpinBox->value()));
+    config->set("random_no_ratings_weight_plus", QString::number(dialog->ui.noRatingPlusSpinBox->value()));
+    config->set("random_no_tags_weight_plus", QString::number(dialog->ui.noTagsPlusSpinBox->value()));
 
     int new_time_watched_limit = (dialog->ui.MinutesSpinBox->value() * 60) + dialog->ui.SecondsSpinBox->value();
     if (this->time_watched_limit != new_time_watched_limit) {
@@ -1858,7 +1874,32 @@ QString MainWindow::saltSeed(QString seed) {
     return seed;
 }
 
-QString MainWindow::getRandomVideo(QString seed, bool weighted_random, QJsonObject settings) {
+WeightedBiasSettings MainWindow::getWeightedBiasSettings() {
+    WeightedBiasSettings settings;
+    if (this->App->currentDB == "PLUS") {
+        settings.weighted_random_enabled = this->App->config->get_bool("weighted_random_plus");
+        settings.bias_general = this->App->config->get("random_general_bias_plus").toDouble();
+        settings.bias_views = this->App->config->get("random_views_bias_plus").toDouble();
+        settings.bias_rating = this->App->config->get("random_rating_bias_plus").toDouble();
+        settings.bias_tags = this->App->config->get("random_tags_bias_plus").toDouble();
+        settings.no_views_weight = this->App->config->get("random_no_views_weight_plus").toDouble();
+        settings.no_rating_weight = this->App->config->get("random_no_ratings_weight_plus").toDouble();
+        settings.no_tags_weight = this->App->config->get("random_no_tags_weight_plus").toDouble();
+    }
+    else if (this->App->currentDB == "MINUS") {
+        settings.weighted_random_enabled = this->App->config->get_bool("weighted_random_minus");
+        settings.bias_general = this->App->config->get("random_general_bias_minus").toDouble();
+        settings.bias_views = this->App->config->get("random_views_bias_minus").toDouble();
+        settings.bias_rating = this->App->config->get("random_rating_bias_minus").toDouble();
+        settings.bias_tags = this->App->config->get("random_tags_bias_minus").toDouble();
+        settings.no_views_weight = this->App->config->get("random_no_views_weight_minus").toDouble();
+        settings.no_rating_weight = this->App->config->get("random_no_ratings_weight_minus").toDouble();
+        settings.no_tags_weight = this->App->config->get("random_no_tags_weight_minus").toDouble();
+    }
+    return settings;
+}
+
+QString MainWindow::getRandomVideo(QString seed, WeightedBiasSettings weighted_settings, QJsonObject settings) {
     QList<VideoWeightedData> videos = this->App->db->getVideos(this->App->currentDB, settings);
     if (!videos.isEmpty()) {
         QRandomGenerator generator;
@@ -1868,18 +1909,10 @@ QString MainWindow::getRandomVideo(QString seed, bool weighted_random, QJsonObje
         else {
             generator.seed(utils::stringToSeed(this->saltSeed(seed)));
         }
-        double biasGeneral = this->App->config->get("random_general_bias").toDouble();
-        double biasViews = this->App->config->get("random_views_bias").toDouble();
-        double biasRating = this->App->config->get("random_rating_bias").toDouble();
-        double biasTags = this->App->config->get("random_tags_bias").toDouble();
-        double noViewsWeight = this->App->config->get("random_no_views_weight").toDouble();
-        double noRatingWeight = this->App->config->get("random_no_ratings_weight").toDouble();
-        double noTagsWeight = this->App->config->get("random_no_tags_weight").toDouble();
-
-        if (not weighted_random) {
-            biasGeneral = 0;
+        if (not weighted_settings.weighted_random_enabled) {
+            weighted_settings.bias_general = 0;
         }
-        return utils::weightedRandomChoice(videos, generator, biasViews, biasRating, biasTags, biasGeneral, noViewsWeight, noRatingWeight, noTagsWeight);
+        return utils::weightedRandomChoice(videos, generator, weighted_settings.bias_views, weighted_settings.bias_rating, weighted_settings.bias_tags, weighted_settings.bias_general, weighted_settings.no_views_weight, weighted_settings.no_rating_weight, weighted_settings.no_tags_weight);
     }
     return "";
 }
@@ -1904,14 +1937,14 @@ bool MainWindow::randomVideo(bool watched_all, QStringList vid_type_include, QSt
             }
             QString item_name;
             if (this->App->config->get(this->getRandomButtonConfigKey()) == "Filtered") {
-                item_name = this->getRandomVideo(this->App->config->get("random_seed"), this->App->config->get_bool("weighted_random"), settings);
+                item_name = this->getRandomVideo(this->App->config->get("random_seed"), this->getWeightedBiasSettings(), settings);
             }
             else {
                 FilterSettings default_settings = FilterSettings();
                 default_settings.json.insert("watched", QJsonArray{ "No" });
                 default_settings.json.insert("types_include", QJsonArray::fromStringList(vid_type_include));
                 default_settings.json.insert("types_exclude", QJsonArray::fromStringList(vid_type_exclude));
-                item_name = item_name = this->getRandomVideo(this->App->config->get("random_seed"), this->App->config->get_bool("weighted_random"), settings);
+                item_name = item_name = this->getRandomVideo(this->App->config->get("random_seed"), this->getWeightedBiasSettings(), settings);
             }
             if (!item_name.isEmpty()) {
                 QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(item_name, Qt::MatchExactly, ListColumns["PATH_COLUMN"], 1);

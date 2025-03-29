@@ -122,7 +122,7 @@ public:
     bool isNextButtonRandom();
     QString getNextButtonConfigKey();
     void setCounterVar(int value);
-    QString getRandomVideo(QString seed, bool weighted_random, QJsonObject settings);
+    QString getRandomVideo(QString seed, WeightedBiasSettings weighted_settings, QJsonObject settings);
     bool randomVideo(bool watched_all = true, QStringList vid_type_include = {}, QStringList vid_type_exclude = {});
     void refreshCurrentVideo();
     void selectCurrentItem(QTreeWidgetItem* item = nullptr, bool selectcurrent = true);
@@ -140,6 +140,7 @@ public:
     void setDebugMode(bool debug);
     void settingsDialogButton();
     QString saltSeed(QString seed);
+    WeightedBiasSettings getWeightedBiasSettings();
     void quit();
     void NextButtonClicked(bool increment, bool update_watched_state);
     void NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state);

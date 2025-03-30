@@ -249,7 +249,7 @@
       <Filter>Source Files\general</Filter>
     </ClCompile>
     <ClCompile Include="src\QtClasses\Widgets\WheelEventFilter.cpp">
-      <Filter>Header Files\QtClasses\Widgets</Filter>
+      <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

@@ -92,5 +92,6 @@ namespace utils {
 	inline long double normalize(long double x, long double maxVal);
 	QList<long double> calculateWeights(const QList<VideoWeightedData>& items, double biasViews, double biasRating, double biasTags, double biasGeneral, long double maxViews, long double maxRating, long double maxTagsWeight, long double no_views_weight = 0, long double no_rating_weight = 0, long double no_tags_weight = 0);
 	QString weightedRandomChoice(const QList<VideoWeightedData>& items, QRandomGenerator& generator, double biasViews, double biasRating, double biasTags, double biasGeneral, long double no_views_weight = 0, long double no_rating_weight = 0, long double no_tags_weight = 0);
+	QMap<int, long double> calculateProbabilities(const QList<VideoWeightedData>& items, double biasViews, double biasRating, double biasTags, double biasGeneral, long double no_views_weight, long double no_rating_weight, long double no_tags_weight);
 	quint32 stringToSeed(const QString& textSeed);
 }

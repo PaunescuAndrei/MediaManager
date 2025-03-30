@@ -70,6 +70,7 @@ public:
     void updatePath(int video_id, QString new_path);
     void syncItems(QTreeWidgetItem* main_item, QList<QTreeWidgetItem*> items);
     void toggleSearchBar();
+    bool isDatesColumnVisible();
     void toggleDates(bool scroll = true);
     void init_icons();
     QMenu* trayIconContextMenu(QWidget* parent = nullptr);
@@ -98,10 +99,13 @@ public:
     void updateProgressBar(QString position, QString duration);
     void updateTotalListLabel(bool force_update = false);
     void changePlayerVideo(QSharedPointer<BasePlayer> player, QString path, int video_id, double position);
+    void updateVideoListRandomProbabilities();
+    void updateVideoListRandomProbabilitiesIfVisible();
     void refreshVisibility(QString search_text);
     void refreshVisibility();
     void refreshHeadersVisibility();
     void videosWidgetHeaderContextMenu(QPoint point);
+    void updateHeaderSettings(QStringList settings);
     void videosWidgetContextMenu(QPoint point);
     VideosTagsDialog* editTags(QList<QTreeWidgetItem*> items, QWidget* parent = nullptr);
     void setCurrent(int id, QString path, QString name, QString author, QString tags);
@@ -123,7 +127,8 @@ public:
     QString getNextButtonConfigKey();
     void setCounterVar(int value);
     QString getRandomVideo(QString seed, WeightedBiasSettings weighted_settings, QJsonObject settings);
-    bool randomVideo(bool watched_all = true, QStringList vid_type_include = {}, QStringList vid_type_exclude = {});
+    QJsonObject getRandomSettings(RandomModes::Mode random_mode, bool ignore_filters_and_defaults = false, QStringList vid_type_include = {}, QStringList vid_type_exclude = {});
+    bool randomVideo(RandomModes::Mode random_mode, bool ignore_filters_and_defaults = false, QStringList vid_type_include = {}, QStringList vid_type_exclude = {});
     void refreshCurrentVideo();
     void selectCurrentItem(QTreeWidgetItem* item = nullptr, bool selectcurrent = true);
     void insertDialogButton();
@@ -144,6 +149,7 @@ public:
     void quit();
     void NextButtonClicked(bool increment, bool update_watched_state);
     void NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state);
+    NextVideoSettings getNextVideoSettings();
     bool NextVideo(bool random, bool increment, bool update_watched_state);
     bool setNextVideo(QTreeWidgetItem* item);
     int calculate_sv_target();

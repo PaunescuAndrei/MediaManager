@@ -528,7 +528,7 @@ std::tuple<int, QString, QString, QString, QString> sqliteDB::getCurrentVideo(QS
 
 QList<VideoWeightedData> sqliteDB::getVideos(QString category, QJsonObject settings) {
     QSqlQuery query = QSqlQuery(this->db);
-    QString main_query_string = "SELECT  v.id,v.path,SUM(t.weight) AS tags, v.views, v.rating FROM videodetails v";
+    QString main_query_string = "SELECT v.id, v.path,SUM(t.weight) AS tags, v.views, v.rating FROM videodetails v";
     QString join_query_string = " LEFT JOIN tags_relations tr ON v.id = tr.video_id "
                                "LEFT JOIN tags t ON tr.tag_id = t.id";
     QString category_query_string = " WHERE v.category == :cat_bound_value";

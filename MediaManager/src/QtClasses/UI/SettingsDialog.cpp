@@ -191,7 +191,7 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 	this->ui.seedLineEdit->setText(mw->App->config->get("random_seed"));
 
 	this->ui.weightedRandMinusGroupBox->setTitle(this->ui.weightedRandMinusGroupBox->title().replace("MINUS", mw->App->config->get("minus_category_name"), Qt::CaseSensitive));
-	this->ui.weightedRandPlusGroupBox->setTitle(this->ui.weightedRandMinusGroupBox->title().replace("PLUS", mw->App->config->get("plus_category_name"), Qt::CaseSensitive));
+	this->ui.weightedRandPlusGroupBox->setTitle(this->ui.weightedRandPlusGroupBox->title().replace("PLUS", mw->App->config->get("plus_category_name"), Qt::CaseSensitive));
 	WheelEventFilter* filter = new WheelEventFilter(this);
 
 	//MINUS Weighted settings

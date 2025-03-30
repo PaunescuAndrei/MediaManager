@@ -696,6 +696,40 @@ QString utils::weightedRandomChoice(const QList<VideoWeightedData>& items, QRand
 	return items[index].path;
 }
 
+QMap<int, long double> utils::calculateProbabilities(const QList<VideoWeightedData>& items, double biasViews, double biasRating, double biasTags, double biasGeneral, long double no_views_weight, long double no_rating_weight, long double no_tags_weight) {
+	QMap<int, long double> probabilities;
+	if (items.empty()) {
+		return probabilities;
+	}
+
+	long double maxViews = 0, maxRating = 0, maxTagsWeight = 0;
+	for (const auto& item : items) {
+		maxViews = std::max(maxViews, (long double)item.views);
+		maxRating = std::max(maxRating, (long double)item.rating);
+		maxTagsWeight = std::max(maxTagsWeight, (long double)item.tagsWeight);
+	}
+
+	QList<long double> weights = utils::calculateWeights(items, biasViews, biasRating, biasTags, biasGeneral, maxViews, maxRating, maxTagsWeight, no_views_weight, no_rating_weight, no_tags_weight);
+	long double totalWeight = std::accumulate(weights.begin(), weights.end(), 0.0L);
+
+	if (totalWeight == 0) {
+		long double equalProbability = 100.0 / items.size();
+		for (const auto& item : items) {
+			probabilities.insert(item.id, equalProbability);
+			//qDebug() << item.path << ":" << QString::number(equalProbability, 'f', 2) << "%";
+		}
+		return probabilities;
+	}
+
+	for (int i = 0; i < items.size(); ++i) {
+		long double probability = (weights[i] / totalWeight) * 100.0;
+		probabilities.insert(items[i].id, probability);
+		//qDebug() << items[i].path << ":" << QString::number(probability, 'f', 2) << "%";
+	}
+
+	return probabilities;
+}
+
 quint32 utils::stringToSeed(const QString& textSeed) {
 	QByteArray hash = QCryptographicHash::hash(textSeed.toUtf8(), QCryptographicHash::Md5);
 	quint32 seed = 0;

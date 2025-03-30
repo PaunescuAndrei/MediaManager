@@ -105,7 +105,21 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     new QShortcut(QKeySequence("F1"), this, [this] {this->switchCurrentDB(); });
     new QShortcut(QKeySequence("F2"), this, [this] {this->toggleSearchBar(); });
     new QShortcut(QKeySequence("F3"), this, [this] {this->toggleDates(); });
-    QShortcut *shortcutLogs = new QShortcut(QKeySequence("F4"), this, [this] {this->App->toggleLogWindow(); });
+    new QShortcut(QKeySequence("F4"), this, [this] {
+        QString settings_str = QString();
+        if (this->App->currentDB == "PLUS")
+            settings_str = this->App->config->get("headers_plus_visible");
+        else if (this->App->currentDB == "MINUS")
+            settings_str = this->App->config->get("headers_minus_visible");
+        QStringList settings_list = settings_str.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+        if (settings_list.contains("random%"))
+            settings_list.removeAll("random%");
+        else
+            settings_list.append("random%");
+        this->updateHeaderSettings(settings_list);
+    });
+    QShortcut *shortcutLogs = new QShortcut(QKeySequence("F5"), this, [this] {this->App->toggleLogWindow(); });
+
     QShortcut* shortcutSSE = new QShortcut(QKeySequence("F8"), this, [this] {
         this->playSpecialSoundEffect(true);
     });
@@ -205,8 +219,9 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     });
 
     connect(this->ui.random_button, &QPushButton::clicked, this, [this] {
-        bool all = this->App->config->get(this->getRandomButtonConfigKey()) == "All";
-        bool video_changed = this->randomVideo(all);
+        NextVideoSettings settings = this->getNextVideoSettings();
+        bool ignore_filters_and_defaults = settings.random_mode == RandomModes::All;
+        bool video_changed = this->randomVideo(settings.random_mode, ignore_filters_and_defaults, settings.vid_type_include, settings.vid_type_exclude);
         if (this->App->VW->mainPlayer and video_changed) {
             this->changePlayerVideo(this->App->VW->mainPlayer, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
         }
@@ -218,6 +233,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
             QJsonObject json = dialog.toJson();
             this->filterSettings.setJson(json);
             this->App->db->setFilterSettings(QJsonDocument(dialog.toJson()).toJson(QJsonDocument::Compact), this->App->currentDB);
+            this->updateVideoListRandomProbabilitiesIfVisible();
         }
     });
     connect(this->ui.random_button, &customQButton::rightClicked, this, [this] {
@@ -1095,63 +1111,87 @@ void MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool incre
         if (this->App->config->get_bool("mascots"))
             this->updateMascots();
     }
+    this->updateVideoListRandomProbabilitiesIfVisible();
 }
 
-bool MainWindow::NextVideo(bool random, bool increment, bool update_watched_state) {
-    QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(this->ui.currentVideo->path, Qt::MatchFixedString, ListColumns["PATH_COLUMN"], 1);
-    bool video_changed = false;
-    if (!items.isEmpty()) {
-        this->App->db->db.transaction();
-        this->App->db->setMainInfoValue("current",this->App->currentDB,"");
-        QString watched = (update_watched_state) ? "Yes" : items.first()->text(ListColumns["WATCHED_COLUMN"]);
-        if(increment)
-            this->App->db->updateWatchedState(items.first()->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), this->position, watched, true, true);
-        else
-            this->App->db->updateWatchedState(items.first()->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), watched, false, false);
-        if (random) {
-            if (this->App->currentDB == "MINUS") {
-                if (this->sv_count >= this->sv_target_count) {
-                    bool sv_available = this->randomVideo(false, { this->App->config->get("sv_type") });
-                    video_changed = sv_available;
-                    this->sv_count = 0;
-                    this->ui.counterLabel->setProgress(this->sv_count);
-                    this->App->db->setMainInfoValue("sv_count", "ALL", QString::number(this->sv_count));
-                    if (!sv_available)
-                        video_changed = this->randomVideo(false);
-                }
-                else {
-                    video_changed = this->randomVideo(false, {}, { this->App->config->get("sv_type") });
-                    this->sv_count++;
-                    this->ui.counterLabel->setProgress(this->sv_count);
-                    this->App->db->setMainInfoValue("sv_count", "ALL", QString::number(this->sv_count));
-                }
-            }
-            else {
-                video_changed = this->randomVideo(false);
+NextVideoSettings MainWindow::getNextVideoSettings() {
+    NextVideoSettings settings;
+    settings.random_mode = static_cast<RandomModes::Mode>(this->App->config->get(this->getRandomButtonConfigKey()).toInt());
+    if (this->App->currentDB == "MINUS") {
+        if (this->sv_count >= this->sv_target_count) {
+            settings.vid_type_include = { this->App->config->get("sv_type") };
+            settings.vid_type_exclude = {};
+            QJsonObject random_settings = getRandomSettings(settings.random_mode, settings.ignore_filters_and_defaults, settings.vid_type_include, settings.vid_type_exclude);
+            QString seed = this->App->config->get_bool("random_use_seed") ? this->App->config->get("random_seed") : "";
+            settings.sv_is_available = not this->getRandomVideo(seed, this->getWeightedBiasSettings(), random_settings).isEmpty();
+            settings.next_video_is_sv = true;
+            if (!settings.sv_is_available) {
+                settings.vid_type_include = {};
             }
         }
         else {
-            video_changed = this->setNextVideo(items.first());
+            settings.next_video_is_sv = false;
+            settings.vid_type_include = {};
+            settings.vid_type_exclude = { this->App->config->get("sv_type") };
         }
-        this->App->db->db.commit();
-        if (video_changed == false && items.first()->text(ListColumns["PATH_COLUMN"]) != this->ui.currentVideo->path) {
-            video_changed = true;
-        }
+    }
+    else {
+        //default values are good
+    }
+    return settings;
+}
 
+bool MainWindow::NextVideo(bool random, bool increment, bool update_watched_state) {
+    bool video_changed = false;
+    bool sv_count_reset = false;
+    QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(this->ui.currentVideo->path, Qt::MatchFixedString, ListColumns["PATH_COLUMN"], 1);
+    QTreeWidgetItem* item = (!items.isEmpty()) ? items.first() : nullptr;
+    this->App->db->db.transaction();
+    if (item != nullptr) {
+        this->App->db->setMainInfoValue("current", this->App->currentDB, "");
+        QString watched = (update_watched_state) ? "Yes" : items.first()->text(ListColumns["WATCHED_COLUMN"]);
+        if (increment)
+            this->App->db->updateWatchedState(items.first()->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), this->position, watched, true, true);
+        else
+            this->App->db->updateWatchedState(items.first()->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), watched, false, false);
+    }
+    if (random) {
+        NextVideoSettings settings = this->getNextVideoSettings();
+        if (this->App->currentDB == "MINUS") {
+            if (this->sv_count >= this->sv_target_count) {
+                this->sv_count = 0;
+                sv_count_reset = true;
+                this->ui.counterLabel->setProgress(this->sv_count);
+                this->App->db->setMainInfoValue("sv_count", "ALL", QString::number(this->sv_count));
+            }
+        }
+        video_changed = this->randomVideo(settings.random_mode,settings.ignore_filters_and_defaults,settings.vid_type_include,settings.vid_type_exclude);
+    }
+    else {
+        video_changed = this->setNextVideo(item);
+    }
+    if (item != nullptr and sv_count_reset == false) {
+        this->sv_count++;
+        this->ui.counterLabel->setProgress(this->sv_count);
+        this->App->db->setMainInfoValue("sv_count", "ALL", QString::number(this->sv_count));
+    }
+    this->App->db->db.commit();
+
+    if (item != nullptr) {
         QDateTime currenttime = QDateTime::currentDateTime();
-        items.first()->setData(ListColumns["LAST_WATCHED_COLUMN"], Qt::DisplayRole, currenttime);
-        if(increment)
-            items.first()->setText(ListColumns["VIEWS_COLUMN"], QString::number(items.first()->text(ListColumns["VIEWS_COLUMN"]).toInt() + 1));
+        item->setData(ListColumns["LAST_WATCHED_COLUMN"], Qt::DisplayRole, currenttime);
+        if (increment)
+            item->setText(ListColumns["VIEWS_COLUMN"], QString::number(item->text(ListColumns["VIEWS_COLUMN"]).toInt() + 1));
         if (update_watched_state) {
-            items.first()->setText(ListColumns["WATCHED_COLUMN"], "Yes");
-            items.first()->setForeground(ListColumns["WATCHED_COLUMN"], QBrush(QColor("#00e640")));
+            item->setText(ListColumns["WATCHED_COLUMN"], "Yes");
+            item->setForeground(ListColumns["WATCHED_COLUMN"], QBrush(QColor("#00e640")));
         }
         this->refreshVisibility();
 
         this->App->db->db.transaction();
         if (this->App->currentDB == "MINUS") {
             this->incrementCounterVar(-1);
-            if (items.first()->text(ListColumns["TYPE_COLUMN"]) == this->App->config->get("sv_type")) {
+            if (item->text(ListColumns["TYPE_COLUMN"]) == this->App->config->get("sv_type")) {
                 int val = this->calculate_sv_target();
                 this->App->db->setMainInfoValue("sv_target_count", "ALL", QString::number(val));
                 this->sv_target_count = val;
@@ -1159,56 +1199,24 @@ bool MainWindow::NextVideo(bool random, bool increment, bool update_watched_stat
             }
         }
         else if (this->App->currentDB == "PLUS" && increment)
-            this->incrementtimeWatchedIncrement(this->App->db->getVideoProgress(items.first()->data(ListColumns["PATH_COLUMN"],CustomRoles::id).toInt(), "0").toDouble());
+            this->incrementtimeWatchedIncrement(this->App->db->getVideoProgress(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), "0").toDouble());
         this->updateTotalListLabel();
         this->checktimeWatchedIncrement();
         this->updateWatchedProgressBar();
         this->App->db->db.commit();
-    }
-    else {
-        QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom("No", Qt::MatchFixedString, ListColumns["WATCHED_COLUMN"], 1);
-        if (!items.isEmpty()) {
-            this->App->db->db.transaction();
-            if (random) {
-                if (this->App->currentDB == "MINUS") {
-                    if (this->sv_count >= this->sv_target_count) {
-                        bool sv_available = this->randomVideo(false, { this->App->config->get("sv_type") });
-                        video_changed = sv_available;
-                        this->sv_count = 0;
-                        this->ui.counterLabel->setProgress(sv_count);
-                        this->App->db->setMainInfoValue("sv_count", "ALL", QString::number(this->sv_count));
-                        if (!sv_available)
-                            video_changed = this->randomVideo(false);
-                    }
-                    else {
-                        video_changed = this->randomVideo(false, {}, { this->App->config->get("sv_type") });
-                        this->sv_count++;
-                        this->ui.counterLabel->setProgress(sv_count);
-                        this->App->db->setMainInfoValue("sv_count", "ALL", QString::number(this->sv_count));
-                    }
-                }
-                else {
-                    video_changed = this->randomVideo(false);
-                }
-            }
-            else {
-                this->setCurrent(items.first()->data(ListColumns["PATH_COLUMN"],CustomRoles::id).toInt(), items.first()->text(ListColumns["PATH_COLUMN"]), items.first()->text(ListColumns["NAME_COLUMN"]), items.first()->text(ListColumns["AUTHOR_COLUMN"]), items.first()->text(ListColumns["TAGS_COLUMN"]));
-                this->selectCurrentItem(items.first());
-                video_changed = true;
-            }
-            this->App->db->db.commit();
-        }
     }
     return video_changed;
 }
 
 bool MainWindow::setNextVideo(QTreeWidgetItem* item) {
     QTreeWidgetItem* item_below = this->ui.videosWidget->itemBelow(item);
+    bool looped_once = false;
     while (true) {
-        if (item_below == nullptr) {
+        if (item_below == nullptr and looped_once == false) {
             item_below = this->ui.videosWidget->topLevelItem(0);
+            looped_once = true;
         }
-        if (item == item_below) {
+        if (item == item_below or item_below == nullptr) {
             this->setCurrent(-1, "", "", "", "");
             this->selectCurrentItem(nullptr);
             return false;
@@ -1327,8 +1335,10 @@ bool MainWindow::loadDB(QString path, QWidget* parent) {
             return_code = this->App->db->loadOrSaveDb(this->App->db->db, path.toStdString().c_str(), false);
             this->initListDetails();
             this->refreshVideosWidget(false, true);
+            this->refreshHeadersVisibility();
             this->updateTotalListLabel();
             this->init_icons();
+            this->filterSettings = FilterSettings(this->App->db->getFilterSettings(this->App->currentDB));
             if (this->App->VW->mainPlayer) {
                 this->changePlayerVideo(this->App->VW->mainPlayer, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
             }
@@ -1721,7 +1731,7 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     if (dialog->ui.seedCheckBox->checkState() == Qt::CheckState::Checked) {
         config->set("random_use_seed", "True");
     }
-    else if (dialog->ui.seedCheckBox->checkState() == Qt::CheckState::Unchecked) {\
+    else if (dialog->ui.seedCheckBox->checkState() == Qt::CheckState::Unchecked) {
         config->set("random_use_seed", "False");
     }
 
@@ -1848,6 +1858,7 @@ void MainWindow::settingsDialogButton()
     int value = dialog.exec();
     if (value == QDialog::Accepted) {
         this->applySettings(&dialog);
+        this->updateVideoListRandomProbabilitiesIfVisible();
     }
     else if (value == QDialog::Rejected) {
         if (dialog.ui.volumeSpinBox->value() != dialog.oldVolume) {
@@ -1917,40 +1928,47 @@ QString MainWindow::getRandomVideo(QString seed, WeightedBiasSettings weighted_s
     return "";
 }
 
-bool MainWindow::randomVideo(bool watched_all, QStringList vid_type_include, QStringList vid_type_exclude) {
+QJsonObject MainWindow::getRandomSettings(RandomModes::Mode random_mode, bool ignore_filters_and_defaults, QStringList vid_type_include, QStringList vid_type_exclude) {
+    QJsonObject settings = FilterSettings().json; //default settings
+    if (ignore_filters_and_defaults) {
+        settings.insert("ignore_defaults", "True");
+    }
+    else if (random_mode == RandomModes::Filtered) {
+        settings = QJsonObject(this->filterSettings.json); //filter settings
+    }
+    else if (random_mode == RandomModes::Normal) {
+        //default behaviour for next when not filtered
+        settings.insert("ignore_defaults", "False");
+    }
+    else if (random_mode == RandomModes::All) {
+        settings.insert("ignore_defaults", "True");
+    }
+    else {
+        //still default settings but we shouldnt be here
+    }
+    bool ignore_defaults = utils::text_to_bool(settings.value("ignore_defaults").toString().toStdString());
+    if (not ignore_defaults) {
+        settings.insert("watched", QJsonArray{ "No" });
+        //these will not work as intented if you want to ignore default and use include/exclude from function call but its not used for now so whatever
+        settings.insert("types_include", QJsonArray::fromStringList(vid_type_include));
+        settings.insert("types_exclude", QJsonArray::fromStringList(vid_type_exclude));
+    }
+    return settings;
+}
+
+bool MainWindow::randomVideo(RandomModes::Mode random_mode, bool ignore_filters_and_defaults, QStringList vid_type_include, QStringList vid_type_exclude) {
     QTreeWidgetItem* root = this->ui.videosWidget->invisibleRootItem();
     QTreeWidgetItem* item = nullptr;
     int videos_count = root->childCount();
     if (videos_count > 0) {
-        if (watched_all) {
-            int index = utils::randint(0, videos_count - 1, !this->App->config->get("random_seed").isEmpty() ? utils::stringToSeed(this->saltSeed(this->App->config->get("random_seed"))) : 0);
-            item = root->child(index);
-        }
-        else {
-            QJsonObject settings = QJsonObject(this->filterSettings.json);
-            bool ignore_defaults = utils::text_to_bool(settings.value("ignore_defaults").toString().toStdString());
-            if (!ignore_defaults) {
-                settings.insert("watched", QJsonArray{ "No"});
-                settings.insert("types_include", QJsonArray::fromStringList(vid_type_include.isEmpty() ? QStringList({ "All" }) : vid_type_include));
-                if(not vid_type_exclude.isEmpty())
-                    settings.insert("types_exclude", QJsonArray::fromStringList(vid_type_exclude));
-            }
-            QString item_name;
-            if (this->App->config->get(this->getRandomButtonConfigKey()) == "Filtered") {
-                item_name = this->getRandomVideo(this->App->config->get("random_seed"), this->getWeightedBiasSettings(), settings);
-            }
-            else {
-                FilterSettings default_settings = FilterSettings();
-                default_settings.json.insert("watched", QJsonArray{ "No" });
-                default_settings.json.insert("types_include", QJsonArray::fromStringList(vid_type_include));
-                default_settings.json.insert("types_exclude", QJsonArray::fromStringList(vid_type_exclude));
-                item_name = item_name = this->getRandomVideo(this->App->config->get("random_seed"), this->getWeightedBiasSettings(), settings);
-            }
-            if (!item_name.isEmpty()) {
-                QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(item_name, Qt::MatchExactly, ListColumns["PATH_COLUMN"], 1);
-                if (!items.isEmpty())
-                    item = items.first();
-            }
+        QJsonObject settings = this->getRandomSettings(random_mode, ignore_filters_and_defaults, vid_type_include, vid_type_exclude);
+        QString item_name;
+        QString seed = this->App->config->get_bool("random_use_seed") ? this->App->config->get("random_seed") : "";
+        item_name = this->getRandomVideo(seed, this->getWeightedBiasSettings(), settings);
+        if (!item_name.isEmpty()) {
+            QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(item_name, Qt::MatchExactly, ListColumns["PATH_COLUMN"], 1);
+            if (!items.isEmpty())
+                item = items.first();
         }
         if (item != nullptr) {
             this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]), item->text(ListColumns["TAGS_COLUMN"]));
@@ -2365,6 +2383,7 @@ void MainWindow::switchCurrentDB(QString db) {
         this->toggleDates(false);
     this->App->config->set("current_db", this->App->currentDB);
     this->App->config->save_config();
+    this->filterSettings = FilterSettings(this->App->db->getFilterSettings(this->App->currentDB));
     if(player != nullptr){
         this->changePlayerVideo(player, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
     }
@@ -2521,6 +2540,9 @@ void MainWindow::switchNextButtonMode(customQButton* nextbutton) {
 }
 
 QString MainWindow::getRandomButtonConfigKey() {
+    // All - doesnt care about default settings
+    // Normal - ignores filter settings but cares about default settings
+    // Filtered - uses filter settings
     if (this->App->currentDB == "PLUS") {
         return "plus_get_random_mode";
     }
@@ -2532,10 +2554,10 @@ QString MainWindow::getRandomButtonConfigKey() {
 
 void MainWindow::initRandomButtonMode(customQButton* randombutton) {
     QString config_key = this->getRandomButtonConfigKey();
-    if (this->App->config->get(config_key) == "All") {
+    if (this->App->config->get(config_key).toInt() == RandomModes::All) {
         randombutton->setText("Get Random (All)");
     }
-    else if (this->App->config->get(config_key) == "Filtered") {
+    else if (this->App->config->get(config_key).toInt() == RandomModes::Filtered) {
         randombutton->setText("Get Random (F)");
     }
     else {
@@ -2545,14 +2567,14 @@ void MainWindow::initRandomButtonMode(customQButton* randombutton) {
 
 void MainWindow::switchRandomButtonMode(customQButton* randombutton) {
     QString config_key = this->getRandomButtonConfigKey();
-    QString mode = this->App->config->get(config_key);
-    if (mode == "Normal")
-        mode = "Filtered";
-    else if (mode == "Filtered")
-        mode = "All";
+    int mode = this->App->config->get(config_key).toInt();
+    if (mode == RandomModes::Normal)
+        mode = RandomModes::Filtered;
+    else if (mode == RandomModes::Filtered)
+        mode = RandomModes::All;
     else
-        mode = "Normal";
-    this->App->config->set(config_key, mode);
+        mode = RandomModes::Normal;
+    this->App->config->set(config_key, QString::number(mode));
     if (randombutton != this->ui.random_button) {
         this->initRandomButtonMode(this->ui.random_button);
     }
@@ -2651,6 +2673,7 @@ void MainWindow::populateList(bool selectcurrent) {
     //if (this->ui.searchBar->isVisible())
     //    QTimer::singleShot(1, [this,itemlist] {this->search(this->old_search);});
     this->updateTotalListLabel();
+    this->updateVideoListRandomProbabilitiesIfVisible();
     this->ui.videosWidget->setSortingEnabled(true);
     this->selectCurrentItem(nullptr, selectcurrent);
 }
@@ -2717,6 +2740,11 @@ void MainWindow::videosWidgetHeaderContextMenu(QPoint point) {
     if (settings_list.contains("rating"))
         rating->setChecked(true);
     menu.addAction(rating);
+    QAction* random_chance = new QAction("Random %", &menu);
+    random_chance->setCheckable(true);
+    if (settings_list.contains("random%"))
+        random_chance->setChecked(true);
+    menu.addAction(random_chance);
     QAction* date_created = new QAction("Date Created", &menu);
     date_created->setCheckable(true);
     if (settings_list.contains("date_created"))
@@ -2799,6 +2827,12 @@ void MainWindow::videosWidgetHeaderContextMenu(QPoint point) {
         else
             settings_list.append("rating");
     }
+    else if (menu_click == random_chance) {
+        if (utils::hiddenCheck(settings_list) && !random_chance->isChecked())
+            settings_list.removeAll("random%");
+        else
+            settings_list.append("random%");
+    }
     else if (menu_click == date_created) {
         if (utils::hiddenCheck(settings_list) && !date_created->isChecked())
             settings_list.removeAll("date_created");
@@ -2812,17 +2846,21 @@ void MainWindow::videosWidgetHeaderContextMenu(QPoint point) {
             settings_list.append("last_watched");
     }
     if (menu_click) {
-        settings_list.removeDuplicates();
-        if (this->App->currentDB == "PLUS")
-            this->App->config->set("headers_plus_visible", settings_list.join(" "));
-        else if (this->App->currentDB == "MINUS")
-            this->App->config->set("headers_minus_visible", settings_list.join(" "));
-        this->refreshHeadersVisibility();
-        this->refreshVisibility();
-        if (this->toggleDatesFlag)
-            this->toggleDates(false);
-        this->App->config->save_config();
+        this->updateHeaderSettings(settings_list);
     }
+}
+
+void MainWindow::updateHeaderSettings(QStringList settings) {
+    settings.removeDuplicates();
+    if (this->App->currentDB == "PLUS")
+        this->App->config->set("headers_plus_visible", settings.join(" "));
+    else if (this->App->currentDB == "MINUS")
+        this->App->config->set("headers_minus_visible", settings.join(" "));
+    this->refreshHeadersVisibility();
+    this->refreshVisibility();
+    if (this->toggleDatesFlag)
+        this->toggleDates(false);
+    this->App->config->save_config();
 }
 
 void MainWindow::videosWidgetContextMenu(QPoint point) {
@@ -3228,6 +3266,12 @@ void MainWindow::refreshHeadersVisibility() {
         header->setSectionHidden(ListColumns["RATING_COLUMN"], false);
     else
         header->setSectionHidden(ListColumns["RATING_COLUMN"], true);
+    if (settings_list.contains("random%")) {
+        header->setSectionHidden(ListColumns["RANDOM%_COLUMN"], false);
+        this->updateVideoListRandomProbabilitiesIfVisible();
+    }
+    else
+        header->setSectionHidden(ListColumns["RANDOM%_COLUMN"], true);
     if (settings_list.contains("date_created"))
         header->setSectionHidden(ListColumns["DATE_CREATED_COLUMN"], false);
     else
@@ -3275,6 +3319,35 @@ void MainWindow::changePlayerVideo(QSharedPointer<BasePlayer> player, QString pa
     }
     this->VideoInfoNotification();
     qMainApp->logger->log(QString("Changing Video to \"%1\"").arg(path), "Video", path);
+}
+
+void MainWindow::updateVideoListRandomProbabilities() {
+    NextVideoSettings next_video_settings = this->getNextVideoSettings();
+    QJsonObject random_settings = this->getRandomSettings(next_video_settings.random_mode, next_video_settings.ignore_filters_and_defaults, next_video_settings.vid_type_include, next_video_settings.vid_type_exclude);
+    QList<VideoWeightedData> items = this->App->db->getVideos(this->App->currentDB, random_settings);
+    WeightedBiasSettings bias_settings = this->getWeightedBiasSettings();
+    if (not bias_settings.weighted_random_enabled) {
+        bias_settings.bias_general = 0;
+    }
+    QMap<int, long double> probabilities = utils::calculateProbabilities(items, bias_settings.bias_views, bias_settings.bias_rating, bias_settings.bias_tags, bias_settings.bias_general, bias_settings.no_views_weight, bias_settings.no_rating_weight, bias_settings.no_tags_weight);
+    
+    QTreeWidgetItemIterator it(this->ui.videosWidget);
+    bool sorting = this->ui.videosWidget->isSortingEnabled();
+    this->ui.videosWidget->setSortingEnabled(false);
+    while (*it) {
+        bool hidden = (*it)->isHidden();
+        (*it)->setHidden(true);
+        (*it)->setText(ListColumns["RANDOM%_COLUMN"], QString::number(probabilities.value((*it)->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(),0), 'f', 2) % "%");
+        (*it)->setTextAlignment(ListColumns["RANDOM%_COLUMN"], Qt::AlignCenter);
+        (*it)->setHidden(hidden);
+        ++it;
+    }
+    this->ui.videosWidget->setSortingEnabled(sorting);
+}
+
+void MainWindow::updateVideoListRandomProbabilitiesIfVisible() {
+    if (not this->ui.videosWidget->header()->isSectionHidden(ListColumns["RANDOM%_COLUMN"]))
+        this->updateVideoListRandomProbabilities();
 }
 
 MainWindow::~MainWindow()

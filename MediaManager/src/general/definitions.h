@@ -28,6 +28,23 @@ struct WeightedBiasSettings {
 	double no_tags_weight = 0;
 };
 
+namespace RandomModes {
+	enum Mode {
+		All = 0,
+		Normal = 1,
+		Filtered = 2,
+	};
+}
+
+struct NextVideoSettings {
+	RandomModes::Mode random_mode = RandomModes::Filtered;
+	bool ignore_filters_and_defaults = false;
+	QStringList vid_type_include = {};
+	QStringList vid_type_exclude = {};
+	bool next_video_is_sv = false;
+	bool sv_is_available = false;
+};
+
 struct Tag {
 	int id;
 	QString name;

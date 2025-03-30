@@ -651,7 +651,13 @@ QList<long double> utils::calculateWeights(const QList<VideoWeightedData>& items
 		long double tagsWeight = (item.tagsWeight == 0) ? no_tags_weight : normalize(item.tagsWeight, maxTagsWeight);
 
 		long double weight = (biasViews * viewWeight) + (biasRating * ratingWeight) + (biasTags * tagsWeight);
-		weight = powl(weight, biasGeneral); // Apply general bias
+
+		// biasGeneral Value
+		// 1.0	No change to weight(neutral)
+		// > 1.0	Amplifies differences(larger values grow faster)
+		// < 1.0 (but > 0)	Compresses differences(smaller values get closer together)
+		// 0.0	Makes all weights equal to 1.0
+		weight = powl(1+weight, biasGeneral); // Apply general bias
 		weights.append(weight);
 	}
 

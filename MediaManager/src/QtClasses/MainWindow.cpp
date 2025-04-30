@@ -66,6 +66,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     : QMainWindow(parent)
 {
     this->App = App;
+    this->thumbnailManager = new generateThumbnailManager(this->App->config->get("threads").toInt());
     this->initRatingIcons();
     ui.setupUi(this);
 
@@ -374,8 +375,8 @@ void MainWindow::UpdateWindowTitle() {
     if (this->App->VW and this->App->VW->mainPlayer_time_start) {
         elapsed_time = " [" % QString::fromStdString(utils::formatSeconds(std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->App->VW->mainPlayer_time_start).count())) % "]";
     }
-    if (this->thumbnailManager.work_count > 0) {
-        thumb_work_count = " (" % QString::number(this->thumbnailManager.work_count) % ")";
+    if (this->thumbnailManager->work_count > 0) {
+        thumb_work_count = " (" % QString::number(this->thumbnailManager->work_count) % ")";
     }
     this->setWindowTitle(main_title % thumb_work_count % elapsed_time);
 }
@@ -560,8 +561,8 @@ void MainWindow::updatePath(int video_id, QString new_path) {
         this->App->db->updateAuthor(video_id, author);
         this->App->db->updateName(video_id, name);
         this->App->db->db.commit();
-        this->thumbnailManager.enqueue_work({ new_path, false });
-        this->thumbnailManager.start();
+        this->thumbnailManager->enqueue_work({ new_path, false });
+        this->thumbnailManager->start();
         this->refreshVideosWidget(false, false);
         this->ui.videosWidget->findAndScrollToDelayed(new_path, true);
     }
@@ -2271,7 +2272,7 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
             count = 0;
         }
         files_inserted.append((*it)->text(0));
-        this->thumbnailManager.enqueue_work({ (*it)->text(0), false});
+        this->thumbnailManager->enqueue_work({ (*it)->text(0), false});
         ++it;
     }
 
@@ -2284,7 +2285,7 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
         QString first = files_inserted.first();
         this->ui.videosWidget->findAndScrollToDelayed(first, false);
         this->selectItemsDelayed(files_inserted);
-        this->thumbnailManager.start();
+        this->thumbnailManager->start();
         if (set_first_current) {
             QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(first, Qt::MatchExactly, ListColumns["PATH_COLUMN"], 1);
             if (!items.isEmpty()) {
@@ -2962,8 +2963,8 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
     }
     else if (menu_click == generate_thumbnails) {
         for (auto const& item : items) {
-            this->thumbnailManager.enqueue_work({ item->text(ListColumns["PATH_COLUMN"]), true });
-            this->thumbnailManager.start();
+            this->thumbnailManager->enqueue_work({ item->text(ListColumns["PATH_COLUMN"]), true });
+            this->thumbnailManager->start();
         }
     }
     else if (menu_click == author_edit) {

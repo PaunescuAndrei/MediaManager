@@ -25,7 +25,7 @@ public:
     void set_work_count(int value);
     void start();
     void rebuildThumbnailCache(QSqlDatabase& db, bool overwrite = false);
-    generateThumbnailManager(unsigned int threads_number = 3);
+    generateThumbnailManager(unsigned int threads_number = 4);
     ~generateThumbnailManager();
 };
 

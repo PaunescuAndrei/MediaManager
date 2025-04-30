@@ -44,7 +44,7 @@ public:
     QList<QPair<QString,int>> lastScrolls = QList<QPair<QString, int>>();
     QString old_search = "";
     QString last_backup = "";
-    generateThumbnailManager thumbnailManager = generateThumbnailManager(4);
+    generateThumbnailManager *thumbnailManager = nullptr;
     QIcon* active = new QIcon();
     QIcon* inactive = new QIcon();
     QIcon* halfactive = new QIcon();
@@ -70,7 +70,6 @@ public:
     void updatePath(int video_id, QString new_path);
     void syncItems(QTreeWidgetItem* main_item, QList<QTreeWidgetItem*> items);
     void toggleSearchBar();
-    bool isDatesColumnVisible();
     void toggleDates(bool scroll = true);
     void init_icons();
     QMenu* trayIconContextMenu(QWidget* parent = nullptr);

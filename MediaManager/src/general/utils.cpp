@@ -184,6 +184,21 @@ void utils::bring_hwnd_to_foreground(HWND hwnd) {
 	SetForegroundWindow(hwnd);
 }
 
+void utils::bring_hwnd_to_foreground_all(HWND hwnd, IUIAutomation* uiAutomation)
+{
+	utils::bring_hwnd_to_foreground_uiautomation_method(hwnd, uiAutomation);
+	if (GetForegroundWindow() != hwnd)
+		utils::bring_hwnd_to_foreground_uiautomation_method(hwnd, uiAutomation);
+	else if (GetForegroundWindow() != hwnd)
+		utils::bring_hwnd_to_foreground(hwnd);
+	else if (GetForegroundWindow() != hwnd)
+		utils::bring_hwnd_to_foreground_console_method(hwnd);
+	else if (GetForegroundWindow() != hwnd)
+		utils::bring_hwnd_to_foreground_alt_method(hwnd);
+	//if (GetForegroundWindow() != this->old_foreground_window)
+	//	bring_hwnd_to_foreground_attach_method(this->old_foreground_window);
+}
+
 bool utils::is_hwnd_full_screen(HWND hwnd) {
 	tagRECT full_screen_rect = { 0,0,GetSystemMetrics(0),GetSystemMetrics(1) };
 	tagRECT lprect;
@@ -218,7 +233,7 @@ bool utils::is_pid_full_screen(qint64 pid, HWND hwnd) {
 	return false;
 }
 
-bool utils::bring_hwnd_to_foreground_uiautomation_method(IUIAutomation* uiAutomation, HWND hwnd)
+bool utils::bring_hwnd_to_foreground_uiautomation_method(HWND hwnd, IUIAutomation* uiAutomation)
 {
 	bool result = false;
 	// First restore if window is minimized
@@ -738,4 +753,28 @@ quint32 utils::stringToSeed(const QString& textSeed) {
 		seed = (seed << 8) | (static_cast<quint32>(hash[i]) & 0xFF);
 	}
 	return seed;
+}
+
+BOOL utils::CallIsWindowArranged(HWND hwnd)
+{
+	static PFN_IsWindowArranged pIsWindowArranged = nullptr;
+	static bool triedToLoad = false;
+
+	if (!triedToLoad) {
+		HMODULE hUser32 = GetModuleHandleW(L"user32.dll"); // Already loaded, no FreeLibrary needed
+		if (hUser32) {
+			pIsWindowArranged = (PFN_IsWindowArranged)GetProcAddress(hUser32, "IsWindowArranged");
+		}
+		triedToLoad = true;
+	}
+
+	if (pIsWindowArranged) {
+		return pIsWindowArranged(hwnd);
+	}
+	else {
+		qDebug() << "IsWindowArranged not available on this system.";
+		if (qApp)
+			qMainApp->logger->log("isWindowArranged not available on this system.","Warning");
+		return FALSE;
+	}
 }

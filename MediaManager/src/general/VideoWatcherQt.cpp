@@ -79,18 +79,10 @@ void VideoWatcherQt::toggle_window()
 			player->setPaused(true,true);
 			if (fullscreen)
 				player->toggleFullScreen(true);
+			SetWindowPos(player->player_hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+			SetWindowPos(player->player_hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 			if (this->old_foreground_window) {
-				utils::bring_hwnd_to_foreground_uiautomation_method(this->App->uiAutomation, this->old_foreground_window);
-				if (GetForegroundWindow() != this->old_foreground_window)
-					utils::bring_hwnd_to_foreground_uiautomation_method(this->App->uiAutomation, this->old_foreground_window);
-				if (GetForegroundWindow() != this->old_foreground_window)
-					utils::bring_hwnd_to_foreground(this->old_foreground_window);
-				if (GetForegroundWindow() != this->old_foreground_window)
-					utils::bring_hwnd_to_foreground_console_method(this->old_foreground_window);
-				if (GetForegroundWindow() != this->old_foreground_window)
-					utils::bring_hwnd_to_foreground_alt_method(this->old_foreground_window);
-				//if (GetForegroundWindow() != this->old_foreground_window)
-				//	bring_hwnd_to_foreground_attach_method(this->old_foreground_window);
+				utils::bring_hwnd_to_foreground_all(this->old_foreground_window, this->App->uiAutomation);
 			}
 		}
 		else {
@@ -98,7 +90,7 @@ void VideoWatcherQt::toggle_window()
 			is_foreground = false;
 			int tries = 0;
 			while (!is_foreground && tries < 10) {
-				utils::bring_hwnd_to_foreground_uiautomation_method(this->App->uiAutomation,player->player_hwnd);
+				utils::bring_hwnd_to_foreground_uiautomation_method(player->player_hwnd, this->App->uiAutomation);
 				tries++;
 				QList<HWND> hwnds = utils::get_hwnds_for_pid(player->pid);
 				if (hwnds.contains(GetForegroundWindow()))

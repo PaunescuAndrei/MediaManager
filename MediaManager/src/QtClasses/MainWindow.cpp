@@ -2310,7 +2310,7 @@ void MainWindow::openEmptyVideoPlayer() {
         qMainApp->logger->log(QString("Opening empty Video Player."),"Video");
     }
     else {
-        utils::bring_hwnd_to_foreground_uiautomation_method(this->App->uiAutomation, this->App->VW->mainPlayer->player_hwnd);
+        utils::bring_hwnd_to_foreground_uiautomation_method(this->App->VW->mainPlayer->player_hwnd, this->App->uiAutomation);
     }
 }
 
@@ -2327,7 +2327,7 @@ void MainWindow::watchCurrent() {
         qMainApp->logger->log(QString("Playing Current Video \"%1\" from %2").arg(this->ui.currentVideo->path).arg(utils::formatSecondsQt(seconds)), "Video", this->ui.currentVideo->path);
     }
     else {
-        utils::bring_hwnd_to_foreground_uiautomation_method(this->App->uiAutomation, this->App->VW->mainPlayer->player_hwnd);
+        utils::bring_hwnd_to_foreground_uiautomation_method(this->App->VW->mainPlayer->player_hwnd, this->App->uiAutomation);
     }
 }
 

@@ -45,11 +45,12 @@ namespace utils {
 	QList<HWND> get_hwnds_for_pid(qint64 pid);
 	void bring_pid_to_foreground(qint64 pid, HWND hwnd = nullptr);
 	bool is_pid_full_screen(qint64 pid, HWND hwnd = nullptr);
-	bool bring_hwnd_to_foreground_uiautomation_method(IUIAutomation* uiAutomation,HWND hwnd);
+	bool bring_hwnd_to_foreground_uiautomation_method(HWND hwnd, IUIAutomation* uiAutomation);
 	void bring_hwnd_to_foreground_attach_method(HWND hwnd);
 	void bring_hwnd_to_foreground_alt_method(HWND hwnd);
 	void bring_hwnd_to_foreground_console_method(HWND hwnd);
 	void bring_hwnd_to_foreground(HWND hwnd);
+	void bring_hwnd_to_foreground_all(HWND hwnd, IUIAutomation* uiAutomation);
 	bool is_hwnd_full_screen(HWND hwnd);
 	qreal volume_convert(int volume);
 	QString getParentDirectoryName(QString path, int depth);
@@ -94,4 +95,7 @@ namespace utils {
 	QString weightedRandomChoice(const QList<VideoWeightedData>& items, QRandomGenerator& generator, double biasViews, double biasRating, double biasTags, double biasGeneral, long double no_views_weight = 0, long double no_rating_weight = 0, long double no_tags_weight = 0);
 	QMap<int, long double> calculateProbabilities(const QList<VideoWeightedData>& items, double biasViews, double biasRating, double biasTags, double biasGeneral, long double no_views_weight, long double no_rating_weight, long double no_tags_weight);
 	quint32 stringToSeed(const QString& textSeed);
+
+	typedef BOOL(WINAPI* PFN_IsWindowArranged)(HWND hwnd);
+	BOOL CallIsWindowArranged(HWND hwnd);
 }

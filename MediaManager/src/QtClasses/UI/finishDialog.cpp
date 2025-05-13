@@ -84,7 +84,7 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 				}
 				QTimer::singleShot(100, [dialog] {
 					if (dialog) {
-						utils::bring_hwnd_to_foreground_uiautomation_method(qMainApp->uiAutomation, (HWND)dialog->winId());
+						utils::bring_hwnd_to_foreground_uiautomation_method((HWND)dialog->winId(), qMainApp->uiAutomation);
 						dialog->raise();
 						dialog->show();
 						dialog->activateWindow();
@@ -102,7 +102,7 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 		if (QGuiApplication::queryKeyboardModifiers() & Qt::AltModifier)
 			return;
 		//if (not (this->isActiveWindow() and utils::IsMyWindowVisible(this))) {
-			utils::bring_hwnd_to_foreground_uiautomation_method(qMainApp->uiAutomation, (HWND)this->winId());
+			utils::bring_hwnd_to_foreground_uiautomation_method((HWND)this->winId(), qMainApp->uiAutomation);
 			this->raise();
 			this->show();
 			this->activateWindow();

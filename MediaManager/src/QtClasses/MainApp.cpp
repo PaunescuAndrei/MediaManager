@@ -155,7 +155,7 @@ void MainApp::toggleLogWindow() {
 		this->logDialog->show();
 	}
 	else {
-		utils::bring_hwnd_to_foreground_uiautomation_method(qMainApp->uiAutomation, (HWND)this->logDialog->winId());
+		utils::bring_hwnd_to_foreground_uiautomation_method((HWND)this->logDialog->winId(), qMainApp->uiAutomation);
 	}
 }
 

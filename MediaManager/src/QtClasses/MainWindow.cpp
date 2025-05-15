@@ -408,8 +408,8 @@ void MainWindow::VideoInfoNotification() {
         if (not ok)
             stars = 0;
         starRating.setStarCount(stars);
-        this->notification_dialog->ui.starsLabel->setText(QString(" %1").arg(stars));
-        this->notification_dialog->ui.viewsLabel->setText(this->ui.videosWidget->last_selected->text(ListColumns["VIEWS_COLUMN"]) + " Views ");
+        this->notification_dialog->ui.starsLabel->setText(QString(" %1 ").arg(stars));
+        this->notification_dialog->ui.viewsLabel->setText(QString(" %1 Views ").arg(this->ui.videosWidget->last_selected->text(ListColumns["VIEWS_COLUMN"])));
     }
     this->notification_dialog->ui.rating->setStarRating(starRating);
 

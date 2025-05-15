@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>100</width>
-    <height>79</height>
+    <width>168</width>
+    <height>98</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -130,7 +130,55 @@
              </widget>
             </item>
             <item>
-             <widget class="starEditorWidget" name="rating" native="true"/>
+             <widget class="QWidget" name="widget" native="true">
+              <layout class="QHBoxLayout" name="horizontalLayout">
+               <property name="spacing">
+                <number>0</number>
+               </property>
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+               <item>
+                <widget class="starEditorWidget" name="rating" native="true"/>
+               </item>
+               <item>
+                <widget class="QLabel" name="starsLabel">
+                 <property name="text">
+                  <string/>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="horizontalSpacer">
+                 <property name="orientation">
+                  <enum>Qt::Orientation::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>0</width>
+                   <height>0</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+               <item>
+                <widget class="QLabel" name="viewsLabel">
+                 <property name="text">
+                  <string/>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
             </item>
            </layout>
           </widget>

@@ -403,9 +403,16 @@ void MainWindow::VideoInfoNotification() {
         this->notification_dialog->ui.tags->setText(this->ui.currentVideo->tags);
     StarRating starRating = StarRating(this->active, this->halfactive, this->inactive, 0, 5.0);
     if (this->ui.videosWidget->last_selected) {
-        starRating.setStarCount(this->ui.videosWidget->last_selected->data(ListColumns["RATING_COLUMN"], CustomRoles::rating).toDouble());
+        bool ok = true;
+        double stars = this->ui.videosWidget->last_selected->data(ListColumns["RATING_COLUMN"], CustomRoles::rating).toDouble(&ok);
+        if (not ok)
+            stars = 0;
+        starRating.setStarCount(stars);
+        this->notification_dialog->ui.starsLabel->setText(QString(" %1").arg(stars));
+        this->notification_dialog->ui.viewsLabel->setText(this->ui.videosWidget->last_selected->text(ListColumns["VIEWS_COLUMN"]) + " Views ");
     }
     this->notification_dialog->ui.rating->setStarRating(starRating);
+
     this->notification_dialog->setWindowModality(Qt::WindowModal);
     this->notification_dialog->setAttribute(Qt::WA_ShowWithoutActivating, true);
     this->notification_dialog->setWindowFlags(this->notification_dialog->windowFlags() | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint | Qt::X11BypassWindowManagerHint | Qt::Tool | Qt::WindowStaysOnTopHint | Qt::WindowDoesNotAcceptFocus);

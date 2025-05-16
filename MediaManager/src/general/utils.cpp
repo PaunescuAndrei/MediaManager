@@ -607,7 +607,7 @@ std::chrono::microseconds utils::QueryUnbiasedInterruptTimeChrono()
 	return std::chrono::microseconds(interruptTime);
 }
 
-double utils::get_luminance(QColor& color) {
+double utils::get_luminance(const QColor& color) {
 	int R, G, B;
 	color.getRgb(&R, &G, &B);
 	const double rg = R <= 10 ? R / 3294.0 : std::pow((R / 269.0) + 0.0513, 2.4);
@@ -616,12 +616,34 @@ double utils::get_luminance(QColor& color) {
 	return (0.2126 * rg) + (0.7152 * gg) + (0.0722 * bg);
 }
 
-QColor utils::complementary_color(QColor& color) {
+QColor utils::complementary_color(const QColor& color) {
 	double Luminance = get_luminance(color);
 	if(Luminance <= 0.35)
 		return QColor(Qt::white);
 	else
 		return QColor(Qt::black);
+}
+QColor utils::get_vibrant_color(const QColor& color, int satIncrease, int lightAdjust) {
+	float h, s, l, a;
+	color.getHslF(&h, &s, &l, &a);
+
+	s = qMin(1.0, s + s * (satIncrease / 100.0));
+	l = qBound(0.0, l + l * (lightAdjust / 100.0), 1.0);
+
+	return QColor::fromHslF(h, s, l, a);
+}
+
+QColor utils::get_vibrant_color_exponential(const QColor& color, float saturation_strength, float lightning_strength) {
+	float h, s, l, a;
+	color.getHslF(&h, &s, &l, &a);
+
+	s = s + (1.0 - s) * saturation_strength;
+	l = l + (1.0 - l) * lightning_strength;
+
+	s = qMin(1.0, s);
+	l = qMin(1.0, l);
+
+	return QColor::fromHslF(h, s, l, a);
 }
 
 color_area& utils::get_weighted_random_color(QList<color_area>& colors) {

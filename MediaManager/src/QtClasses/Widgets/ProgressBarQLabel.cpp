@@ -152,21 +152,23 @@ void ProgressBarQLabel::paintEvent(QPaintEvent* e)
 	progress_bar_option.progress = this->progress();
 	progress_bar_option.rect = rect;
 	QStyle* style = QApplication::style();
-	style->drawControl(QStyle::CE_ProgressBar, &progress_bar_option, &painter);
+	QColor highlight_color = this->palette().color(QPalette::Highlight);
 	
-	//https://stackoverflow.com/questions/64290561/qlabel-correct-positioning-for-text-outline
 	int indent;
 	double x, y;
 	QFont font_ = this->font();
 	QBrush brush = this->brush_;
 
 	if (highlight_check()) {
+		progress_bar_option.palette.setColor(QPalette::Highlight, utils::get_vibrant_color_exponential(highlight_color,0.12,0.12));
 		font_.setPointSizeF(24);
-		brush = QBrush(this->palette().color(QPalette::Highlight).lighter(125));
 	}
 	else {
 		font_.setPointSizeF(16);
 	}
+	style->drawControl(QStyle::CE_ProgressBar, &progress_bar_option, &painter);
+
+	//https://stackoverflow.com/questions/64290561/qlabel-correct-positioning-for-text-outline
 	double w = this->outlineThickness(font_);
 
 	QFontMetrics metrics = QFontMetrics(font_);

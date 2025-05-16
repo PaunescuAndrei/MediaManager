@@ -65,8 +65,10 @@ namespace utils {
 	void openFileExplorer(QString path);
 	void numlock_toggle_on();
 	std::chrono::microseconds QueryUnbiasedInterruptTimeChrono();
-	double get_luminance(QColor& color);
-	QColor complementary_color(QColor& color);
+	double get_luminance(const QColor& color);
+	QColor complementary_color(const QColor& color);
+	QColor get_vibrant_color(const QColor& color, int satIncrease = 20, int lightAdjust = 0);
+	QColor get_vibrant_color_exponential(const QColor& color, float saturation_strength = 0.1, float lightning_strength = 0.1);
 	color_area& get_weighted_random_color(QList<color_area>& colors);
 	void measureExecutionTime(std::function<void()> func, const QString& message);
 

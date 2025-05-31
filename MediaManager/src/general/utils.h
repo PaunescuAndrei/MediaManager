@@ -36,11 +36,12 @@ namespace utils {
 	bool hiddenCheck(QStringList &settings);
 	int randint(int start,int stop, quint32 seed = 0);
 	double randfloat(double start, double stop, quint32 seed = 0);
-	QList<std::string> getFiles(std::string directory,bool recursive = false);
-	QStringList getFilesQt(QString directory,bool recursive = false);
+	QList<std::string> getFiles(std::string directory,bool recursive = false, bool relative_path = false);
+	QStringList getFilesQt(QString directory,bool recursive = false, bool relative_path = false);
 	QList<std::string> getDirs(std::string directory, bool recursive = false);
 	QStringList getDirsQt(QString directory, bool recursive = false);
 	QStringList getDirNames(QString path);
+	QString getRootPath(const QString& pathStr);
 	static BOOL CALLBACK enumWindowCallback(HWND hWnd, LPARAM lparam);
 	QList<HWND> get_hwnds_for_pid(qint64 pid);
 	void bring_pid_to_foreground(qint64 pid, HWND hwnd = nullptr);

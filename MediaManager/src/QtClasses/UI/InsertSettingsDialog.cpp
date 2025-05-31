@@ -8,6 +8,7 @@
 #include <QStringList>
 #include "AutoToolTipDelegate.h"
 #include "stylesQt.h"
+#include <filesystem>
 
 InsertSettingsDialog::InsertSettingsDialog(QWidget* parent) : QDialog(parent) {
 	ui.setupUi(this);
@@ -114,6 +115,26 @@ QString InsertSettingsDialog::get_type(QString path) {
 		}
 	}
 	return type;
+}
+
+QString InsertSettingsDialog::get_maindir_path(QString path, QString dirsplit)
+{
+	QString rootPath = utils::getRootPath(path);
+	QStringList dirs = utils::getDirNames(path);
+	QString namedir;
+	if (dirsplit.isEmpty())
+		namedir = InsertSettingsDialog::get_namedir(path);
+	else
+		namedir = dirsplit;
+	int index = dirs.indexOf(namedir);
+	const QFileInfo info(path);
+	//QString name = info.fileName();
+	QString name;
+	for (int i = index; i < dirs.length(); i++) {
+		name = utils::pathAppend(dirs.at(i), name);
+	}
+	name = rootPath % name;
+	return name;
 }
 
 void InsertSettingsDialog::init_namedir(QStringList items) {

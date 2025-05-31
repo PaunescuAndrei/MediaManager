@@ -309,13 +309,14 @@ bool utils::pid_exists(qint64 pid) {
 	return false;
 }
 
-QList<std::string> utils::getFiles(std::string directory,bool recursive)
+QList<std::string> utils::getFiles(std::string directory,bool recursive, bool relative_path)
 {
 	QList<std::string> files = QList<std::string>();
+	QDir dir(QString::fromStdString(directory));
 	if (recursive) {
 		QDirIterator it(QString::fromStdString(directory), QDir::Files, QDirIterator::Subdirectories);
 		while (it.hasNext()) {
-			files.append(QDir::toNativeSeparators(it.next()).toStdString());
+			files.append(QDir::toNativeSeparators(relative_path ? dir.relativeFilePath(it.next()) : it.next()).toStdString());
 		}
 		//for (const auto& entry : std::filesystem::recursive_directory_iterator(directory, std::filesystem::directory_options::skip_permission_denied)) {
 		//	files.append(entry.path().string());
@@ -324,7 +325,7 @@ QList<std::string> utils::getFiles(std::string directory,bool recursive)
 	else {
 		QDirIterator it(QString::fromStdString(directory), QDir::Files, QDirIterator::NoIteratorFlags);
 		while (it.hasNext()) {
-			files.append(QDir::toNativeSeparators(it.next()).toStdString());
+			files.append(QDir::toNativeSeparators(relative_path ? dir.relativeFilePath(it.next()) : it.next()).toStdString());
 		}
 		//for (const auto& entry : std::filesystem::directory_iterator(directory, std::filesystem::directory_options::skip_permission_denied)) {
 		//	files.append(entry.path().string());
@@ -333,12 +334,13 @@ QList<std::string> utils::getFiles(std::string directory,bool recursive)
 	return files;
 }
 
-QStringList utils::getFilesQt(QString directory,bool recursive) {
+QStringList utils::getFilesQt(QString directory,bool recursive, bool relative_path) {
 	QStringList files = QStringList();
+	QDir dir(directory);
 	if (recursive) {
 		QDirIterator it(directory, QDir::Files, QDirIterator::Subdirectories);
 		while (it.hasNext()) {
-			files.append(QDir::toNativeSeparators(it.next()));
+			files.append(dir.toNativeSeparators(relative_path ? dir.relativeFilePath(it.next()) : it.next()));
 		}
 		//for (const auto& entry : std::filesystem::recursive_directory_iterator(directory, std::filesystem::directory_options::skip_permission_denied)) {
 		//	files.append(QString::fromStdString(entry.path().string()));
@@ -347,7 +349,7 @@ QStringList utils::getFilesQt(QString directory,bool recursive) {
 	else {
 		QDirIterator it(directory, QDir::Files, QDirIterator::NoIteratorFlags);
 		while (it.hasNext()) {
-			files.append(QDir::toNativeSeparators(it.next()));
+			files.append(dir.toNativeSeparators(relative_path ? dir.relativeFilePath(it.next()) : it.next()));
 		}
 		//for (const auto& entry : std::filesystem::directory_iterator(directory, std::filesystem::directory_options::skip_permission_denied)) {
 		//	files.append(QString::fromStdString(entry.path().string()));
@@ -413,6 +415,12 @@ QStringList utils::getDirNames(QString path) {
 		fileInfo1 = QFileInfo(fileInfo1.dir().absolutePath());
 	}
 	return files;
+}
+
+QString utils::getRootPath(const QString& pathStr) {
+	std::filesystem::path path(pathStr.toStdString());
+	path = std::filesystem::absolute(path);
+	return QString::fromStdString(path.root_path().string());
 }
 
 std::string utils::linux_to_windows_path(std::string& path) {

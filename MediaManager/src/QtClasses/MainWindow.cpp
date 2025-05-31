@@ -2995,7 +2995,21 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
     else if (menu_click == update_path) {
         QString old_path = item->text(ListColumns["PATH_COLUMN"]);
         QFileInfo fileInfo(old_path);
-        QString new_path = QFileDialog::getOpenFileName(this, "Select new path", fileInfo.absolutePath());
+        QDir main_path = QDir(InsertSettingsDialog::get_maindir_path(old_path));
+        QString old_name = InsertSettingsDialog::get_name(old_path);
+        QString max_similarity_filename = "";
+        double max_similarity = 0;
+        if (main_path.exists()) {
+            QStringList existing_files = utils::getFilesQt(fileInfo.absolutePath(),true,true);
+            for (const QString &filename : existing_files) {
+                double score = rapidfuzz::fuzz::partial_ratio(old_name.toStdString(), filename.toStdString());
+                if (score > max_similarity) {
+                    max_similarity_filename = filename;
+                    max_similarity = score;
+                }
+            }
+        }
+        QString new_path = QFileDialog::getOpenFileName(this, "Select new path", max_similarity_filename.isEmpty() ? fileInfo.absolutePath() : main_path.absoluteFilePath(max_similarity_filename));
         if (!new_path.isEmpty()) {
             new_path = QDir::toNativeSeparators(new_path);
             generateThumbnailThread::deleteThumbnail(old_path);

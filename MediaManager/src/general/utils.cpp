@@ -417,9 +417,12 @@ QStringList utils::getDirNames(QString path) {
 	return files;
 }
 
-QString utils::getRootPath(const QString& pathStr) {
-	std::filesystem::path path(pathStr.toStdString());
-	path = std::filesystem::absolute(path);
+QString utils::getRootPath(const QString &pathStr) {
+	#ifdef Q_OS_WIN
+		std::filesystem::path path(pathStr.toStdWString());  // Convert QString to wide string on Windows
+	#else
+		std::filesystem::path path(pathStr.toStdString());   // Use UTF-8 on Unix-like systems
+	#endif
 	return QString::fromStdString(path.root_path().string());
 }
 

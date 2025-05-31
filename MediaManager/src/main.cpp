@@ -32,29 +32,30 @@ int main(int argc, char *argv[])
     }
     MainApp App(argc, argv);
     signal(SIGSEGV, manageSegFailure);
-    try
-    {
-        return App.exec();
-    }
-    catch (const std::runtime_error& re)
-    {
-        // speciffic handling for runtime_error
-        std::cerr << "Runtime error: " << re.what() << std::endl;
-        QMessageBox::critical(nullptr, "Runtime error", QString::fromStdString(re.what()));
-        throw;
-    }
-    catch (const std::exception& ex)
-    {
-        // speciffic handling for all exceptions extending std::exception
-        std::cerr << "Error occurred: " << ex.what() << std::endl;
-        QMessageBox::critical(nullptr, "Error occurred", QString::fromStdString(ex.what()));
-        throw;
-    }
-    catch (...)
-    {
-        // catch any other errors (that we have no information about)
-        QMessageBox::critical(nullptr, "Error occurred", "Unknown failure occurred. Possible memory corruption.");
-        std::cerr << "Unknown failure occurred. Possible memory corruption" << std::endl;
-        throw;
-    }
+    return App.exec();
+    //try
+    //{
+    //    return App.exec();
+    //}
+    //catch (const std::runtime_error& re)
+    //{
+    //    // speciffic handling for runtime_error
+    //    std::cerr << "Runtime error: " << re.what() << std::endl;
+    //    QMessageBox::critical(nullptr, "Runtime error", QString::fromStdString(re.what()));
+    //    throw;
+    //}
+    //catch (const std::exception& ex)
+    //{
+    //    // speciffic handling for all exceptions extending std::exception
+    //    std::cerr << "Error occurred: " << ex.what() << std::endl;
+    //    QMessageBox::critical(nullptr, "Error occurred", QString::fromStdString(ex.what()));
+    //    throw;
+    //}
+    //catch (...)
+    //{
+    //    // catch any other errors (that we have no information about)
+    //    QMessageBox::critical(nullptr, "Error occurred", "Unknown failure occurred. Possible memory corruption.");
+    //    std::cerr << "Unknown failure occurred. Possible memory corruption" << std::endl;
+    //    throw;
+    //}
 }

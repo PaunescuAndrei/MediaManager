@@ -41,7 +41,7 @@ namespace utils {
 	QList<std::string> getDirs(std::string directory, bool recursive = false);
 	QStringList getDirsQt(QString directory, bool recursive = false);
 	QStringList getDirNames(QString path);
-	QString getRootPath(const QString& pathStr);
+	QString getRootPath(const QString &pathStr);
 	static BOOL CALLBACK enumWindowCallback(HWND hWnd, LPARAM lparam);
 	QList<HWND> get_hwnds_for_pid(qint64 pid);
 	void bring_pid_to_foreground(qint64 pid, HWND hwnd = nullptr);

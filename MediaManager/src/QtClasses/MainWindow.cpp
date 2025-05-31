@@ -3002,7 +3002,7 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
         if (main_path.exists()) {
             QStringList existing_files = utils::getFilesQt(fileInfo.absolutePath(),true,true);
             for (const QString &filename : existing_files) {
-                double score = rapidfuzz::fuzz::partial_ratio(old_name.toStdString(), filename.toStdString());
+                double score = rapidfuzz::fuzz::partial_ratio(old_name.toLower().toStdString(), filename.toLower().toStdString());
                 if (score > max_similarity) {
                     max_similarity_filename = filename;
                     max_similarity = score;

@@ -13,6 +13,8 @@
 finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 {
 	ui.setupUi(this);
+	this->MW = MW;
+	this->updateWindowTitle();
 	this->setWindowModality(Qt::NonModal);
 	MW->initNextButtonMode(this->ui.NextButton);
 	connect(this->ui.NextButton, &customQButton::rightClicked, this, [this,MW] {
@@ -126,6 +128,9 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 		this->ui.tagsButton->installEventFilter(this);
 	}
 	this->timer.start(250);
+
+	connect(&titleUpdateTimer, &QTimer::timeout, this, &finishDialog::updateWindowTitle);
+	titleUpdateTimer.start(1000);
 }
 
 bool finishDialog::eventFilter(QObject* obj, QEvent* event) {
@@ -163,6 +168,16 @@ void finishDialog::wheelEvent(QWheelEvent* event)
 	}
 }
 
+void finishDialog::updateWindowTitle() {
+	QString currentTime = QTime::currentTime().toString("hh:mm:ss");
+	QString elapsed_time = "";
+	if (this->MW and this->MW->App->VW and this->MW->App->VW->mainPlayer_time_start) {
+        elapsed_time = " [Watching for: " % QString::fromStdString(utils::formatSeconds(std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->MW->App->VW->mainPlayer_time_start).count())) % "]";
+    }
+	this->setWindowTitle("Continue? "+ elapsed_time + " [Time: " + currentTime + "]");
+}
+
 finishDialog::~finishDialog()
 {
+    titleUpdateTimer.stop();
 }

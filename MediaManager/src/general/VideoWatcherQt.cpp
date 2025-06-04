@@ -100,7 +100,11 @@ void VideoWatcherQt::toggle_window()
 				player->toggleFullScreen(true);
 			}
 			player->setPaused(false,true);
-			player->displayOsdMessage(QString("%1 / %2").arg(utils::formatSecondsQt(player->position), utils::formatSecondsQt(player->duration)), 3000,true);
+			QTime currentTime = QTime::currentTime();
+			player->displayOsdMessage(QString("%1 / %2 | %3").arg(
+				utils::formatSecondsQt(player->position), 
+				utils::formatSecondsQt(player->duration),
+				currentTime.toString("hh:mm")), 3000, true);
 		}
 	}
 }

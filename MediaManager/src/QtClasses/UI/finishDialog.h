@@ -17,7 +17,7 @@ public:
     void stopCountdown();
     QTimer timer;
     QTimer countdownTimer;
-    int countdownSeconds;
+    int countdownSeconds = 10;
     Ui::finishDialog ui;
     enum CustomDialogCode {
         Skip = 100,

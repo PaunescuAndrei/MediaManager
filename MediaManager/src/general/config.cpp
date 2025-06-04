@@ -84,6 +84,7 @@ void Config::init_defaults() {
 		{"sound_effects_chain_chance","100"},
 		{"time_watched_limit","600"},
 		{"numlock_only_on","True"},
+		{"video_autoplay", "True"},
 		{"random_use_seed","False"},
 		{"random_seed",""},
 		{"weighted_random_minus","True"},

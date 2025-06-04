@@ -177,8 +177,15 @@ void MpcPlayer::openPlayer(QString video_path, double position_seconds)
     this->process->setProgram(this->App->config->get("player_path"));
     if (video_path.isEmpty())
         this->process->setArguments({ "/slave",QString::number((unsigned long long int)this->class_hwnd) });
-    else
-        this->process->setArguments({ "/open", video_path, "/start", QString::number(position_seconds * 1000, 'f',4), "/slave",QString::number((unsigned long long int)this->class_hwnd) });
+    else {
+        QStringList args;
+        if(this->App->config->get_bool("video_autoplay"))
+            args << "/play";
+        else 
+            args << "/open";
+        args << video_path << "/start" << QString::number(position_seconds * 1000, 'f',4) << "/slave" << QString::number((unsigned long long int)this->class_hwnd);
+        this->process->setArguments(args);
+    }
 
     this->process->start();
     this->pid = this->process->processId();
@@ -246,6 +253,11 @@ void MpcPlayer::changeVideo(QString path, int video_id, double position)
     }
     guard.unlock();
     this->queue.enqueue(std::make_shared<ChangeVideoCommand>(path,video_id,position));
+    
+    if (!path.isEmpty()) {
+        bool should_autoplay = this->App->config->get_bool("video_autoplay");
+        this->setPaused(!should_autoplay, false);
+    }
 }
 
 void MpcPlayer::run() {

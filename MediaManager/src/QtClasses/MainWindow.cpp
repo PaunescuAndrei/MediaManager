@@ -1622,6 +1622,11 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         config->set("mascots_color_theme", "False");
         this->resetPalette();
     }
+    if (dialog->ui.videoAutoplay->checkState() == Qt::CheckState::Checked)
+        config->set("video_autoplay", "True");
+    else if (dialog->ui.videoAutoplay->checkState() == Qt::CheckState::Unchecked)
+        config->set("video_autoplay", "False");
+    
     if (dialog->ui.minusCatRadioBtn->isChecked())
         config->set("current_db", "MINUS");
     if (dialog->ui.plusCatRadioBtn->isChecked())
@@ -2384,6 +2389,7 @@ void MainWindow::switchCurrentDB(QString db) {
     this->initListDetails();
     this->initNextButtonMode(this->ui.next_button);
     this->initRandomButtonMode(this->ui.random_button);
+    connect(this->ui.update_watched_button, &QToolButton::toggled, this, &MainWindow::setCheckedUpdateWatchedToggleButton);
     this->initUpdateWatchedToggleButton();
     this->refreshVideosWidget();
     this->refreshHeadersVisibility();
@@ -2481,7 +2487,7 @@ void MainWindow::addWatchedDialogButton() {
 void MainWindow::incrementtimeWatchedIncrement(double value) {
     if (value > 0)
         qMainApp->logger->log(QString("Increasing time watched by %1").arg(utils::formatSecondsQt(value)), "Stats");
-    double time = this->App->db->getMainInfoValue("timeWatchedIncrement", "ALL", "0.0").toDouble();
+    double time = this->App->db->getMainInfoValue("timeWatchedIncrement", "ALL", "0").toDouble();
     time += value;
     this->App->db->setMainInfoValue("timeWatchedIncrement", "ALL", QString::number(time));
 }

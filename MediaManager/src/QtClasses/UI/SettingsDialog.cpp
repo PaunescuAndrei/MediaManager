@@ -123,6 +123,12 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 		this->ui.videoAutoplay->setCheckState(Qt::CheckState::Checked);
 	else
 		this->ui.videoAutoplay->setCheckState(Qt::CheckState::Unchecked);
+	if (mw->App->config->get_bool("auto_continue"))
+		this->ui.autoContinue->setCheckState(Qt::CheckState::Checked);
+	else
+		this->ui.autoContinue->setCheckState(Qt::CheckState::Unchecked);
+
+	this->ui.autoContinueDelay->setValue(mw->App->config->get("auto_continue_delay").toInt());
 
 	this->ui.SVspinBox->setValue(mw->App->db->getMainInfoValue("sv_target_count", "ALL","0").toInt());
 	this->oldSVmax = this->ui.SVspinBox->value();

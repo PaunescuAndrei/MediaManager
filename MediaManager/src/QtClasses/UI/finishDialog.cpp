@@ -108,7 +108,46 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 			this->activateWindow();
 		//}
 	});
+	if (MW->App->config->get_bool("auto_continue")) {
+		this->countdownSeconds = MW->App->config->get("auto_continue_delay").toInt();
+		this->updateCountdownText();
+		connect(&this->countdownTimer, &QTimer::timeout, this, [this] {
+			this->countdownSeconds--;
+			if (this->countdownSeconds <= 0) {
+				this->countdownTimer.stop();
+				this->timer.stop();
+				this->done(finishDialog::Accepted);
+			} else {
+				this->updateCountdownText();
+			}
+		});
+		this->countdownTimer.start(1000);
+		this->installEventFilter(this);
+		this->ui.tagsButton->installEventFilter(this);
+	}
 	this->timer.start(250);
+}
+
+bool finishDialog::eventFilter(QObject* obj, QEvent* event) {
+    if (event->type() == QEvent::KeyPress || 
+        event->type() == QEvent::KeyRelease ||
+        event->type() == QEvent::MouseButtonPress ||
+        event->type() == QEvent::Wheel) {
+        this->stopCountdown();
+    }
+    return QDialog::eventFilter(obj, event);
+}
+
+void finishDialog::updateCountdownText() {
+	this->ui.mainmsg->setText(QString("Continue? (Auto in %1s)").arg(this->countdownSeconds));
+}
+
+void finishDialog::stopCountdown()
+{
+	if (this->countdownTimer.isActive()) {
+		this->countdownTimer.stop();
+		this->ui.mainmsg->setText("Continue?");
+	}
 }
 
 void finishDialog::wheelEvent(QWheelEvent* event)

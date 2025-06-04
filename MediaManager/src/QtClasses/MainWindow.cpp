@@ -1626,6 +1626,11 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         config->set("video_autoplay", "True");
     else if (dialog->ui.videoAutoplay->checkState() == Qt::CheckState::Unchecked)
         config->set("video_autoplay", "False");
+    if (dialog->ui.autoContinue->checkState() == Qt::CheckState::Checked)
+        config->set("auto_continue", "True");
+    else if (dialog->ui.autoContinue->checkState() == Qt::CheckState::Unchecked)
+        config->set("auto_continue", "False");
+    config->set("auto_continue_delay", QString::number(dialog->ui.autoContinueDelay->value()));
     
     if (dialog->ui.minusCatRadioBtn->isChecked())
         config->set("current_db", "MINUS");

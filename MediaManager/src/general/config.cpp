@@ -103,6 +103,8 @@ void Config::init_defaults() {
 		{"random_no_views_weight_plus","1.0"},
 		{"random_no_ratings_weight_plus","1.0"},
 		{"random_no_tags_weight_plus","0.0"},
+		{"auto_continue", "False"},
+		{"auto_continue_delay", "5"},
 	});
 }
 

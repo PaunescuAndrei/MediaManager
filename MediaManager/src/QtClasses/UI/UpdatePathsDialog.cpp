@@ -56,7 +56,7 @@ double UpdatePathsDialog::calculateSimilarity(const QString& name1, const QStrin
         return similarity_cache[key];
     }
     
-    double score;
+    double score = 0;
     switch(ui.algorithmComboBox->currentIndex()) {
         case 0: // Simple Ratio
             score = rapidfuzz::fuzz::ratio(key.first.toStdString(), key.second.toStdString());

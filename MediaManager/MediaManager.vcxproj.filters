@@ -248,7 +248,10 @@
     <ClCompile Include="src\general\MpcPlayer.cpp">
       <Filter>Source Files\general</Filter>
     </ClCompile>
-    <ClCompile Include="src\QtClasses\Widgets\WheelEventFilter.cpp">
+    <ClCompile Include="src\QtClasses\UI\UpdatePathsDialog.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\WheelStrongFocusEventFilter.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
   </ItemGroup>
@@ -406,6 +409,9 @@
     <QtUic Include="src\QtClasses\UI\Form Files\VideosTagsDialog.ui">
       <Filter>Form Files</Filter>
     </QtUic>
+    <QtUic Include="src\QtClasses\UI\Form Files\UpdatePathsDialog.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="src\QtClasses\MainWindow.h">
@@ -531,7 +537,10 @@
     <QtMoc Include="src\general\BasePlayer.h">
       <Filter>Header Files\general</Filter>
     </QtMoc>
-    <QtMoc Include="src\QtClasses\Widgets\WheelEventFilter.h">
+    <QtMoc Include="src\QtClasses\UI\UpdatePathsDialog.h">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\WheelStrongFocusEventFilter.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
   </ItemGroup>

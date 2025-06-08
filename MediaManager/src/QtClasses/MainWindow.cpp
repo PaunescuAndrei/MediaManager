@@ -55,6 +55,7 @@
 #include "colorPaletteExtractor.h"
 #include "loadBackupDialog.h"
 #include "TagsDialog.h"
+#include "UpdatePathsDialog.h"
 
 #pragma warning(push ,3)
 #include "rapidfuzz_all.hpp"
@@ -561,6 +562,7 @@ void MainWindow::updatePath(int video_id, QString new_path) {
     QMimeDatabase db;
     QMimeType guess_type = db.mimeTypeForFile(new_path);
     if (guess_type.isValid() && guess_type.name().startsWith("video")) {
+        qMainApp->logger->log(QString("Updating video with id \"%1\" to %2").arg(video_id).arg(new_path), "UpdatePath", new_path);
         this->App->db->db.transaction();
         this->App->db->updateItem(video_id, new_path);
         QString author = InsertSettingsDialog::get_author(new_path);
@@ -2911,9 +2913,7 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
     QAction* name_edit = new QAction("Edit Name", set_menu);
     set_menu->addAction(name_edit);
     QAction* update_path = new QAction("Update Path", set_menu);
-    if (items.size() == 1) {
-        set_menu->addAction(update_path);
-    }
+    set_menu->addAction(update_path);
     QAction* tags_edit = new QAction("Edit Tags", set_menu);
     set_menu->addAction(tags_edit);
     QMenu* watched_menu = new QMenu("Set Watched as", &menu);
@@ -3004,37 +3004,11 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
         }
     }
     else if (menu_click == update_path) {
-        QString old_path = item->text(ListColumns["PATH_COLUMN"]);
-        QFileInfo fileInfo(old_path);
-        QDir main_path = QDir(InsertSettingsDialog::get_maindir_path(old_path));
-        QString old_name = InsertSettingsDialog::get_name(old_path);
-        QString max_similarity_filename = "";
-        double max_similarity = 0;
-        if (main_path.exists()) {
-            QStringList existing_files = utils::getFilesQt(fileInfo.absolutePath(),true,true);
-            for (const QString &filename : existing_files) {
-                double score = rapidfuzz::fuzz::ratio(old_name.toLower().toStdString(), filename.toLower().toStdString());
-                if (score > max_similarity) {
-                    max_similarity_filename = filename;
-                    max_similarity = score;
-                }
-            }
-        }
-        QString new_path = QFileDialog::getOpenFileName(this, "Select new path", max_similarity_filename.isEmpty() ? fileInfo.absolutePath() : main_path.absoluteFilePath(max_similarity_filename));
-        if (!new_path.isEmpty()) {
-            new_path = QDir::toNativeSeparators(new_path);
-            generateThumbnailThread::deleteThumbnail(old_path);
-            this->updatePath(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), new_path);
-            if (old_path == this->ui.currentVideo->path) {
-                auto items = this->ui.videosWidget->findItemsCustom(new_path, Qt::MatchFixedString, ListColumns["PATH_COLUMN"], 1);
-                if (not items.isEmpty()) {
-                    auto item = items.first();
-                    this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(),item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]), item->text(ListColumns["TAGS_COLUMN"]));
-                    if (this->App->VW->mainPlayer) {
-                        this->changePlayerVideo(this->App->VW->mainPlayer, this->ui.currentVideo->path, this->ui.currentVideo->id, 0);
-                    }
-                }
-            }
+        if (not items.isEmpty()) {
+            UpdatePathsDialog* dialog = new UpdatePathsDialog(this, this);
+            dialog->addItems(items);
+            dialog->exec();
+            dialog->deleteLater();
         }
     }
     else if (menu_click == tags_edit) {

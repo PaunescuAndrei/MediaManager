@@ -11,7 +11,6 @@
 #include <QSpinBox>
 #include <QSignalBlocker>
 #include "definitions.h"
-#include "WheelEventFilter.h"
 
 SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 {

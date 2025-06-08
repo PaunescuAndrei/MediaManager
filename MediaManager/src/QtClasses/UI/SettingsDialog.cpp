@@ -204,7 +204,7 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 
 	this->ui.weightedRandMinusGroupBox->setTitle(this->ui.weightedRandMinusGroupBox->title().replace("MINUS", mw->App->config->get("minus_category_name"), Qt::CaseSensitive));
 	this->ui.weightedRandPlusGroupBox->setTitle(this->ui.weightedRandPlusGroupBox->title().replace("PLUS", mw->App->config->get("plus_category_name"), Qt::CaseSensitive));
-	WheelEventFilter* filter = new WheelEventFilter(this);
+	WheelStrongFocusEventFilter* filter = new WheelStrongFocusEventFilter(this);
 
 	//MINUS Weighted settings
 	this->ui.weightedRandMinusGroupBox->setChecked(mw->App->config->get_bool("weighted_random_minus"));
@@ -395,12 +395,12 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 	//These need to be at the bottom
 	QList<QSpinBox*> spinboxes = this->findChildren<QSpinBox*>();
 	for (auto spinbox : spinboxes) {
-		spinbox->installEventFilter(this);
+		spinbox->installEventFilter(filter);
 		connect(spinbox, &QSpinBox::valueChanged, this, [this] {this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(true); });
 	}
 	QList<QDoubleSpinBox*> doublespinboxes = this->findChildren<QDoubleSpinBox*>();
 	for (auto doublespinbox : doublespinboxes) {
-		doublespinbox->installEventFilter(this);
+		doublespinbox->installEventFilter(filter);
 		connect(doublespinbox, &QDoubleSpinBox::valueChanged, this, [this] {this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(true); });
 	}
 	QList<QCheckBox*> checkboxes = this->findChildren<QCheckBox*>();

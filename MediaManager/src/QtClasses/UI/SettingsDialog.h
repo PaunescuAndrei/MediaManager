@@ -1,6 +1,7 @@
 #pragma once
 #include <QDialog>
 #include "ui_SettingsDialog.h"
+#include "WheelStrongFocusEventFilter.h"
 
 class MainWindow;
 

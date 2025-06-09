@@ -49,8 +49,23 @@ UpdatePathsDialog::UpdatePathsDialog(QWidget* parent, MainWindow* mainWindow)
     });
 }
 
+QString UpdatePathsDialog::normalizeFilename(const QString& filepath) {
+    QFileInfo fileInfo(filepath);
+    QString dirPath = QDir::toNativeSeparators(fileInfo.path());
+    QString baseName = fileInfo.completeBaseName();
+
+    baseName.replace(QRegularExpression("[._-]"), " ");
+    baseName = baseName.toLower().trimmed();
+    baseName.replace(QRegularExpression("\\s+"), " ");
+
+    if (dirPath.isEmpty() or dirPath == ".")
+        return baseName;
+
+    return dirPath.toLower() + QDir::separator() + baseName;
+}
+
 double UpdatePathsDialog::calculateSimilarity(const QString& name1, const QString& name2) {
-    QPair<QString, QString> key(name1.toLower(), name2.toLower());
+	QPair<QString, QString> key(normalizeFilename(name1), normalizeFilename(name2));
     
     if (similarity_cache.contains(key)) {
         return similarity_cache[key];

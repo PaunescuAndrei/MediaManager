@@ -12,6 +12,7 @@ class UpdatePathsDialog : public QDialog
 
 public:
     UpdatePathsDialog(QWidget* parent, MainWindow* mainWindow);
+    static QString normalizeFilename(const QString& filepath);
     ~UpdatePathsDialog();
     void addItems(QList<QTreeWidgetItem*> items);
 

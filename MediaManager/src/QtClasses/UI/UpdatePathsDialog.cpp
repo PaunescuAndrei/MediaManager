@@ -52,7 +52,7 @@ UpdatePathsDialog::UpdatePathsDialog(QWidget* parent, MainWindow* mainWindow)
 QString UpdatePathsDialog::normalizeFilename(const QString& filepath) {
     QFileInfo fileInfo(filepath);
     QString dirPath = QDir::toNativeSeparators(fileInfo.path());
-    QString baseName = fileInfo.completeBaseName();
+    QString baseName = fileInfo.fileName();
 
     baseName.replace(QRegularExpression("[._-]"), " ");
     baseName = baseName.toLower().trimmed();

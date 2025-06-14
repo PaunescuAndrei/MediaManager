@@ -218,12 +218,11 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
             }
         }
         this->InsertVideoFiles(files,false); 
-    });
-
+    });    
     connect(this->ui.random_button, &QPushButton::clicked, this, [this] {
         NextVideoSettings settings = this->getNextVideoSettings();
         bool ignore_filters_and_defaults = settings.random_mode == RandomModes::All;
-        bool video_changed = this->randomVideo(settings.random_mode, ignore_filters_and_defaults, settings.vid_type_include, settings.vid_type_exclude);
+        bool video_changed = this->randomVideo(settings.random_mode, ignore_filters_and_defaults, settings.vid_type_include, settings.vid_type_exclude, false);
         if (this->App->VW->mainPlayer and video_changed) {
             this->changePlayerVideo(this->App->VW->mainPlayer, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
         }
@@ -1231,9 +1230,9 @@ bool MainWindow::setNextVideo(QTreeWidgetItem* item) {
             this->selectCurrentItem(nullptr);
             return false;
             break;
-        }
+        }        
         if (item_below->text(ListColumns["WATCHED_COLUMN"]) == "No") {
-            this->setCurrent(item_below->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item_below->text(ListColumns["PATH_COLUMN"]), item_below->text(ListColumns["NAME_COLUMN"]), item_below->text(ListColumns["AUTHOR_COLUMN"]), item_below->text(ListColumns["TAGS_COLUMN"]));
+            this->setCurrent(item_below->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item_below->text(ListColumns["PATH_COLUMN"]), item_below->text(ListColumns["NAME_COLUMN"]), item_below->text(ListColumns["AUTHOR_COLUMN"]), item_below->text(ListColumns["TAGS_COLUMN"]), true);
             this->selectCurrentItem(item_below);
             return true;
             break;
@@ -1976,7 +1975,7 @@ QJsonObject MainWindow::getRandomSettings(RandomModes::Mode random_mode, bool ig
     return settings;
 }
 
-bool MainWindow::randomVideo(RandomModes::Mode random_mode, bool ignore_filters_and_defaults, QStringList vid_type_include, QStringList vid_type_exclude) {
+bool MainWindow::randomVideo(RandomModes::Mode random_mode, bool ignore_filters_and_defaults, QStringList vid_type_include, QStringList vid_type_exclude, bool reset_progress) {
     QTreeWidgetItem* root = this->ui.videosWidget->invisibleRootItem();
     QTreeWidgetItem* item = nullptr;
     int videos_count = root->childCount();
@@ -1984,14 +1983,14 @@ bool MainWindow::randomVideo(RandomModes::Mode random_mode, bool ignore_filters_
         QJsonObject settings = this->getRandomSettings(random_mode, ignore_filters_and_defaults, vid_type_include, vid_type_exclude);
         QString item_name;
         QString seed = this->App->config->get_bool("random_use_seed") ? this->App->config->get("random_seed") : "";
-        item_name = this->getRandomVideo(seed, this->getWeightedBiasSettings(), settings);
+        item_name = this->getRandomVideo(seed, this->getWeightedBiasSettings(), settings);        
         if (!item_name.isEmpty()) {
             QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(item_name, Qt::MatchExactly, ListColumns["PATH_COLUMN"], 1);
             if (!items.isEmpty())
                 item = items.first();
-        }
+        }        
         if (item != nullptr) {
-            this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]), item->text(ListColumns["TAGS_COLUMN"]));
+            this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]), item->text(ListColumns["TAGS_COLUMN"]), reset_progress);
             this->selectCurrentItem(item);
             return true;
         }
@@ -3209,9 +3208,12 @@ void MainWindow::selectItemsDelayed(QStringList items, bool clear_selection) {
     });
 }
 
-void MainWindow::setCurrent(int id, QString path, QString name, QString author, QString tags) {
+void MainWindow::setCurrent(int id, QString path, QString name, QString author, QString tags, bool reset_progress) {
     this->ui.currentVideo->setValues(id, path, name, author, tags);
-    this->updateProgressBar(this->App->db->getVideoProgress(this->ui.currentVideo->id), utils::getVideoDuration(this->ui.currentVideo->path));
+    if (reset_progress)
+        this->updateProgressBar("0", utils::getVideoDuration(this->ui.currentVideo->path));
+    else
+        this->updateProgressBar(this->App->db->getVideoProgress(this->ui.currentVideo->id), utils::getVideoDuration(this->ui.currentVideo->path));
     this->App->db->setMainInfoValue("current", this->App->currentDB, path);
     qMainApp->logger->log(QString("Setting current Video to \"%1\"").arg(path), "Video",path);
 }

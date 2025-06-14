@@ -107,7 +107,7 @@ public:
     void updateHeaderSettings(QStringList settings);
     void videosWidgetContextMenu(QPoint point);
     VideosTagsDialog* editTags(QList<QTreeWidgetItem*> items, QWidget* parent = nullptr);
-    void setCurrent(int id, QString path, QString name, QString author, QString tags);
+    void setCurrent(int id, QString path, QString name, QString author, QString tags, bool reset_progress = false);
     QString getWatchedVisibilityOption(bool watched_yes, bool watched_no, bool watched_mixed, bool search_bar_visible, bool visible_only_checkbox);
     void DeleteDialogButton(QList<QTreeWidgetItem*> items);
     void setWatched(QString value, QList<QTreeWidgetItem*> items);
@@ -127,7 +127,7 @@ public:
     void setCounterVar(int value);
     QString getRandomVideo(QString seed, WeightedBiasSettings weighted_settings, QJsonObject settings);
     QJsonObject getRandomSettings(RandomModes::Mode random_mode, bool ignore_filters_and_defaults = false, QStringList vid_type_include = {}, QStringList vid_type_exclude = {});
-    bool randomVideo(RandomModes::Mode random_mode, bool ignore_filters_and_defaults = false, QStringList vid_type_include = {}, QStringList vid_type_exclude = {});
+    bool randomVideo(RandomModes::Mode random_mode, bool ignore_filters_and_defaults = false, QStringList vid_type_include = {}, QStringList vid_type_exclude = {}, bool reset_progress = true);
     void refreshCurrentVideo();
     void selectCurrentItem(QTreeWidgetItem* item = nullptr, bool selectcurrent = true);
     void insertDialogButton();

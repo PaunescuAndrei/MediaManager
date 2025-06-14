@@ -614,7 +614,6 @@ std::chrono::microseconds utils::QueryUnbiasedInterruptTimeChrono()
 		interruptTime = -1;
 	}
 	interruptTime = interruptTime / 10;
-
 	return std::chrono::microseconds(interruptTime);
 }
 

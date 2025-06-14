@@ -1,6 +1,7 @@
 #pragma once
 #include "BasePlayer.h"
 #include "MpcApi.h"
+#include <chrono>
 
 class MpcPlayer :
     public BasePlayer
@@ -14,6 +15,7 @@ public:
     bool change_in_progress_video = false;
     bool change_in_progress_seek = false;
     bool change_in_progress_pause = false;
+    std::chrono::microseconds last_seek_time;
     MpcPlayer(QString video_path, int video_id, int* CLASS_COUNT, QObject* parent, MainApp* App);
     ~MpcPlayer();
     static LRESULT CALLBACK WndProcWrapper(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);

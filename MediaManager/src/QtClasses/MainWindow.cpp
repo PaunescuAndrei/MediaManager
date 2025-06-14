@@ -2335,6 +2335,9 @@ void MainWindow::watchCurrent() {
         double seconds = this->position;
         if (seconds < 0.001)
             seconds = 0.001;
+        else if (seconds >= this->duration - 0.1) {
+			seconds = this->duration - 0.1; // mpc-hc bugs out a bit if we try to play from the end of the video, so we set it to a bit before the end
+        }
         l->openPlayer(this->ui.currentVideo->path, seconds);
         connect(l.data(), &BasePlayer::endOfVideoSignal, this, &MainWindow::showEndOfVideoDialog);
         this->VideoInfoNotification();

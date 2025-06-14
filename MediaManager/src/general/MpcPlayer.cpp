@@ -19,6 +19,7 @@ MpcPlayer::MpcPlayer(QString video_path, int video_id, int* CLASS_COUNT, QObject
     if (!messageWindow) {
         qDebug() << "Failed to create message-only window";
     }
+	this->last_seek_time = utils::QueryUnbiasedInterruptTimeChrono();
 }
 
 MpcPlayer::~MpcPlayer()
@@ -109,6 +110,7 @@ LRESULT MpcPlayer::OnCopyData(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
             }
             case CMD_NOTIFYSEEK:
             {
+                this->last_seek_time = utils::QueryUnbiasedInterruptTimeChrono();
                 if (this->change_in_progress_seek == true) {
                     this->change_in_progress_seek = false;
                 };
@@ -352,13 +354,24 @@ void MpcPlayer::run() {
         }
         if (this->change_in_progress == false and not this->video_path.isEmpty() and this->position >= 0 and this->duration >= 0 and this->position >= this->duration - 0.5) {
             if (this->end_of_video == false) {
-                this->end_of_video = true;
-                emit this->endOfVideoSignal();
+                auto now = utils::QueryUnbiasedInterruptTimeChrono();
+                auto time_since_seek = std::chrono::duration_cast<std::chrono::milliseconds>(now - this->last_seek_time).count();
+                if (time_since_seek >= 500) {
+					//weird bug if finish dialog steals mpc-hc window focus while seeking it will hang sending final pause state and final notify end of stream
+                    this->end_of_video = true;
+                    emit this->endOfVideoSignal();
+                }
             }
         }
         else if (this->end_of_video == true) {
             this->end_of_video = false;
         }
+        if(this->position >= this->duration and this->position >= 0 and this->duration >= 0 and this->paused == false) {
+            //weird bug if finish dialog steals mpc-hc window focus while seeking it will hang sending final pause state and final notify end of stream
+			// you need both this and endofvideosignal delay to avoid mpc-hc bug
+            // this combined with the delay prevents finish dialog from apearing when holding mouse seek
+            this->send_message(CMD_SETPOSITION, QString::number(this->duration));
+		}
         this->msleep(100);
     }
 }

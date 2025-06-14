@@ -940,16 +940,16 @@ void sqliteDB::createTables() {
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('currentIconPath', 'MINUS', '')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('currentIconPath', 'PLUS', '')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('counterVar', 'ALL', '0')");
-    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('timeWatchedIncrement', 'ALL', '0')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('sv_target_count', 'ALL', '0')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('sv_count', 'ALL', '0')");
-    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('timeSessionTotal', 'ALL', '0')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('timeWatchedIncrement', 'ALL', '0')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('lastSessionDate', 'ALL', '')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('timeWatchedTotal', 'ALL', '0')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('timeWatchedToday', 'ALL', '0')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('timeSessionTotal', 'ALL', '0')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('timeSessionToday', 'ALL', '0')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('videosWatchedToday', 'PLUS', '0')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('videosWatchedToday', 'MINUS', '0')");
-    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('lastSessionDate', 'ALL', '')");
     this->db.commit();
 }
 

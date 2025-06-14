@@ -3,7 +3,7 @@
 #include "MainApp.h"
 #include "utils.h"
 
-BasePlayer::BasePlayer(QString video_path, int video_id, int* CLASS_COUNT, QObject* parent, MainApp* App) : QThread(parent)
+BasePlayer::BasePlayer(QString video_path, int video_id, int* CLASS_COUNT, QObject* parent, MainApp* App)
 {
     this->App = App;
     this->target_video_path = video_path;
@@ -53,23 +53,23 @@ void BasePlayer::startWatchedTiming() {
 
 void BasePlayer::stopWatchedTiming() {
     if (this->watchedTimeStart != nullptr) {
-        int elapsed = std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->watchedTimeStart).count();
+        double elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(utils::QueryUnbiasedInterruptTimeChrono() - *this->watchedTimeStart).count();
         this->totalWatchedTimeSeconds += elapsed;
         this->watchedTimeStart.reset();
     }
 }
 
-int BasePlayer::getSessionTime() {
+double BasePlayer::getSessionTime() {
     if (this->sessionTimeStart != nullptr) {
-        return std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->sessionTimeStart).count();
+        return std::chrono::duration_cast<std::chrono::duration<double>>(utils::QueryUnbiasedInterruptTimeChrono() - *this->sessionTimeStart).count();
     }
-    return 0;
+    return 0.0;
 }
 
-int BasePlayer::getTotalWatchedTime() {
-    int total = this->totalWatchedTimeSeconds;
+double BasePlayer::getTotalWatchedTime() {
+    double total = this->totalWatchedTimeSeconds;
     if (this->watchedTimeStart != nullptr) {
-        int currentSession = std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->watchedTimeStart).count();
+        double currentSession = std::chrono::duration_cast<std::chrono::duration<double>>(utils::QueryUnbiasedInterruptTimeChrono() - *this->watchedTimeStart).count();
         total += currentSession;
     }
     return total;

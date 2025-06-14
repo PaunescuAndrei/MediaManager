@@ -31,7 +31,7 @@ public:
     QProcess* process;  
     std::shared_ptr<std::chrono::microseconds> sessionTimeStart = nullptr;  
     std::shared_ptr<std::chrono::microseconds> watchedTimeStart = nullptr;  
-    int totalWatchedTimeSeconds = 0;  
+    double totalWatchedTimeSeconds = 0.0;
     bool wasPlayingLastCheck = false;  
     BasePlayer(QString video_path, int video_id, int* CLASS_COUNT, QObject* parent = nullptr, MainApp* App = nullptr);  
     virtual ~BasePlayer();  
@@ -48,8 +48,8 @@ public:
     void stopSessionTiming();  
     void startWatchedTiming();  
     void stopWatchedTiming();  
-    int getSessionTime();  
-    int getTotalWatchedTime();  
+    double getSessionTime();  
+    double getTotalWatchedTime();  
     void updateWatchedTiming();
     void start();
 signals:  

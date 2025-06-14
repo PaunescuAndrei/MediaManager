@@ -869,14 +869,14 @@ int sqliteDB::getUniqueVideosWatched(QString category) {
     return query.first() ? query.value(0).toInt() : 0;
 }
 
-void sqliteDB::incrementTimeWatchedToday(int value) {
-    int time = this->getMainInfoValue("timeWatchedToday", "ALL", "0").toInt();
+void sqliteDB::incrementTimeWatchedToday(double value) {
+    double time = this->getMainInfoValue("timeWatchedToday", "ALL", "0.0").toDouble();
     time += value;
     this->setMainInfoValue("timeWatchedToday", "ALL", QString::number(time));
 }
 
-void sqliteDB::incrementTimeSessionToday(int value) {
-    int time = this->getMainInfoValue("timeSessionToday", "ALL", "0").toInt();
+void sqliteDB::incrementTimeSessionToday(double value) {
+    double time = this->getMainInfoValue("timeSessionToday", "ALL", "0.0").toDouble();
     time += value;
     this->setMainInfoValue("timeSessionToday", "ALL", QString::number(time));
 }

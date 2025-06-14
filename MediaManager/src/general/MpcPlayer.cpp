@@ -68,11 +68,14 @@ LRESULT MpcPlayer::OnCopyData(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
         switch (pCDS->dwData)
         {
             case CMD_CONNECT:
+            {
                 //qDebug() << QString::fromStdWString(data);
                 this->player_hwnd = (HWND)wcstoull(data, nullptr, 10);
                 //qDebug() << QString::number((unsigned long long int)this->mpchc_hwnd);
                 break;
+            }
             case CMD_CURRENTPOSITION:
+            {
                 if (not this->change_in_progress_video) {
                     if (this->first_getcurrentposition && not this->change_in_progress) {
                         this->first_getcurrentposition = false;
@@ -87,6 +90,7 @@ LRESULT MpcPlayer::OnCopyData(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
                         this->change_in_progress_video = false;
                 }
                 break;
+            }
             case CMD_NOWPLAYING:
             {
                 QString nowplaying = QString::fromStdWString(data);
@@ -104,15 +108,18 @@ LRESULT MpcPlayer::OnCopyData(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
                 break;
             }
             case CMD_NOTIFYSEEK:
+            {
                 if (this->change_in_progress_seek == true) {
                     this->change_in_progress_seek = false;
                 };
                 break;
+            }
             case CMD_PLAYMODE:
+            {
                 //qDebug() << QString::fromStdWString(data).toInt();
                 int state = QString::fromStdWString(data).toInt();
                 this->paused = state != 0;
-				emit this->pausedChangedSignal(bool(this->paused));
+                emit this->pausedChangedSignal(bool(this->paused));
                 if (this->change_in_progress_pause == true and this->paused == true) {
                     this->change_in_progress_pause = false;
                 }
@@ -124,6 +131,7 @@ LRESULT MpcPlayer::OnCopyData(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
                             this->App->soundPlayer->playSoundEffect();
                 }
                 break;
+            }
         }
     }
     return DefWindowProc(hWnd, uMsg, wParam, lParam);

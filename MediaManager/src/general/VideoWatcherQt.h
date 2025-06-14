@@ -32,8 +32,8 @@ public:
     void clearMainPlayer();
     void clearAfterMainVideoEnd();
     void toggle_window();
-    void incrementTimeWatchedTotal(int value);
-    void incrementTimeSessionTotal(int value);
+    void incrementTimeWatchedTotal(double value);
+    void incrementTimeSessionTotal(double value);
     void resetDailyStats();
     void run() override;
     ~VideoWatcherQt();

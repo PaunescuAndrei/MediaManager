@@ -55,6 +55,6 @@ public:
     QMap<double, int> getRatingDistribution();
     int getUnratedVideoCount();
     int getUniqueVideosWatched(QString category);
-    void incrementTimeWatchedToday(int value);
-    void incrementTimeSessionToday(int value);
+    void incrementTimeWatchedToday(double value);
+    void incrementTimeSessionToday(double value);
 };

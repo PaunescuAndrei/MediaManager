@@ -369,16 +369,24 @@ QString MainWindow::getCategoryName() {
 }
 
 void MainWindow::UpdateWindowTitle() {
-    QString elapsed_time;
+    QString session_time;
+    QString watched_time;
     QString thumb_work_count;
     QString main_title = QString("Media Manager %1 %2").arg(this->getCategoryName()).arg(VERSION_TEXT);
-    if (this->App->VW and this->App->VW->mainPlayer_time_start) {
-        elapsed_time = " [" % QString::fromStdString(utils::formatSeconds(std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->App->VW->mainPlayer_time_start).count())) % "]";
+    if (this->App->VW and this->App->VW->mainPlayer) {
+        int sessionSeconds = this->App->VW->mainPlayer->getSessionTime();
+        int watchedSeconds = this->App->VW->mainPlayer->getTotalWatchedTime();
+        if (sessionSeconds > 0) {
+            session_time = " [Session: " % QString::fromStdString(utils::formatSeconds(sessionSeconds)) % "]";
+        }
+        if (watchedSeconds > 0) {
+            watched_time = " [Watched: " % QString::fromStdString(utils::formatSeconds(watchedSeconds)) % "]";
+        }
     }
     if (this->thumbnailManager->work_count > 0) {
         thumb_work_count = " (" % QString::number(this->thumbnailManager->work_count) % ")";
     }
-    this->setWindowTitle(main_title % thumb_work_count % elapsed_time);
+    this->setWindowTitle(main_title % thumb_work_count % session_time % watched_time);
 }
 
 void MainWindow::VideoInfoNotification() {

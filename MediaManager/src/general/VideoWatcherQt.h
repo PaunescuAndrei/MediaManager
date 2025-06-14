@@ -21,7 +21,7 @@ public:
     sqliteDB* db = nullptr;
     HWND old_foreground_window = nullptr;
     QSharedPointer<BasePlayer> mainPlayer = nullptr;
-    std::shared_ptr <std::chrono::microseconds> mainPlayer_time_start = nullptr;
+    std::shared_ptr <std::chrono::microseconds> videoWatcherSessionTimeStart = nullptr;
     QList<QSharedPointer<BasePlayer>> Players = QList<QSharedPointer<BasePlayer>>();
     VideoWatcherQt(MainApp* App, QObject* parent = nullptr);
     QSharedPointer<BasePlayer> newPlayer(QString path, int video_id);

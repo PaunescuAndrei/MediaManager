@@ -112,6 +112,7 @@ LRESULT MpcPlayer::OnCopyData(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
                 //qDebug() << QString::fromStdWString(data).toInt();
                 int state = QString::fromStdWString(data).toInt();
                 this->paused = state != 0;
+				emit this->pausedChangedSignal(bool(this->paused));
                 if (this->change_in_progress_pause == true and this->paused == true) {
                     this->change_in_progress_pause = false;
                 }
@@ -262,7 +263,7 @@ void MpcPlayer::changeVideo(QString path, int video_id, double position)
 
 void MpcPlayer::run() {
     this->running = true;
-	while (this->running) {
+    while (this->running) {
         this->askForStatus();
         std::optional<std::shared_ptr<PlayerCommand>> _command = this->queue.front();
         if (_command) {
@@ -351,5 +352,5 @@ void MpcPlayer::run() {
             this->end_of_video = false;
         }
         this->msleep(100);
-	}
+    }
 }

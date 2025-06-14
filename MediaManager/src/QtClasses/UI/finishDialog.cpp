@@ -170,11 +170,19 @@ void finishDialog::wheelEvent(QWheelEvent* event)
 
 void finishDialog::updateWindowTitle() {
 	QString currentTime = QTime::currentTime().toString("hh:mm:ss");
-	QString elapsed_time = "";
-	if (this->MW and this->MW->App->VW and this->MW->App->VW->mainPlayer_time_start) {
-        elapsed_time = " [Watching for: " % QString::fromStdString(utils::formatSeconds(std::chrono::duration_cast<std::chrono::seconds>(utils::QueryUnbiasedInterruptTimeChrono() - *this->MW->App->VW->mainPlayer_time_start).count())) % "]";
-    }
-	this->setWindowTitle("Continue? "+ elapsed_time + " [Time: " + currentTime + "]");
+	QString session_time = "";
+	QString watched_time = "";
+	if (this->MW and this->MW->App->VW and this->MW->App->VW->mainPlayer) {
+		int sessionSeconds = this->MW->App->VW->mainPlayer->getSessionTime();
+		int watchedSeconds = this->MW->App->VW->mainPlayer->getTotalWatchedTime();
+		if (sessionSeconds > 0) {
+			session_time = " [Session: " % QString::fromStdString(utils::formatSeconds(sessionSeconds)) % "]";
+		}
+		if (watchedSeconds > 0) {
+			watched_time = " [Watched: " % QString::fromStdString(utils::formatSeconds(watchedSeconds)) % "]";
+		}
+	}
+	this->setWindowTitle("Continue?" + session_time + watched_time + " [Time: " + currentTime + "]");
 }
 
 finishDialog::~finishDialog()

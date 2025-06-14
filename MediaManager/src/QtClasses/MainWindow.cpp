@@ -720,29 +720,13 @@ void MainWindow::init_icons() {
 void MainWindow::openStats() {
     StatsDialog *dialog = new StatsDialog(this);
     dialog->setAttribute(Qt::WA_DeleteOnClose);
-    int time = this->App->db->getMainInfoValue("timeWatchedTotal", "ALL", "0").toInt();
-    dialog->ui.time_placeholder_label->setText(QString::fromStdString(utils::convert_time_to_text(time)));
-
-    QFont font1 = QFont();
-    font1.setPointSize(11);
-
-    int ow = this->App->db->getVideosWatched("PLUS", 0);
-    int hfw = this->App->db->getVideosWatched("MINUS", 0);
-
-    QLabel *total_videos_watched = new QLabel(QString("Videos watched: <b>%1</b> (<b>%2</b> %4, <b>%3</b> %5)").arg(QString::number(ow + hfw)).arg(QString::number(ow)).arg(QString::number(hfw)).arg(this->App->config->get("plus_category_name")).arg(this->App->config->get("minus_category_name")), dialog);
-    total_videos_watched->setTextFormat(Qt::RichText);
-    total_videos_watched->setFont(font1);
-
-    double ort = this->App->db->getAverageRating("PLUS", 0);
-    double hfrt = this->App->db->getAverageRating("MINUS", 0);
-
-    QLabel *average_total_rating = new QLabel(QString("Average rating: <b>%1</b> (<b>%2</b> %4, <b>%3</b> %5)").arg(QString::number((ort + hfrt) / 2, 'f', 2)).arg(QString::number(ort, 'f', 2)).arg(QString::number(hfrt, 'f', 2)).arg(this->App->config->get("plus_category_name")).arg(this->App->config->get("minus_category_name")), dialog);
-    average_total_rating->setTextFormat(Qt::RichText);
-    average_total_rating->setFont(font1);
-
-    dialog->ui.stats_container->layout()->addWidget(total_videos_watched);
-    dialog->ui.stats_container->layout()->addWidget(average_total_rating);
-
+    
+    // Setup all statistics sections
+    dialog->setupTimeStats(this->App);
+    dialog->setupVideoStats(this->App);
+    dialog->setupRatingStats(this->App);
+    
+    // Play sound effects
     this->App->soundPlayer->playSoundEffectChain(1.1);
     this->App->soundPlayer->playSoundEffectChain(1.1);
     this->App->soundPlayer->playSoundEffectChain(1.1);
@@ -1206,6 +1190,9 @@ bool MainWindow::NextVideo(bool random, bool increment, bool update_watched_stat
         this->refreshVisibility();
 
         this->App->db->db.transaction();
+        if (increment) {
+            this->App->db->incrementVideosWatchedToday(this->App->currentDB);
+        }
         if (this->App->currentDB == "MINUS") {
             this->incrementCounterVar(-1);
             if (item->text(ListColumns["TYPE_COLUMN"]) == this->App->config->get("sv_type")) {
@@ -2098,6 +2085,7 @@ void MainWindow::showEndOfVideoDialog() {
                         this->ui.videosWidget->last_selected->setData(ListColumns["LAST_WATCHED_COLUMN"], Qt::DisplayRole, QDateTime::currentDateTime());
                     }
                     this->App->db->incrementVideoViews(this->App->VW->mainPlayer->video_id, 1, true);
+                    this->App->db->incrementVideosWatchedToday(this->App->currentDB);
                     this->App->db->db.commit();
                     this->App->VW->mainPlayer->queue.enqueue(std::make_shared<MpcDirectCommand>(CMD_SETPOSITION, "0"));
                     this->position = 0;

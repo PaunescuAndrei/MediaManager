@@ -1,6 +1,7 @@
 #pragma once
 #include <QThread>
 #include <QMutex>
+#include <QDate>
 #include "sqliteDB.h"
 #include "BasePlayer.h"
 #include "MpcPlayer.h"
@@ -23,6 +24,7 @@ public:
     QSharedPointer<BasePlayer> mainPlayer = nullptr;
     std::shared_ptr <std::chrono::microseconds> videoWatcherSessionTimeStart = nullptr;
     QList<QSharedPointer<BasePlayer>> Players = QList<QSharedPointer<BasePlayer>>();
+    QString lastSessionDateCached = "";
     VideoWatcherQt(MainApp* App, QObject* parent = nullptr);
     QSharedPointer<BasePlayer> newPlayer(QString path, int video_id);
     void clearData(bool include_mainplayer);
@@ -31,6 +33,8 @@ public:
     void clearAfterMainVideoEnd();
     void toggle_window();
     void incrementTimeWatchedTotal(int value);
+    void incrementTimeSessionTotal(int value);
+    void resetDailyStats();
     void run() override;
     ~VideoWatcherQt();
 signals:

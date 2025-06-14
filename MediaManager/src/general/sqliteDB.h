@@ -50,4 +50,11 @@ public:
     void resetDB(QString category = "ALL");
     void resetWatched(QString category, double progress = 0, QString watched = "No");
     void resetWatched(QString category, QJsonObject settings, double progress = 0, QString watched = "No");
-}; 
+    void incrementVideosWatchedToday(QString category);
+    int getVideoCount(QString category);
+    QMap<double, int> getRatingDistribution();
+    int getUnratedVideoCount();
+    int getUniqueVideosWatched(QString category);
+    void incrementTimeWatchedToday(int value);
+    void incrementTimeSessionToday(int value);
+};

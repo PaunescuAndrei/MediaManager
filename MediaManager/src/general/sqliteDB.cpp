@@ -796,6 +796,91 @@ void sqliteDB::resetWatched(QString category, QJsonObject settings, double progr
     }
 }
 
+void sqliteDB::incrementVideosWatchedToday(QString category)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QString("UPDATE maininfo SET value = value + 1 WHERE name = 'videosWatchedToday' AND category = ?;"));
+    query.addBindValue(category);
+    if (!query.exec()) {
+        qDebug() << "incrementVideosWatchedToday " << query.lastError().text();
+        if (qApp)
+            qMainApp->showErrorMessage("incrementVideosWatchedToday " + query.lastError().text());
+	}
+}
+
+int sqliteDB::getVideoCount(QString category) {
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare("SELECT COUNT(*) FROM videodetails WHERE category = ?");
+    query.bindValue(0, category);
+    if (!query.exec()) {
+        qDebug() << "getVideoCount " << query.lastError().text();
+        if (qApp)
+            qMainApp->showErrorMessage("getVideoCount " + query.lastError().text());
+        return 0;
+    }
+    return query.first() ? query.value(0).toInt() : 0;
+}
+
+QMap<double, int> sqliteDB::getRatingDistribution() {
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare("SELECT rating, COUNT(*) FROM videodetails WHERE rating > 0 GROUP BY rating ORDER BY rating");
+    if (!query.exec()) {
+        qDebug() << "getRatingDistribution " << query.lastError().text();
+        if (qApp)
+            qMainApp->showErrorMessage("getRatingDistribution " + query.lastError().text());
+        return QMap<double, int>();
+    }
+    
+    QMap<double, int> ratingCounts;
+    while (query.next()) {
+        double rating = query.value(0).toDouble();
+        int count = query.value(1).toInt();
+        ratingCounts[rating] = count;
+    }
+    return ratingCounts;
+}
+
+int sqliteDB::getUnratedVideoCount() {
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare("SELECT COUNT(*) FROM videodetails WHERE rating = 0 OR rating IS NULL");
+    if (!query.exec()) {
+        qDebug() << "getUnratedVideoCount " << query.lastError().text();
+        if (qApp)
+            qMainApp->showErrorMessage("getUnratedVideoCount " + query.lastError().text());
+        return 0;
+    }
+    return query.first() ? query.value(0).toInt() : 0;
+}
+
+int sqliteDB::getUniqueVideosWatched(QString category) {
+    QSqlQuery query = QSqlQuery(this->db);
+    if (category == "ALL")
+        query.prepare("SELECT COUNT(*) FROM videodetails WHERE views > 0");
+    else {
+        query.prepare("SELECT COUNT(*) FROM videodetails WHERE category = ? AND views > 0");
+        query.bindValue(0, category);
+    }
+    if (!query.exec()) {
+        qDebug() << "getUniqueVideosWatched " << query.lastError().text();
+        if (qApp)
+            qMainApp->showErrorMessage("getUniqueVideosWatched " + query.lastError().text());
+        return 0;
+    }
+    return query.first() ? query.value(0).toInt() : 0;
+}
+
+void sqliteDB::incrementTimeWatchedToday(int value) {
+    int time = this->getMainInfoValue("timeWatchedToday", "ALL", "0").toInt();
+    time += value;
+    this->setMainInfoValue("timeWatchedToday", "ALL", QString::number(time));
+}
+
+void sqliteDB::incrementTimeSessionToday(int value) {
+    int time = this->getMainInfoValue("timeSessionToday", "ALL", "0").toInt();
+    time += value;
+    this->setMainInfoValue("timeSessionToday", "ALL", QString::number(time));
+}
+
 void sqliteDB::createTables() {
     QString videodetails = " CREATE TABLE \"videodetails\" ("
         "\"id\"	INTEGER NOT NULL,"
@@ -851,14 +936,20 @@ void sqliteDB::createTables() {
     query.exec(tags_relations);
     query.exec(tags_priority_index);
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('current', 'MINUS', '')");
-    query.exec("INSERT OR IGNORE INTO maininfo(name,category,value) VALUES('current', 'PLUS', '')");
-    query.exec("INSERT OR IGNORE INTO maininfo(name,category,value) VALUES('currentIconPath', 'MINUS', '')");
-    query.exec("INSERT OR IGNORE INTO maininfo(name,category,value) VALUES('currentIconPath', 'PLUS', '')");
-    query.exec("INSERT OR IGNORE INTO maininfo(name,category,value) VALUES('counterVar', 'ALL', '0')");
-    query.exec("INSERT OR IGNORE INTO maininfo(name,category,value) VALUES('timeWatchedIncrement', 'ALL', '0')");
-    query.exec("INSERT OR IGNORE INTO maininfo(name,category,value) VALUES('timeWatchedTotal', 'ALL', '0')");
-    query.exec("INSERT OR IGNORE INTO maininfo(name,category,value) VALUES('sv_target_count', 'ALL', '0')");
-    query.exec("INSERT OR IGNORE INTO maininfo(name,category,value) VALUES('sv_count', 'ALL', '0')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('current', 'PLUS', '')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('currentIconPath', 'MINUS', '')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('currentIconPath', 'PLUS', '')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('counterVar', 'ALL', '0')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('timeWatchedIncrement', 'ALL', '0')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('sv_target_count', 'ALL', '0')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('sv_count', 'ALL', '0')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('timeSessionTotal', 'ALL', '0')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('timeWatchedTotal', 'ALL', '0')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('timeWatchedToday', 'ALL', '0')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('timeSessionToday', 'ALL', '0')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('videosWatchedToday', 'PLUS', '0')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('videosWatchedToday', 'MINUS', '0')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('lastSessionDate', 'ALL', '')");
     this->db.commit();
 }
 

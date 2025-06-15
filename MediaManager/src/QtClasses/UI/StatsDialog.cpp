@@ -15,19 +15,19 @@ void StatsDialog::setupTimeStats(MainApp* app) {
     int row = 0;
     
     // Total watched time
-    int totalWatchedTime = app->db->getMainInfoValue("timeWatchedTotal", "ALL", "0").toInt();
+    double totalWatchedTime = app->db->getMainInfoValue("timeWatchedTotal", "ALL", "0.0").toDouble();
     addStatToGrid(layout, row++, "Total Watched Time:", QString::fromStdString(utils::convert_time_to_text(totalWatchedTime)));
     
     // Total session time
-    int totalSessionTime = app->db->getMainInfoValue("timeSessionTotal", "ALL", "0").toInt();
+    double totalSessionTime = app->db->getMainInfoValue("timeSessionTotal", "ALL", "0.0").toDouble();
     addStatToGrid(layout, row++, "Total Session Time:", QString::fromStdString(utils::convert_time_to_text(totalSessionTime)));
     
     // Today's watched time
-    int todayWatchedTime = app->db->getMainInfoValue("timeWatchedToday", "ALL", "0").toInt();
+    double todayWatchedTime = app->db->getMainInfoValue("timeWatchedToday", "ALL", "0.0").toDouble();
     addStatToGrid(layout, row++, "Watched Time Today:", QString::fromStdString(utils::convert_time_to_text(todayWatchedTime)));
     
     // Today's session time
-    int todaySessionTime = app->db->getMainInfoValue("timeSessionToday", "ALL", "0").toInt();
+    double todaySessionTime = app->db->getMainInfoValue("timeSessionToday", "ALL", "0.0").toDouble();
     addStatToGrid(layout, row++, "Session Time Today:", QString::fromStdString(utils::convert_time_to_text(todaySessionTime)));
 }
 

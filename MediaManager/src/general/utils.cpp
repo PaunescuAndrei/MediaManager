@@ -497,6 +497,10 @@ std::string utils::convert_time_to_text(unsigned long int seconds)
 	return text_result;
 }
 
+std::string utils::convert_time_to_text(double seconds) {
+	return utils::convert_time_to_text(static_cast<unsigned long int>(seconds));
+}
+
 bool utils::IsMyWindowCovered(QWidget* MyWindow)
 {
 	RECT MyRect = { 0 };

@@ -57,6 +57,7 @@ namespace utils {
 	QString getParentDirectoryName(QString path, int depth);
 	double take_closest(QList<double> const& vec, int value);
 	std::string convert_time_to_text(unsigned long int seconds);
+	std::string convert_time_to_text(double seconds);
 	bool IsMyWindowCovered(QWidget* MyWindow);
 	bool IsMyWindowVisible(QWidget* MyWindow);
 	QColor blendColors(const QColor& color1, const QColor& color2, double ratio);

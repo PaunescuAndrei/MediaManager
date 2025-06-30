@@ -20,6 +20,7 @@ MpcPlayer::MpcPlayer(QString video_path, int video_id, int* CLASS_COUNT, QObject
         qDebug() << "Failed to create message-only window";
     }
 	this->last_seek_time = utils::QueryUnbiasedInterruptTimeChrono();
+	this->last_end_position_time = utils::QueryUnbiasedInterruptTimeChrono();
 }
 
 MpcPlayer::~MpcPlayer()
@@ -367,10 +368,15 @@ void MpcPlayer::run() {
             this->end_of_video = false;
         }
         if(this->position >= this->duration and this->position >= 0 and this->duration >= 0 and this->paused == false) {
-            //weird bug if finish dialog steals mpc-hc window focus while seeking it will hang sending final pause state and final notify end of stream
-			// you need both this and endofvideosignal delay to avoid mpc-hc bug
-            // this combined with the delay prevents finish dialog from apearing when holding mouse seek
-            this->send_message(CMD_SETPOSITION, QString::number(this->duration));
+            auto now = utils::QueryUnbiasedInterruptTimeChrono();
+            auto time_since_last_end_position = std::chrono::duration_cast<std::chrono::milliseconds>(now - this->last_end_position_time).count();
+            if (time_since_last_end_position >= 1000) { // Only send command once per second
+                //weird bug if finish dialog steals mpc-hc window focus while seeking it will hang sending final pause state and final notify end of stream
+                // you need both this and endofvideosignal delay to avoid mpc-hc bug
+                // this combined with the delay prevents finish dialog from apearing when holding mouse seek
+                this->send_message(CMD_SETPOSITION, QString::number(this->duration));
+                this->last_end_position_time = now;
+            }
 		}
         this->msleep(100);
     }

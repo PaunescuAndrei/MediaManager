@@ -32,8 +32,13 @@ void generateThumbnailManager::set_work_count(int value)
 }
 
 void generateThumbnailManager::start() {
-    generateThumbnailRunnable* thumbsTask = new generateThumbnailRunnable(&this->queue, this, this);
-    this->thumbsThreadPool->start(thumbsTask);
+	for (int i = 0; i < this->thumbsThreadPool->maxThreadCount() && !this->queue.isEmpty(); i++) {
+        generateThumbnailRunnable* thumbsTask = new generateThumbnailRunnable(&this->queue, this, this);
+        bool started = this->thumbsThreadPool->tryStart(thumbsTask);
+        if(not started) {
+			delete thumbsTask; // Clean up if the task could not be started, its automatically deleted by the thread pool if it starts successfully
+		}
+	}
 }
 
 void generateThumbnailManager::rebuildThumbnailCache(QSqlDatabase& db, bool overwrite)

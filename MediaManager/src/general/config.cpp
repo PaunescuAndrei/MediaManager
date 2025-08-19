@@ -30,7 +30,7 @@ Config::Config(QString filepath) {
 void Config::init_defaults() {
 	this->ini["DEFAULT"].set({
 		{"single_instance", "False"},
-		{"threads","16"},
+		{"threads","8"},
 		{"player_path", ""},
 		{"shoko_path", ""},
 		{"shoko_user",""},

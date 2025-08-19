@@ -33,7 +33,7 @@
 #include <QFileInfo>
 #include <QMessageBox>
 #include <QDesktopServices>
-#include "generateThumbnailThread.h"
+#include "generateThumbnailRunnable.h"
 #include "AutoToolTipDelegate.h"
 #include "StatsDialog.h"
 #include <QDir>
@@ -1008,8 +1008,8 @@ void MainWindow::setThemeHighlightColor(QColor color) {
 }
 
 void MainWindow::openThumbnails(QString path) {
-    QString suffix = generateThumbnailThread::getThumbnailSuffix(path);
-    QString cachename = generateThumbnailThread::getThumbnailFilename(path);
+    QString suffix = generateThumbnailRunnable::getThumbnailSuffix(path);
+    QString cachename = generateThumbnailRunnable::getThumbnailFilename(path);
     QString cachepath = QString(THUMBNAILS_CACHE_PATH) + "/" + cachename;
     QFileInfo file(cachepath);
     if (file.exists()) {
@@ -1017,7 +1017,7 @@ void MainWindow::openThumbnails(QString path) {
     }
     else {
         QProcess *process = new QProcess();
-        generateThumbnailThread::generateThumbnail(*process, suffix, path);
+        generateThumbnailRunnable::generateThumbnail(*process, suffix, path);
         process->start();
         connect(process, &QProcess::finished, this, [this,file, process](int exitCode, QProcess::ExitStatus exitStatus) {
             process->deleteLater(); 
@@ -2142,7 +2142,7 @@ void MainWindow::DeleteDialogButton(QList<QTreeWidgetItem*> items) {
                     root->removeChild(item);
                 }
                 this->App->db->deleteVideo(item->data(ListColumns["PATH_COLUMN"],CustomRoles::id).toInt());
-                generateThumbnailThread::deleteThumbnail(item->text(ListColumns["PATH_COLUMN"]));
+                generateThumbnailRunnable::deleteThumbnail(item->text(ListColumns["PATH_COLUMN"]));
                 if (item == this->ui.videosWidget->last_selected)
                     this->ui.videosWidget->last_selected = nullptr;
                 delete item;

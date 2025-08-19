@@ -1,31 +1,34 @@
 #pragma once
-#include "generateThumbnailThread.h"
+#include "generateThumbnailRunnable.h"
 #include "SafeQueue.h"
+#include <QThreadPool>
 #include <QString>
 #include <QMutex>
 #include <QList>
 #include <QTimer>
+#include <QObject>
 
 struct ThumbnailCommand {
     QString path;
     bool overwrite;
 };
 
-class generateThumbnailManager
+class generateThumbnailManager:
+    public QObject
 {
+    Q_OBJECT
 public:
     SafeQueue<ThumbnailCommand> queue = SafeQueue<ThumbnailCommand>();
-    QList<generateThumbnailThread*> threadList = QList<generateThumbnailThread*>();
+    QThreadPool *thumbsThreadPool;
     QMutex data_lock = QMutex();
     int work_count = 0;
-    unsigned int threads_number = 0;
     void enqueue_work(ThumbnailCommand work);
     void clear_work();
     void add_work_count(int value);
     void set_work_count(int value);
     void start();
     void rebuildThumbnailCache(QSqlDatabase& db, bool overwrite = false);
-    generateThumbnailManager(unsigned int threads_number = 4);
+    generateThumbnailManager(unsigned int threads_number, QObject* parent = nullptr);
     ~generateThumbnailManager();
 };
 

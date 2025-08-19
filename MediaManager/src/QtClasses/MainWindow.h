@@ -6,7 +6,7 @@
 #include "IconChanger.h"
 #include <QQueue>
 #include "generateThumbnailManager.h"
-#include "generateThumbnailThread.h"
+#include "generateThumbnailRunnable.h"
 #include <QSystemTrayIcon>
 #include "SettingsDialog.h"
 #include "FilterSettings.h"

@@ -2,9 +2,10 @@
 #include "generateThumbnailManager.h"
 #include <QMutexLocker>
 
-generateThumbnailManager::generateThumbnailManager(unsigned int threads_number)
+generateThumbnailManager::generateThumbnailManager(unsigned int threads_number, QObject* parent) : QObject(parent)
 {
-	this->threads_number = threads_number;
+    this->thumbsThreadPool = new QThreadPool(this);
+    this->thumbsThreadPool->setMaxThreadCount(threads_number);
 }
 
 void generateThumbnailManager::enqueue_work(ThumbnailCommand work)
@@ -31,13 +32,8 @@ void generateThumbnailManager::set_work_count(int value)
 }
 
 void generateThumbnailManager::start() {
-    while (this->threadList.size() < this->threads_number) {
-        generateThumbnailThread* t = new generateThumbnailThread(&this->queue, this);
-        t->connect(t, &generateThumbnailThread::finished, [this, t] {t->deleteLater(); this->threadList.removeOne(t); });
-        this->threadList.append(t);
-    }
-    for (auto t : this->threadList)
-        t->start();
+    generateThumbnailRunnable* thumbsTask = new generateThumbnailRunnable(&this->queue, this, this);
+    this->thumbsThreadPool->start(thumbsTask);
 }
 
 void generateThumbnailManager::rebuildThumbnailCache(QSqlDatabase& db, bool overwrite)
@@ -53,11 +49,5 @@ void generateThumbnailManager::rebuildThumbnailCache(QSqlDatabase& db, bool over
 
 generateThumbnailManager::~generateThumbnailManager() {
     this->clear_work();
-    for (auto t : this->threadList) {
-        if (t) {
-            if (t->process)
-                t->process->kill();
-            t->deleteLater();
-        }
-    }
+    this->thumbsThreadPool->deleteLater();
 }

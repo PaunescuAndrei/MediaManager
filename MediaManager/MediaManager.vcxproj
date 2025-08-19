@@ -25,7 +25,7 @@
     <ClCompile Include="src\general\generateThumbnailManager.cpp" />
     <ClCompile Include="src\general\MpcPlayer.cpp" />
     <ClCompile Include="src\general\utils.cpp" />
-    <ClCompile Include="src\general\generateThumbnailThread.cpp" />
+    <ClCompile Include="src\general\generateThumbnailRunnable.cpp" />
     <ClCompile Include="src\general\IconChanger.cpp" />
     <ClCompile Include="src\general\mascotsAnimationsThread.cpp" />
     <ClCompile Include="src\general\mascotsGeneratorThread.cpp" />
@@ -101,7 +101,7 @@
     <ClInclude Include="src\general\definitions.h" />
     <ClInclude Include="src\general\EventLock.h" />
     <ClInclude Include="src\general\FilterSettings.h" />
-    <ClInclude Include="src\general\generateThumbnailManager.h" />
+    <QtMoc Include="src\general\generateThumbnailManager.h" />
     <QtMoc Include="src\general\MpcPlayer.h" />
     <ClInclude Include="src\general\PlayerCommands.h" />
     <ClInclude Include="src\general\utils.h" />
@@ -142,7 +142,7 @@
     <QtMoc Include="src\general\mascotsGeneratorThread.h" />
     <QtMoc Include="src\general\mascotsAnimationsThread.h" />
     <QtMoc Include="src\general\IconChanger.h" />
-    <QtMoc Include="src\general\generateThumbnailThread.h" />
+    <QtMoc Include="src\general\generateThumbnailRunnable.h" />
     <ClInclude Include="src\stdafx.h" />
     <ClInclude Include="src\QtClasses\stylesQt.h" />
     <ClInclude Include="src\QtClasses\Widgets\TreeWidgetItem.h" />

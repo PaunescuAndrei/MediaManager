@@ -79,8 +79,15 @@ QString generateThumbnailRunnable::getThumbnailFilename(QString path)
 
 generateThumbnailRunnable::~generateThumbnailRunnable()
 {
-    if (this->process != nullptr) {
+    if (this->process) {
+        if (this->process->state() != QProcess::NotRunning) {
+            if (!this->process->waitForFinished(10000)) {
+                this->process->kill(); 
+                this->process->waitForFinished(); 
+            }
+        }
         delete this->process;
+        this->process = nullptr;
     }
 }
 

@@ -16,7 +16,7 @@ generateThumbnailRunnable::generateThumbnailRunnable(SafeQueue<ThumbnailCommand>
 
 void generateThumbnailRunnable::run()
 {
-    this->process = new QProcess();
+    this->process = new QProcess(this);
 	while (!this->queue->isEmpty()) {
         if (this->process->state() == QProcess::NotRunning) {
             std::optional<ThumbnailCommand> item_ = this->queue->dequeue();
@@ -80,14 +80,7 @@ QString generateThumbnailRunnable::getThumbnailFilename(QString path)
 generateThumbnailRunnable::~generateThumbnailRunnable()
 {
     if (this->process) {
-        if (this->process->state() != QProcess::NotRunning) {
-            if (!this->process->waitForFinished(10000)) {
-                this->process->kill(); 
-                this->process->waitForFinished(); 
-            }
-        }
-        delete this->process;
-        this->process = nullptr;
+		this->process->deleteLater();
     }
 }
 

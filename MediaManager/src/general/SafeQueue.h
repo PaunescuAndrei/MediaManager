@@ -29,6 +29,13 @@ public:
         //c.notify_one();
     }
 
+    void enqueue_front(T t)
+    {
+        std::lock_guard<std::mutex> lock(m);
+        q.push_front(t);
+        //c.notify_one();
+    }
+
     // Get the "front"-element.
     // If the queue is empty, wait till a element is avaiable.
     std::optional<T> dequeue(void)

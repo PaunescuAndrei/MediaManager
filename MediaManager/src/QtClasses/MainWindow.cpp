@@ -1,4 +1,4 @@
-﻿#include "stdafx.h"
+#include "stdafx.h"
 #include "MainWindow.h"
 #include "MainApp.h"
 #include "version.h"
@@ -68,6 +68,9 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
 {
     this->App = App;
     this->thumbnailManager = new generateThumbnailManager(this->App->config->get("threads").toInt());
+    connect(this->thumbnailManager, &generateThumbnailManager::openFile, this, [](QString path) {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(path));
+        });
     this->initRatingIcons();
     ui.setupUi(this);
 
@@ -577,7 +580,10 @@ void MainWindow::updatePath(int video_id, QString new_path) {
         this->App->db->updateAuthor(video_id, author);
         this->App->db->updateName(video_id, name);
         this->App->db->db.commit();
-        this->thumbnailManager->enqueue_work({ new_path, false });
+        if (video_id == this->ui.currentVideo->id) {
+            this->setCurrent(video_id, new_path, name, author, this->ui.currentVideo->tags, false);
+        }
+        this->thumbnailManager->enqueue_work({ new_path, false, false });
         this->thumbnailManager->start();
         this->refreshVideosWidget(false, false);
         this->ui.videosWidget->findAndScrollToDelayed(new_path, true);
@@ -1008,7 +1014,6 @@ void MainWindow::setThemeHighlightColor(QColor color) {
 }
 
 void MainWindow::openThumbnails(QString path) {
-    QString suffix = generateThumbnailRunnable::getThumbnailSuffix(path);
     QString cachename = generateThumbnailRunnable::getThumbnailFilename(path);
     QString cachepath = QString(THUMBNAILS_CACHE_PATH) + "/" + cachename;
     QFileInfo file(cachepath);
@@ -1016,15 +1021,8 @@ void MainWindow::openThumbnails(QString path) {
         QDesktopServices::openUrl(QUrl::fromLocalFile(file.absoluteFilePath()));
     }
     else {
-        QProcess *process = new QProcess();
-        generateThumbnailRunnable::generateThumbnail(*process, suffix, path);
-        process->start();
-        connect(process, &QProcess::finished, this, [this,file, process](int exitCode, QProcess::ExitStatus exitStatus) {
-            process->deleteLater(); 
-            if (exitCode == 0) {
-                QDesktopServices::openUrl(QUrl::fromLocalFile(file.absoluteFilePath()));
-            }
-        });
+        this->thumbnailManager->enqueue_work_front({ path, false, true });
+        this->thumbnailManager->start();
     }
 }
 
@@ -2286,7 +2284,7 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
             count = 0;
         }
         files_inserted.append((*it)->text(0));
-        this->thumbnailManager->enqueue_work({ (*it)->text(0), false});
+        this->thumbnailManager->enqueue_work({ (*it)->text(0), false, false});
         ++it;
     }
 
@@ -2979,7 +2977,7 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
     }
     else if (menu_click == generate_thumbnails) {
         for (auto const& item : items) {
-            this->thumbnailManager->enqueue_work({ item->text(ListColumns["PATH_COLUMN"]), true });
+            this->thumbnailManager->enqueue_work({ item->text(ListColumns["PATH_COLUMN"]), true, false });
             this->thumbnailManager->start();
         }
     }
@@ -3364,6 +3362,7 @@ MainWindow::~MainWindow()
     this->animatedIcon->quit();
     this->animatedIcon->deleteLater();
     delete this->search_timer;
+    delete this->thumbnailManager;
     delete this->active;
     delete this->inactive;
     delete this->halfactive;

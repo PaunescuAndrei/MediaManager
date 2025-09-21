@@ -14,6 +14,12 @@ void generateThumbnailManager::enqueue_work(ThumbnailCommand work)
 	this->queue.enqueue(work);
 }
 
+void generateThumbnailManager::enqueue_work_front(ThumbnailCommand work)
+{
+	this->add_work_count(1);
+	this->queue.enqueue_front(work);
+}
+
 void generateThumbnailManager::clear_work() {
     this->queue.clear();
     this->set_work_count(0);
@@ -34,11 +40,17 @@ void generateThumbnailManager::set_work_count(int value)
 void generateThumbnailManager::start() {
 	for (int i = 0; i < this->thumbsThreadPool->maxThreadCount() && !this->queue.isEmpty(); i++) {
         generateThumbnailRunnable* thumbsTask = new generateThumbnailRunnable(&this->queue, this, this);
+        connect(thumbsTask, &generateThumbnailRunnable::openFile, this, &generateThumbnailManager::onOpenFile);
         bool started = this->thumbsThreadPool->tryStart(thumbsTask);
         if(not started) {
 			delete thumbsTask; // Clean up if the task could not be started, its automatically deleted by the thread pool if it starts successfully
 		}
 	}
+}
+
+void generateThumbnailManager::onOpenFile(QString path)
+{
+    emit openFile(path);
 }
 
 void generateThumbnailManager::rebuildThumbnailCache(QSqlDatabase& db, bool overwrite)
@@ -47,7 +59,7 @@ void generateThumbnailManager::rebuildThumbnailCache(QSqlDatabase& db, bool over
     query.prepare(QString("SELECT path from videodetails"));
     query.exec();
     while (query.next()) {
-        this->enqueue_work({ query.value(0).toString(),overwrite });
+        this->enqueue_work({ query.value(0).toString(),overwrite, false });
     }
 	this->start();
 }

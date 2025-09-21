@@ -16,7 +16,7 @@ generateThumbnailRunnable::generateThumbnailRunnable(SafeQueue<ThumbnailCommand>
 
 void generateThumbnailRunnable::run()
 {
-    this->process = new QProcess(this);
+    this->process = new QProcess();
 	while (!this->queue->isEmpty()) {
         if (this->process->state() == QProcess::NotRunning) {
             std::optional<ThumbnailCommand> item_ = this->queue->dequeue();
@@ -32,15 +32,24 @@ void generateThumbnailRunnable::run()
                 });
                 QString thumbnail_suffix = generateThumbnailRunnable::getThumbnailSuffix(item.path);
                 QString thumbnail_filename = generateThumbnailRunnable::getThumbnailFilename(item.path);
+                QString cachepath = QString(THUMBNAILS_CACHE_PATH) + "/" + thumbnail_filename;
 
                 QFileInfo fi(item.path);
-                if (!item.overwrite and QFileInfo::exists(QDir::toNativeSeparators(QString(THUMBNAILS_CACHE_PATH) + "/" + thumbnail_filename))) {
+                if (!item.overwrite and QFileInfo::exists(QDir::toNativeSeparators(cachepath))) {
                     this->process->disconnect();
+                    if (item.openWhenFinished) {
+                        emit openFile(cachepath);
+                    }
                 }
                 else {
                     generateThumbnailRunnable::generateThumbnail(*process, thumbnail_suffix, item.path);
                     process->start();
                     process->waitForFinished(-1);
+                    if (process->exitCode() == 0 || process->exitCode() == 1) {
+                        if (item.openWhenFinished) {
+                            emit openFile(cachepath);
+                        }
+                    }
                 }
                 if (this->manager) {
                     this->manager->add_work_count(-1);

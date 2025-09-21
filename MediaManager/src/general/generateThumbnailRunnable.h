@@ -23,5 +23,7 @@ public:
     static QString getThumbnailSuffix(QString path);
     static QString getThumbnailFilename(QString path);
     ~generateThumbnailRunnable();
+signals:
+    void openFile(QString path);
 };
 

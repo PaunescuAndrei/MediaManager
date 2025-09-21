@@ -38,7 +38,7 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 
 	if (!SUCCEEDED(CoCreateInstance(__uuidof(CUIAutomation), NULL, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&(this->uiAutomation))))
 	{
-		throw new std::exception("Failed to create instance of UI automation!");
+		throw std::runtime_error("Failed to create instance of UI automation!");
 	}
 
 	videoTypes = this->config->get("video_types").split(',', Qt::SkipEmptyParts);
@@ -250,6 +250,7 @@ MainApp::~MainApp()
 	delete this->mainWindow;
 	delete this->config;
 	delete this->db;
+	delete this->shoko_API;
 	delete this->taskbar;
 	delete this->musicPlayer;
 	delete this->soundPlayer;

@@ -17,6 +17,7 @@
 #include <QMediaPlayer>
 #include "BasePlayer.h"
 #include "MpcPlayer.h"
+#include "rapidfuzz_all.hpp"
 
 class MainApp;
 
@@ -80,7 +81,7 @@ public:
     void initRandomButtonMode(customQButton* randombutton);
     void switchRandomButtonMode(customQButton* randombutton);
     void updateSortConfig();
-    void filterVisibilityItem(QTreeWidgetItem* item, QString watched_option, QStringList& mixed_done, QString search_text);
+    void filterVisibilityItem(QTreeWidgetItem* item, QString watched_option, QStringList& mixed_done, QString search_text, const rapidfuzz::fuzz::CachedPartialRatio<char>* cached_search_text_ratio = nullptr);
     void addWatchedDialogButton();
     void switchCurrentDB(QString db = "");
     void initUpdateWatchedToggleButton();

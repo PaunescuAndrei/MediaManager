@@ -694,8 +694,14 @@ void MainWindow::refreshVisibility(QString search_text) {
     QString option = this->getWatchedVisibilityOption(watched_yes, watched_no, watched_mixed, this->ui.searchBar->isVisible(), this->ui.visibleOnlyCheckBox->isChecked());
 
     QTreeWidgetItemIterator it(this->ui.videosWidget);
+	std::unique_ptr<rapidfuzz::fuzz::CachedPartialRatio<char>> cached_ratio_ptr;
+	if (!search_text.isEmpty()) {
+		cached_ratio_ptr = std::make_unique<rapidfuzz::fuzz::CachedPartialRatio<char>>(
+            search_text.toLower().toStdString()
+		);
+	}
     while (*it) {
-        this->filterVisibilityItem(*it, option, mixed_done, search_text);
+        this->filterVisibilityItem(*it, option, mixed_done, search_text, cached_ratio_ptr.get());
         ++it;
     }
     this->old_search = search_text;
@@ -2605,7 +2611,7 @@ void MainWindow::updateSortConfig() {
     this->App->config->save_config();
 }
 
-void MainWindow::filterVisibilityItem(QTreeWidgetItem* item, QString watched_option, QStringList& mixed_done, QString search_text) {
+void MainWindow::filterVisibilityItem(QTreeWidgetItem* item, QString watched_option, QStringList& mixed_done, QString search_text, const rapidfuzz::fuzz::CachedPartialRatio<char>* cached_search_text_ratio) {
     bool hidden = false;
     QList<QTreeWidgetItem*> items = {};
 
@@ -2635,13 +2641,27 @@ void MainWindow::filterVisibilityItem(QTreeWidgetItem* item, QString watched_opt
 
     //search
     if(not search_text.isEmpty() and hidden == false) {
-        double score = rapidfuzz::fuzz::partial_ratio(search_text.toLower().toStdString(), (item->text(ListColumns["PATH_COLUMN"]) % " " % item->text(ListColumns["AUTHOR_COLUMN"]) % " " % item->text(ListColumns["TAGS_COLUMN"]) % " " % item->text(ListColumns["TYPE_COLUMN"])).toLower().toStdString());
-        if (score > 80) {
-            hidden = false;
-        }
-        else {
-            hidden = true;
-        }
+		double score = 0;
+		std::string item_combined_text = (item->text(ListColumns["PATH_COLUMN"]) % " " %
+			item->text(ListColumns["AUTHOR_COLUMN"]) % " " %
+			item->text(ListColumns["TAGS_COLUMN"]) % " " %
+			item->text(ListColumns["TYPE_COLUMN"])).toLower().toStdString();
+
+		if (cached_search_text_ratio) {
+			score = cached_search_text_ratio->similarity(item_combined_text);
+
+		}
+		else {
+			score = rapidfuzz::fuzz::partial_ratio(search_text.toLower().toStdString(), item_combined_text);
+
+		}
+		if (score > 80) {
+			hidden = false;
+
+		}
+		else {
+			hidden = true;
+		}
     }
 
     //actually hidding the item/items

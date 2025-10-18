@@ -675,17 +675,6 @@ color_area& utils::get_weighted_random_color(QList<color_area>& colors) {
 	return colors.first();
 }
 
-void utils::measureExecutionTime(std::function<void()> func, const QString& message) {
-	auto start = std::chrono::high_resolution_clock::now();
-
-	func();
-
-	auto end = std::chrono::high_resolution_clock::now();
-	std::chrono::duration<double, std::milli> elapsed = end - start;
-
-	qDebug() << message << "Elapsed Time:" << elapsed.count() << "ms";
-}
-
 long double utils::normalize(long double x, long double maxVal)
 {
 	return (maxVal > 0) ? x / maxVal : 0.0;

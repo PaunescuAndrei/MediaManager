@@ -72,8 +72,23 @@ namespace utils {
 	QColor get_vibrant_color(const QColor& color, int satIncrease = 20, int lightAdjust = 0);
 	QColor get_vibrant_color_exponential(const QColor& color, float saturation_strength = 0.1, float lightning_strength = 0.1);
 	color_area& get_weighted_random_color(QList<color_area>& colors);
-	void measureExecutionTime(std::function<void()> func, const QString& message);
+	inline long double normalize(long double x, long double maxVal);
+	QList<long double> calculateWeights(const QList<VideoWeightedData>& items, double biasViews, double biasRating, double biasTags, double biasGeneral, long double maxViews, long double maxRating, long double maxTagsWeight, long double no_views_weight = 0, long double no_rating_weight = 0, long double no_tags_weight = 0);
+	QString weightedRandomChoice(const QList<VideoWeightedData>& items, QRandomGenerator& generator, double biasViews, double biasRating, double biasTags, double biasGeneral, long double no_views_weight = 0, long double no_rating_weight = 0, long double no_tags_weight = 0);
+	QMap<int, long double> calculateProbabilities(const QList<VideoWeightedData>& items, double biasViews, double biasRating, double biasTags, double biasGeneral, long double no_views_weight, long double no_rating_weight, long double no_tags_weight);
+	quint32 stringToSeed(const QString& textSeed);
 
+	template <typename Func, typename... Args>
+	void measureExecutionTime(Func&& func, const QString& message, Args&&... args) {
+		auto start = std::chrono::high_resolution_clock::now();
+
+		std::invoke(std::forward<Func>(func), std::forward<Args>(args)...);
+
+		auto end = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double, std::milli> elapsed = end - start;
+
+		qDebug() << message << "Elapsed Time:" << elapsed.count() << "ms";
+	}
 	template <typename T>
 	inline void shuffle_qlist(QList<T>& list) {
 		std::random_device seed;
@@ -86,19 +101,12 @@ namespace utils {
 		std::advance(start, dis(g));
 		return start;
 	}
-
 	template<typename Iter>
 	Iter select_randomly(Iter start, Iter end) {
 		static std::random_device rd;
 		static std::mt19937 gen(rd());
 		return select_randomly(start, end, gen);
 	}
-
-	inline long double normalize(long double x, long double maxVal);
-	QList<long double> calculateWeights(const QList<VideoWeightedData>& items, double biasViews, double biasRating, double biasTags, double biasGeneral, long double maxViews, long double maxRating, long double maxTagsWeight, long double no_views_weight = 0, long double no_rating_weight = 0, long double no_tags_weight = 0);
-	QString weightedRandomChoice(const QList<VideoWeightedData>& items, QRandomGenerator& generator, double biasViews, double biasRating, double biasTags, double biasGeneral, long double no_views_weight = 0, long double no_rating_weight = 0, long double no_tags_weight = 0);
-	QMap<int, long double> calculateProbabilities(const QList<VideoWeightedData>& items, double biasViews, double biasRating, double biasTags, double biasGeneral, long double no_views_weight, long double no_rating_weight, long double no_tags_weight);
-	quint32 stringToSeed(const QString& textSeed);
 
 	typedef BOOL(WINAPI* PFN_IsWindowArranged)(HWND hwnd);
 	BOOL CallIsWindowArranged(HWND hwnd);

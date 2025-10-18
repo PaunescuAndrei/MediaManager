@@ -170,6 +170,39 @@ QStringList sqliteDB::getAuthors(QString category) {
     return itemlist;
 }
 
+QStringList sqliteDB::getUniqueNames(QString category) {
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QString("SELECT DISTINCT name from videodetails where category = ? ORDER BY name"));
+    query.addBindValue(category);
+    if (!query.exec()) {
+        qDebug() << "getUniqueNames " << query.lastError().text();
+        if (qApp)
+            qMainApp->showErrorMessage("getUniqueNames " + query.lastError().text());
+    }
+    QStringList itemlist = QStringList();
+    while (query.next()) {
+        QString name = query.value(0).toString();
+        itemlist.append(name);
+    }
+    return itemlist;
+}
+
+QStringList sqliteDB::getUniqueTags(QString category) {
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QString("SELECT DISTINCT name from tags"));
+    if (!query.exec()) {
+        qDebug() << "getUniqueTags " << query.lastError().text();
+        if (qApp)
+            qMainApp->showErrorMessage("getUniqueTags " + query.lastError().text());
+    }
+    QStringList itemlist = QStringList();
+    while (query.next()) {
+        QString name = query.value(0).toString();
+        itemlist.append(name);
+    }
+    return itemlist;
+}
+
 QStringList sqliteDB::getTypes(QString category) {
     QSqlQuery query = QSqlQuery(this->db);
     query.prepare(QString("SELECT DISTINCT type from videodetails where category = ? ORDER BY type"));

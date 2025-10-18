@@ -21,6 +21,8 @@ public:
     void insertTag(int video_id, int tag_id);
     void deleteExtraTags(int video_id, QSet<int> tags_id);
     QStringList getAuthors(QString category);
+    QStringList getUniqueNames(QString category);
+    QStringList getUniqueTags(QString category);
     QStringList getTypes(QString category);
     void setFilterSettings(QString value, QString category);
     QJsonObject getFilterSettings(QString category);

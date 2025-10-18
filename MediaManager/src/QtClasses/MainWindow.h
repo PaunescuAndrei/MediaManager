@@ -18,6 +18,7 @@
 #include "BasePlayer.h"
 #include "MpcPlayer.h"
 #include "rapidfuzz_all.hpp"
+#include <QCompleter>
 
 class MainApp;
 
@@ -26,6 +27,7 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
+    QCompleter* search_completer = nullptr;
     Ui::MainWindow ui;
     MainApp *App = nullptr;
     FilterSettings filterSettings;
@@ -101,6 +103,7 @@ public:
     void changePlayerVideo(QSharedPointer<BasePlayer> player, QString path, int video_id, double position);
     void updateVideoListRandomProbabilities();
     void updateVideoListRandomProbabilitiesIfVisible();
+    void updateSearchCompleter();
     void refreshVisibility(QString search_text);
     void refreshVisibility();
     void refreshHeadersVisibility();

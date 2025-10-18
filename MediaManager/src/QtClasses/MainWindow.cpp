@@ -322,6 +322,16 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     connect(this->ui.visibleOnlyCheckBox, &QCheckBox::checkStateChanged, this, [this](Qt::CheckState state) {
         this->refreshVisibility(this->ui.searchBar->text());
     });
+
+    this->search_completer = new QCompleter(this);
+    this->search_completer->setModel(new QStringListModel(this));
+    this->updateSearchCompleter();
+    this->search_completer->setCaseSensitivity(Qt::CaseInsensitive);
+    this->search_completer->setFilterMode(Qt::MatchContains);
+	this->search_completer->setCompletionMode(QCompleter::PopupCompletion);
+	this->search_completer->setModelSorting(QCompleter::CaseInsensitivelySortedModel);
+    this->ui.searchBar->setCompleter(this->search_completer);
+
     //connect(this->ui.searchBar, &QLineEdit::textChanged, this, [this] {this->search(this->ui.searchBar->text()); });
 
     this->search_timer = new QTimer(this);
@@ -2361,6 +2371,15 @@ void MainWindow::watchSelected(int video_id, QString path) {
     qMainApp->logger->log(QString("Playing Video \"%1\" from %2").arg(path).arg(utils::formatSecondsQt(seconds)), "Video", path);
 }
 
+void MainWindow::updateSearchCompleter() {
+    QStringList wordList;
+    wordList << this->App->db->getAuthors(this->App->currentDB);
+    wordList << this->App->db->getUniqueNames(this->App->currentDB);
+    wordList << this->App->db->getUniqueTags(this->App->currentDB);
+    wordList.removeDuplicates();
+    static_cast<QStringListModel*>(this->search_completer->model())->setStringList(wordList);
+}
+
 void MainWindow::refreshVideosWidget(bool selectcurrent, bool remember_selected) {
     QStringList selected_items = {};
     if (remember_selected) {
@@ -2372,6 +2391,7 @@ void MainWindow::refreshVideosWidget(bool selectcurrent, bool remember_selected)
     this->populateList(selectcurrent);
     if (!selected_items.isEmpty())
         this->selectItemsDelayed(selected_items);
+    this->updateSearchCompleter();
 }
 
 void MainWindow::switchCurrentDB(QString db) {
@@ -2410,6 +2430,7 @@ void MainWindow::switchCurrentDB(QString db) {
     if(player != nullptr){
         this->changePlayerVideo(player, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
     }
+    this->updateSearchCompleter();
 }
 
 void MainWindow::initUpdateWatchedToggleButton() {
@@ -3382,6 +3403,7 @@ MainWindow::~MainWindow()
     this->animatedIcon->quit();
     this->animatedIcon->deleteLater();
     delete this->search_timer;
+    delete this->search_completer;
     delete this->thumbnailManager;
     delete this->active;
     delete this->inactive;

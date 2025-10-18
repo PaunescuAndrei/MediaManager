@@ -549,14 +549,14 @@
     <QtMoc Include="src\general\BasePlayer.h">
       <Filter>Header Files\general</Filter>
     </QtMoc>
-    <QtMoc Include="src\QtClasses\UI\UpdatePathsDialog.h">
-      <Filter>Source Files\QtClasses\UI</Filter>
-    </QtMoc>
     <QtMoc Include="src\QtClasses\Widgets\WheelStrongFocusEventFilter.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
     <QtMoc Include="src\general\generateThumbnailManager.h">
       <Filter>Header Files\general</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\UpdatePathsDialog.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
     </QtMoc>
   </ItemGroup>
   <ItemGroup>

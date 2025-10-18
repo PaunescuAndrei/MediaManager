@@ -2,9 +2,9 @@
 #include <algorithm>
 #include <rapidfuzz/details/Range.hpp>
 #include <rapidfuzz/details/type_traits.hpp>
-#include <string>
 
-namespace rapidfuzz::detail {
+namespace rapidfuzz {
+namespace detail {
 
 template <typename InputIt>
 class SplittedSentenceView {
@@ -12,7 +12,7 @@ public:
     using CharT = iter_value_t<InputIt>;
 
     SplittedSentenceView(RangeVec<InputIt> sentence) noexcept(
-        std::is_nothrow_move_constructible_v<RangeVec<InputIt>>)
+        std::is_nothrow_move_constructible<RangeVec<InputIt>>::value)
         : m_sentence(std::move(sentence))
     {}
 
@@ -34,7 +34,7 @@ public:
         return m_sentence.size();
     }
 
-    std::basic_string<CharT> join() const;
+    std::vector<CharT> join() const;
 
     const RangeVec<InputIt>& words() const
     {
@@ -68,21 +68,21 @@ size_t SplittedSentenceView<InputIt>::size() const
 }
 
 template <typename InputIt>
-auto SplittedSentenceView<InputIt>::join() const -> std::basic_string<CharT>
+auto SplittedSentenceView<InputIt>::join() const -> std::vector<CharT>
 {
     if (m_sentence.empty()) {
-        return std::basic_string<CharT>();
+        return std::vector<CharT>();
     }
 
     auto sentence_iter = m_sentence.begin();
-    std::basic_string<CharT> joined(sentence_iter->begin(), sentence_iter->end());
-    const std::basic_string<CharT> whitespace{0x20};
+    std::vector<CharT> joined(sentence_iter->begin(), sentence_iter->end());
     ++sentence_iter;
     for (; sentence_iter != m_sentence.end(); ++sentence_iter) {
-        joined.append(whitespace)
-            .append(std::basic_string<CharT>(sentence_iter->begin(), sentence_iter->end()));
+        joined.push_back(0x20);
+        joined.insert(joined.end(), sentence_iter->begin(), sentence_iter->end());
     }
     return joined;
 }
 
-} // namespace rapidfuzz::detail
+} // namespace detail
+} // namespace rapidfuzz

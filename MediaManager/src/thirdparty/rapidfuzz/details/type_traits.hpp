@@ -4,9 +4,7 @@
 #pragma once
 #include <rapidfuzz/details/types.hpp>
 
-#include <functional>
 #include <iterator>
-#include <type_traits>
 #include <utility>
 
 namespace rapidfuzz {
@@ -50,5 +48,8 @@ struct is_explicitly_convertible {
 
     static bool const value = test<From, To>(0);
 };
+
+template <bool B, class T = void>
+using rf_enable_if_t = typename std::enable_if<B, T>::type;
 
 } // namespace rapidfuzz

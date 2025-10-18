@@ -29,7 +29,7 @@ namespace rapidfuzz {
  * @param max
  *   Maximum Levenshtein distance between s1 and s2, that is
  *   considered as a result. If the distance is bigger than max,
- *   max + 1 is returned instead. Default is std::numeric_limits<int64_t>::max(),
+ *   max + 1 is returned instead. Default is std::numeric_limits<size_t>::max(),
  *   which deactivates this behaviour.
  *
  * @return returns the levenshtein distance between s1 and s2
@@ -120,53 +120,53 @@ namespace rapidfuzz {
  * Find the Levenshtein distance between two strings:
  * @code{.cpp}
  * // dist is 2
- * int64_t dist = levenshtein_distance("lewenstein", "levenshtein");
+ * size_t dist = levenshtein_distance("lewenstein", "levenshtein");
  * @endcode
  *
  * Setting a maximum distance allows the implementation to select
  * a more efficient implementation:
  * @code{.cpp}
  * // dist is 2
- * int64_t dist = levenshtein_distance("lewenstein", "levenshtein", {1, 1, 1}, 1);
+ * size_t dist = levenshtein_distance("lewenstein", "levenshtein", {1, 1, 1}, 1);
  * @endcode
  *
  * It is possible to select different weights by passing a `weight` struct.
  * @code{.cpp}
  * // dist is 3
- * int64_t dist = levenshtein_distance("lewenstein", "levenshtein", {1, 1, 2});
+ * size_t dist = levenshtein_distance("lewenstein", "levenshtein", {1, 1, 2});
  * @endcode
  * @endparblock
  */
 template <typename InputIt1, typename InputIt2>
-int64_t levenshtein_distance(InputIt1 first1, InputIt1 last1, InputIt2 first2, InputIt2 last2,
-                             LevenshteinWeightTable weights = {1, 1, 1},
-                             int64_t score_cutoff = std::numeric_limits<int64_t>::max(),
-                             int64_t score_hint = std::numeric_limits<int64_t>::max())
+size_t levenshtein_distance(InputIt1 first1, InputIt1 last1, InputIt2 first2, InputIt2 last2,
+                            LevenshteinWeightTable weights = {1, 1, 1},
+                            size_t score_cutoff = std::numeric_limits<size_t>::max(),
+                            size_t score_hint = std::numeric_limits<size_t>::max())
 {
     return detail::Levenshtein::distance(first1, last1, first2, last2, weights, score_cutoff, score_hint);
 }
 
 template <typename Sentence1, typename Sentence2>
-int64_t levenshtein_distance(const Sentence1& s1, const Sentence2& s2,
-                             LevenshteinWeightTable weights = {1, 1, 1},
-                             int64_t score_cutoff = std::numeric_limits<int64_t>::max(),
-                             int64_t score_hint = std::numeric_limits<int64_t>::max())
+size_t levenshtein_distance(const Sentence1& s1, const Sentence2& s2,
+                            LevenshteinWeightTable weights = {1, 1, 1},
+                            size_t score_cutoff = std::numeric_limits<size_t>::max(),
+                            size_t score_hint = std::numeric_limits<size_t>::max())
 {
     return detail::Levenshtein::distance(s1, s2, weights, score_cutoff, score_hint);
 }
 
 template <typename InputIt1, typename InputIt2>
-int64_t levenshtein_similarity(InputIt1 first1, InputIt1 last1, InputIt2 first2, InputIt2 last2,
-                               LevenshteinWeightTable weights = {1, 1, 1}, int64_t score_cutoff = 0,
-                               int64_t score_hint = 0)
+size_t levenshtein_similarity(InputIt1 first1, InputIt1 last1, InputIt2 first2, InputIt2 last2,
+                              LevenshteinWeightTable weights = {1, 1, 1}, size_t score_cutoff = 0,
+                              size_t score_hint = 0)
 {
     return detail::Levenshtein::similarity(first1, last1, first2, last2, weights, score_cutoff, score_hint);
 }
 
 template <typename Sentence1, typename Sentence2>
-int64_t levenshtein_similarity(const Sentence1& s1, const Sentence2& s2,
-                               LevenshteinWeightTable weights = {1, 1, 1}, int64_t score_cutoff = 0,
-                               int64_t score_hint = 0)
+size_t levenshtein_similarity(const Sentence1& s1, const Sentence2& s2,
+                              LevenshteinWeightTable weights = {1, 1, 1}, size_t score_cutoff = 0,
+                              size_t score_hint = 0)
 {
     return detail::Levenshtein::similarity(s1, s2, weights, score_cutoff, score_hint);
 }
@@ -281,49 +281,49 @@ double levenshtein_normalized_similarity(const Sentence1& s1, const Sentence2& s
  */
 template <typename InputIt1, typename InputIt2>
 Editops levenshtein_editops(InputIt1 first1, InputIt1 last1, InputIt2 first2, InputIt2 last2,
-                            int64_t score_hint = std::numeric_limits<int64_t>::max())
+                            size_t score_hint = std::numeric_limits<size_t>::max())
 {
-    return detail::levenshtein_editops(detail::Range(first1, last1), detail::Range(first2, last2),
+    return detail::levenshtein_editops(detail::make_range(first1, last1), detail::make_range(first2, last2),
                                        score_hint);
 }
 
 template <typename Sentence1, typename Sentence2>
 Editops levenshtein_editops(const Sentence1& s1, const Sentence2& s2,
-                            int64_t score_hint = std::numeric_limits<int64_t>::max())
+                            size_t score_hint = std::numeric_limits<size_t>::max())
 {
-    return detail::levenshtein_editops(detail::Range(s1), detail::Range(s2), score_hint);
+    return detail::levenshtein_editops(detail::make_range(s1), detail::make_range(s2), score_hint);
 }
 
 #ifdef RAPIDFUZZ_SIMD
 namespace experimental {
 template <int MaxLen>
-struct MultiLevenshtein : public detail::MultiDistanceBase<MultiLevenshtein<MaxLen>, int64_t, 0,
+struct MultiLevenshtein : public detail::MultiDistanceBase<MultiLevenshtein<MaxLen>, size_t, 0,
                                                            std::numeric_limits<int64_t>::max()> {
 private:
-    friend detail::MultiDistanceBase<MultiLevenshtein<MaxLen>, int64_t, 0,
+    friend detail::MultiDistanceBase<MultiLevenshtein<MaxLen>, size_t, 0,
                                      std::numeric_limits<int64_t>::max()>;
-    friend detail::MultiNormalizedMetricBase<MultiLevenshtein<MaxLen>>;
+    friend detail::MultiNormalizedMetricBase<MultiLevenshtein<MaxLen>, size_t>;
 
-    constexpr static size_t get_vec_size()
+    RAPIDFUZZ_CONSTEXPR_CXX14 static size_t get_vec_size()
     {
 #    ifdef RAPIDFUZZ_AVX2
         using namespace detail::simd_avx2;
 #    else
         using namespace detail::simd_sse2;
 #    endif
-        if constexpr (MaxLen <= 8)
-            return native_simd<uint8_t>::size();
-        else if constexpr (MaxLen <= 16)
-            return native_simd<uint16_t>::size();
-        else if constexpr (MaxLen <= 32)
-            return native_simd<uint32_t>::size();
-        else if constexpr (MaxLen <= 64)
-            return native_simd<uint64_t>::size();
+        RAPIDFUZZ_IF_CONSTEXPR (MaxLen <= 8)
+            return native_simd<uint8_t>::size;
+        else RAPIDFUZZ_IF_CONSTEXPR (MaxLen <= 16)
+            return native_simd<uint16_t>::size;
+        else RAPIDFUZZ_IF_CONSTEXPR (MaxLen <= 32)
+            return native_simd<uint32_t>::size;
+        else RAPIDFUZZ_IF_CONSTEXPR (MaxLen <= 64)
+            return native_simd<uint64_t>::size;
 
-        static_assert(MaxLen <= 64);
+        static_assert(MaxLen <= 64, "expected MaxLen <= 64");
     }
 
-    constexpr static size_t find_block_count(size_t count)
+    static size_t find_block_count(size_t count)
     {
         size_t vec_size = get_vec_size();
         size_t simd_vec_count = detail::ceil_div(count, vec_size);
@@ -381,27 +381,27 @@ public:
 
 private:
     template <typename InputIt2>
-    void _distance(int64_t* scores, size_t score_count, detail::Range<InputIt2> s2,
-                   int64_t score_cutoff = std::numeric_limits<int64_t>::max()) const
+    void _distance(size_t* scores, size_t score_count, const detail::Range<InputIt2>& s2,
+                   size_t score_cutoff = std::numeric_limits<size_t>::max()) const
     {
         if (score_count < result_count())
             throw std::invalid_argument("scores has to have >= result_count() elements");
 
-        detail::Range scores_(scores, scores + score_count);
-        if constexpr (MaxLen == 8)
+        auto scores_ = detail::make_range(scores, scores + score_count);
+        RAPIDFUZZ_IF_CONSTEXPR (MaxLen == 8)
             detail::levenshtein_hyrroe2003_simd<uint8_t>(scores_, PM, str_lens, s2, score_cutoff);
-        else if constexpr (MaxLen == 16)
+        else RAPIDFUZZ_IF_CONSTEXPR (MaxLen == 16)
             detail::levenshtein_hyrroe2003_simd<uint16_t>(scores_, PM, str_lens, s2, score_cutoff);
-        else if constexpr (MaxLen == 32)
+        else RAPIDFUZZ_IF_CONSTEXPR (MaxLen == 32)
             detail::levenshtein_hyrroe2003_simd<uint32_t>(scores_, PM, str_lens, s2, score_cutoff);
-        else if constexpr (MaxLen == 64)
+        else RAPIDFUZZ_IF_CONSTEXPR (MaxLen == 64)
             detail::levenshtein_hyrroe2003_simd<uint64_t>(scores_, PM, str_lens, s2, score_cutoff);
     }
 
     template <typename InputIt2>
-    int64_t maximum(size_t s1_idx, detail::Range<InputIt2> s2) const
+    size_t maximum(size_t s1_idx, const detail::Range<InputIt2>& s2) const
     {
-        return detail::levenshtein_maximum(static_cast<ptrdiff_t>(str_lens[s1_idx]), s2.size(), weights);
+        return detail::levenshtein_maximum(str_lens[s1_idx], s2.size(), weights);
     }
 
     size_t get_input_count() const noexcept
@@ -416,10 +416,10 @@ private:
     LevenshteinWeightTable weights;
 };
 } /* namespace experimental */
-#endif
+#endif /* RAPIDFUZZ_SIMD */
 
 template <typename CharT1>
-struct CachedLevenshtein : public detail::CachedDistanceBase<CachedLevenshtein<CharT1>, int64_t, 0,
+struct CachedLevenshtein : public detail::CachedDistanceBase<CachedLevenshtein<CharT1>, size_t, 0,
                                                              std::numeric_limits<int64_t>::max()> {
     template <typename Sentence1>
     explicit CachedLevenshtein(const Sentence1& s1_, LevenshteinWeightTable aWeights = {1, 1, 1})
@@ -428,22 +428,22 @@ struct CachedLevenshtein : public detail::CachedDistanceBase<CachedLevenshtein<C
 
     template <typename InputIt1>
     CachedLevenshtein(InputIt1 first1, InputIt1 last1, LevenshteinWeightTable aWeights = {1, 1, 1})
-        : s1(first1, last1), PM(detail::Range(first1, last1)), weights(aWeights)
+        : s1(first1, last1), PM(detail::make_range(first1, last1)), weights(aWeights)
     {}
 
 private:
-    friend detail::CachedDistanceBase<CachedLevenshtein<CharT1>, int64_t, 0,
+    friend detail::CachedDistanceBase<CachedLevenshtein<CharT1>, size_t, 0,
                                       std::numeric_limits<int64_t>::max()>;
     friend detail::CachedNormalizedMetricBase<CachedLevenshtein<CharT1>>;
 
     template <typename InputIt2>
-    int64_t maximum(detail::Range<InputIt2> s2) const
+    size_t maximum(const detail::Range<InputIt2>& s2) const
     {
-        return detail::levenshtein_maximum(static_cast<ptrdiff_t>(s1.size()), s2.size(), weights);
+        return detail::levenshtein_maximum(s1.size(), s2.size(), weights);
     }
 
     template <typename InputIt2>
-    int64_t _distance(detail::Range<InputIt2> s2, int64_t score_cutoff, int64_t score_hint) const
+    size_t _distance(const detail::Range<InputIt2>& s2, size_t score_cutoff, size_t score_hint) const
     {
         if (weights.insert_cost == weights.delete_cost) {
             /* when insertions + deletions operations are free there can not be any edit distance */
@@ -452,10 +452,10 @@ private:
             /* uniform Levenshtein multiplied with the common factor */
             if (weights.insert_cost == weights.replace_cost) {
                 // max can make use of the common divisor of the three weights
-                int64_t new_score_cutoff = detail::ceil_div(score_cutoff, weights.insert_cost);
-                int64_t new_score_hint = detail::ceil_div(score_hint, weights.insert_cost);
-                int64_t dist = detail::uniform_levenshtein_distance(PM, detail::Range(s1), s2,
-                                                                    new_score_cutoff, new_score_hint);
+                size_t new_score_cutoff = detail::ceil_div(score_cutoff, weights.insert_cost);
+                size_t new_score_hint = detail::ceil_div(score_hint, weights.insert_cost);
+                size_t dist = detail::uniform_levenshtein_distance(PM, detail::make_range(s1), s2,
+                                                                   new_score_cutoff, new_score_hint);
                 dist *= weights.insert_cost;
 
                 return (dist <= score_cutoff) ? dist : score_cutoff + 1;
@@ -466,27 +466,29 @@ private:
              */
             else if (weights.replace_cost >= weights.insert_cost + weights.delete_cost) {
                 // max can make use of the common divisor of the three weights
-                int64_t new_max = detail::ceil_div(score_cutoff, weights.insert_cost);
-                int64_t dist = detail::indel_distance(PM, detail::Range(s1), s2, new_max);
+                size_t new_max = detail::ceil_div(score_cutoff, weights.insert_cost);
+                size_t dist = detail::indel_distance(PM, detail::make_range(s1), s2, new_max);
                 dist *= weights.insert_cost;
                 return (dist <= score_cutoff) ? dist : score_cutoff + 1;
             }
         }
 
-        return detail::generalized_levenshtein_distance(detail::Range(s1), s2, weights, score_cutoff);
+        return detail::generalized_levenshtein_distance(detail::make_range(s1), s2, weights, score_cutoff);
     }
 
-    std::basic_string<CharT1> s1;
+    std::vector<CharT1> s1;
     detail::BlockPatternMatchVector PM;
     LevenshteinWeightTable weights;
 };
 
+#ifdef RAPIDFUZZ_DEDUCTION_GUIDES
 template <typename Sentence1>
-explicit CachedLevenshtein(const Sentence1& s1_, LevenshteinWeightTable aWeights = {1, 1, 1})
-    -> CachedLevenshtein<char_type<Sentence1>>;
+explicit CachedLevenshtein(const Sentence1& s1_, LevenshteinWeightTable aWeights = {
+                                                     1, 1, 1}) -> CachedLevenshtein<char_type<Sentence1>>;
 
 template <typename InputIt1>
-CachedLevenshtein(InputIt1 first1, InputIt1 last1, LevenshteinWeightTable aWeights = {1, 1, 1})
-    -> CachedLevenshtein<iter_value_t<InputIt1>>;
+CachedLevenshtein(InputIt1 first1, InputIt1 last1,
+                  LevenshteinWeightTable aWeights = {1, 1, 1}) -> CachedLevenshtein<iter_value_t<InputIt1>>;
+#endif
 
 } // namespace rapidfuzz

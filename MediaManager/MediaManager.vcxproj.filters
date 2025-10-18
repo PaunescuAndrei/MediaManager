@@ -57,6 +57,9 @@
     <Filter Include="Source Files\thirdparty\sqlite3">
       <UniqueIdentifier>{eee2a4eb-9586-4bc2-ac6d-03e297d8bf69}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\thirdparty\rapidfuzz">
+      <UniqueIdentifier>{b5728631-64a9-4aeb-a846-a1cb8e2b755f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp">
@@ -342,6 +345,18 @@
     </ClInclude>
     <ClInclude Include="src\general\SoundPlayer.h">
       <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\thirdparty\rapidfuzz\distance.hpp">
+      <Filter>Source Files\thirdparty\rapidfuzz</Filter>
+    </ClInclude>
+    <ClInclude Include="src\thirdparty\rapidfuzz\fuzz.hpp">
+      <Filter>Source Files\thirdparty\rapidfuzz</Filter>
+    </ClInclude>
+    <ClInclude Include="src\thirdparty\rapidfuzz\fuzz_impl.hpp">
+      <Filter>Source Files\thirdparty\rapidfuzz</Filter>
+    </ClInclude>
+    <ClInclude Include="src\thirdparty\rapidfuzz\rapidfuzz_all.hpp">
+      <Filter>Source Files\thirdparty\rapidfuzz</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

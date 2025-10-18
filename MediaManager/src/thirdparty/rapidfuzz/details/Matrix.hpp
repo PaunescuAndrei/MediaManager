@@ -5,21 +5,19 @@
 #include <algorithm>
 #include <cassert>
 #include <cstddef>
-#include <cstdint>
-#include <stdexcept>
-#include <stdint.h>
 #include <stdio.h>
 #include <vector>
 
-namespace rapidfuzz::detail {
+namespace rapidfuzz {
+namespace detail {
 
 template <typename T, bool IsConst>
 struct BitMatrixView {
 
     using value_type = T;
     using size_type = size_t;
-    using pointer = std::conditional_t<IsConst, const value_type*, value_type*>;
-    using reference = std::conditional_t<IsConst, const value_type&, value_type&>;
+    using pointer = typename std::conditional<IsConst, const value_type*, value_type*>::type;
+    using reference = typename std::conditional<IsConst, const value_type&, value_type&>::type;
 
     BitMatrixView(pointer vector, size_type cols) noexcept : m_vector(vector), m_cols(cols)
     {}
@@ -159,7 +157,7 @@ struct ShiftedBitMatrix {
 
     bool test_bit(size_t row, size_t col, bool default_ = false) const noexcept
     {
-        ptrdiff_t offset = static_cast<ptrdiff_t>(m_offsets[row]);
+        ptrdiff_t offset = m_offsets[row];
 
         if (offset < 0) {
             col += static_cast<size_t>(-offset);
@@ -174,17 +172,17 @@ struct ShiftedBitMatrix {
 
         size_t word_size = sizeof(value_type) * 8;
         size_t col_word = col / word_size;
-        uint64_t col_mask = value_type(1) << (col % word_size);
+        value_type col_mask = value_type(1) << (col % word_size);
 
         return bool(m_matrix[row][col_word] & col_mask);
     }
 
-    auto operator[](size_t row) noexcept
+    BitMatrixView<value_type, false> operator[](size_t row) noexcept
     {
         return m_matrix[row];
     }
 
-    auto operator[](size_t row) const noexcept
+    BitMatrixView<value_type, true> operator[](size_t row) const noexcept
     {
         return m_matrix[row];
     }
@@ -199,4 +197,5 @@ private:
     std::vector<ptrdiff_t> m_offsets;
 };
 
-} // namespace rapidfuzz::detail
+} // namespace detail
+} // namespace rapidfuzz

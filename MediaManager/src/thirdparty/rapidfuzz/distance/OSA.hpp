@@ -2,8 +2,8 @@
 /* Copyright © 2021 Max Bachmann */
 
 #pragma once
-#include <cmath>
-#include <numeric>
+
+#include <limits>
 #include <rapidfuzz/details/common.hpp>
 #include <rapidfuzz/distance/OSA_impl.hpp>
 
@@ -34,28 +34,28 @@ namespace rapidfuzz {
  * @return OSA distance between s1 and s2
  */
 template <typename InputIt1, typename InputIt2>
-int64_t osa_distance(InputIt1 first1, InputIt1 last1, InputIt2 first2, InputIt2 last2,
-                     int64_t score_cutoff = std::numeric_limits<int64_t>::max())
+size_t osa_distance(InputIt1 first1, InputIt1 last1, InputIt2 first2, InputIt2 last2,
+                    size_t score_cutoff = std::numeric_limits<size_t>::max())
 {
     return detail::OSA::distance(first1, last1, first2, last2, score_cutoff, score_cutoff);
 }
 
 template <typename Sentence1, typename Sentence2>
-int64_t osa_distance(const Sentence1& s1, const Sentence2& s2,
-                     int64_t score_cutoff = std::numeric_limits<int64_t>::max())
+size_t osa_distance(const Sentence1& s1, const Sentence2& s2,
+                    size_t score_cutoff = std::numeric_limits<size_t>::max())
 {
     return detail::OSA::distance(s1, s2, score_cutoff, score_cutoff);
 }
 
 template <typename InputIt1, typename InputIt2>
-int64_t osa_similarity(InputIt1 first1, InputIt1 last1, InputIt2 first2, InputIt2 last2,
-                       int64_t score_cutoff = 0)
+size_t osa_similarity(InputIt1 first1, InputIt1 last1, InputIt2 first2, InputIt2 last2,
+                      size_t score_cutoff = 0)
 {
     return detail::OSA::similarity(first1, last1, first2, last2, score_cutoff, score_cutoff);
 }
 
 template <typename Sentence1, typename Sentence2>
-int64_t osa_similarity(const Sentence1& s1, const Sentence2& s2, int64_t score_cutoff = 0)
+size_t osa_similarity(const Sentence1& s1, const Sentence2& s2, size_t score_cutoff = 0)
 {
     return detail::OSA::similarity(s1, s2, score_cutoff, score_cutoff);
 }
@@ -114,31 +114,31 @@ double osa_normalized_similarity(const Sentence1& s1, const Sentence2& s2, doubl
 namespace experimental {
 template <int MaxLen>
 struct MultiOSA
-    : public detail::MultiDistanceBase<MultiOSA<MaxLen>, int64_t, 0, std::numeric_limits<int64_t>::max()> {
+    : public detail::MultiDistanceBase<MultiOSA<MaxLen>, size_t, 0, std::numeric_limits<int64_t>::max()> {
 private:
-    friend detail::MultiDistanceBase<MultiOSA<MaxLen>, int64_t, 0, std::numeric_limits<int64_t>::max()>;
-    friend detail::MultiNormalizedMetricBase<MultiOSA<MaxLen>>;
+    friend detail::MultiDistanceBase<MultiOSA<MaxLen>, size_t, 0, std::numeric_limits<int64_t>::max()>;
+    friend detail::MultiNormalizedMetricBase<MultiOSA<MaxLen>, size_t>;
 
-    constexpr static size_t get_vec_size()
+    RAPIDFUZZ_CONSTEXPR_CXX14 static size_t get_vec_size()
     {
 #    ifdef RAPIDFUZZ_AVX2
         using namespace detail::simd_avx2;
 #    else
         using namespace detail::simd_sse2;
 #    endif
-        if constexpr (MaxLen <= 8)
-            return native_simd<uint8_t>::size();
-        else if constexpr (MaxLen <= 16)
-            return native_simd<uint16_t>::size();
-        else if constexpr (MaxLen <= 32)
-            return native_simd<uint32_t>::size();
-        else if constexpr (MaxLen <= 64)
-            return native_simd<uint64_t>::size();
+        RAPIDFUZZ_IF_CONSTEXPR (MaxLen <= 8)
+            return native_simd<uint8_t>::size;
+        else RAPIDFUZZ_IF_CONSTEXPR (MaxLen <= 16)
+            return native_simd<uint16_t>::size;
+        else RAPIDFUZZ_IF_CONSTEXPR (MaxLen <= 32)
+            return native_simd<uint32_t>::size;
+        else RAPIDFUZZ_IF_CONSTEXPR (MaxLen <= 64)
+            return native_simd<uint64_t>::size;
 
-        static_assert(MaxLen <= 64);
+        static_assert(MaxLen <= 64, "expected MaxLen <= 64");
     }
 
-    constexpr static size_t find_block_count(size_t count)
+    static size_t find_block_count(size_t count)
     {
         size_t vec_size = get_vec_size();
         size_t simd_vec_count = detail::ceil_div(count, vec_size);
@@ -193,27 +193,27 @@ public:
 
 private:
     template <typename InputIt2>
-    void _distance(int64_t* scores, size_t score_count, detail::Range<InputIt2> s2,
-                   int64_t score_cutoff = std::numeric_limits<int64_t>::max()) const
+    void _distance(size_t* scores, size_t score_count, const detail::Range<InputIt2>& s2,
+                   size_t score_cutoff = std::numeric_limits<size_t>::max()) const
     {
         if (score_count < result_count())
             throw std::invalid_argument("scores has to have >= result_count() elements");
 
-        detail::Range scores_(scores, scores + score_count);
-        if constexpr (MaxLen == 8)
+        auto scores_ = detail::make_range(scores, scores + score_count);
+        RAPIDFUZZ_IF_CONSTEXPR (MaxLen == 8)
             detail::osa_hyrroe2003_simd<uint8_t>(scores_, PM, str_lens, s2, score_cutoff);
-        else if constexpr (MaxLen == 16)
+        else RAPIDFUZZ_IF_CONSTEXPR (MaxLen == 16)
             detail::osa_hyrroe2003_simd<uint16_t>(scores_, PM, str_lens, s2, score_cutoff);
-        else if constexpr (MaxLen == 32)
+        else RAPIDFUZZ_IF_CONSTEXPR (MaxLen == 32)
             detail::osa_hyrroe2003_simd<uint32_t>(scores_, PM, str_lens, s2, score_cutoff);
-        else if constexpr (MaxLen == 64)
+        else RAPIDFUZZ_IF_CONSTEXPR (MaxLen == 64)
             detail::osa_hyrroe2003_simd<uint64_t>(scores_, PM, str_lens, s2, score_cutoff);
     }
 
     template <typename InputIt2>
-    int64_t maximum(size_t s1_idx, detail::Range<InputIt2> s2) const
+    size_t maximum(size_t s1_idx, const detail::Range<InputIt2>& s2) const
     {
-        return std::max(static_cast<ptrdiff_t>(str_lens[s1_idx]), s2.size());
+        return std::max(str_lens[s1_idx], s2.size());
     }
 
     size_t get_input_count() const noexcept
@@ -231,51 +231,52 @@ private:
 
 template <typename CharT1>
 struct CachedOSA
-    : public detail::CachedDistanceBase<CachedOSA<CharT1>, int64_t, 0, std::numeric_limits<int64_t>::max()> {
+    : public detail::CachedDistanceBase<CachedOSA<CharT1>, size_t, 0, std::numeric_limits<int64_t>::max()> {
     template <typename Sentence1>
     explicit CachedOSA(const Sentence1& s1_) : CachedOSA(detail::to_begin(s1_), detail::to_end(s1_))
     {}
 
     template <typename InputIt1>
-    CachedOSA(InputIt1 first1, InputIt1 last1) : s1(first1, last1), PM(detail::Range(first1, last1))
+    CachedOSA(InputIt1 first1, InputIt1 last1) : s1(first1, last1), PM(detail::make_range(first1, last1))
     {}
 
 private:
-    friend detail::CachedDistanceBase<CachedOSA<CharT1>, int64_t, 0, std::numeric_limits<int64_t>::max()>;
+    friend detail::CachedDistanceBase<CachedOSA<CharT1>, size_t, 0, std::numeric_limits<int64_t>::max()>;
     friend detail::CachedNormalizedMetricBase<CachedOSA<CharT1>>;
 
     template <typename InputIt2>
-    int64_t maximum(detail::Range<InputIt2> s2) const
+    size_t maximum(const detail::Range<InputIt2>& s2) const
     {
-        return std::max(static_cast<ptrdiff_t>(s1.size()), s2.size());
+        return std::max(s1.size(), s2.size());
     }
 
     template <typename InputIt2>
-    int64_t _distance(detail::Range<InputIt2> s2, int64_t score_cutoff,
-                      [[maybe_unused]] int64_t score_hint) const
+    size_t _distance(const detail::Range<InputIt2>& s2, size_t score_cutoff, size_t) const
     {
-        int64_t res;
+        size_t res;
         if (s1.empty())
             res = s2.size();
         else if (s2.empty())
-            res = static_cast<int64_t>(s1.size());
+            res = s1.size();
         else if (s1.size() < 64)
-            res = detail::osa_hyrroe2003(PM, detail::Range(s1), s2, score_cutoff);
+            res = detail::osa_hyrroe2003(PM, detail::make_range(s1), s2, score_cutoff);
         else
-            res = detail::osa_hyrroe2003_block(PM, detail::Range(s1), s2, score_cutoff);
+            res = detail::osa_hyrroe2003_block(PM, detail::make_range(s1), s2, score_cutoff);
 
         return (res <= score_cutoff) ? res : score_cutoff + 1;
     }
 
-    std::basic_string<CharT1> s1;
+    std::vector<CharT1> s1;
     detail::BlockPatternMatchVector PM;
 };
 
+#ifdef RAPIDFUZZ_DEDUCTION_GUIDES
 template <typename Sentence1>
 CachedOSA(const Sentence1& s1_) -> CachedOSA<char_type<Sentence1>>;
 
 template <typename InputIt1>
 CachedOSA(InputIt1 first1, InputIt1 last1) -> CachedOSA<iter_value_t<InputIt1>>;
+#endif
 /**@}*/
 
 } // namespace rapidfuzz

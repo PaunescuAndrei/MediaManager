@@ -2,16 +2,18 @@
 /* Copyright © 2021-present Max Bachmann */
 /* Copyright © 2011 Adam Cohen */
 
+#include "rapidfuzz/details/Range.hpp"
 #include <limits>
 #include <rapidfuzz/details/CharSet.hpp>
 
 #include <algorithm>
 #include <cmath>
 #include <iterator>
-#include <unordered_map>
+#include <sys/types.h>
 #include <vector>
 
-namespace rapidfuzz::fuzz {
+namespace rapidfuzz {
+namespace fuzz {
 
 /**********************************************
  *                  ratio
@@ -20,7 +22,7 @@ namespace rapidfuzz::fuzz {
 template <typename InputIt1, typename InputIt2>
 double ratio(InputIt1 first1, InputIt1 last1, InputIt2 first2, InputIt2 last2, double score_cutoff)
 {
-    return ratio(detail::Range(first1, last1), detail::Range(first2, last2), score_cutoff);
+    return ratio(detail::make_range(first1, last1), detail::make_range(first2, last2), score_cutoff);
 }
 
 template <typename Sentence1, typename Sentence2>
@@ -34,7 +36,7 @@ template <typename InputIt2>
 double CachedRatio<CharT1>::similarity(InputIt2 first2, InputIt2 last2, double score_cutoff,
                                        double score_hint) const
 {
-    return similarity(detail::Range(first2, last2), score_cutoff, score_hint);
+    return similarity(detail::make_range(first2, last2), score_cutoff, score_hint);
 }
 
 template <typename CharT1>
@@ -50,26 +52,39 @@ double CachedRatio<CharT1>::similarity(const Sentence2& s2, double score_cutoff,
 
 namespace fuzz_detail {
 
+static RAPIDFUZZ_CONSTEXPR_CXX14 double norm_distance(size_t dist, size_t lensum, double score_cutoff = 0)
+{
+    double score =
+        (lensum > 0) ? (100.0 - 100.0 * static_cast<double>(dist) / static_cast<double>(lensum)) : 100.0;
+
+    return (score >= score_cutoff) ? score : 0;
+}
+
+static inline size_t score_cutoff_to_distance(double score_cutoff, size_t lensum)
+{
+    return static_cast<size_t>(std::ceil(static_cast<double>(lensum) * (1.0 - score_cutoff / 100)));
+}
+
 template <typename InputIt1, typename InputIt2, typename CachedCharT1>
 ScoreAlignment<double>
-partial_ratio_impl(rapidfuzz::detail::Range<InputIt1> s1, rapidfuzz::detail::Range<InputIt2> s2,
+partial_ratio_impl(const detail::Range<InputIt1>& s1, const detail::Range<InputIt2>& s2,
                    const CachedRatio<CachedCharT1>& cached_ratio,
                    const detail::CharSet<iter_value_t<InputIt1>>& s1_char_set, double score_cutoff)
 {
     ScoreAlignment<double> res;
-    auto len1 = static_cast<size_t>(s1.size());
-    auto len2 = static_cast<size_t>(s2.size());
+    size_t len1 = s1.size();
+    size_t len2 = s2.size();
     res.src_start = 0;
     res.src_end = len1;
     res.dest_start = 0;
     res.dest_end = len1;
 
     if (len2 > len1) {
-        int64_t maximum = static_cast<int64_t>(len1) * 2;
+        size_t maximum = len1 * 2;
         double norm_cutoff_sim = rapidfuzz::detail::NormSim_to_NormDist(score_cutoff / 100);
-        int64_t cutoff_dist = static_cast<int64_t>(std::ceil(static_cast<double>(maximum) * norm_cutoff_sim));
-        int64_t best_dist = std::numeric_limits<int64_t>::max();
-        std::vector<int64_t> scores(len2 - len1, -1);
+        size_t cutoff_dist = static_cast<size_t>(std::ceil(static_cast<double>(maximum) * norm_cutoff_sim));
+        size_t best_dist = std::numeric_limits<size_t>::max();
+        std::vector<size_t> scores(len2 - len1, std::numeric_limits<size_t>::max());
         std::vector<std::pair<size_t, size_t>> windows = {{0, len2 - len1 - 1}};
         std::vector<std::pair<size_t, size_t>> new_windows;
 
@@ -77,10 +92,12 @@ partial_ratio_impl(rapidfuzz::detail::Range<InputIt1> s1, rapidfuzz::detail::Ran
             for (const auto& window : windows) {
                 auto subseq1_first = s2.begin() + static_cast<ptrdiff_t>(window.first);
                 auto subseq2_first = s2.begin() + static_cast<ptrdiff_t>(window.second);
-                rapidfuzz::detail::Range subseq1(subseq1_first, subseq1_first + static_cast<ptrdiff_t>(len1));
-                rapidfuzz::detail::Range subseq2(subseq2_first, subseq2_first + static_cast<ptrdiff_t>(len1));
+                auto subseq1 =
+                    detail::make_range(subseq1_first, subseq1_first + static_cast<ptrdiff_t>(len1));
+                auto subseq2 =
+                    detail::make_range(subseq2_first, subseq2_first + static_cast<ptrdiff_t>(len1));
 
-                if (scores[window.first] == -1) {
+                if (scores[window.first] == std::numeric_limits<size_t>::max()) {
                     scores[window.first] = cached_ratio.cached_indel.distance(subseq1);
                     if (scores[window.first] < cutoff_dist) {
                         cutoff_dist = best_dist = scores[window.first];
@@ -92,7 +109,7 @@ partial_ratio_impl(rapidfuzz::detail::Range<InputIt1> s1, rapidfuzz::detail::Ran
                         }
                     }
                 }
-                if (scores[window.second] == -1) {
+                if (scores[window.second] == std::numeric_limits<size_t>::max()) {
                     scores[window.second] = cached_ratio.cached_indel.distance(subseq2);
                     if (scores[window.second] < cutoff_dist) {
                         cutoff_dist = best_dist = scores[window.second];
@@ -109,11 +126,13 @@ partial_ratio_impl(rapidfuzz::detail::Range<InputIt1> s1, rapidfuzz::detail::Ran
                 if (cell_diff == 1) continue;
 
                 /* find the minimum score possible in the range first <-> last */
-                int64_t known_edits = std::abs(scores[window.first] - scores[window.second]);
+                size_t known_edits = detail::abs_diff(scores[window.first], scores[window.second]);
                 /* half of the cells that are not needed for known_edits can lead to a better score */
-                int64_t min_score = std::min(scores[window.first], scores[window.second]) -
-                                    (static_cast<int64_t>(cell_diff) + known_edits / 2);
-                if (min_score < cutoff_dist) {
+                size_t max_score_improvement = (cell_diff - known_edits / 2) / 2 * 2;
+                ptrdiff_t min_score =
+                    static_cast<ptrdiff_t>(std::min(scores[window.first], scores[window.second])) -
+                    static_cast<ptrdiff_t>(max_score_improvement);
+                if (min_score < static_cast<ptrdiff_t>(cutoff_dist)) {
                     size_t center = cell_diff / 2;
                     new_windows.emplace_back(window.first, window.first + center);
                     new_windows.emplace_back(window.first + center, window.second);
@@ -130,7 +149,7 @@ partial_ratio_impl(rapidfuzz::detail::Range<InputIt1> s1, rapidfuzz::detail::Ran
     }
 
     for (size_t i = 1; i < len1; ++i) {
-        rapidfuzz::detail::Range subseq(s2.begin(), s2.begin() + static_cast<ptrdiff_t>(i));
+        auto subseq = rapidfuzz::detail::make_range(s2.begin(), s2.begin() + static_cast<ptrdiff_t>(i));
         if (!s1_char_set.find(subseq.back())) continue;
 
         double ls_ratio = cached_ratio.similarity(subseq, score_cutoff);
@@ -143,7 +162,7 @@ partial_ratio_impl(rapidfuzz::detail::Range<InputIt1> s1, rapidfuzz::detail::Ran
     }
 
     for (size_t i = len2 - len1; i < len2; ++i) {
-        rapidfuzz::detail::Range subseq(s2.begin() + static_cast<ptrdiff_t>(i), s2.end());
+        auto subseq = rapidfuzz::detail::make_range(s2.begin() + static_cast<ptrdiff_t>(i), s2.end());
         if (!s1_char_set.find(subseq.front())) continue;
 
         double ls_ratio = cached_ratio.similarity(subseq, score_cutoff);
@@ -159,8 +178,8 @@ partial_ratio_impl(rapidfuzz::detail::Range<InputIt1> s1, rapidfuzz::detail::Ran
 }
 
 template <typename InputIt1, typename InputIt2, typename CharT1 = iter_value_t<InputIt1>>
-ScoreAlignment<double> partial_ratio_impl(rapidfuzz::detail::Range<InputIt1> s1,
-                                          rapidfuzz::detail::Range<InputIt2> s2, double score_cutoff)
+ScoreAlignment<double> partial_ratio_impl(const detail::Range<InputIt1>& s1,
+                                          const detail::Range<InputIt2>& s2, double score_cutoff)
 {
     CachedRatio<CharT1> cached_ratio(s1);
 
@@ -177,8 +196,8 @@ template <typename InputIt1, typename InputIt2>
 ScoreAlignment<double> partial_ratio_alignment(InputIt1 first1, InputIt1 last1, InputIt2 first2,
                                                InputIt2 last2, double score_cutoff)
 {
-    auto len1 = static_cast<size_t>(std::distance(first1, last1));
-    auto len2 = static_cast<size_t>(std::distance(first2, last2));
+    size_t len1 = static_cast<size_t>(std::distance(first1, last1));
+    size_t len2 = static_cast<size_t>(std::distance(first2, last2));
 
     if (len1 > len2) {
         ScoreAlignment<double> result = partial_ratio_alignment(first2, last2, first1, last1, score_cutoff);
@@ -192,8 +211,8 @@ ScoreAlignment<double> partial_ratio_alignment(InputIt1 first1, InputIt1 last1, 
     if (!len1 || !len2)
         return ScoreAlignment<double>(static_cast<double>(len1 == len2) * 100.0, 0, len1, 0, len1);
 
-    auto s1 = detail::Range(first1, last1);
-    auto s2 = detail::Range(first2, last2);
+    auto s1 = detail::make_range(first1, last1);
+    auto s2 = detail::make_range(first2, last2);
 
     auto alignment = fuzz_detail::partial_ratio_impl(s1, s2, score_cutoff);
     if (alignment.score != 100 && s1.size() == s2.size()) {
@@ -240,7 +259,7 @@ CachedPartialRatio<CharT1>::CachedPartialRatio(InputIt1 first1, InputIt1 last1)
 template <typename CharT1>
 template <typename InputIt2>
 double CachedPartialRatio<CharT1>::similarity(InputIt2 first2, InputIt2 last2, double score_cutoff,
-                                              [[maybe_unused]] double score_hint) const
+                                              double) const
 {
     size_t len1 = s1.size();
     size_t len2 = static_cast<size_t>(std::distance(first2, last2));
@@ -252,8 +271,8 @@ double CachedPartialRatio<CharT1>::similarity(InputIt2 first2, InputIt2 last2, d
 
     if (!len1 || !len2) return static_cast<double>(len1 == len2) * 100.0;
 
-    auto s1_ = detail::Range(s1);
-    auto s2 = detail::Range(first2, last2);
+    auto s1_ = detail::make_range(s1);
+    auto s2 = detail::make_range(first2, last2);
 
     double score = fuzz_detail::partial_ratio_impl(s1_, s2, cached_ratio, s1_char_set, score_cutoff).score;
     if (score != 100 && s1_.size() == s2.size()) {
@@ -267,8 +286,7 @@ double CachedPartialRatio<CharT1>::similarity(InputIt2 first2, InputIt2 last2, d
 
 template <typename CharT1>
 template <typename Sentence2>
-double CachedPartialRatio<CharT1>::similarity(const Sentence2& s2, double score_cutoff,
-                                              [[maybe_unused]] double score_hint) const
+double CachedPartialRatio<CharT1>::similarity(const Sentence2& s2, double score_cutoff, double) const
 {
     return similarity(detail::to_begin(s2), detail::to_end(s2), score_cutoff);
 }
@@ -295,7 +313,7 @@ double token_sort_ratio(const Sentence1& s1, const Sentence2& s2, double score_c
 template <typename CharT1>
 template <typename InputIt2>
 double CachedTokenSortRatio<CharT1>::similarity(InputIt2 first2, InputIt2 last2, double score_cutoff,
-                                                [[maybe_unused]] double score_hint) const
+                                                double) const
 {
     if (score_cutoff > 100) return 0;
 
@@ -304,8 +322,7 @@ double CachedTokenSortRatio<CharT1>::similarity(InputIt2 first2, InputIt2 last2,
 
 template <typename CharT1>
 template <typename Sentence2>
-double CachedTokenSortRatio<CharT1>::similarity(const Sentence2& s2, double score_cutoff,
-                                                [[maybe_unused]] double score_hint) const
+double CachedTokenSortRatio<CharT1>::similarity(const Sentence2& s2, double score_cutoff, double) const
 {
     return similarity(detail::to_begin(s2), detail::to_end(s2), score_cutoff);
 }
@@ -334,7 +351,7 @@ double partial_token_sort_ratio(const Sentence1& s1, const Sentence2& s2, double
 template <typename CharT1>
 template <typename InputIt2>
 double CachedPartialTokenSortRatio<CharT1>::similarity(InputIt2 first2, InputIt2 last2, double score_cutoff,
-                                                       [[maybe_unused]] double score_hint) const
+                                                       double) const
 {
     if (score_cutoff > 100) return 0;
 
@@ -343,8 +360,7 @@ double CachedPartialTokenSortRatio<CharT1>::similarity(InputIt2 first2, InputIt2
 
 template <typename CharT1>
 template <typename Sentence2>
-double CachedPartialTokenSortRatio<CharT1>::similarity(const Sentence2& s2, double score_cutoff,
-                                                       [[maybe_unused]] double score_hint) const
+double CachedPartialTokenSortRatio<CharT1>::similarity(const Sentence2& s2, double score_cutoff, double) const
 {
     return similarity(detail::to_begin(s2), detail::to_end(s2), score_cutoff);
 }
@@ -360,7 +376,7 @@ double token_set_ratio(const rapidfuzz::detail::SplittedSentenceView<InputIt1>& 
                        const double score_cutoff)
 {
     /* in FuzzyWuzzy this returns 0. For sake of compatibility return 0 here as well
-     * see https://github.com/maxbachmann/RapidFuzz/issues/110 */
+     * see https://github.com/rapidfuzz/RapidFuzz/issues/110 */
     if (tokens_a.empty() || tokens_b.empty()) return 0;
 
     auto decomposition = detail::set_decomposition(tokens_a, tokens_b);
@@ -374,20 +390,19 @@ double token_set_ratio(const rapidfuzz::detail::SplittedSentenceView<InputIt1>& 
     auto diff_ab_joined = diff_ab.join();
     auto diff_ba_joined = diff_ba.join();
 
-    size_t ab_len = diff_ab_joined.length();
-    size_t ba_len = diff_ba_joined.length();
+    size_t ab_len = diff_ab_joined.size();
+    size_t ba_len = diff_ba_joined.size();
     size_t sect_len = intersect.length();
 
     // string length sect+ab <-> sect and sect+ba <-> sect
-    int64_t sect_ab_len = static_cast<int64_t>(sect_len + bool(sect_len) + ab_len);
-    int64_t sect_ba_len = static_cast<int64_t>(sect_len + bool(sect_len) + ba_len);
+    size_t sect_ab_len = sect_len + bool(sect_len) + ab_len;
+    size_t sect_ba_len = sect_len + bool(sect_len) + ba_len;
 
     double result = 0;
-    auto cutoff_distance = detail::score_cutoff_to_distance<100>(score_cutoff, sect_ab_len + sect_ba_len);
-    int64_t dist = indel_distance(diff_ab_joined, diff_ba_joined, cutoff_distance);
+    size_t cutoff_distance = score_cutoff_to_distance(score_cutoff, sect_ab_len + sect_ba_len);
+    size_t dist = indel_distance(diff_ab_joined, diff_ba_joined, cutoff_distance);
 
-    if (dist <= cutoff_distance)
-        result = detail::norm_distance<100>(dist, sect_ab_len + sect_ba_len, score_cutoff);
+    if (dist <= cutoff_distance) result = norm_distance(dist, sect_ab_len + sect_ba_len, score_cutoff);
 
     // exit early since the other ratios are 0
     if (!sect_len) return result;
@@ -395,13 +410,11 @@ double token_set_ratio(const rapidfuzz::detail::SplittedSentenceView<InputIt1>& 
     // levenshtein distance sect+ab <-> sect and sect+ba <-> sect
     // since only sect is similar in them the distance can be calculated based on
     // the length difference
-    int64_t sect_ab_dist = static_cast<int64_t>(bool(sect_len) + ab_len);
-    double sect_ab_ratio =
-        detail::norm_distance<100>(sect_ab_dist, static_cast<int64_t>(sect_len) + sect_ab_len, score_cutoff);
+    size_t sect_ab_dist = bool(sect_len) + ab_len;
+    double sect_ab_ratio = norm_distance(sect_ab_dist, sect_len + sect_ab_len, score_cutoff);
 
-    int64_t sect_ba_dist = static_cast<int64_t>(bool(sect_len) + ba_len);
-    double sect_ba_ratio =
-        detail::norm_distance<100>(sect_ba_dist, static_cast<int64_t>(sect_len) + sect_ba_len, score_cutoff);
+    size_t sect_ba_dist = bool(sect_len) + ba_len;
+    double sect_ba_ratio = norm_distance(sect_ba_dist, sect_len + sect_ba_len, score_cutoff);
 
     return std::max({result, sect_ab_ratio, sect_ba_ratio});
 }
@@ -426,7 +439,7 @@ double token_set_ratio(const Sentence1& s1, const Sentence2& s2, double score_cu
 template <typename CharT1>
 template <typename InputIt2>
 double CachedTokenSetRatio<CharT1>::similarity(InputIt2 first2, InputIt2 last2, double score_cutoff,
-                                               [[maybe_unused]] double score_hint) const
+                                               double) const
 {
     if (score_cutoff > 100) return 0;
 
@@ -435,8 +448,7 @@ double CachedTokenSetRatio<CharT1>::similarity(InputIt2 first2, InputIt2 last2, 
 
 template <typename CharT1>
 template <typename Sentence2>
-double CachedTokenSetRatio<CharT1>::similarity(const Sentence2& s2, double score_cutoff,
-                                               [[maybe_unused]] double score_hint) const
+double CachedTokenSetRatio<CharT1>::similarity(const Sentence2& s2, double score_cutoff, double) const
 {
     return similarity(detail::to_begin(s2), detail::to_end(s2), score_cutoff);
 }
@@ -452,7 +464,7 @@ double partial_token_set_ratio(const rapidfuzz::detail::SplittedSentenceView<Inp
                                const double score_cutoff)
 {
     /* in FuzzyWuzzy this returns 0. For sake of compatibility return 0 here as well
-     * see https://github.com/maxbachmann/RapidFuzz/issues/110 */
+     * see https://github.com/rapidfuzz/RapidFuzz/issues/110 */
     if (tokens_a.empty() || tokens_b.empty()) return 0;
 
     auto decomposition = detail::set_decomposition(tokens_a, tokens_b);
@@ -485,7 +497,7 @@ double partial_token_set_ratio(const Sentence1& s1, const Sentence2& s2, double 
 template <typename CharT1>
 template <typename InputIt2>
 double CachedPartialTokenSetRatio<CharT1>::similarity(InputIt2 first2, InputIt2 last2, double score_cutoff,
-                                                      [[maybe_unused]] double score_hint) const
+                                                      double) const
 {
     if (score_cutoff > 100) return 0;
 
@@ -494,8 +506,7 @@ double CachedPartialTokenSetRatio<CharT1>::similarity(InputIt2 first2, InputIt2 
 
 template <typename CharT1>
 template <typename Sentence2>
-double CachedPartialTokenSetRatio<CharT1>::similarity(const Sentence2& s2, double score_cutoff,
-                                                      [[maybe_unused]] double score_hint) const
+double CachedPartialTokenSetRatio<CharT1>::similarity(const Sentence2& s2, double score_cutoff, double) const
 {
     return similarity(detail::to_begin(s2), detail::to_end(s2), score_cutoff);
 }
@@ -522,20 +533,20 @@ double token_ratio(InputIt1 first1, InputIt1 last1, InputIt2 first2, InputIt2 la
     auto diff_ab_joined = diff_ab.join();
     auto diff_ba_joined = diff_ba.join();
 
-    size_t ab_len = diff_ab_joined.length();
-    size_t ba_len = diff_ba_joined.length();
+    size_t ab_len = diff_ab_joined.size();
+    size_t ba_len = diff_ba_joined.size();
     size_t sect_len = intersect.length();
 
     double result = ratio(tokens_a.join(), tokens_b.join(), score_cutoff);
 
     // string length sect+ab <-> sect and sect+ba <-> sect
-    int64_t sect_ab_len = static_cast<int64_t>(sect_len + bool(sect_len) + ab_len);
-    int64_t sect_ba_len = static_cast<int64_t>(sect_len + bool(sect_len) + ba_len);
+    size_t sect_ab_len = sect_len + bool(sect_len) + ab_len;
+    size_t sect_ba_len = sect_len + bool(sect_len) + ba_len;
 
-    auto cutoff_distance = detail::score_cutoff_to_distance<100>(score_cutoff, sect_ab_len + sect_ba_len);
-    int64_t dist = indel_distance(diff_ab_joined, diff_ba_joined, cutoff_distance);
+    size_t cutoff_distance = fuzz_detail::score_cutoff_to_distance(score_cutoff, sect_ab_len + sect_ba_len);
+    size_t dist = indel_distance(diff_ab_joined, diff_ba_joined, cutoff_distance);
     if (dist <= cutoff_distance)
-        result = std::max(result, detail::norm_distance<100>(dist, sect_ab_len + sect_ba_len, score_cutoff));
+        result = std::max(result, fuzz_detail::norm_distance(dist, sect_ab_len + sect_ba_len, score_cutoff));
 
     // exit early since the other ratios are 0
     if (!sect_len) return result;
@@ -543,13 +554,11 @@ double token_ratio(InputIt1 first1, InputIt1 last1, InputIt2 first2, InputIt2 la
     // levenshtein distance sect+ab <-> sect and sect+ba <-> sect
     // since only sect is similar in them the distance can be calculated based on
     // the length difference
-    int64_t sect_ab_dist = static_cast<int64_t>(bool(sect_len) + ab_len);
-    double sect_ab_ratio =
-        detail::norm_distance<100>(sect_ab_dist, static_cast<int64_t>(sect_len) + sect_ab_len, score_cutoff);
+    size_t sect_ab_dist = bool(sect_len) + ab_len;
+    double sect_ab_ratio = fuzz_detail::norm_distance(sect_ab_dist, sect_len + sect_ab_len, score_cutoff);
 
-    int64_t sect_ba_dist = static_cast<int64_t>(bool(sect_len) + ba_len);
-    double sect_ba_ratio =
-        detail::norm_distance<100>(sect_ba_dist, static_cast<int64_t>(sect_len) + sect_ba_len, score_cutoff);
+    size_t sect_ba_dist = bool(sect_len) + ba_len;
+    double sect_ba_ratio = fuzz_detail::norm_distance(sect_ba_dist, sect_len + sect_ba_len, score_cutoff);
 
     return std::max({result, sect_ab_ratio, sect_ba_ratio});
 }
@@ -581,20 +590,20 @@ double token_ratio(const rapidfuzz::detail::SplittedSentenceView<CharT1>& s1_tok
     auto diff_ab_joined = diff_ab.join();
     auto diff_ba_joined = diff_ba.join();
 
-    int64_t ab_len = diff_ab_joined.length();
-    int64_t ba_len = diff_ba_joined.length();
-    int64_t sect_len = intersect.length();
+    size_t ab_len = diff_ab_joined.size();
+    size_t ba_len = diff_ba_joined.size();
+    size_t sect_len = intersect.length();
 
     double result = cached_ratio_s1_sorted.similarity(s2_tokens.join(), score_cutoff);
 
     // string length sect+ab <-> sect and sect+ba <-> sect
-    int64_t sect_ab_len = sect_len + bool(sect_len) + ab_len;
-    int64_t sect_ba_len = sect_len + bool(sect_len) + ba_len;
+    size_t sect_ab_len = sect_len + bool(sect_len) + ab_len;
+    size_t sect_ba_len = sect_len + bool(sect_len) + ba_len;
 
-    auto cutoff_distance = detail::score_cutoff_to_distance<100>(score_cutoff, sect_ab_len + sect_ba_len);
-    int64_t dist = indel_distance(diff_ab_joined, diff_ba_joined, cutoff_distance);
+    size_t cutoff_distance = score_cutoff_to_distance(score_cutoff, sect_ab_len + sect_ba_len);
+    size_t dist = indel_distance(diff_ab_joined, diff_ba_joined, cutoff_distance);
     if (dist <= cutoff_distance)
-        result = std::max(result, detail::norm_distance<100>(dist, sect_ab_len + sect_ba_len, score_cutoff));
+        result = std::max(result, norm_distance(dist, sect_ab_len + sect_ba_len, score_cutoff));
 
     // exit early since the other ratios are 0
     if (!sect_len) return result;
@@ -602,18 +611,18 @@ double token_ratio(const rapidfuzz::detail::SplittedSentenceView<CharT1>& s1_tok
     // levenshtein distance sect+ab <-> sect and sect+ba <-> sect
     // since only sect is similar in them the distance can be calculated based on
     // the length difference
-    int64_t sect_ab_dist = bool(sect_len) + ab_len;
-    double sect_ab_ratio = detail::norm_distance<100>(sect_ab_dist, sect_len + sect_ab_len, score_cutoff);
+    size_t sect_ab_dist = bool(sect_len) + ab_len;
+    double sect_ab_ratio = norm_distance(sect_ab_dist, sect_len + sect_ab_len, score_cutoff);
 
-    int64_t sect_ba_dist = bool(sect_len) + ba_len;
-    double sect_ba_ratio = detail::norm_distance<100>(sect_ba_dist, sect_len + sect_ba_len, score_cutoff);
+    size_t sect_ba_dist = bool(sect_len) + ba_len;
+    double sect_ba_ratio = norm_distance(sect_ba_dist, sect_len + sect_ba_len, score_cutoff);
 
     return std::max({result, sect_ab_ratio, sect_ba_ratio});
 }
 
 // todo this is a temporary solution until WRatio is properly implemented using other scorers
 template <typename CharT1, typename InputIt1, typename InputIt2>
-double token_ratio(const std::basic_string<CharT1>& s1_sorted,
+double token_ratio(const std::vector<CharT1>& s1_sorted,
                    const rapidfuzz::detail::SplittedSentenceView<InputIt1>& tokens_s1,
                    const detail::BlockPatternMatchVector& blockmap_s1_sorted, InputIt2 first2, InputIt2 last2,
                    double score_cutoff)
@@ -632,15 +641,16 @@ double token_ratio(const std::basic_string<CharT1>& s1_sorted,
     auto diff_ab_joined = diff_ab.join();
     auto diff_ba_joined = diff_ba.join();
 
-    int64_t ab_len = diff_ab_joined.length();
-    int64_t ba_len = diff_ba_joined.length();
-    int64_t sect_len = intersect.length();
+    size_t ab_len = diff_ab_joined.size();
+    size_t ba_len = diff_ba_joined.size();
+    size_t sect_len = intersect.length();
 
     double result = 0;
     auto s2_sorted = tokens_b.join();
     if (s1_sorted.size() < 65) {
-        double norm_sim = detail::indel_normalized_similarity(blockmap_s1_sorted, detail::Range(s1_sorted),
-                                                              detail::Range(s2_sorted), score_cutoff / 100);
+        double norm_sim =
+            detail::indel_normalized_similarity(blockmap_s1_sorted, detail::make_range(s1_sorted),
+                                                detail::make_range(s2_sorted), score_cutoff / 100);
         result = norm_sim * 100;
     }
     else {
@@ -648,13 +658,13 @@ double token_ratio(const std::basic_string<CharT1>& s1_sorted,
     }
 
     // string length sect+ab <-> sect and sect+ba <-> sect
-    int64_t sect_ab_len = sect_len + bool(sect_len) + ab_len;
-    int64_t sect_ba_len = sect_len + bool(sect_len) + ba_len;
+    size_t sect_ab_len = sect_len + bool(sect_len) + ab_len;
+    size_t sect_ba_len = sect_len + bool(sect_len) + ba_len;
 
-    auto cutoff_distance = detail::score_cutoff_to_distance<100>(score_cutoff, sect_ab_len + sect_ba_len);
-    int64_t dist = indel_distance(diff_ab_joined, diff_ba_joined, cutoff_distance);
+    size_t cutoff_distance = score_cutoff_to_distance(score_cutoff, sect_ab_len + sect_ba_len);
+    size_t dist = indel_distance(diff_ab_joined, diff_ba_joined, cutoff_distance);
     if (dist <= cutoff_distance)
-        result = std::max(result, detail::norm_distance<100>(dist, sect_ab_len + sect_ba_len, score_cutoff));
+        result = std::max(result, norm_distance(dist, sect_ab_len + sect_ba_len, score_cutoff));
 
     // exit early since the other ratios are 0
     if (!sect_len) return result;
@@ -662,11 +672,11 @@ double token_ratio(const std::basic_string<CharT1>& s1_sorted,
     // levenshtein distance sect+ab <-> sect and sect+ba <-> sect
     // since only sect is similar in them the distance can be calculated based on
     // the length difference
-    int64_t sect_ab_dist = bool(sect_len) + ab_len;
-    double sect_ab_ratio = detail::norm_distance<100>(sect_ab_dist, sect_len + sect_ab_len, score_cutoff);
+    size_t sect_ab_dist = bool(sect_len) + ab_len;
+    double sect_ab_ratio = norm_distance(sect_ab_dist, sect_len + sect_ab_len, score_cutoff);
 
-    int64_t sect_ba_dist = bool(sect_len) + ba_len;
-    double sect_ba_ratio = detail::norm_distance<100>(sect_ba_dist, sect_len + sect_ba_len, score_cutoff);
+    size_t sect_ba_dist = bool(sect_len) + ba_len;
+    double sect_ba_ratio = norm_distance(sect_ba_dist, sect_len + sect_ba_len, score_cutoff);
 
     return std::max({result, sect_ab_ratio, sect_ba_ratio});
 }
@@ -675,15 +685,14 @@ double token_ratio(const std::basic_string<CharT1>& s1_sorted,
 template <typename CharT1>
 template <typename InputIt2>
 double CachedTokenRatio<CharT1>::similarity(InputIt2 first2, InputIt2 last2, double score_cutoff,
-                                            [[maybe_unused]] double score_hint) const
+                                            double) const
 {
     return fuzz_detail::token_ratio(s1_tokens, cached_ratio_s1_sorted, first2, last2, score_cutoff);
 }
 
 template <typename CharT1>
 template <typename Sentence2>
-double CachedTokenRatio<CharT1>::similarity(const Sentence2& s2, double score_cutoff,
-                                            [[maybe_unused]] double score_hint) const
+double CachedTokenRatio<CharT1>::similarity(const Sentence2& s2, double score_cutoff, double) const
 {
     return similarity(detail::to_begin(s2), detail::to_end(s2), score_cutoff);
 }
@@ -729,7 +738,7 @@ double partial_token_ratio(const Sentence1& s1, const Sentence2& s2, double scor
 
 namespace fuzz_detail {
 template <typename CharT1, typename InputIt1, typename InputIt2>
-double partial_token_ratio(const std::basic_string<CharT1>& s1_sorted,
+double partial_token_ratio(const std::vector<CharT1>& s1_sorted,
                            const rapidfuzz::detail::SplittedSentenceView<InputIt1>& tokens_s1,
                            InputIt2 first2, InputIt2 last2, double score_cutoff)
 {
@@ -761,15 +770,14 @@ double partial_token_ratio(const std::basic_string<CharT1>& s1_sorted,
 template <typename CharT1>
 template <typename InputIt2>
 double CachedPartialTokenRatio<CharT1>::similarity(InputIt2 first2, InputIt2 last2, double score_cutoff,
-                                                   [[maybe_unused]] double score_hint) const
+                                                   double) const
 {
     return fuzz_detail::partial_token_ratio(s1_sorted, tokens_s1, first2, last2, score_cutoff);
 }
 
 template <typename CharT1>
 template <typename Sentence2>
-double CachedPartialTokenRatio<CharT1>::similarity(const Sentence2& s2, double score_cutoff,
-                                                   [[maybe_unused]] double score_hint) const
+double CachedPartialTokenRatio<CharT1>::similarity(const Sentence2& s2, double score_cutoff, double) const
 {
     return similarity(detail::to_begin(s2), detail::to_end(s2), score_cutoff);
 }
@@ -789,7 +797,7 @@ double WRatio(InputIt1 first1, InputIt1 last1, InputIt2 first2, InputIt2 last2, 
     auto len2 = std::distance(first2, last2);
 
     /* in FuzzyWuzzy this returns 0. For sake of compatibility return 0 here as well
-     * see https://github.com/maxbachmann/RapidFuzz/issues/110 */
+     * see https://github.com/rapidfuzz/RapidFuzz/issues/110 */
     if (!len1 || !len2) return 0;
 
     double len_ratio = (len1 > len2) ? static_cast<double>(len1) / static_cast<double>(len2)
@@ -802,7 +810,7 @@ double WRatio(InputIt1 first1, InputIt1 last1, InputIt2 first2, InputIt2 last2, 
         return std::max(end_ratio, token_ratio(first1, last1, first2, last2, score_cutoff) * UNBASE_SCALE);
     }
 
-    const double PARTIAL_SCALE = (len_ratio < 8.0) ? 0.9 : 0.6;
+    const double PARTIAL_SCALE = (len_ratio <= 8.0) ? 0.9 : 0.6;
 
     score_cutoff = std::max(score_cutoff, end_ratio) / PARTIAL_SCALE;
     end_ratio =
@@ -827,23 +835,22 @@ CachedWRatio<Sentence1>::CachedWRatio(InputIt1 first1, InputIt1 last1)
       cached_partial_ratio(first1, last1),
       tokens_s1(detail::sorted_split(std::begin(s1), std::end(s1))),
       s1_sorted(tokens_s1.join()),
-      blockmap_s1_sorted(detail::Range(s1_sorted))
+      blockmap_s1_sorted(detail::make_range(s1_sorted))
 {}
 
 template <typename CharT1>
 template <typename InputIt2>
-double CachedWRatio<CharT1>::similarity(InputIt2 first2, InputIt2 last2, double score_cutoff,
-                                        [[maybe_unused]] double score_hint) const
+double CachedWRatio<CharT1>::similarity(InputIt2 first2, InputIt2 last2, double score_cutoff, double) const
 {
     if (score_cutoff > 100) return 0;
 
     constexpr double UNBASE_SCALE = 0.95;
 
-    ptrdiff_t len1 = s1.size();
-    ptrdiff_t len2 = std::distance(first2, last2);
+    size_t len1 = s1.size();
+    size_t len2 = static_cast<size_t>(std::distance(first2, last2));
 
     /* in FuzzyWuzzy this returns 0. For sake of compatibility return 0 here as well
-     * see https://github.com/maxbachmann/RapidFuzz/issues/110 */
+     * see https://github.com/rapidfuzz/RapidFuzz/issues/110 */
     if (!len1 || !len2) return 0;
 
     double len_ratio = (len1 > len2) ? static_cast<double>(len1) / static_cast<double>(len2)
@@ -859,7 +866,7 @@ double CachedWRatio<CharT1>::similarity(InputIt2 first2, InputIt2 last2, double 
         return std::max(end_ratio, r * UNBASE_SCALE);
     }
 
-    const double PARTIAL_SCALE = (len_ratio < 8.0) ? 0.9 : 0.6;
+    const double PARTIAL_SCALE = (len_ratio <= 8.0) ? 0.9 : 0.6;
 
     score_cutoff = std::max(score_cutoff, end_ratio) / PARTIAL_SCALE;
     end_ratio =
@@ -872,8 +879,7 @@ double CachedWRatio<CharT1>::similarity(InputIt2 first2, InputIt2 last2, double 
 
 template <typename CharT1>
 template <typename Sentence2>
-double CachedWRatio<CharT1>::similarity(const Sentence2& s2, double score_cutoff,
-                                        [[maybe_unused]] double score_hint) const
+double CachedWRatio<CharT1>::similarity(const Sentence2& s2, double score_cutoff, double) const
 {
     return similarity(detail::to_begin(s2), detail::to_end(s2), score_cutoff);
 }
@@ -885,11 +891,11 @@ double CachedWRatio<CharT1>::similarity(const Sentence2& s2, double score_cutoff
 template <typename InputIt1, typename InputIt2>
 double QRatio(InputIt1 first1, InputIt1 last1, InputIt2 first2, InputIt2 last2, double score_cutoff)
 {
-    auto len1 = std::distance(first1, last1);
-    auto len2 = std::distance(first2, last2);
+    ptrdiff_t len1 = std::distance(first1, last1);
+    ptrdiff_t len2 = std::distance(first2, last2);
 
     /* in FuzzyWuzzy this returns 0. For sake of compatibility return 0 here as well
-     * see https://github.com/maxbachmann/RapidFuzz/issues/110 */
+     * see https://github.com/rapidfuzz/RapidFuzz/issues/110 */
     if (!len1 || !len2) return 0;
 
     return ratio(first1, last1, first2, last2, score_cutoff);
@@ -904,13 +910,12 @@ double QRatio(const Sentence1& s1, const Sentence2& s2, double score_cutoff)
 
 template <typename CharT1>
 template <typename InputIt2>
-double CachedQRatio<CharT1>::similarity(InputIt2 first2, InputIt2 last2, double score_cutoff,
-                                        [[maybe_unused]] double score_hint) const
+double CachedQRatio<CharT1>::similarity(InputIt2 first2, InputIt2 last2, double score_cutoff, double) const
 {
     auto len2 = std::distance(first2, last2);
 
     /* in FuzzyWuzzy this returns 0. For sake of compatibility return 0 here as well
-     * see https://github.com/maxbachmann/RapidFuzz/issues/110 */
+     * see https://github.com/rapidfuzz/RapidFuzz/issues/110 */
     if (s1.empty() || !len2) return 0;
 
     return cached_ratio.similarity(first2, last2, score_cutoff);
@@ -918,10 +923,10 @@ double CachedQRatio<CharT1>::similarity(InputIt2 first2, InputIt2 last2, double 
 
 template <typename CharT1>
 template <typename Sentence2>
-double CachedQRatio<CharT1>::similarity(const Sentence2& s2, double score_cutoff,
-                                        [[maybe_unused]] double score_hint) const
+double CachedQRatio<CharT1>::similarity(const Sentence2& s2, double score_cutoff, double) const
 {
     return similarity(detail::to_begin(s2), detail::to_end(s2), score_cutoff);
 }
 
-} // namespace rapidfuzz::fuzz
+} // namespace fuzz
+} // namespace rapidfuzz

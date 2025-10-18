@@ -2,18 +2,19 @@
 /* Copyright © 2021 Max Bachmann */
 
 #pragma once
-#include <array>
-#include <cmath>
 #include <cstring>
-#include <limits>
 #include <rapidfuzz/details/Range.hpp>
 #include <rapidfuzz/details/SplittedSentenceView.hpp>
 #include <rapidfuzz/details/intrinsics.hpp>
 #include <rapidfuzz/details/type_traits.hpp>
 #include <rapidfuzz/details/types.hpp>
-#include <vector>
 
-namespace rapidfuzz::detail {
+#if defined(__APPLE__) && !defined(_LIBCPP_HAS_C11_FEATURES)
+#    include <mm_malloc.h>
+#endif
+
+namespace rapidfuzz {
+namespace detail {
 
 template <typename InputIt1, typename InputIt2, typename InputIt3>
 struct DecomposedSet {
@@ -27,6 +28,18 @@ struct DecomposedSet {
           intersection(std::move(intersect))
     {}
 };
+
+static inline size_t abs_diff(size_t a, size_t b)
+{
+    return a > b ? a - b : b - a;
+}
+
+template <typename TO, typename FROM>
+TO opt_static_cast(const FROM& value)
+{
+    /* calling the cast through this template function somehow avoids useless cast warnings */
+    return static_cast<TO>(value);
+}
 
 /**
  * @defgroup Common Common
@@ -43,26 +56,6 @@ template <typename InputIt1, typename InputIt2>
 DecomposedSet<InputIt1, InputIt2, InputIt1> set_decomposition(SplittedSentenceView<InputIt1> a,
                                                               SplittedSentenceView<InputIt2> b);
 
-constexpr double result_cutoff(double result, double score_cutoff)
-{
-    return (result >= score_cutoff) ? result : 0;
-}
-
-template <int Max = 1>
-constexpr double norm_distance(int64_t dist, int64_t lensum, double score_cutoff = 0)
-{
-    double max = static_cast<double>(Max);
-    return result_cutoff((lensum > 0) ? (max - max * static_cast<double>(dist) / static_cast<double>(lensum))
-                                      : max,
-                         score_cutoff);
-}
-
-template <int Max = 1>
-static inline int64_t score_cutoff_to_distance(double score_cutoff, int64_t lensum)
-{
-    return static_cast<int64_t>(std::ceil(static_cast<double>(lensum) * (1.0 - score_cutoff / Max)));
-}
-
 template <typename InputIt1, typename InputIt2>
 StringAffix remove_common_affix(Range<InputIt1>& s1, Range<InputIt2>& s2);
 
@@ -75,8 +68,34 @@ size_t remove_common_suffix(Range<InputIt1>& s1, Range<InputIt2>& s2);
 template <typename InputIt, typename CharT = iter_value_t<InputIt>>
 SplittedSentenceView<InputIt> sorted_split(InputIt first, InputIt last);
 
+static inline void* rf_aligned_alloc(size_t alignment, size_t size)
+{
+#if defined(_WIN32)
+    return _aligned_malloc(size, alignment);
+#elif defined(__APPLE__) && !defined(_LIBCPP_HAS_C11_FEATURES)
+    return _mm_malloc(size, alignment);
+#elif defined(__ANDROID__) && __ANDROID_API__ > 16
+    void* ptr = nullptr;
+    return posix_memalign(&ptr, alignment, size) ? nullptr : ptr;
+#else
+    return aligned_alloc(alignment, size);
+#endif
+}
+
+static inline void rf_aligned_free(void* ptr)
+{
+#if defined(_WIN32)
+    _aligned_free(ptr);
+#elif defined(__APPLE__) && !defined(_LIBCPP_HAS_C11_FEATURES)
+    _mm_free(ptr);
+#else
+    free(ptr);
+#endif
+}
+
 /**@}*/
 
-} // namespace rapidfuzz::detail
+} // namespace detail
+} // namespace rapidfuzz
 
 #include <rapidfuzz/details/common_impl.hpp>

@@ -4,11 +4,11 @@
 #pragma once
 
 #include <array>
-#include <iterator>
-#include <new>
+#include <stddef.h>
 #include <stdint.h>
 
-namespace rapidfuzz::detail {
+namespace rapidfuzz {
+namespace detail {
 
 /* hashmap for integers which can only grow, but can't remove elements */
 template <typename T_Key, typename T_Entry>
@@ -30,7 +30,7 @@ private:
     MapElem* m_map;
 
 public:
-    GrowingHashmap() : used(0), fill(0), mask(-1), m_map(NULL)
+    GrowingHashmap() : used(0), fill(0), mask(-1), m_map(nullptr)
     {}
     ~GrowingHashmap()
     {
@@ -78,14 +78,14 @@ public:
 
     value_type get(key_type key) const noexcept
     {
-        if (m_map == NULL) return value_type();
+        if (m_map == nullptr) return value_type();
 
         return m_map[lookup(key)].value;
     }
 
     value_type& operator[](key_type key) noexcept
     {
-        if (m_map == NULL) allocate();
+        if (m_map == nullptr) allocate();
 
         size_t i = lookup(key);
 
@@ -201,4 +201,5 @@ private:
     std::array<value_type, 256> m_extendedAscii;
 };
 
-} // namespace rapidfuzz::detail
+} // namespace detail
+} // namespace rapidfuzz

@@ -6,44 +6,57 @@
 #include <rapidfuzz/details/distance.hpp>
 #include <stdexcept>
 
-namespace rapidfuzz::detail {
+namespace rapidfuzz {
+namespace detail {
 
-class Hamming : public DistanceBase<Hamming, int64_t, 0, std::numeric_limits<int64_t>::max()> {
-    friend DistanceBase<Hamming, int64_t, 0, std::numeric_limits<int64_t>::max()>;
-    friend NormalizedMetricBase<Hamming>;
+class Hamming : public DistanceBase<Hamming, size_t, 0, std::numeric_limits<int64_t>::max(), bool> {
+    friend DistanceBase<Hamming, size_t, 0, std::numeric_limits<int64_t>::max(), bool>;
+    friend NormalizedMetricBase<Hamming, bool>;
 
     template <typename InputIt1, typename InputIt2>
-    static int64_t maximum(Range<InputIt1> s1, Range<InputIt2>)
+    static size_t maximum(const Range<InputIt1>& s1, const Range<InputIt2>& s2, bool)
     {
-        return s1.size();
+        return std::max(s1.size(), s2.size());
     }
 
     template <typename InputIt1, typename InputIt2>
-    static int64_t _distance(Range<InputIt1> s1, Range<InputIt2> s2, int64_t score_cutoff,
-                             [[maybe_unused]] int64_t score_hint)
+    static size_t _distance(const Range<InputIt1>& s1, const Range<InputIt2>& s2, bool pad,
+                            size_t score_cutoff, size_t)
     {
-        if (s1.size() != s2.size()) throw std::invalid_argument("Sequences are not the same length.");
+        if (!pad && s1.size() != s2.size()) throw std::invalid_argument("Sequences are not the same length.");
 
-        int64_t dist = 0;
-        for (ptrdiff_t i = 0; i < s1.size(); ++i)
-            dist += bool(s1[i] != s2[i]);
+        size_t min_len = std::min(s1.size(), s2.size());
+        size_t dist = std::max(s1.size(), s2.size());
+        auto iter_s1 = s1.begin();
+        auto iter_s2 = s2.begin();
+        for (size_t i = 0; i < min_len; ++i)
+            dist -= bool(*(iter_s1++) == *(iter_s2++));
 
         return (dist <= score_cutoff) ? dist : score_cutoff + 1;
     }
 };
 
 template <typename InputIt1, typename InputIt2>
-Editops hamming_editops(Range<InputIt1> s1, Range<InputIt2> s2, int64_t)
+Editops hamming_editops(const Range<InputIt1>& s1, const Range<InputIt2>& s2, bool pad, size_t)
 {
-    if (s1.size() != s2.size()) throw std::invalid_argument("Sequences are not the same length.");
+    if (!pad && s1.size() != s2.size()) throw std::invalid_argument("Sequences are not the same length.");
 
     Editops ops;
-    for (ptrdiff_t i = 0; i < s1.size(); ++i)
+    size_t min_len = std::min(s1.size(), s2.size());
+    size_t i = 0;
+    for (; i < min_len; ++i)
         if (s1[i] != s2[i]) ops.emplace_back(EditType::Replace, i, i);
 
-    ops.set_src_len(static_cast<size_t>(s1.size()));
-    ops.set_dest_len(static_cast<size_t>(s2.size()));
+    for (; i < s1.size(); ++i)
+        ops.emplace_back(EditType::Delete, i, s2.size());
+
+    for (; i < s2.size(); ++i)
+        ops.emplace_back(EditType::Insert, s1.size(), i);
+
+    ops.set_src_len(s1.size());
+    ops.set_dest_len(s2.size());
     return ops;
 }
 
-} // namespace rapidfuzz::detail
+} // namespace detail
+} // namespace rapidfuzz

@@ -136,6 +136,10 @@
     <QtMoc Include="src\QtClasses\UI\UpdatePathsDialog.h" />
     <QtMoc Include="src\QtClasses\Widgets\WheelStrongFocusEventFilter.h" />
     <ClInclude Include="src\thirdparty\MpcApi.h" />
+    <ClInclude Include="src\thirdparty\rapidfuzz\distance.hpp" />
+    <ClInclude Include="src\thirdparty\rapidfuzz\fuzz.hpp" />
+    <ClInclude Include="src\thirdparty\rapidfuzz\fuzz_impl.hpp" />
+    <ClInclude Include="src\thirdparty\rapidfuzz\rapidfuzz_all.hpp" />
     <ClInclude Include="src\thirdparty\sqlite3\sqlite3.h" />
     <ClInclude Include="src\version.h" />
     <QtMoc Include="src\general\VideoWatcherQt.h" />

@@ -1,4 +1,4 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 #include "MainWindow.h"
 #include "MainApp.h"
 #include "version.h"
@@ -73,7 +73,6 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         });
     this->initRatingIcons();
     ui.setupUi(this);
-    connect(&this->filter_watcher, &QFutureWatcher<bool>::finished, this, &MainWindow::filteringFinished);
 
     // scale main window
     // Define variables for aspect ratio and screen size fraction
@@ -161,8 +160,15 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     this->initUpdateWatchedToggleButton();
     this->ui.shoko_button->setMainWindow(this);
 
-    DateItemDelegate* datedelegate = new DateItemDelegate(this->ui.videosWidget,"dd/MM/yyyy hh:mm");
+    this->searchThreadPool = new QThreadPool(this);
+    this->searchThreadPool->setMaxThreadCount(QThread::idealThreadCount());
+    // Warm up the QtConcurrent thread pool
+    QList<int> dummy_list = { 1 };
+    QFuture<void> dummy_future = QtConcurrent::map(this->searchThreadPool, dummy_list, [](int value) {
+        (void)value; // Suppress unused variable warning
+    });
 
+    DateItemDelegate* datedelegate = new DateItemDelegate(this->ui.videosWidget,"dd/MM/yyyy hh:mm");
     this->ui.videosWidget->setItemDelegateForColumn(ListColumns["RATING_COLUMN"], new StarDelegate(this->active,this->halfactive,this->inactive,this->ui.videosWidget,this));
     this->ui.videosWidget->setItemDelegateForColumn(ListColumns["DATE_CREATED_COLUMN"], datedelegate);
     this->ui.videosWidget->setItemDelegateForColumn(ListColumns["LAST_WATCHED_COLUMN"], datedelegate);
@@ -690,69 +696,6 @@ void MainWindow::toggleDates(bool scroll) {
     }
 }
 
-void MainWindow::refreshVisibility(QString search_text)
-{
-    if (this->filter_watcher.isRunning()) {
-        this->filter_watcher.cancel();
-        this->filter_watcher.waitForFinished();
-    }
-
-    bool watched_yes = true, watched_no = true, watched_mixed = false;
-    QString settings_str = QString();
-    if (this->App->currentDB == "PLUS")
-        settings_str = this->App->config->get("headers_plus_visible");
-    else if (this->App->currentDB == "MINUS")
-        settings_str = this->App->config->get("headers_minus_visible");
-    QStringList settings_list = settings_str.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
-    watched_yes = settings_list.contains("watched_yes");
-    watched_no = settings_list.contains("watched_no");
-    watched_mixed = settings_list.contains("watched_mixed");
-    QString option = this->getWatchedVisibilityOption(watched_yes, watched_no, watched_mixed, this->ui.searchBar->isVisible(), this->ui.visibleOnlyCheckBox->isChecked());
-
-    this->items_to_filter.clear();
-    QTreeWidgetItemIterator it(this->ui.videosWidget);
-    while (*it) {
-        this->items_to_filter.append(*it);
-        ++it;
-    }
-
-    std::shared_ptr<rapidfuzz::fuzz::CachedPartialRatio<char>> cached_ratio_ptr_shared;
-    if (!search_text.isEmpty()) {
-        cached_ratio_ptr_shared = std::make_shared<rapidfuzz::fuzz::CachedPartialRatio<char>>(
-            search_text.toLower().toStdString()
-            );
-    }
-
-    QSet<QString> authorsWithUnwatched;
-    if (option == "Mixed") {
-        for (QTreeWidgetItem* item : this->items_to_filter) {
-            if (item->text(ListColumns["WATCHED_COLUMN"]) == "No") {
-                authorsWithUnwatched.insert(item->text(ListColumns["AUTHOR_COLUMN"]));
-            }
-        }
-    }
-
-    QFuture<bool> future = QtConcurrent::mapped(this->items_to_filter, [=](QTreeWidgetItem* item) {
-        return determineVisibility(item, option, search_text, cached_ratio_ptr_shared.get(), authorsWithUnwatched);
-        });
-    this->filter_watcher.setFuture(future);
-
-    this->old_search = search_text;
-}
-
-void MainWindow::filteringFinished()
-{
-    QList<bool> hidden_flags = this->filter_watcher.future().results();
-    for (int i = 0; i < this->items_to_filter.count(); ++i)
-    {
-        if (i < hidden_flags.count())
-        {
-            this->items_to_filter[i]->setHidden(hidden_flags[i]);
-        }
-    }
-    this->items_to_filter.clear();
-}
-
 bool MainWindow::determineVisibility(QTreeWidgetItem* item, const QString& watched_option, const QString& search_text, const rapidfuzz::fuzz::CachedPartialRatio<char>* cached_search_text_ratio, const QSet<QString>& authorsWithUnwatched)
 {
     bool hidden = false;
@@ -801,6 +744,53 @@ bool MainWindow::determineVisibility(QTreeWidgetItem* item, const QString& watch
     }
 
     return hidden;
+}
+
+void MainWindow::refreshVisibility(QString search_text)
+{
+	QList<QTreeWidgetItem*> items_to_filter = QList<QTreeWidgetItem*>();
+	bool watched_yes = true, watched_no = true, watched_mixed = false;
+	QString settings_str = QString();
+	if (this->App->currentDB == "PLUS")
+		settings_str = this->App->config->get("headers_plus_visible");
+	else if (this->App->currentDB == "MINUS")
+		settings_str = this->App->config->get("headers_minus_visible");
+	QStringList settings_list = settings_str.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+	watched_yes = settings_list.contains("watched_yes");
+	watched_no = settings_list.contains("watched_no");
+	watched_mixed = settings_list.contains("watched_mixed");
+	QString option = this->getWatchedVisibilityOption(watched_yes, watched_no, watched_mixed, this->ui.searchBar->isVisible(), this->ui.visibleOnlyCheckBox->isChecked());
+
+	std::shared_ptr<rapidfuzz::fuzz::CachedPartialRatio<char>> cached_ratio_ptr_shared;
+	if (!search_text.isEmpty()) {
+		cached_ratio_ptr_shared = std::make_shared<rapidfuzz::fuzz::CachedPartialRatio<char>>(
+			search_text.toLower().toStdString()
+		);
+	}
+
+	QSet<QString> authorsWithUnwatched;
+	QTreeWidgetItemIterator it(this->ui.videosWidget);
+	while (*it) {
+		QTreeWidgetItem* item = *it;
+		items_to_filter.append(item);
+		if (option == "Mixed" && item->text(ListColumns["WATCHED_COLUMN"]) == "No") {
+			authorsWithUnwatched.insert(item->text(ListColumns["AUTHOR_COLUMN"]));
+		}
+		++it;
+	}
+
+	QList<bool> hidden_flags = QtConcurrent::blockingMapped(this->searchThreadPool, items_to_filter, [=](QTreeWidgetItem* item) {
+		return determineVisibility(item, option, search_text, cached_ratio_ptr_shared.get(), authorsWithUnwatched);
+		});
+
+	for (int i = 0; i < items_to_filter.count(); ++i)
+	{
+		if (i < hidden_flags.count())
+		{
+			items_to_filter[i]->setHidden(hidden_flags[i]);
+		}
+	}
+	this->old_search = search_text;
 }
 
 void MainWindow::refreshVisibility()
@@ -2721,61 +2711,61 @@ void MainWindow::updateSortConfig() {
 
 
 void MainWindow::populateList(bool selectcurrent) {
-    auto itemlist = this->App->db->getVideos(this->App->currentDB);
-    this->ui.videosWidget->setSortingEnabled(false);
-    this->ui.videosWidget->addTopLevelItems(itemlist);
+	auto itemlist = this->App->db->getVideos(this->App->currentDB);
+	this->ui.videosWidget->setSortingEnabled(false);
+	this->ui.videosWidget->addTopLevelItems(itemlist);
 
-    QString settings_str = QString();
-    if (this->App->currentDB == "PLUS")
-        settings_str = this->App->config->get("headers_plus_visible");
-    else if (this->App->currentDB == "MINUS")
-        settings_str = this->App->config->get("headers_minus_visible");
-    QStringList settings_list = settings_str.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
-    bool watched_yes = settings_list.contains("watched_yes");
-    bool watched_no = settings_list.contains("watched_no");
-    bool watched_mixed = settings_list.contains("watched_mixed");
-    QString option = this->getWatchedVisibilityOption(watched_yes, watched_no, watched_mixed, this->ui.searchBar->isVisible(), this->ui.visibleOnlyCheckBox->isChecked());
+	QString settings_str = QString();
+	if (this->App->currentDB == "PLUS")
+		settings_str = this->App->config->get("headers_plus_visible");
+	else if (this->App->currentDB == "MINUS")
+		settings_str = this->App->config->get("headers_minus_visible");
+	QStringList settings_list = settings_str.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+	bool watched_yes = settings_list.contains("watched_yes");
+	bool watched_no = settings_list.contains("watched_no");
+	bool watched_mixed = settings_list.contains("watched_mixed");
+	QString option = this->getWatchedVisibilityOption(watched_yes, watched_no, watched_mixed, this->ui.searchBar->isVisible(), this->ui.visibleOnlyCheckBox->isChecked());
 
-    QSet<QString> authorsWithUnwatched;
-    if (option == "Mixed") {
-        for (QTreeWidgetItem* item : itemlist) {
-            if (item->text(ListColumns["WATCHED_COLUMN"]) == "No") {
-                authorsWithUnwatched.insert(item->text(ListColumns["AUTHOR_COLUMN"]));
-            }
-        }
-    }
+	QSet<QString> authorsWithUnwatched;
+	if (option == "Mixed") {
+		for (QTreeWidgetItem* item : itemlist) {
+			if (item->text(ListColumns["WATCHED_COLUMN"]) == "No") {
+				authorsWithUnwatched.insert(item->text(ListColumns["AUTHOR_COLUMN"]));
+			}
+		}
+	}
 
-    QString search_text = this->ui.searchBar->isVisible() ? this->old_search : "";
-    std::shared_ptr<rapidfuzz::fuzz::CachedPartialRatio<char>> cached_ratio_ptr_shared;
-    if (!search_text.isEmpty()) {
-        cached_ratio_ptr_shared = std::make_shared<rapidfuzz::fuzz::CachedPartialRatio<char>>(
-            search_text.toLower().toStdString()
-            );
-    }
+	QString search_text = this->ui.searchBar->isVisible() ? this->old_search : "";
+	std::shared_ptr<rapidfuzz::fuzz::CachedPartialRatio<char>> cached_ratio_ptr_shared;
+	if (!search_text.isEmpty()) {
+		cached_ratio_ptr_shared = std::make_shared<rapidfuzz::fuzz::CachedPartialRatio<char>>(
+			search_text.toLower().toStdString()
+		);
+	}
 
-    for (auto& item : itemlist)
-    {
-        item->setTextAlignment(ListColumns["WATCHED_COLUMN"], Qt::AlignHCenter);
-        item->setTextAlignment(ListColumns["VIEWS_COLUMN"], Qt::AlignHCenter);
-        item->setTextAlignment(ListColumns["TAGS_COLUMN"], Qt::AlignHCenter);
-        item->setTextAlignment(ListColumns["TYPE_COLUMN"], Qt::AlignHCenter);
-        item->setTextAlignment(ListColumns["DATE_CREATED_COLUMN"], Qt::AlignHCenter);
-        item->setTextAlignment(ListColumns["LAST_WATCHED_COLUMN"], Qt::AlignHCenter);
-        if (item->text(ListColumns["WATCHED_COLUMN"]) == "Yes")
-            item->setForeground(ListColumns["WATCHED_COLUMN"], QBrush(QColor("#00e640")));
-        else if (item->text(ListColumns["WATCHED_COLUMN"]) == "No")
-            item->setForeground(ListColumns["WATCHED_COLUMN"], QBrush(QColor("#cf000f")));
+	for (auto& item : itemlist)
+	{
+		item->setTextAlignment(ListColumns["WATCHED_COLUMN"], Qt::AlignHCenter);
+		item->setTextAlignment(ListColumns["VIEWS_COLUMN"], Qt::AlignHCenter);
+		item->setTextAlignment(ListColumns["TAGS_COLUMN"], Qt::AlignHCenter);
+		item->setTextAlignment(ListColumns["TYPE_COLUMN"], Qt::AlignHCenter);
+		item->setTextAlignment(ListColumns["DATE_CREATED_COLUMN"], Qt::AlignHCenter);
+		item->setTextAlignment(ListColumns["LAST_WATCHED_COLUMN"], Qt::AlignHCenter);
+		if (item->text(ListColumns["WATCHED_COLUMN"]) == "Yes")
+			item->setForeground(ListColumns["WATCHED_COLUMN"], QBrush(QColor("#00e640")));
+		else if (item->text(ListColumns["WATCHED_COLUMN"]) == "No")
+			item->setForeground(ListColumns["WATCHED_COLUMN"], QBrush(QColor("#cf000f")));
 
-        bool hidden = determineVisibility(item, option, search_text, cached_ratio_ptr_shared.get(), authorsWithUnwatched);
-        item->setHidden(hidden);
-    }
-    // not sure if this alternative method is needed anymore
-    //if (this->ui.searchBar->isVisible())
-    //    QTimer::singleShot(1, [this,itemlist] {this->search(this->old_search);});
-    this->updateTotalListLabel();
-    this->updateVideoListRandomProbabilitiesIfVisible();
-    this->ui.videosWidget->setSortingEnabled(true);
-    this->selectCurrentItem(nullptr, selectcurrent);
+		bool hidden = determineVisibility(item, option, search_text, cached_ratio_ptr_shared.get(), authorsWithUnwatched);
+		item->setHidden(hidden);
+	}
+	// not sure if this alternative method is needed anymore
+	//if (this->ui.searchBar->isVisible())
+	//    QTimer::singleShot(1, [this,itemlist] {this->search(this->old_search);});
+	this->updateTotalListLabel();
+	this->updateVideoListRandomProbabilitiesIfVisible();
+	this->ui.videosWidget->setSortingEnabled(true);
+	this->selectCurrentItem(nullptr, selectcurrent);
 }
 
 void MainWindow::videosWidgetHeaderContextMenu(QPoint point) {
@@ -3444,7 +3434,6 @@ MainWindow::~MainWindow()
     this->animatedIcon->running = false;
     this->animatedIcon->quit();
     this->animatedIcon->deleteLater();
-    delete this->search_timer;
     delete this->search_completer;
     delete this->thumbnailManager;
     delete this->active;

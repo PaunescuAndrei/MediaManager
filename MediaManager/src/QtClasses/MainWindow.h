@@ -23,6 +23,7 @@
 #include <QMutex>
 #include <QFuture>
 #include <QFutureWatcher>
+#include <QThreadPool>
 
 class MainApp;
 
@@ -59,8 +60,7 @@ public:
     finishDialog* finish_dialog = nullptr;
     QList<QStringList> IconsStage = QList<QStringList>({ QStringList(),QStringList(),QStringList() });
     QMediaPlayer* special_effects_player = nullptr;
-    QFutureWatcher<bool> filter_watcher;
-    QList<QTreeWidgetItem*> items_to_filter;
+    QThreadPool* searchThreadPool;
 
     MainWindow(QWidget *parent = nullptr,MainApp *App = nullptr);
     //void resizeEvent(QResizeEvent* event) override;
@@ -110,6 +110,7 @@ public:
     void updateVideoListRandomProbabilities();
     void updateVideoListRandomProbabilitiesIfVisible();
     void updateSearchCompleter();
+    static bool determineVisibility(QTreeWidgetItem* item, const QString& watched_option, const QString& search_text, const rapidfuzz::fuzz::CachedPartialRatio<char>* cached_search_text_ratio, const QSet<QString>& authorsWithUnwatched);
     void refreshVisibility(QString search_text);
     void refreshVisibility();
     void refreshHeadersVisibility();
@@ -196,12 +197,8 @@ public:
     bool event(QEvent* e) override;
     void playSpecialSoundEffect(bool force_play = false);
     ~MainWindow();
-private:
-    static bool determineVisibility(QTreeWidgetItem* item, const QString& watched_option, const QString& search_text, const rapidfuzz::fuzz::CachedPartialRatio<char>* cached_search_text_ratio, const QSet<QString>& authorsWithUnwatched);
 signals:
     void fileDropped(QStringList files, QWidget* widget = nullptr);
 public slots:
     void iconActivated(QSystemTrayIcon::ActivationReason reason);
-private slots:
-    void filteringFinished();
 };

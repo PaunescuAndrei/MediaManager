@@ -105,6 +105,7 @@ void Config::init_defaults() {
 		{"random_no_tags_weight_plus","0.0"},
 		{"auto_continue", "False"},
 		{"auto_continue_delay", "5"},
+		{"search_timer_interval", "100"},
 	});
 }
 

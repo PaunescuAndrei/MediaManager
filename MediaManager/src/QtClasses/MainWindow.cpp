@@ -627,7 +627,7 @@ void MainWindow::toggleSearchBar() {
         this->lastScrolls.append({ "toggleSearchBar" ,this->ui.videosWidget->verticalScrollBar()->value() });
         this->ui.searchWidget->setVisible(true);
         if (!this->search_timer->isActive())
-            this->search_timer->start(500);
+            this->search_timer->start(this->App->config->get("search_timer_interval").toInt());
         this->ui.searchBar->setFocus();
         if (!this->ui.searchBar->text().isEmpty())
             this->refreshVisibility(this->ui.searchBar->text());
@@ -1717,6 +1717,11 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     else if (dialog->ui.autoContinue->checkState() == Qt::CheckState::Unchecked)
         config->set("auto_continue", "False");
     config->set("auto_continue_delay", QString::number(dialog->ui.autoContinueDelay->value()));
+    config->set("search_timer_interval", QString::number(dialog->ui.searchTimerInterval->value()));
+    if (this->search_timer->isActive()) {
+        this->search_timer->stop();
+        this->search_timer->start(this->App->config->get("search_timer_interval").toInt());
+    }
     
     if (dialog->ui.minusCatRadioBtn->isChecked())
         config->set("current_db", "MINUS");

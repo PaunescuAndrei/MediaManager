@@ -19,10 +19,6 @@
 #include "MpcPlayer.h"
 #include "rapidfuzz_all.hpp"
 #include <QCompleter>
-#include <QtConcurrent/QtConcurrent>
-#include <QMutex>
-#include <QFuture>
-#include <QFutureWatcher>
 #include <QThreadPool>
 
 class MainApp;

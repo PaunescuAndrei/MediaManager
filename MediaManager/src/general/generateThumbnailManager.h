@@ -7,6 +7,7 @@
 #include <QList>
 #include <QTimer>
 #include <QObject>
+#include <atomic>
 
 struct ThumbnailCommand {
     QString path;
@@ -21,8 +22,7 @@ class generateThumbnailManager:
 public:
     SafeQueue<ThumbnailCommand> queue = SafeQueue<ThumbnailCommand>();
     QThreadPool *thumbsThreadPool;
-    QMutex data_lock = QMutex();
-    int work_count = 0;
+    std::atomic<int> work_count = 0;
     void enqueue_work(ThumbnailCommand work);
     void enqueue_work_front(ThumbnailCommand work);
     void clear_work();
@@ -34,7 +34,7 @@ public:
     ~generateThumbnailManager();
 signals:
     void openFile(QString path);
-public slots:
-    void onOpenFile(QString path);
+//public slots:
+//    void onOpenFile(QString path);
 };
 

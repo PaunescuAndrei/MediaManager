@@ -1,6 +1,5 @@
 #include "stdafx.h"
 #include "generateThumbnailManager.h"
-#include <QMutexLocker>
 
 generateThumbnailManager::generateThumbnailManager(unsigned int threads_number, QObject* parent) : QObject(parent)
 {
@@ -27,31 +26,30 @@ void generateThumbnailManager::clear_work() {
 
 void generateThumbnailManager::add_work_count(int value)
 {
-    QMutexLocker lock(&this->data_lock);
-	this->work_count = std::max(0, this->work_count + value);
+	this->work_count += value;
 }
 
 void generateThumbnailManager::set_work_count(int value)
 {
-    QMutexLocker lock(&this->data_lock);
-	this->work_count = std::max(0, value);
+	this->work_count = value;
 }
 
 void generateThumbnailManager::start() {
-	for (int i = 0; i < this->thumbsThreadPool->maxThreadCount() && !this->queue.isEmpty(); i++) {
+    if (this->queue.isEmpty()) {
+        return;
+    }
+    for (int i = 0; i < this->thumbsThreadPool->maxThreadCount(); i++) {
         generateThumbnailRunnable* thumbsTask = new generateThumbnailRunnable(&this->queue, this, this);
-        connect(thumbsTask, &generateThumbnailRunnable::openFile, this, &generateThumbnailManager::onOpenFile);
-        bool started = this->thumbsThreadPool->tryStart(thumbsTask);
-        if(not started) {
-			thumbsTask->deleteLater(); // Clean up if the task could not be started, its automatically deleted by the thread pool if it starts successfully
-		}
-	}
+        connect(thumbsTask, &generateThumbnailRunnable::openFile, this, &generateThumbnailManager::openFile);
+        if (!this->thumbsThreadPool->tryStart(thumbsTask)) {
+            thumbsTask->deleteLater();
+        }
+    }
 }
 
-void generateThumbnailManager::onOpenFile(QString path)
-{
-    emit openFile(path);
-}
+//void generateThumbnailManager::onOpenFile(QString path) {
+//    emit openFile(path);
+//}
 
 void generateThumbnailManager::rebuildThumbnailCache(QSqlDatabase& db, bool overwrite)
 {

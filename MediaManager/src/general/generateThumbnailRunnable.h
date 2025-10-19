@@ -5,6 +5,11 @@
 #include <QPair>
 #include "SafeQueue.h"
 
+namespace {
+    constexpr int MtnSuccess = 0;
+    constexpr int MtnSuccessNoFrame = 1;
+}
+
 class generateThumbnailManager;
 struct ThumbnailCommand;
 
@@ -14,7 +19,6 @@ class generateThumbnailRunnable :
     Q_OBJECT
 public:
     SafeQueue<ThumbnailCommand> *queue = nullptr;
-    QProcess *process = nullptr;
     generateThumbnailManager* manager = nullptr;
     generateThumbnailRunnable(SafeQueue<ThumbnailCommand> *queue, generateThumbnailManager* manager = nullptr, QObject* parent = nullptr);
     void run() override;

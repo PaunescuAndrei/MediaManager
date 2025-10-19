@@ -17,7 +17,7 @@ LogDialog::LogDialog(QWidget* parent) : QDialog(parent)
 	logTimer->setInterval(100); // Process logs every 100ms
 	connect(logTimer, &QTimer::timeout, this, &LogDialog::processBufferedLogs);
 
-	for(log_message newLog : qMainApp->logger->logs)
+	for(log_message newLog : qMainApp->logger->getLogs())
 		this->insertNewItem(newLog.date, newLog.message, newLog.type, newLog.extra_data);
 
 	connect(qMainApp->logger, &Logger::newLog,this, [this](log_message newLog) {

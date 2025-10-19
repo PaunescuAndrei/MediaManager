@@ -2,6 +2,7 @@
 #include "logger.h"
 #include <QDateTime>
 #include "MainApp.h"
+#include <QMutexLocker>
 
 Logger::Logger(QObject* parent, int maxsize) : QObject(parent)
 {
@@ -11,13 +12,21 @@ Logger::Logger(QObject* parent, int maxsize) : QObject(parent)
 
 void Logger::log(QString message,QString type, QString extra_data)
 {
+	QMutexLocker locker(&m_mutex);
+
 	if (this->logs.size() >= this->max_size)
 		this->logs.removeFirst();
 	log_message new_message = { message, QDateTime::currentDateTime().toString("dd.MM.yyyy hh:mm:ss"), type, extra_data};
 	this->logs.append(new_message);
 	if(qMainApp && qMainApp->debug_mode == true)
-		qDebug().noquote() << QDateTime::currentDateTime().toString("dd.MM.yyyy hh:mm:ss") + " " + message;
+		qDebug().noquote() << new_message.date + " " + new_message.message;
 	emit newLog(new_message);
+}
+
+QList<log_message> Logger::getLogs() const
+{
+	QMutexLocker locker(&m_mutex);
+	return logs;
 }
 
 Logger::~Logger()

@@ -13,11 +13,18 @@ LogDialog::LogDialog(QWidget* parent) : QDialog(parent)
 	this->layout()->setContentsMargins(0, 0, 0, 0);
 	this->layout()->setSpacing(0);
 
+	logTimer = new QTimer(this);
+	logTimer->setInterval(100); // Process logs every 100ms
+	connect(logTimer, &QTimer::timeout, this, &LogDialog::processBufferedLogs);
+
 	for(log_message newLog : qMainApp->logger->logs)
 		this->insertNewItem(newLog.date, newLog.message, newLog.type, newLog.extra_data);
 
 	connect(qMainApp->logger, &Logger::newLog,this, [this](log_message newLog) {
-		this->insertNewItem(newLog.date, newLog.message, newLog.type, newLog.extra_data);
+		logBuffer.append(newLog);
+		if (!logTimer->isActive()) {
+			logTimer->start();
+		}
 	});
 
 	this->ui.treeWidget->setContextMenuPolicy(Qt::CustomContextMenu);
@@ -59,12 +66,33 @@ void LogDialog::insertNewItem(QString Date, QString Message, QString Type, QStri
 	QTreeWidgetItem* item = new QTreeWidgetItem({ Date, Type, Message });
 	item->setData(0, Qt::UserRole, Extra_Data);
 	this->ui.treeWidget->addTopLevelItem(item);
-	this->ui.treeWidget->resizeColumnToContents(0);
-	this->ui.treeWidget->resizeColumnToContents(1);
 	if (viewAtBottom)
 		this->ui.treeWidget->scrollToBottom();
 }
 
+void LogDialog::processBufferedLogs() {
+	logTimer->stop();
+	this->ui.treeWidget->setUpdatesEnabled(false);
+	this->ui.treeWidget->clear(); // Clear all existing items
+	QList<log_message> currentLogs = qMainApp->logger->getLogs();
+	for (const log_message& newLog : currentLogs) {
+		// Re-add all logs from the logger's main list
+		QTreeWidgetItem* item = new QTreeWidgetItem({ newLog.date, newLog.type, newLog.message });
+		item->setData(0, Qt::UserRole, newLog.extra_data);
+		this->ui.treeWidget->addTopLevelItem(item);
+	}
+	logBuffer.clear();
+	this->ui.treeWidget->resizeColumnToContents(0);
+	this->ui.treeWidget->resizeColumnToContents(1);
+	this->ui.treeWidget->setUpdatesEnabled(true);
+	// Scroll to bottom if it was at the bottom before clearing
+	auto bar = this->ui.treeWidget->verticalScrollBar();
+	if (bar && bar->maximum() > 0) {
+		this->ui.treeWidget->scrollToBottom();
+	}
+}
+
 LogDialog::~LogDialog()
 {
+	delete logTimer;
 }

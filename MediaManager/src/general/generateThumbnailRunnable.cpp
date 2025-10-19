@@ -60,8 +60,7 @@ void generateThumbnailRunnable::run()
 void generateThumbnailRunnable::generateThumbnail(QProcess& process, QString suffix, QString path) {
 	QDir().mkpath(THUMBNAILS_CACHE_PATH);
 	process.setProgram(QDir(QDir::currentPath()).filePath(THUMBNAILS_PROGRAM_PATH));
-	//process.setArguments({ "-P", "-j", "85", "-q", "-r", "5", "-c", "6", "-w", "3840", "-D", "0", "-b", "1", "-k", "181818", "-F", "bebebe:22","-O",THUMBNAILS_CACHE_PATH,"-o",suffix, path });
-    process.setArguments({ "-P"});
+	process.setArguments({ "-P", "-j", "85", "-q", "-r", "5", "-c", "6", "-w", "3840", "-D", "0", "-b", "1", "-k", "181818", "-F", "bebebe:22","-O",THUMBNAILS_CACHE_PATH,"-o",suffix, path });
 }
 
 void generateThumbnailRunnable::deleteThumbnail(QString path)

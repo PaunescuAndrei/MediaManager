@@ -2146,6 +2146,7 @@ void MainWindow::showEndOfVideoDialog() {
     if (this->App->VW->mainPlayer and not this->App->VW->mainPlayer->video_path.isEmpty() and this->App->VW->mainPlayer->end_of_video == true and this->App->VW->mainPlayer->change_in_progress == false) {
         if (not this->finish_dialog) {
             this->finish_dialog = new finishDialog(this);
+            this->finish_dialog->setAttribute(Qt::WA_DeleteOnClose);
             this->finish_dialog->setWindowFlag(Qt::WindowStaysOnTopHint, true);
             this->finish_dialog->setWindowState((this->finish_dialog->windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
             this->finish_dialog->raise();
@@ -2192,9 +2193,8 @@ void MainWindow::showEndOfVideoDialog() {
                     this->NextButtonClicked(this->App->VW->mainPlayer, false, this->getCheckedUpdateWatchedToggleButton());
                     this->position = 0;
                 }
-                delete this->finish_dialog; // using deletelater causes some warning because it is already deleted by qt
                 this->finish_dialog = nullptr;
-                });
+            });
         }
     }
 }
@@ -3398,7 +3398,7 @@ void MainWindow::updateTotalListLabel(bool force_update) {
 void MainWindow::changePlayerVideo(QSharedPointer<BasePlayer> player, QString path, int video_id, double position) {
     player->changeVideo(path, video_id, position);
     if (this->finish_dialog) {
-        this->finish_dialog->deleteLater();
+        this->finish_dialog->close();
         this->finish_dialog = nullptr;
     }
     this->VideoInfoNotification();
@@ -3439,8 +3439,8 @@ MainWindow::~MainWindow()
     this->animatedIcon->running = false;
     this->animatedIcon->quit();
     this->animatedIcon->deleteLater();
-    delete this->search_completer;
-    delete this->thumbnailManager;
+    this->search_completer->deleteLater();
+    this->thumbnailManager->deleteLater();
     delete this->active;
     delete this->inactive;
     delete this->halfactive;

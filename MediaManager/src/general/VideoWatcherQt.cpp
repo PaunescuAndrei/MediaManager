@@ -56,7 +56,7 @@ void VideoWatcherQt::clearAfterMainVideoEnd()
 	this->clearMainPlayer();
 	if (this->App) {
 		if (this->App->mainWindow->finish_dialog) {
-			this->App->mainWindow->finish_dialog->deleteLater();
+			this->App->mainWindow->finish_dialog->close();
 			this->App->mainWindow->finish_dialog = nullptr;
 		}
 	}

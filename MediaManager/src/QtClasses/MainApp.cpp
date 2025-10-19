@@ -247,14 +247,16 @@ void MainApp::stop_handle()
 MainApp::~MainApp()
 {
 	timeEndPeriod(2);
-	delete this->mainWindow;
+	if(this->mainWindow)
+		this->mainWindow->deleteLater();
 	delete this->config;
 	delete this->db;
 	delete this->shoko_API;
 	delete this->taskbar;
 	delete this->musicPlayer;
 	delete this->soundPlayer;
-	delete this->quitEater;
+	if(this->quitEater)
+		this->quitEater->deleteLater();
 	delete this->keyboard_hook;
 	this->VW->deleteLater();
 	this->MascotsAnimation->deleteLater();

@@ -43,7 +43,7 @@ void generateThumbnailManager::start() {
         connect(thumbsTask, &generateThumbnailRunnable::openFile, this, &generateThumbnailManager::onOpenFile);
         bool started = this->thumbsThreadPool->tryStart(thumbsTask);
         if(not started) {
-			delete thumbsTask; // Clean up if the task could not be started, its automatically deleted by the thread pool if it starts successfully
+			thumbsTask->deleteLater(); // Clean up if the task could not be started, its automatically deleted by the thread pool if it starts successfully
 		}
 	}
 }

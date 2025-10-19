@@ -176,7 +176,7 @@ void MusicPlayer::setVolume(int volume) {
 
 MusicPlayer::~MusicPlayer()
 {
-	delete this->player;
-	delete this->audioOutput;
+	this->player->deleteLater();
+	this->audioOutput->deleteLater();
 	this->media_devices->deleteLater();
 }

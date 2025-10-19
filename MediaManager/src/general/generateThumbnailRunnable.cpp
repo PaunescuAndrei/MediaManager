@@ -10,59 +10,59 @@
 
 generateThumbnailRunnable::generateThumbnailRunnable(SafeQueue<ThumbnailCommand>* queue, generateThumbnailManager* manager, QObject* parent) : QObject(parent), QRunnable()
 {
-	this->queue = queue;
+    this->queue = queue;
     this->manager = manager;
 }
 
 void generateThumbnailRunnable::run()
 {
     this->process = new QProcess();
-	while (!this->queue->isEmpty()) {
-        if (this->process->state() == QProcess::NotRunning) {
-            std::optional<ThumbnailCommand> item_ = this->queue->dequeue();
-            if (item_) {
-                ThumbnailCommand item = item_.value();
-                connect(this->process, &QProcess::finished, this, [item](int exitCode, QProcess::ExitStatus exitStatus) {
-                    if (exitCode != 0) {
-                        if(qMainApp)
-                            qMainApp->logger->log(QString("mtn.exe exit code %1 for \"%2\"").arg(QString::number(exitCode), item.path), "Thumbnail", item.path);
-                        else
-                            qDebug() << "mtn.exe exit code " << exitCode;
-                    }
-                });
-                QString thumbnail_suffix = generateThumbnailRunnable::getThumbnailSuffix(item.path);
-                QString thumbnail_filename = generateThumbnailRunnable::getThumbnailFilename(item.path);
-                QString cachepath = QString(THUMBNAILS_CACHE_PATH) + "/" + thumbnail_filename;
+    while (!this->queue->isEmpty()) {
+        std::optional<ThumbnailCommand> item_ = this->queue->dequeue();
+        if (item_) {
+            ThumbnailCommand item = item_.value();
+            QEventLoop loop;
+            connect(this->process, &QProcess::finished, &loop, &QEventLoop::quit);
 
-                QFileInfo fi(item.path);
-                if (!item.overwrite and QFileInfo::exists(QDir::toNativeSeparators(cachepath))) {
-                    this->process->disconnect();
+            QString thumbnail_suffix = generateThumbnailRunnable::getThumbnailSuffix(item.path);
+            QString thumbnail_filename = generateThumbnailRunnable::getThumbnailFilename(item.path);
+            QString cachepath = QString(THUMBNAILS_CACHE_PATH) + "/" + thumbnail_filename;
+
+            QFileInfo fi(item.path);
+            if (!item.overwrite and QFileInfo::exists(QDir::toNativeSeparators(cachepath))) {
+                if (item.openWhenFinished) {
+                    emit openFile(cachepath);
+                }
+            }
+            else {
+                generateThumbnailRunnable::generateThumbnail(*process, thumbnail_suffix, item.path);
+                process->start();
+                loop.exec(); // Blocks until process is finished
+
+                if (process->exitCode() != 0) {
+                    if (qMainApp)
+                        qMainApp->logger->log(QString("mtn.exe exit code %1 for \"%2\"").arg(QString::number(process->exitCode()), item.path), "Thumbnail", item.path);
+                    else
+                        qDebug() << "mtn.exe exit code " << process->exitCode();
+                }
+
+                if (process->exitCode() == 0 || process->exitCode() == 1) {
                     if (item.openWhenFinished) {
                         emit openFile(cachepath);
                     }
                 }
-                else {
-                    generateThumbnailRunnable::generateThumbnail(*process, thumbnail_suffix, item.path);
-                    process->start();
-                    process->waitForFinished(-1);
-                    if (process->exitCode() == 0 || process->exitCode() == 1) {
-                        if (item.openWhenFinished) {
-                            emit openFile(cachepath);
-                        }
-                    }
-                }
-                if (this->manager) {
-                    this->manager->add_work_count(-1);
-                }
+            }
+            if (this->manager) {
+                this->manager->add_work_count(-1);
             }
         }
-	}
+    }
 }
 
-void generateThumbnailRunnable::generateThumbnail(QProcess &process, QString suffix, QString path) {
-    QDir().mkpath(THUMBNAILS_CACHE_PATH);
-    process.setProgram(QDir(QDir::currentPath()).filePath(THUMBNAILS_PROGRAM_PATH));
-    process.setArguments({ "-P", "-j", "85", "-q", "-r", "5", "-c", "6", "-w", "3840", "-D", "0", "-b", "1", "-k", "181818", "-F", "bebebe:22","-O",THUMBNAILS_CACHE_PATH,"-o",suffix, path });
+void generateThumbnailRunnable::generateThumbnail(QProcess& process, QString suffix, QString path) {
+	QDir().mkpath(THUMBNAILS_CACHE_PATH);
+	process.setProgram(QDir(QDir::currentPath()).filePath(THUMBNAILS_PROGRAM_PATH));
+	process.setArguments({ "-P", "-j", "85", "-q", "-r", "5", "-c", "6", "-w", "3840", "-D", "0", "-b", "1", "-k", "181818", "-F", "bebebe:22","-O",THUMBNAILS_CACHE_PATH,"-o",suffix, path });
 }
 
 void generateThumbnailRunnable::deleteThumbnail(QString path)
@@ -89,7 +89,7 @@ QString generateThumbnailRunnable::getThumbnailFilename(QString path)
 generateThumbnailRunnable::~generateThumbnailRunnable()
 {
     if (this->process) {
-		this->process->deleteLater();
+        this->process->deleteLater();
     }
 }
 

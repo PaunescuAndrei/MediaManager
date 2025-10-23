@@ -29,9 +29,7 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 	int counter_width = this->ui.counterLabel->sizeHint().width();
 	this->ui.totalLabel->setMinimumWidth(std::max(total_width,counter_width));
 	this->ui.counterLabel->setMinimumWidth(std::max(total_width, counter_width));
-	this->ui.scrollArea_author->setStyleSheet("QScrollBar:horizontal {height:0px;} QScrollBar:vertical {height:0px;}");
 	this->ui.scrollArea_author->installEventFilter(new scrollAreaEventFilter(this->ui.scrollArea_author));
-	this->ui.scrollArea_name->setStyleSheet("QScrollBar:horizontal {height:0px;} QScrollBar:vertical {height:0px;}");
 	this->ui.scrollArea_name->installEventFilter(new scrollAreaEventFilter(this->ui.scrollArea_name));
 	this->ui.author_label->setText(MW->ui.currentVideo->author);
 	this->ui.name_label->setText(MW->ui.currentVideo->name);
@@ -56,6 +54,36 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 		lt->insertWidget(3, avg_rating_label);
 
 		this->ui.tags_label->setText(items.first()->text(ListColumns["TAGS_COLUMN"]));
+		
+		// Set views count
+		QString viewsText = items.first()->text(ListColumns["VIEWS_COLUMN"]);
+		this->ui.viewsValueLabel->setText(viewsText);
+		
+		// Set last watched date in human-readable format
+		QString lastWatchedText = items.first()->text(ListColumns["LAST_WATCHED_COLUMN"]);
+		QVariant lastWatchedData = items.first()->data(ListColumns["LAST_WATCHED_COLUMN"], Qt::DisplayRole);
+		
+		if (!lastWatchedText.isEmpty() && lastWatchedData.type() == QVariant::DateTime) {
+			QDateTime lastWatchedDateTime = lastWatchedData.toDateTime();
+			
+			if (lastWatchedDateTime.isValid()) {
+				QDateTime currentDateTime = QDateTime::currentDateTime();
+				qint64 secondsDiff = lastWatchedDateTime.secsTo(currentDateTime);
+				if (secondsDiff < 0) {
+					// If the date is in the future (shouldn't happen but just in case)
+					this->ui.lastWatchedValueLabel->setText(lastWatchedText);
+				} else {
+					QString humanReadableDate = utils::formatTimeAgo(secondsDiff);
+					this->ui.lastWatchedValueLabel->setText(humanReadableDate);
+					this->ui.lastWatchedValueLabel->setToolTip(lastWatchedText);
+				}
+			} else {
+				// If the date is invalid, display as Never
+				this->ui.lastWatchedValueLabel->setText("Never");
+			}
+		} else {
+			this->ui.lastWatchedValueLabel->setText("Never");
+		}
 
 		connect(this->ui.tagsButton, &QPushButton::clicked, this, [this, MW]() {
 			QList<QTreeWidgetItem*> items = MW->ui.videosWidget->findItemsCustom(MW->ui.currentVideo->path, Qt::MatchExactly, ListColumns["PATH_COLUMN"],1);

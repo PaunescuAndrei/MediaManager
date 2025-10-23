@@ -63,6 +63,7 @@ namespace utils {
 	QColor blendColors(const QColor& color1, const QColor& color2, double ratio);
 	void changeQImageHue(QImage& img, QColor& newcolor, double blend_ratio);
 	std::string getAppId(const char* VERSION);
+	QString formatTimeAgo(qint64 seconds);
 	bool isSingleInstanceRunning(QString appid);
 	void openFileExplorer(QString path);
 	void numlock_toggle_on();

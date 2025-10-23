@@ -16,7 +16,7 @@ public:
    void updateCountdownText();  
    void stopCountdown();  
    void updateWindowTitle();
-   MainWindow* MW = nullptr;
+   MainWindow* MW = nullptr;  
    QTimer timer;  
    QTimer countdownTimer;  
    QTimer titleUpdateTimer;
@@ -26,5 +26,5 @@ public:
        Skip = 100,  
        Replay = 101  
    };  
+private:
 };
-

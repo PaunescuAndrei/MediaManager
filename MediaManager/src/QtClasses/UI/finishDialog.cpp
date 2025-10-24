@@ -57,7 +57,6 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 
 		this->ui.tags_label->setText(items.first()->text(ListColumns["TAGS_COLUMN"]));
 
-					this->ui.last_watched_label->setText("Last Watched: " + lastWatchedText);
 		connect(this->ui.tagsButton, &QPushButton::clicked, this, [this, MW]() {
 			QList<QTreeWidgetItem*> items = MW->ui.videosWidget->findItemsCustom(MW->ui.currentVideo->path, Qt::MatchExactly, ListColumns["PATH_COLUMN"],1);
 			if (!items.isEmpty()) {

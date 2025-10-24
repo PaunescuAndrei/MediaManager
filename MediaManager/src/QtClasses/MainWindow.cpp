@@ -2372,30 +2372,44 @@ QJsonObject MainWindow::getRandomSettings(RandomModes::Mode random_mode, bool ig
 }
 
 bool MainWindow::randomVideo(RandomModes::Mode random_mode, bool ignore_filters_and_defaults, QStringList vid_type_include, QStringList vid_type_exclude, bool reset_progress) {
-    QTreeWidgetItem* root = this->ui.videosWidget->invisibleRootItem();
-    QTreeWidgetItem* item = nullptr;
-    int videos_count = root->childCount();
-    if (videos_count > 0) {
-        QJsonObject settings = this->getRandomSettings(random_mode, ignore_filters_and_defaults, vid_type_include, vid_type_exclude);
-        QString item_name;
-        QString seed = this->App->config->get_bool("random_use_seed") ? this->App->config->get("random_seed") : "";
-        item_name = this->getRandomVideo(seed, this->getWeightedBiasSettings(), settings);        
-        if (!item_name.isEmpty()) {
-            QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(item_name, Qt::MatchExactly, ListColumns["PATH_COLUMN"], 1);
-            if (!items.isEmpty())
-                item = items.first();
-        }        
-        if (item != nullptr) {
-            this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]), item->text(ListColumns["TAGS_COLUMN"]), reset_progress);
-            this->selectCurrentItem(item);
-            return true;
-        }
-        else {
-            this->setCurrent(-1, "", "", "", "");
-            this->selectCurrentItem(nullptr);
-        }
+    // Early exit if no videos
+    if (this->ui.videosWidget->invisibleRootItem()->childCount() == 0) {
+        return false;
     }
-    return false;
+
+    // Get random settings
+    QJsonObject settings = this->getRandomSettings(random_mode, ignore_filters_and_defaults, vid_type_include, vid_type_exclude);
+    QString seed = this->App->config->get_bool("random_use_seed") ? this->App->config->get("random_seed") : "";
+
+    // Get random video path
+    QString item_path = this->getRandomVideo(seed, this->getWeightedBiasSettings(), settings);
+
+    // Early exit if no video selected
+    if (item_path.isEmpty()) {
+        this->setCurrent(-1, "", "", "", "");
+        this->selectCurrentItem(nullptr);
+        return false;
+    }
+
+    // Find the item in the tree
+    QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(item_path, Qt::MatchExactly, ListColumns["PATH_COLUMN"], 1);
+
+    if (items.isEmpty()) {
+        this->setCurrent(-1, "", "", "", "");
+        this->selectCurrentItem(nullptr);
+        return false;
+    }
+
+    // Set current video
+    QTreeWidgetItem* item = items.first();
+    this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(),
+        item->text(ListColumns["PATH_COLUMN"]),
+        item->text(ListColumns["NAME_COLUMN"]),
+        item->text(ListColumns["AUTHOR_COLUMN"]),
+        item->text(ListColumns["TAGS_COLUMN"]),
+        reset_progress);
+    this->selectCurrentItem(item);
+    return true;
 }
 
 void MainWindow::refreshCurrentVideo() {

@@ -2,6 +2,8 @@
 #include <QString>
 #include <QStringList>
 #include <QMetaType>
+#include <QList>
+#include <QTreeWidgetItem>
 
 extern std::map<QString, int> ListColumns;
 extern std::map<int, QString> ListColumns_reversed;
@@ -15,6 +17,12 @@ struct VideoWeightedData {
 	double views;
 	double rating;
 	double tagsWeight;
+};
+
+struct AuthorVideoData {
+	QString author;
+	QList<VideoWeightedData> videos;
+	QTreeWidgetItem* firstItem;
 };
 
 struct WeightedBiasSettings {
@@ -33,6 +41,14 @@ namespace RandomModes {
 		All = 0,
 		Normal = 1,
 		Filtered = 2,
+	};
+}
+
+namespace NextVideoModes {
+	enum Mode {
+		Sequential = 0,
+		Random = 1,
+		SeriesRandom = 2,
 	};
 }
 

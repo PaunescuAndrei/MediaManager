@@ -156,8 +156,14 @@ public:
     void NextButtonClicked(bool increment, bool update_watched_state);
     void NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state);
     NextVideoSettings getNextVideoSettings();
-    bool NextVideo(bool random, bool increment, bool update_watched_state);
+    NextVideoModes::Mode getNextVideoMode();
+    bool NextVideo(NextVideoModes::Mode mode, bool increment, bool update_watched_state);
+    bool NextVideo(bool random, bool increment, bool update_watched_state); // Legacy function for backward compatibility
     bool setNextVideo(QTreeWidgetItem* item);
+    QMap<QString, AuthorVideoData> getAuthorVideoMap(const QString& exclude_author, const QList<VideoWeightedData>& all_videos);
+    void findFirstItemsForAuthors(QMap<QString, AuthorVideoData>& author_map);
+    QList<VideoWeightedData> calculateAuthorWeights(const QMap<QString, AuthorVideoData>& author_map);
+    bool seriesRandomVideo(QTreeWidgetItem* current_item);
     int calculate_sv_target();
     void setCounterDialogButton();
     void loadIcons(QString path);

@@ -42,8 +42,8 @@ void Config::init_defaults() {
 		{"minus_category_name", "MINUS"},
 		{"plus_update_watched", "True"},
 		{"minus_update_watched", "True"},
-		{"plus_random_next", "False"},
-		{"minus_random_next", "True"},
+		{"plus_random_next", "0"},  // Sequential by default
+		{"minus_random_next", "0"}, // Sequential by default
 		{"plus_get_random_mode", "2"},
 		{"minus_get_random_mode", "2"},
 		{"current_db", "MINUS"},

@@ -871,7 +871,23 @@ QMenu* MainWindow::trayIconContextMenu(QWidget* parent) {
     traycontextmenu->addAction("Watch", [this] {
         this->watchCurrent();
         });
-    traycontextmenu->addAction(this->App->config->get_bool(this->getNextButtonConfigKey()) ? "Next (R)" : "Next", [this] {
+    NextVideoModes::Mode mode = this->getNextVideoMode();
+    QString mode_text;
+    switch (mode) {
+        case NextVideoModes::Sequential:
+            mode_text = "Next";
+            break;
+        case NextVideoModes::Random:
+            mode_text = "Next (R)";
+            break;
+        case NextVideoModes::SeriesRandom:
+            mode_text = "Next (SR)";
+            break;
+        default:
+            mode_text = "Next"; // Default to Sequential
+            break;
+    }
+    traycontextmenu->addAction(mode_text, [this] {
         this->NextButtonClicked(true, this->getCheckedUpdateWatchedToggleButton());
     });
     traycontextmenu->addAction(QString("Change (%1)").arg(this->getCategoryName()), [this] {
@@ -1192,7 +1208,8 @@ void MainWindow::NextButtonClicked(bool increment, bool update_watched_state) {
 }
 
 void MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state) {
-    bool video_changed = this->NextVideo(this->App->config->get_bool(this->getNextButtonConfigKey()), increment, update_watched_state);
+    NextVideoModes::Mode mode = this->getNextVideoMode();
+    bool video_changed = this->NextVideo(mode, increment, update_watched_state);
     if (player) {
         this->changePlayerVideo(player, this->ui.currentVideo->path, this->ui.currentVideo->id, 0);
     }
@@ -1233,6 +1250,12 @@ NextVideoSettings MainWindow::getNextVideoSettings() {
 }
 
 bool MainWindow::NextVideo(bool random, bool increment, bool update_watched_state) {
+    // Legacy function - convert boolean to enum and call new function
+    NextVideoModes::Mode mode = random ? NextVideoModes::Random : NextVideoModes::Sequential;
+    return this->NextVideo(mode, increment, update_watched_state);
+}
+
+bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool update_watched_state) {
     bool video_changed = false;
     bool sv_count_reset = false;
     QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(this->ui.currentVideo->path, Qt::MatchFixedString, ListColumns["PATH_COLUMN"], 1);
@@ -1246,21 +1269,30 @@ bool MainWindow::NextVideo(bool random, bool increment, bool update_watched_stat
         else
             this->App->db->updateWatchedState(items.first()->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), watched, false, false);
     }
-    if (random) {
-        NextVideoSettings settings = this->getNextVideoSettings();
-        if (this->App->currentDB == "MINUS") {
-            if (this->sv_count >= this->sv_target_count) {
-                this->sv_count = 0;
-                sv_count_reset = true;
-                this->ui.counterLabel->setProgress(this->sv_count);
-                this->App->db->setMainInfoValue("sv_count", "ALL", QString::number(this->sv_count));
+    
+    switch (mode) {
+        case NextVideoModes::Sequential:
+            video_changed = this->setNextVideo(item);
+            break;
+        case NextVideoModes::Random:
+            {
+                NextVideoSettings settings = this->getNextVideoSettings();
+                if (this->App->currentDB == "MINUS") {
+                    if (this->sv_count >= this->sv_target_count) {
+                        this->sv_count = 0;
+                        sv_count_reset = true;
+                        this->ui.counterLabel->setProgress(this->sv_count);
+                        this->App->db->setMainInfoValue("sv_count", "ALL", QString::number(this->sv_count));
+                    }
+                }
+                video_changed = this->randomVideo(settings.random_mode,settings.ignore_filters_and_defaults,settings.vid_type_include,settings.vid_type_exclude);
             }
-        }
-        video_changed = this->randomVideo(settings.random_mode,settings.ignore_filters_and_defaults,settings.vid_type_include,settings.vid_type_exclude);
+            break;
+        case NextVideoModes::SeriesRandom:
+            video_changed = this->seriesRandomVideo(item);
+            break;
     }
-    else {
-        video_changed = this->setNextVideo(item);
-    }
+    
     if (item != nullptr and sv_count_reset == false) {
         this->sv_count++;
         this->ui.counterLabel->setProgress(this->sv_count);
@@ -1324,6 +1356,280 @@ bool MainWindow::setNextVideo(QTreeWidgetItem* item) {
         }
         item_below = this->ui.videosWidget->itemBelow(item_below);
     }
+}
+
+QMap<QString, AuthorVideoData> MainWindow::getAuthorVideoMap(const QString& exclude_author, const QList<VideoWeightedData>& all_videos) {
+    QMap<QString, AuthorVideoData> author_map;
+
+    // Single pass through all videos
+    for (const VideoWeightedData& video : all_videos) {
+        QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(video.path, Qt::MatchExactly, ListColumns["PATH_COLUMN"], 1);
+        if (items.isEmpty() || items.first()->text(ListColumns["WATCHED_COLUMN"]) != "No") {
+            continue;
+        }
+
+        QTreeWidgetItem* item = items.first();
+        QString author = item->text(ListColumns["AUTHOR_COLUMN"]);
+        if (author.isEmpty()) {
+            author = video.path;
+        }
+
+        // Skip excluded author if specified
+        if (!exclude_author.isEmpty() && author == exclude_author) {
+            continue;
+        }
+
+        // Add video to author's list
+        author_map[author].videos.append(video);
+        author_map[author].author = author;
+    }
+
+    return author_map;
+}
+
+// Optimized helper to find first item for each author in a single tree pass
+void MainWindow::findFirstItemsForAuthors(QMap<QString, AuthorVideoData>& author_map) {
+    QTreeWidgetItemIterator it(this->ui.videosWidget);
+    QSet<QString> found_authors;
+
+    while (*it && found_authors.size() < author_map.size()) {
+        QTreeWidgetItem* item = *it;
+        if (item->text(ListColumns["WATCHED_COLUMN"]) == "No") {
+            QString author = item->text(ListColumns["AUTHOR_COLUMN"]);
+            if (author.isEmpty()) {
+                author = item->text(ListColumns["PATH_COLUMN"]);
+            }
+
+            if (author_map.contains(author) && !found_authors.contains(author)) {
+                author_map[author].firstItem = item;
+                found_authors.insert(author);
+            }
+        }
+        ++it;
+    }
+}
+
+// Optimized helper to calculate author weighted data
+QList<VideoWeightedData> MainWindow::calculateAuthorWeights(const QMap<QString, AuthorVideoData>& author_map) {
+    QList<VideoWeightedData> author_weighted_data;
+    author_weighted_data.reserve(author_map.size());
+
+    for (auto it = author_map.constBegin(); it != author_map.constEnd(); ++it) {
+        const AuthorVideoData& data = it.value();
+        if (data.videos.isEmpty() || !data.firstItem) {
+            continue;
+        }
+
+        // Calculate average weights
+        double total_views = 0, total_rating = 0, total_tags = 0;
+        for (const VideoWeightedData& v : data.videos) {
+            total_views += v.views;
+            total_rating += v.rating;
+            total_tags += v.tagsWeight;
+        }
+
+        int count = data.videos.size();
+        VideoWeightedData author_data;
+        author_data.id = data.firstItem->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt();
+        author_data.path = data.firstItem->text(ListColumns["PATH_COLUMN"]);
+        author_data.views = total_views / count;
+        author_data.rating = total_rating / count;
+        author_data.tagsWeight = total_tags / count;
+
+        author_weighted_data.append(author_data);
+    }
+
+    return author_weighted_data;
+}
+
+
+bool MainWindow::seriesRandomVideo(QTreeWidgetItem* current_item) {
+    NextVideoSettings settings = this->getNextVideoSettings();
+    QJsonObject json_settings = this->getRandomSettings(settings.random_mode, settings.ignore_filters_and_defaults,
+        settings.vid_type_include, settings.vid_type_exclude);
+    QString seed = this->App->config->get_bool("random_use_seed") ? this->App->config->get("random_seed") : "";
+
+    if (current_item == nullptr) {
+        // Get all videos once
+        QList<VideoWeightedData> all_videos = this->App->db->getVideos(this->App->currentDB, json_settings);
+
+        // Build author map in single pass
+        QMap<QString, AuthorVideoData> author_map = this->getAuthorVideoMap("", all_videos);
+
+        if (author_map.isEmpty()) {
+            this->setCurrent(-1, "", "", "", "");
+            this->selectCurrentItem(nullptr);
+            return false;
+        }
+
+        // Find first items for all authors in single tree pass
+        this->findFirstItemsForAuthors(author_map);
+
+        // Calculate author weights
+        QList<VideoWeightedData> author_weighted_data = this->calculateAuthorWeights(author_map);
+
+        if (author_weighted_data.isEmpty()) {
+            this->setCurrent(-1, "", "", "", "");
+            this->selectCurrentItem(nullptr);
+            return false;
+        }
+
+        // Use weighted random selection to choose an author
+        QRandomGenerator generator;
+        if (seed.isEmpty()) {
+            generator.seed(QRandomGenerator::global()->generate());
+        }
+        else {
+            generator.seed(utils::stringToSeed(this->saltSeed(seed)));
+        }
+
+        WeightedBiasSettings weighted_settings = this->getWeightedBiasSettings();
+        if (!weighted_settings.weighted_random_enabled) {
+            weighted_settings.bias_general = 0;
+        }
+
+        QString selected_path = utils::weightedRandomChoice(author_weighted_data, generator,
+            weighted_settings.bias_views,
+            weighted_settings.bias_rating,
+            weighted_settings.bias_tags,
+            weighted_settings.bias_general,
+            weighted_settings.no_views_weight,
+            weighted_settings.no_rating_weight,
+            weighted_settings.no_tags_weight);
+
+        // Find the selected author's first item by matching the path
+        if (!selected_path.isEmpty()) {
+            for (auto it = author_map.constBegin(); it != author_map.constEnd(); ++it) {
+                if (it.value().firstItem && it.value().firstItem->text(ListColumns["PATH_COLUMN"]) == selected_path) {
+                    QTreeWidgetItem* target_item = it.value().firstItem;
+                    this->setCurrent(target_item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(),
+                        target_item->text(ListColumns["PATH_COLUMN"]),
+                        target_item->text(ListColumns["NAME_COLUMN"]),
+                        target_item->text(ListColumns["AUTHOR_COLUMN"]),
+                        target_item->text(ListColumns["TAGS_COLUMN"]), true);
+                    this->selectCurrentItem(target_item);
+                    return true;
+                }
+            }
+        }
+
+        this->setCurrent(-1, "", "", "", "");
+        this->selectCurrentItem(nullptr);
+        return false;
+    }
+
+    // Get current author
+    QString current_author = current_item->text(ListColumns["AUTHOR_COLUMN"]);
+    if (current_author.isEmpty()) {
+        current_author = current_item->text(ListColumns["PATH_COLUMN"]);
+    }
+
+    // Get all unwatched videos from same author in single pass
+    QList<QTreeWidgetItem*> author_videos_unwatched;
+    QTreeWidgetItemIterator it(this->ui.videosWidget);
+    while (*it) {
+        QTreeWidgetItem* item = *it;
+        if (item->text(ListColumns["WATCHED_COLUMN"]) == "No") {
+            QString item_author = item->text(ListColumns["AUTHOR_COLUMN"]);
+            if (item_author.isEmpty()) {
+                item_author = item->text(ListColumns["PATH_COLUMN"]);
+            }
+            if (item_author == current_author) {
+                author_videos_unwatched.append(item);
+            }
+        }
+        ++it;
+    }
+
+    // Find current position
+    int current_pos = author_videos_unwatched.indexOf(current_item);
+
+    QTreeWidgetItem* next_item = nullptr;
+
+    // Determine next item
+    if (current_pos != -1 && current_pos + 1 < author_videos_unwatched.size()) {
+        next_item = author_videos_unwatched[current_pos + 1];
+    }
+    else if (current_pos != -1 && current_pos == author_videos_unwatched.size() - 1 && author_videos_unwatched.size() > 1) {
+        next_item = author_videos_unwatched[0];
+    }
+
+    if (next_item != nullptr) {
+        this->setCurrent(next_item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(),
+            next_item->text(ListColumns["PATH_COLUMN"]),
+            next_item->text(ListColumns["NAME_COLUMN"]),
+            next_item->text(ListColumns["AUTHOR_COLUMN"]),
+            next_item->text(ListColumns["TAGS_COLUMN"]), true);
+        this->selectCurrentItem(next_item);
+        return true;
+    }
+
+    // Need to switch to new author - get all videos once
+    QList<VideoWeightedData> all_videos = this->App->db->getVideos(this->App->currentDB, json_settings);
+
+    // Build author map excluding current author
+    QMap<QString, AuthorVideoData> author_map = this->getAuthorVideoMap(current_author, all_videos);
+
+    if (author_map.isEmpty()) {
+        this->setCurrent(-1, "", "", "", "");
+        this->selectCurrentItem(nullptr);
+        return false;
+    }
+
+    // Find first items for all authors in single tree pass
+    this->findFirstItemsForAuthors(author_map);
+
+    // Calculate author weights
+    QList<VideoWeightedData> author_weighted_data = this->calculateAuthorWeights(author_map);
+
+    if (author_weighted_data.isEmpty()) {
+        this->setCurrent(-1, "", "", "", "");
+        this->selectCurrentItem(nullptr);
+        return false;
+    }
+
+    // Use weighted random selection to choose an author
+    QRandomGenerator generator;
+    if (seed.isEmpty()) {
+        generator.seed(QRandomGenerator::global()->generate());
+    }
+    else {
+        generator.seed(utils::stringToSeed(this->saltSeed(seed)));
+    }
+
+    WeightedBiasSettings weighted_settings = this->getWeightedBiasSettings();
+    if (!weighted_settings.weighted_random_enabled) {
+        weighted_settings.bias_general = 0;
+    }
+
+    QString selected_path = utils::weightedRandomChoice(author_weighted_data, generator,
+        weighted_settings.bias_views,
+        weighted_settings.bias_rating,
+        weighted_settings.bias_tags,
+        weighted_settings.bias_general,
+        weighted_settings.no_views_weight,
+        weighted_settings.no_rating_weight,
+        weighted_settings.no_tags_weight);
+
+    // Find the selected author's first item by matching the path
+    if (!selected_path.isEmpty()) {
+        for (auto it = author_map.constBegin(); it != author_map.constEnd(); ++it) {
+            if (it.value().firstItem && it.value().firstItem->text(ListColumns["PATH_COLUMN"]) == selected_path) {
+                QTreeWidgetItem* target_item = it.value().firstItem;
+                this->setCurrent(target_item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(),
+                    target_item->text(ListColumns["PATH_COLUMN"]),
+                    target_item->text(ListColumns["NAME_COLUMN"]),
+                    target_item->text(ListColumns["AUTHOR_COLUMN"]),
+                    target_item->text(ListColumns["TAGS_COLUMN"]), true);
+                this->selectCurrentItem(target_item);
+                return true;
+            }
+        }
+    }
+
+    this->setCurrent(-1, "", "", "", "");
+    this->selectCurrentItem(nullptr);
+    return false;
 }
 
 int MainWindow::calculate_sv_target() {
@@ -2631,8 +2937,22 @@ int MainWindow::getCounterVar() {
 }
 
 void MainWindow::initNextButtonMode(customQButton* nextbutton) {
-    QString config_key = this->getNextButtonConfigKey();
-    nextbutton->setText(this->App->config->get_bool(config_key) ? "Next (R)" : "Next");
+    NextVideoModes::Mode mode = this->getNextVideoMode();
+    switch (mode) {
+        case NextVideoModes::Sequential:
+            nextbutton->setText("Next");
+            break;
+        case NextVideoModes::Random:
+            nextbutton->setText("Next (R)");
+            break;
+        case NextVideoModes::SeriesRandom:
+            nextbutton->setText("Next (SR)");
+            break;
+        default:
+            // Default to Sequential if an unexpected value is encountered
+            nextbutton->setText("Next");
+            break;
+    }
 }
 
 bool MainWindow::isNextButtonRandom() {
@@ -2643,6 +2963,28 @@ bool MainWindow::isNextButtonRandom() {
         return this->App->config->get_bool("minus_random_next");
     }
     return true;
+}
+
+NextVideoModes::Mode MainWindow::getNextVideoMode() {
+    // Get the raw string value from config
+    QString config_value = this->App->config->get(this->getNextButtonConfigKey());
+    
+    // Try to convert to integer first to check if it's already using the new system
+    bool ok;
+    int mode_value = config_value.toInt(&ok);
+    
+    if (ok && mode_value >= NextVideoModes::Sequential && mode_value <= NextVideoModes::SeriesRandom) {
+        // It's already using the new system
+        return static_cast<NextVideoModes::Mode>(mode_value);
+    } else {
+        // It's still using the old boolean system, convert it
+        bool is_random = utils::text_to_bool(config_value.toStdString());
+        if (is_random) {
+            return NextVideoModes::Random;
+        } else {
+            return NextVideoModes::Sequential;
+        }
+    }
 }
 
 QString MainWindow::getNextButtonConfigKey() {
@@ -2657,7 +2999,27 @@ QString MainWindow::getNextButtonConfigKey() {
 
 void MainWindow::switchNextButtonMode(customQButton* nextbutton) {
     QString config_key = this->getNextButtonConfigKey();
-    this->App->config->set(config_key, utils::bool_to_text_qt(not this->App->config->get_bool(config_key)));
+    NextVideoModes::Mode current_mode = this->getNextVideoMode();
+    
+    // Cycle through the modes: Sequential -> Random -> SeriesRandom -> Sequential -> ...
+    NextVideoModes::Mode next_mode;
+    switch (current_mode) {
+        case NextVideoModes::Sequential:
+            next_mode = NextVideoModes::Random;
+            break;
+        case NextVideoModes::Random:
+            next_mode = NextVideoModes::SeriesRandom;
+            break;
+        case NextVideoModes::SeriesRandom:
+            next_mode = NextVideoModes::Sequential;
+            break;
+        default:
+            // In case of any unexpected value, default to Sequential
+            next_mode = NextVideoModes::Sequential;
+            break;
+    }
+    
+    this->App->config->set(config_key, QString::number(static_cast<int>(next_mode)));
     if (nextbutton != this->ui.next_button)
         this->initNextButtonMode(this->ui.next_button);
     this->initNextButtonMode(nextbutton);
@@ -3407,25 +3769,164 @@ void MainWindow::changePlayerVideo(QSharedPointer<BasePlayer> player, QString pa
 
 void MainWindow::updateVideoListRandomProbabilities() {
     NextVideoSettings next_video_settings = this->getNextVideoSettings();
-    QJsonObject random_settings = this->getRandomSettings(next_video_settings.random_mode, next_video_settings.ignore_filters_and_defaults, next_video_settings.vid_type_include, next_video_settings.vid_type_exclude);
-    QList<VideoWeightedData> items = this->App->db->getVideos(this->App->currentDB, random_settings);
+    NextVideoModes::Mode current_mode = this->getNextVideoMode();
+
+    QJsonObject random_settings;
+    QList<VideoWeightedData> items;
+    QList<QTreeWidgetItem*> relevant_items;
+
+    if (current_mode == NextVideoModes::SeriesRandom) {
+        // Find current video item once
+        QTreeWidgetItem* current_video_item = nullptr;
+        if (!this->ui.currentVideo->path.isEmpty()) {
+            QList<QTreeWidgetItem*> current_items = this->ui.videosWidget->findItemsCustom(this->ui.currentVideo->path, Qt::MatchExactly, ListColumns["PATH_COLUMN"], 1);
+            if (!current_items.isEmpty()) {
+                current_video_item = current_items.first();
+            }
+        }
+
+        if (current_video_item != nullptr) {
+            QString current_author = current_video_item->text(ListColumns["AUTHOR_COLUMN"]);
+            if (current_author.isEmpty()) {
+                current_author = current_video_item->text(ListColumns["PATH_COLUMN"]);
+            }
+
+            // Single pass to get author's unwatched videos
+            QList<QTreeWidgetItem*> author_unwatched_videos;
+            QTreeWidgetItemIterator iter(this->ui.videosWidget);
+            while (*iter) {
+                QTreeWidgetItem* item = *iter;
+                if (item->text(ListColumns["WATCHED_COLUMN"]) == "No") {
+                    QString item_author = item->text(ListColumns["AUTHOR_COLUMN"]);
+                    if (item_author.isEmpty()) {
+                        item_author = item->text(ListColumns["PATH_COLUMN"]);
+                    }
+                    if (item_author == current_author) {
+                        author_unwatched_videos.append(item);
+                    }
+                }
+                ++iter;
+            }
+
+            // Find current position
+            int current_pos = author_unwatched_videos.indexOf(current_video_item);
+
+            // Determine next item
+            if (current_pos != -1 && current_pos + 1 < author_unwatched_videos.size()) {
+                relevant_items.append(author_unwatched_videos[current_pos + 1]);
+            }
+            else if (current_pos != -1 && current_pos == author_unwatched_videos.size() - 1 && author_unwatched_videos.size() > 1) {
+                relevant_items.append(author_unwatched_videos[0]);
+            }
+            else {
+                // Need to switch authors - use optimized helper
+                random_settings = this->getRandomSettings(next_video_settings.random_mode, next_video_settings.ignore_filters_and_defaults,
+                    next_video_settings.vid_type_include, next_video_settings.vid_type_exclude);
+                QList<VideoWeightedData> all_videos = this->App->db->getVideos(this->App->currentDB, random_settings);
+
+                QMap<QString, AuthorVideoData> author_map = this->getAuthorVideoMap(current_author, all_videos);
+                this->findFirstItemsForAuthors(author_map);
+                items = this->calculateAuthorWeights(author_map);
+
+                // Collect relevant items
+                for (const VideoWeightedData& author_data : items) {
+                    for (auto it = author_map.constBegin(); it != author_map.constEnd(); ++it) {
+                        if (it.value().firstItem &&
+                            author_data.path == it.value().firstItem->text(ListColumns["PATH_COLUMN"])) {
+                            relevant_items.append(it.value().firstItem);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        else {
+            // No current video - use optimized helper
+            random_settings = this->getRandomSettings(next_video_settings.random_mode, next_video_settings.ignore_filters_and_defaults,
+                next_video_settings.vid_type_include, next_video_settings.vid_type_exclude);
+            QList<VideoWeightedData> all_videos = this->App->db->getVideos(this->App->currentDB, random_settings);
+
+            QMap<QString, AuthorVideoData> author_map = this->getAuthorVideoMap("", all_videos);
+            this->findFirstItemsForAuthors(author_map);
+            items = this->calculateAuthorWeights(author_map);
+
+            // Collect relevant items
+            for (const VideoWeightedData& author_data : items) {
+                for (auto it = author_map.constBegin(); it != author_map.constEnd(); ++it) {
+                    if (it.value().firstItem &&
+                        author_data.path == it.value().firstItem->text(ListColumns["PATH_COLUMN"])) {
+                        relevant_items.append(it.value().firstItem);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // If items is empty (staying with current author), get actual video data
+        if (items.isEmpty() && !relevant_items.isEmpty()) {
+            random_settings = this->getRandomSettings(next_video_settings.random_mode, next_video_settings.ignore_filters_and_defaults,
+                next_video_settings.vid_type_include, next_video_settings.vid_type_exclude);
+            QList<VideoWeightedData> all_items = this->App->db->getVideos(this->App->currentDB, random_settings);
+
+            QString target_path = relevant_items.first()->text(ListColumns["PATH_COLUMN"]);
+            for (const VideoWeightedData& video : all_items) {
+                if (video.path == target_path) {
+                    items.append(video);
+                    break;
+                }
+            }
+        }
+    }
+    else {
+        // For other modes, use original behavior
+        random_settings = this->getRandomSettings(next_video_settings.random_mode, next_video_settings.ignore_filters_and_defaults,
+            next_video_settings.vid_type_include, next_video_settings.vid_type_exclude);
+        items = this->App->db->getVideos(this->App->currentDB, random_settings);
+    }
+
     WeightedBiasSettings bias_settings = this->getWeightedBiasSettings();
-    if (not bias_settings.weighted_random_enabled) {
+    if (!bias_settings.weighted_random_enabled) {
         bias_settings.bias_general = 0;
     }
-    QMap<int, long double> probabilities = utils::calculateProbabilities(items, bias_settings.bias_views, bias_settings.bias_rating, bias_settings.bias_tags, bias_settings.bias_general, bias_settings.no_views_weight, bias_settings.no_rating_weight, bias_settings.no_tags_weight);
-    
-    QTreeWidgetItemIterator it(this->ui.videosWidget);
+
+    // Calculate probabilities
+    QMap<int, long double> probabilities;
+
+    if (current_mode == NextVideoModes::SeriesRandom && !relevant_items.isEmpty()) {
+        if (relevant_items.size() == 1) {
+            // Single deterministic next video - 100%
+            probabilities[items.first().id] = 100.0;
+        }
+        else {
+            // Multiple possible next videos
+            probabilities = utils::calculateProbabilities(items, bias_settings.bias_views, bias_settings.bias_rating,
+                bias_settings.bias_tags, bias_settings.bias_general,
+                bias_settings.no_views_weight, bias_settings.no_rating_weight,
+                bias_settings.no_tags_weight);
+        }
+    }
+    else {
+        probabilities = utils::calculateProbabilities(items, bias_settings.bias_views, bias_settings.bias_rating,
+            bias_settings.bias_tags, bias_settings.bias_general,
+            bias_settings.no_views_weight, bias_settings.no_rating_weight,
+            bias_settings.no_tags_weight);
+    }
+
+    // Update UI - single pass
+    QTreeWidgetItemIterator it2(this->ui.videosWidget);
     bool sorting = this->ui.videosWidget->isSortingEnabled();
     this->ui.videosWidget->setSortingEnabled(false);
-    while (*it) {
-        bool hidden = (*it)->isHidden();
-        (*it)->setHidden(true);
-        (*it)->setText(ListColumns["RANDOM%_COLUMN"], QString::number(probabilities.value((*it)->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(),0), 'f', 2) % "%");
-        (*it)->setTextAlignment(ListColumns["RANDOM%_COLUMN"], Qt::AlignCenter);
-        (*it)->setHidden(hidden);
-        ++it;
+
+    while (*it2) {
+        bool hidden = (*it2)->isHidden();
+        (*it2)->setHidden(true);
+        int id = (*it2)->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt();
+        (*it2)->setText(ListColumns["RANDOM%_COLUMN"], QString::number(probabilities.value(id, 0), 'f', 2) % "%");
+        (*it2)->setTextAlignment(ListColumns["RANDOM%_COLUMN"], Qt::AlignCenter);
+        (*it2)->setHidden(hidden);
+        ++it2;
     }
+
     this->ui.videosWidget->setSortingEnabled(sorting);
 }
 

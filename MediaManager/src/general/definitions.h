@@ -10,6 +10,7 @@ extern std::map<int, QString> ListColumns_reversed;
 extern std::map<QString, int> sortingDict;
 extern std::map<int, QString> sortingDict_reversed;
 extern QStringList videoTypes;
+extern QStringList svTypes;
 
 struct VideoWeightedData {
 	int id;

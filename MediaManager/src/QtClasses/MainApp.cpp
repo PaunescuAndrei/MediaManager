@@ -42,6 +42,7 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 	}
 
 	videoTypes = this->config->get("video_types").split(',', Qt::SkipEmptyParts);
+	svTypes = this->config->get("sv_types").split(',', Qt::SkipEmptyParts);
 
 	this->createMissingDirs();
 

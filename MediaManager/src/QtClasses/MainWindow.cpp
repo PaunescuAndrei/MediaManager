@@ -1227,7 +1227,7 @@ NextVideoSettings MainWindow::getNextVideoSettings() {
     settings.random_mode = static_cast<RandomModes::Mode>(this->App->config->get(this->getRandomButtonConfigKey()).toInt());
     if (this->App->currentDB == "MINUS") {
         if (this->sv_count >= this->sv_target_count) {
-            settings.vid_type_include = { this->App->config->get("sv_type") };
+            settings.vid_type_include = svTypes;
             settings.vid_type_exclude = {};
             QJsonObject random_settings = getRandomSettings(settings.random_mode, settings.ignore_filters_and_defaults, settings.vid_type_include, settings.vid_type_exclude);
             QString seed = this->App->config->get_bool("random_use_seed") ? this->App->config->get("random_seed") : "";
@@ -1240,7 +1240,7 @@ NextVideoSettings MainWindow::getNextVideoSettings() {
         else {
             settings.next_video_is_sv = false;
             settings.vid_type_include = {};
-            settings.vid_type_exclude = { this->App->config->get("sv_type") };
+            settings.vid_type_exclude = svTypes;
         }
     }
     else {
@@ -1317,7 +1317,7 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
         }
         if (this->App->currentDB == "MINUS") {
             this->incrementCounterVar(-1);
-            if (item->text(ListColumns["TYPE_COLUMN"]) == this->App->config->get("sv_type")) {
+            if (svTypes.contains(item->text(ListColumns["TYPE_COLUMN"]))) {
                 int val = this->calculate_sv_target();
                 this->App->db->setMainInfoValue("sv_target_count", "ALL", QString::number(val));
                 this->sv_target_count = val;
@@ -1637,17 +1637,17 @@ int MainWindow::calculate_sv_target() {
         QTreeWidgetItem* root = this->ui.videosWidget->invisibleRootItem();
         int val = 0;
         int child_count = root->childCount();
-        QString sv_type = this->App->config->get("sv_type");
-        QMap<QString, int> values = { {sv_type,0},{"OTHERS",0} };
+        QStringList sv_types = svTypes;
+        QMap<QString, int> values = { {"SPECIAL_TYPES",0},{"OTHERS",0} };
         for (int i = 0; i < child_count; i++) {
             QTreeWidgetItem* item = root->child(i);
-            if (item->text(ListColumns["WATCHED_COLUMN"]) == "No" && item->text(ListColumns["TYPE_COLUMN"]) == sv_type)
-                values[sv_type]++;
+            if (item->text(ListColumns["WATCHED_COLUMN"]) == "No" && sv_types.contains(item->text(ListColumns["TYPE_COLUMN"])))
+                values["SPECIAL_TYPES"]++;
             else if (item->text(ListColumns["WATCHED_COLUMN"]) == "No")
                 values["OTHERS"]++;
         }
-        if (values[sv_type] > 0) {
-            val = floor((double)values["OTHERS"] / (double)values[sv_type]);
+        if (values["SPECIAL_TYPES"] > 0) {
+            val = floor((double)values["OTHERS"] / (double)values["SPECIAL_TYPES"]);
         }
         else {
             val = values["OTHERS"];

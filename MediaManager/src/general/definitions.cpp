@@ -38,6 +38,7 @@ std::map<int, QString> sortingDict_reversed = {
 };
 
 QStringList videoTypes = QStringList();
+QStringList svTypes = QStringList();
 
  uint qHash(const Tag& key)
  {

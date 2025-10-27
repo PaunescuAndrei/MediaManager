@@ -48,7 +48,7 @@ void Config::init_defaults() {
 		{"minus_get_random_mode", "2"},
 		{"current_db", "MINUS"},
 		{"video_types",	""},
-		{"sv_type",""},
+		{"sv_types",""},
 		{"animated_icon_flag", "False"},
 		{"animated_icon_fps_modifier", "1.0"},
 		{"random_icon", "False"},

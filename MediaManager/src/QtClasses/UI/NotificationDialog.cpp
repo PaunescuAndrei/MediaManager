@@ -17,10 +17,7 @@ NotificationDialog::NotificationDialog(QWidget* parent) : QDialog(parent)
 		this->ui.durationProgressBar->update();
 		if (elapsed >= this->time_duration) {
 			this->timer2->stop();
-			if (this->MW) {
-				this->MW->notification_dialog = nullptr;
-				this->closeNotification();
-			}
+			this->closeNotification();
 		}
 	});
 	this->timer2 = new QTimer(this);
@@ -74,9 +71,6 @@ NotificationDialog::~NotificationDialog()
 void NotificationDialog::mousePressEvent(QMouseEvent* event)
 {
 	event->accept();
-	if (this->MW) {
-		this->MW->notification_dialog = nullptr;
-		this->closeNotification();
-	}
+	this->closeNotification();
 	//return QWidget::mousePressEvent(event);
 }

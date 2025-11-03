@@ -30,7 +30,7 @@ public:
     IUIAutomation* uiAutomation = nullptr;
     Taskbar *taskbar = nullptr;
     MainWindow *mainWindow = nullptr;
-    LogDialog* logDialog = nullptr;
+    QPointer<LogDialog> logDialog = nullptr;
     Config *config = nullptr;
     sqliteDB *db = nullptr;
     shokoAPI* shoko_API = nullptr;

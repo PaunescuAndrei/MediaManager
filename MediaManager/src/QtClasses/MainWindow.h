@@ -52,7 +52,7 @@ public:
     QIcon* active = new QIcon();
     QIcon* inactive = new QIcon();
     QIcon* halfactive = new QIcon();
-    NotificationDialog* notification_dialog = nullptr;
+    QPointer<NotificationDialog> notification_dialog = nullptr;
     QPointer<finishDialog> finish_dialog = nullptr;
     QList<QStringList> IconsStage = QList<QStringList>({ QStringList(),QStringList(),QStringList() });
     QMediaPlayer* special_effects_player = nullptr;

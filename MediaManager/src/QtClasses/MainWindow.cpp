@@ -414,7 +414,6 @@ void MainWindow::VideoInfoNotification() {
     QRect screenGeometry = screen->geometry();
     if (this->notification_dialog) {
         this->notification_dialog->closeNotification();
-        this->notification_dialog = nullptr;
     }
     this->notification_dialog = new NotificationDialog();
     this->notification_dialog->ui.mainWidget->setMaximumWidth((int)(screenGeometry.width() * 0.98));

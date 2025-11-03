@@ -32,7 +32,11 @@ int main(int argc, char *argv[])
     }
     MainApp App(argc, argv);
     signal(SIGSEGV, manageSegFailure);
-    return App.exec();
+    int exitCode = App.exec();
+    if (qMainApp && qMainApp->logger) {
+        qMainApp->logger->log(QString("Application Exited with code: %1").arg(exitCode), "INFO");
+    }
+    return exitCode;
     //try
     //{
     //    return App.exec();

@@ -1701,6 +1701,9 @@ bool MainWindow::TagsDialogButton() {
 }
 
 void MainWindow::resetDB(QString directory) {
+    if (qMainApp && qMainApp->logger) {
+        qMainApp->logger->log(QString("Resetting database for category %1 to %2").arg(this->getCategoryName(),directory), "Database", directory);
+    }
     this->App->db->resetDB(this->App->currentDB);
     this->ui.videosWidget->clear();
     this->InsertVideoFiles(QStringList({ directory }));

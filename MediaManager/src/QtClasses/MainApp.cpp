@@ -29,6 +29,7 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 	}
 
 	this->logger = new Logger(this,512);
+	qMainApp->logger->log("Application Starting.", "INFO");
 	this->ErrorDialog = new QErrorMessage();
 	this->config = new Config("config.ini");
 
@@ -38,8 +39,10 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 
 	if (!SUCCEEDED(CoCreateInstance(__uuidof(CUIAutomation), NULL, CLSCTX_INPROC_SERVER, __uuidof(IUIAutomation), (void**)&(this->uiAutomation))))
 	{
+		this->logger->log("Failed to create instance of UI automation!", "CRITICAL");
 		throw std::runtime_error("Failed to create instance of UI automation!");
 	}
+	this->logger->log("UI automation instance created successfully.", "INFO");
 
 	videoTypes = this->config->get("video_types").split(',', Qt::SkipEmptyParts);
 	svTypes = this->config->get("sv_types").split(',', Qt::SkipEmptyParts);
@@ -175,7 +178,11 @@ void MainApp::startSingleInstanceServer(QString appid) {
 			this->mainWindow->iconActivated(QSystemTrayIcon::DoubleClick);
 		}
 	});
-	this->instanceServer->listen(appid);
+	if(this->instanceServer->listen(appid)){
+		this->logger->log(QString("Single instance server started with id: %1").arg(appid), "INFO");
+	} else {
+		this->logger->log(QString("Single instance server failed to start with id: %1").arg(appid), "ERROR");
+	}
 }
 
 void MainApp::stopSingleInstanceServer() {
@@ -183,6 +190,7 @@ void MainApp::stopSingleInstanceServer() {
 		this->instanceServer->close();
 		this->instanceServer->deleteLater();
 		this->instanceServer = nullptr;
+		this->logger->log("Single instance server stopped.", "INFO");
 	}
 }
 
@@ -246,6 +254,7 @@ void MainApp::stop_handle()
 
 MainApp::~MainApp()
 {
+	this->logger->log("MainApp destructor called. Cleaning up...", "INFO");
 	timeEndPeriod(2);
 	if(this->mainWindow)
 		this->mainWindow->deleteLater();
@@ -261,6 +270,7 @@ MainApp::~MainApp()
 	this->VW->deleteLater();
 	this->MascotsAnimation->deleteLater();
 	this->MascotsGenerator->deleteLater();
+	this->logger->log("MainApp cleanup finished.", "INFO");
 	this->logger->deleteLater();
 	this->ErrorDialog->deleteLater();
 }

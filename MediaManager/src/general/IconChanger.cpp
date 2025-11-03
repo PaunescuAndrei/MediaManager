@@ -38,7 +38,8 @@ void IconChanger::initIcon(bool instant)
 
 void IconChanger::setIcon(QString path, bool cache_check,bool instant)
 {
-	qMainApp->logger->log(QString("Setting icon to \"%1\"").arg(path), "Icon", path);
+	if(qMainApp)
+		qMainApp->logger->log(QString("Setting icon to \"%1\"").arg(path), "Icon", path);
 	if (QFileInfo::exists(path)) {
 
 		this->setIcon_lock.clear();
@@ -129,12 +130,16 @@ void IconChanger::setIcon(QString path, bool cache_check,bool instant)
 				cachepath = QString(ANIMATED_ICONS_CACHE_PATH) + "/" + cachepath + ".iconcache_c";
 
 				QFile file(cachepath);
-				file.open(QIODevice::WriteOnly);
-				QDataStream out(&file);  
-				out << this->icon;   
-				out << this->frame_dict;
-				out << this->frame_pairlist;
-				out << this->ordered_filenames;
+				if (!file.open(QIODevice::WriteOnly)) {
+					if (qMainApp)
+						qMainApp->logger->log(QString("Failed to open cache file for writing: %1").arg(cachepath), "IconChanger", "ERROR");
+				} else {
+					QDataStream out(&file);  
+					out << this->icon;   
+					out << this->frame_dict;
+					out << this->frame_pairlist;
+					out << this->ordered_filenames;
+				}
 				file.close();
 			}
 		}
@@ -177,9 +182,15 @@ bool IconChanger::checkIconCache(QString path, QMap<QString, QIcon>* icon, QMap<
 	QString cachepath = QString(ANIMATED_ICONS_CACHE_PATH) + "/" + iconname + ".iconcache_c";
 	QFile file(cachepath);
 	if (file.exists() && file.size() > 0) {
-		file.open(QIODevice::ReadOnly);
-		QDataStream in(&file);    
-		in >> *icon >> *frame_dict >> *frame_pairlist >> *ordered_filenames; 
+		if (!file.open(QIODevice::ReadOnly)) {
+			if (qMainApp)
+				qMainApp->logger->log(QString("Failed to open cache file for reading: %1").arg(cachepath), "IconChanger", "ERROR");
+			file.close();
+			return false;
+		} else {
+			QDataStream in(&file);    
+			in >> *icon >> *frame_dict >> *frame_pairlist >> *ordered_filenames; 
+		}
 		file.close();
 		return true;
 	}
@@ -253,12 +264,16 @@ void IconChanger::rebuildIconCache() {
 		cachepath = QString(ANIMATED_ICONS_CACHE_PATH) + "/" + cachepath + ".iconcache_c";
 
 		QFile file(cachepath);
-		file.open(QIODevice::WriteOnly);
-		QDataStream out(&file);
-		out << _icon;
-		out << _frame_dict;
-		out << _frame_pairlist;
-		out << _ordered_filenames;
+		if (!file.open(QIODevice::WriteOnly)) {
+			if (qMainApp)
+				qMainApp->logger->log(QString("Failed to open cache file for writing: %1").arg(cachepath), "IconChanger", "ERROR");
+		} else {
+			QDataStream out(&file);
+			out << _icon;
+			out << _frame_dict;
+			out << _frame_pairlist;
+			out << _ordered_filenames;
+		}
 		file.close();
 		zf.close();
 	}

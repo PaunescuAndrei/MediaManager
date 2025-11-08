@@ -167,9 +167,6 @@
     <ClCompile Include="src\stdafx.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\general\BlockingQueue.cpp">
-      <Filter>Source Files\general</Filter>
-    </ClCompile>
     <ClCompile Include="src\thirdparty\sqlite3\sqlite3.c">
       <Filter>Source Files\thirdparty\sqlite3</Filter>
     </ClCompile>
@@ -268,9 +265,6 @@
     <ClInclude Include="src\QtClasses\Widgets\TreeWidgetItem.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </ClInclude>
-    <ClInclude Include="src\general\BlockingQueue.h">
-      <Filter>Header Files\general</Filter>
-    </ClInclude>
     <ClInclude Include="src\general\config.h">
       <Filter>Header Files\general</Filter>
     </ClInclude>
@@ -322,9 +316,6 @@
     <ClInclude Include="src\general\shokoAPI.h">
       <Filter>Header Files\general</Filter>
     </ClInclude>
-    <ClInclude Include="src\general\SafeQueue.h">
-      <Filter>Header Files\general</Filter>
-    </ClInclude>
     <ClInclude Include="src\QtClasses\UI\DateItemDelegate.h">
       <Filter>Header Files\QtClasses\UI</Filter>
     </ClInclude>
@@ -357,6 +348,12 @@
     </ClInclude>
     <ClInclude Include="src\thirdparty\rapidfuzz\rapidfuzz_all.hpp">
       <Filter>Source Files\thirdparty\rapidfuzz</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\BlockingQueue.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\NonBlockingQueue.h">
+      <Filter>Header Files\general</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

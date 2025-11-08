@@ -2505,7 +2505,7 @@ void MainWindow::showEndOfVideoDialog() {
                     this->App->db->incrementVideoViews(this->App->VW->mainPlayer->video_id, 1, true);
                     this->App->db->incrementVideosWatchedToday(this->App->currentDB);
                     this->App->db->db.commit();
-                    this->App->VW->mainPlayer->queue.enqueue(std::make_shared<MpcDirectCommand>(CMD_SETPOSITION, "0"));
+                    this->App->VW->mainPlayer->queue.push(std::make_shared<MpcDirectCommand>(CMD_SETPOSITION, "0"));
                     this->position = 0;
                 }
                 else if (result == finishDialog::Skip) {

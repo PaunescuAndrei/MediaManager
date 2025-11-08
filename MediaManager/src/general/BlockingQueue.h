@@ -1,49 +1,103 @@
 #pragma once
-#include <stdlib.h>
-#include <thread>
-#include <queue>
+#include <deque>
 #include <mutex>
 #include <condition_variable>
+#include <functional>
 
-using namespace std;
-template <class T> class BlockingQueue : public queue<T> {
+template <typename T>
+class BlockingQueue {
 public:
-    BlockingQueue(int size) {
-        maxSize = size;
+    explicit BlockingQueue(size_t maxSize)
+        : maxSize_(maxSize) {
     }
 
-    void push(T item) {
-        unique_lock<std::mutex> wlck(writerMutex);
-        while (Full())
-            isFull.wait(wlck);
-        queue<T>::push(item);
-        isEmpty.notify_all();
+    ~BlockingQueue() = default;
+
+    // Push methods
+    void push(const T& item) {
+        pushBack(item);
     }
 
-    bool notEmpty() {
-        return !queue<T>::empty();
+    void pushFront(const T& item) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        condFull_.wait(lock, [this] { return queue_.size() < maxSize_; });
+        queue_.push_front(item);
+        condEmpty_.notify_one();
     }
 
-    bool Full() {
-        return queue<T>::size() >= maxSize;
+    void pushBack(const T& item) {
+        std::unique_lock<std::mutex> lock(mutex_);
+        condFull_.wait(lock, [this] { return queue_.size() < maxSize_; });
+        queue_.push_back(item);
+        condEmpty_.notify_one();
     }
 
+    // Pop methods
     T pop() {
-        unique_lock<std::mutex> lck(readerMutex);
-        while (queue<T>::empty()) {
-            isEmpty.wait(lck);
+        return popFront();
+    }
+
+    T popFront() {
+        std::unique_lock<std::mutex> lock(mutex_);
+        condEmpty_.wait(lock, [this] { return !queue_.empty(); });
+        T item = queue_.front();
+        queue_.pop_front();
+        condFull_.notify_one();
+        return item;
+    }
+
+    T popBack() {
+        std::unique_lock<std::mutex> lock(mutex_);
+        condEmpty_.wait(lock, [this] { return !queue_.empty(); });
+        T item = queue_.back();
+        queue_.pop_back();
+        condFull_.notify_one();
+        return item;
+    }
+
+    // Peek methods (blocking)
+    T front() {
+        std::unique_lock<std::mutex> lock(mutex_);
+        condEmpty_.wait(lock, [this] { return !queue_.empty(); });
+        return queue_.front();
+    }
+
+    T back() {
+        std::unique_lock<std::mutex> lock(mutex_);
+        condEmpty_.wait(lock, [this] { return !queue_.empty(); });
+        return queue_.back();
+    }
+
+    // Remove items matching a predicate
+    void removeIf(std::function<bool(const T&)> predicate) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (auto it = queue_.begin(); it != queue_.end(); ) {
+            if (predicate(*it)) it = queue_.erase(it);
+            else ++it;
         }
-        T value = queue<T>::front();
-        queue<T>::pop();
-        if (!Full())
-            isFull.notify_all();
-        return value;
+        condFull_.notify_all(); // wake pushers if space freed
+    }
+
+    void clear() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        queue_.clear();
+        condFull_.notify_all();
+    }
+
+    bool isEmpty() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return queue_.empty();
+    }
+
+    size_t size() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return queue_.size();
     }
 
 private:
-    int maxSize;
-    std::mutex readerMutex;
-    std::mutex writerMutex;
-    condition_variable isFull;
-    condition_variable isEmpty;
+    mutable std::mutex mutex_;
+    std::condition_variable condEmpty_;
+    std::condition_variable condFull_;
+    std::deque<T> queue_;
+    size_t maxSize_;
 };

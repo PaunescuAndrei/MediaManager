@@ -16,7 +16,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\general\BasePlayer.cpp" />
-    <ClCompile Include="src\general\BlockingQueue.cpp" />
     <ClCompile Include="src\general\colorPaletteExtractor.cpp" />
     <ClCompile Include="src\general\config.cpp" />
     <ClCompile Include="src\general\definitions.cpp" />
@@ -120,7 +119,7 @@
     <QtMoc Include="src\QtClasses\UI\LogDialog.h" />
     <QtMoc Include="src\QtClasses\UI\NotificationDialog.h" />
     <QtMoc Include="src\QtClasses\UI\FilterDialog.h" />
-    <ClInclude Include="src\general\SafeQueue.h" />
+    <ClInclude Include="src\general\NonBlockingQueue.h" />
     <ClInclude Include="src\QtClasses\UI\DateItemDelegate.h" />
     <ClInclude Include="src\QtClasses\UI\flowlayout.h" />
     <QtMoc Include="src\QtClasses\UI\importPlaylistDialog.h" />

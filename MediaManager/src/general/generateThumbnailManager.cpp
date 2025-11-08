@@ -10,13 +10,13 @@ generateThumbnailManager::generateThumbnailManager(unsigned int threads_number, 
 void generateThumbnailManager::enqueue_work(ThumbnailCommand work)
 {
 	this->add_work_count(1);
-	this->queue.enqueue(work);
+	this->queue.push(work);
 }
 
 void generateThumbnailManager::enqueue_work_front(ThumbnailCommand work)
 {
 	this->add_work_count(1);
-	this->queue.enqueue_front(work);
+	this->queue.pushFront(work);
 }
 
 void generateThumbnailManager::clear_work() {

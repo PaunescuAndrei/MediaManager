@@ -2,7 +2,7 @@
 #include <QThread>  
 #include <windows.h>  
 #include <QProcess>  
-#include "SafeQueue.h"  
+#include "NonBlockingQueue.h"  
 #include "MpcApi.h"  
 #include "PlayerCommands.h"  
 #include <chrono>  
@@ -15,7 +15,7 @@ class BasePlayer : public QThread
 
 public:  
     bool running = false;  
-    SafeQueue< std::shared_ptr<PlayerCommand>> queue = SafeQueue< std::shared_ptr<PlayerCommand>>();  
+    NonBlockingQueue< std::shared_ptr<PlayerCommand>> queue = NonBlockingQueue< std::shared_ptr<PlayerCommand>>();
     QString video_path = "";  
     QString target_video_path = "";  
     int video_id = -1;  

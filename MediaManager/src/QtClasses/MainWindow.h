@@ -12,7 +12,7 @@
 #include "FilterSettings.h"
 #include "NotificationDialog.h"
 #include "finishDialog.h"
-#include "SafeQueue.h"
+#include "NonBlockingQueue.h"
 #include "VideosTagsDialog.h"
 #include <QMediaPlayer>
 #include "BasePlayer.h"

@@ -8,7 +8,7 @@
 #include <MainApp.h>
 #include "definitions.h"
 
-generateThumbnailRunnable::generateThumbnailRunnable(SafeQueue<ThumbnailCommand>* queue, generateThumbnailManager* manager, QObject* parent) : QObject(parent), QRunnable()
+generateThumbnailRunnable::generateThumbnailRunnable(NonBlockingQueue<ThumbnailCommand>* queue, generateThumbnailManager* manager, QObject* parent) : QObject(parent), QRunnable()
 {
     this->queue = queue;
     this->manager = manager;
@@ -17,7 +17,7 @@ generateThumbnailRunnable::generateThumbnailRunnable(SafeQueue<ThumbnailCommand>
 void generateThumbnailRunnable::run()
 {
     while (!this->queue->isEmpty()) {
-        std::optional<ThumbnailCommand> item_ = this->queue->dequeue();
+        std::optional<ThumbnailCommand> item_ = this->queue->pop();
         if (item_) {
             ThumbnailCommand item = item_.value();
             QProcess process;

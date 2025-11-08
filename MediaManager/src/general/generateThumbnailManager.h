@@ -1,6 +1,6 @@
 #pragma once
 #include "generateThumbnailRunnable.h"
-#include "SafeQueue.h"
+#include "NonBlockingQueue.h"
 #include <QThreadPool>
 #include <QString>
 #include <QMutex>
@@ -20,7 +20,7 @@ class generateThumbnailManager:
 {
     Q_OBJECT
 public:
-    SafeQueue<ThumbnailCommand> queue = SafeQueue<ThumbnailCommand>();
+    NonBlockingQueue<ThumbnailCommand> queue = NonBlockingQueue<ThumbnailCommand>();
     QThreadPool *thumbsThreadPool;
     std::atomic<int> work_count = 0;
     void enqueue_work(ThumbnailCommand work);

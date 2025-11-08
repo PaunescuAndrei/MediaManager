@@ -226,9 +226,9 @@ void MpcPlayer::setPaused(bool paused, bool direct)
     }
     else {
         if(paused)
-            this->queue.enqueue(std::make_shared<MpcDirectCommand>(CMD_PAUSE));
+            this->queue.push(std::make_shared<MpcDirectCommand>(CMD_PAUSE));
         else
-            this->queue.enqueue(std::make_shared<MpcDirectCommand>(CMD_PLAY));
+            this->queue.push(std::make_shared<MpcDirectCommand>(CMD_PLAY));
     }
 }
 
@@ -238,7 +238,7 @@ void MpcPlayer::toggleFullScreen(bool direct)
         this->send_message(CMD_TOGGLEFULLSCREEN);
     }
     else {
-        this->queue.enqueue(std::make_shared<MpcDirectCommand>(CMD_TOGGLEFULLSCREEN));
+        this->queue.push(std::make_shared<MpcDirectCommand>(CMD_TOGGLEFULLSCREEN));
     }
 }
 
@@ -248,24 +248,17 @@ void MpcPlayer::displayOsdMessage(QString message, int duration, bool direct)
         this->send_osd_message(message, duration);
     }
     else {
-        this->queue.enqueue(std::make_shared<OsdMessageCommand>(message,duration));
+        this->queue.push(std::make_shared<OsdMessageCommand>(message,duration));
     }
 }
 
 void MpcPlayer::changeVideo(QString path, int video_id, double position)
 {
-    std::unique_lock<std::mutex> guard(this->queue.m);
-    for (auto it = this->queue.q.begin(); it != this->queue.q.end();) {
-        if ((*it)->command == CHANGE_VIDEO) {
-            it = this->queue.q.erase(it);
-        }
-        else {
-            ++it;
-        }
-    }
-    guard.unlock();
-    this->queue.enqueue(std::make_shared<ChangeVideoCommand>(path,video_id,position));
-    
+    this->queue.removeIf([](const std::shared_ptr<PlayerCommand>& cmd) {
+        return cmd->command == CHANGE_VIDEO;
+    });
+    this->queue.push(std::make_shared<ChangeVideoCommand>(path, video_id, position));
+
     if (!path.isEmpty()) {
         bool should_autoplay = this->App->config->get_bool("video_autoplay");
         this->setPaused(!should_autoplay, false);
@@ -282,7 +275,7 @@ void MpcPlayer::run() {
             if (base_command->command == CHANGE_VIDEO) {
                 std::shared_ptr <ChangeVideoCommand> command = std::dynamic_pointer_cast<ChangeVideoCommand>(base_command);
                 if (not command) {
-                    this->queue.dequeue();
+                    this->queue.popFront();
                     continue;
                 }
                 if (command->change_in_progress == false) {
@@ -301,7 +294,7 @@ void MpcPlayer::run() {
                 }
                 if (command->video_path.isEmpty()) {
                     this->send_message(CMD_CLOSEFILE);
-                    this->queue.dequeue();
+                    this->queue.popFront();
                 }
                 else {
                     if (this->change_in_progress_video == false and this->video_path != this->target_video_path) {
@@ -330,27 +323,27 @@ void MpcPlayer::run() {
                         this->change_in_progress = false;
                     }
                     if (this->change_in_progress == false) {
-                        this->queue.dequeue();
+                        this->queue.popFront();
                     }
                 }
             }
             if (base_command->command == MPC_DIRECT_COMMAND) {
                 std::shared_ptr <MpcDirectCommand> command = std::dynamic_pointer_cast<MpcDirectCommand>(base_command);
                 if (not command) {
-                    this->queue.dequeue();
+                    this->queue.popFront();
                     continue;
                 }
                 this->send_message(command->mpc_command, command->data);
-                this->queue.dequeue();
+                this->queue.popFront();
             }
             if (base_command->command == OSD_MESSAGE) {
                 std::shared_ptr <OsdMessageCommand> command = std::dynamic_pointer_cast<OsdMessageCommand>(base_command);
                 if (not command) {
-                    this->queue.dequeue();
+                    this->queue.popFront();
                     continue;
                 }
                 this->send_osd_message(command->message, command->duration);
-                this->queue.dequeue();
+                this->queue.popFront();
             }
         }
         if (this->change_in_progress == false and not this->video_path.isEmpty() and this->position >= 0 and this->duration >= 0 and this->position >= this->duration - 0.5) {

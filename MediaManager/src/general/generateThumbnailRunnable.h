@@ -3,7 +3,7 @@
 #include <QQueue>
 #include <QProcess>
 #include <QPair>
-#include "SafeQueue.h"
+#include "NonBlockingQueue.h"
 
 namespace {
     constexpr int MtnSuccess = 0;
@@ -18,9 +18,9 @@ class generateThumbnailRunnable :
 {
     Q_OBJECT
 public:
-    SafeQueue<ThumbnailCommand> *queue = nullptr;
+    NonBlockingQueue<ThumbnailCommand> *queue = nullptr;
     generateThumbnailManager* manager = nullptr;
-    generateThumbnailRunnable(SafeQueue<ThumbnailCommand> *queue, generateThumbnailManager* manager = nullptr, QObject* parent = nullptr);
+    generateThumbnailRunnable(NonBlockingQueue<ThumbnailCommand> *queue, generateThumbnailManager* manager = nullptr, QObject* parent = nullptr);
     void run() override;
     static void generateThumbnail(QProcess& process, QString suffix, QString path);
     static void deleteThumbnail(QString path);

@@ -24,6 +24,7 @@ protected:
 
 private:
     QString search_text;
+    QString search_text_lower;
     QString watched_option; // "Yes", "No", "Mixed", "All"
     bool visible_only = false;
     QSet<QString> authorsWithUnwatched;

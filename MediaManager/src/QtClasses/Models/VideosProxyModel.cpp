@@ -13,9 +13,11 @@ VideosProxyModel::VideosProxyModel(QObject* parent)
 
 void VideosProxyModel::setSearchText(const QString& text) {
     search_text = text;
+    search_text_lower = text.toLower();
     if (!search_text.isEmpty()) {
-        cached_ratio = std::make_shared<rapidfuzz::fuzz::CachedPartialRatio<char>>(search_text.toLower().toStdString());
-    } else {
+        cached_ratio = std::make_shared<rapidfuzz::fuzz::CachedPartialRatio<char>>(search_text_lower.toStdString());
+    }
+    else {
         cached_ratio.reset();
     }
     invalidateFilter();
@@ -35,11 +37,19 @@ void VideosProxyModel::setVisibleOnlyChecked(bool enabled) {
 void VideosProxyModel::rebuildAuthorsWithUnwatched() {
     authorsWithUnwatched.clear();
     if (watched_option != "Mixed" || !sourceModel()) return;
+
+    // Cache column indices
+    const int watchedCol = ListColumns["WATCHED_COLUMN"];
+    const int authorCol = ListColumns["AUTHOR_COLUMN"];
     const int rows = sourceModel()->rowCount();
+
+    // Pre-allocate hash set
+    authorsWithUnwatched.reserve(rows / 10); // Estimate
+
     for (int r = 0; r < rows; ++r) {
-        const QModelIndex wIdx = sourceModel()->index(r, ListColumns["WATCHED_COLUMN"]);
-        const QModelIndex aIdx = sourceModel()->index(r, ListColumns["AUTHOR_COLUMN"]);
+        const QModelIndex wIdx = sourceModel()->index(r, watchedCol);
         if (wIdx.data(Qt::DisplayRole).toString() == "No") {
+            const QModelIndex aIdx = sourceModel()->index(r, authorCol);
             authorsWithUnwatched.insert(aIdx.data(Qt::DisplayRole).toString());
         }
     }
@@ -47,39 +57,63 @@ void VideosProxyModel::rebuildAuthorsWithUnwatched() {
 
 bool VideosProxyModel::filterAcceptsRow(int source_row, const QModelIndex& source_parent) const {
     Q_UNUSED(source_parent);
-    const QModelIndex wIdx = sourceModel()->index(source_row, ListColumns["WATCHED_COLUMN"]);
-    const QModelIndex aIdx = sourceModel()->index(source_row, ListColumns["AUTHOR_COLUMN"]);
-    const QModelIndex pIdx = sourceModel()->index(source_row, ListColumns["PATH_COLUMN"]);
-    const QModelIndex tIdx = sourceModel()->index(source_row, ListColumns["TAGS_COLUMN"]);
-    const QModelIndex tyIdx = sourceModel()->index(source_row, ListColumns["TYPE_COLUMN"]);
 
-    // watched filter
-    bool visible = false;
+    // Cache column indices (compiler will optimize these as constants)
+    static const int watchedCol = ListColumns["WATCHED_COLUMN"];
+    static const int authorCol = ListColumns["AUTHOR_COLUMN"];
+    static const int pathCol = ListColumns["PATH_COLUMN"];
+    static const int tagsCol = ListColumns["TAGS_COLUMN"];
+    static const int typeCol = ListColumns["TYPE_COLUMN"];
+
+    // Get all indices at once
+    QAbstractItemModel* srcModel = sourceModel();
+    const QModelIndex wIdx = srcModel->index(source_row, watchedCol);
+
+    // Watched filter - early exit if fails
     const QString w = wIdx.data(Qt::DisplayRole).toString();
+
     if (watched_option == "Mixed") {
-        visible = authorsWithUnwatched.contains(aIdx.data(Qt::DisplayRole).toString());
-    } else if (watched_option == "Yes") {
-        visible = (w == "Yes");
-    } else if (watched_option == "No") {
-        visible = (w == "No");
-    } else { // All
-        visible = true;
+        const QModelIndex aIdx = srcModel->index(source_row, authorCol);
+        if (!authorsWithUnwatched.contains(aIdx.data(Qt::DisplayRole).toString())) {
+            return false;
+        }
     }
+    else if (watched_option == "Yes") {
+        if (w != "Yes") return false;
+    }
+    else if (watched_option == "No") {
+        if (w != "No") return false;
+    }
+    // else: All - always passes
 
-    if (!visible) return false;
-
-    // search filter
+    // Search filter - only if search text exists
     if (!search_text.isEmpty()) {
-        const std::string combined = (pIdx.data(Qt::DisplayRole).toString() + " " +
-            aIdx.data(Qt::DisplayRole).toString() + " " +
-            tIdx.data(Qt::DisplayRole).toString() + " " +
-            tyIdx.data(Qt::DisplayRole).toString()).toLower().toStdString();
+        const QModelIndex pIdx = srcModel->index(source_row, pathCol);
+        const QModelIndex aIdx = srcModel->index(source_row, authorCol);
+        const QModelIndex tIdx = srcModel->index(source_row, tagsCol);
+        const QModelIndex tyIdx = srcModel->index(source_row, typeCol);
+
+        // Build combined string - reserve space to avoid reallocations
+        QString combined;
+        combined.reserve(200); // Reasonable estimate
+        combined.append(pIdx.data(Qt::DisplayRole).toString());
+        combined.append(' ');
+        combined.append(aIdx.data(Qt::DisplayRole).toString());
+        combined.append(' ');
+        combined.append(tIdx.data(Qt::DisplayRole).toString());
+        combined.append(' ');
+        combined.append(tyIdx.data(Qt::DisplayRole).toString());
+
+        const std::string combined_std = combined.toLower().toStdString();
+
         double score = 0;
         if (cached_ratio) {
-            score = cached_ratio->similarity(combined);
-        } else {
-            score = rapidfuzz::fuzz::partial_ratio(search_text.toLower().toStdString(), combined);
+            score = cached_ratio->similarity(combined_std);
         }
+        else {
+            score = rapidfuzz::fuzz::partial_ratio(search_text_lower.toStdString(), combined_std);
+        }
+
         if (score <= 80) return false;
     }
 
@@ -87,18 +121,27 @@ bool VideosProxyModel::filterAcceptsRow(int source_row, const QModelIndex& sourc
 }
 
 bool VideosProxyModel::lessThan(const QModelIndex& left, const QModelIndex& right) const {
-    if (left.column() == ListColumns["RATING_COLUMN"]) {
+    const int col = left.column();
+
+    // Special handling for rating column
+    if (col == ListColumns["RATING_COLUMN"]) {
         const double l = left.data(CustomRoles::rating).toDouble();
         const double r = right.data(CustomRoles::rating).toDouble();
         return l < r;
     }
+
+    // Standard string comparison with collator
     const QString lKey = left.data(Qt::DisplayRole).toString();
     const QString rKey = right.data(Qt::DisplayRole).toString();
     const int cmp = collator.compare(lKey, rKey);
-    if (cmp == 0) {
-        QString lPath = left.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
-        QString rPath = right.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
-        return collator.compare(lPath, rPath) < 0;
+
+    if (cmp != 0) {
+        return cmp < 0;
     }
-    return cmp < 0;
+
+    // Tie-breaker: compare by path
+    static const int pathCol = ListColumns["PATH_COLUMN"];
+    const QString lPath = left.siblingAtColumn(pathCol).data(Qt::DisplayRole).toString();
+    const QString rPath = right.siblingAtColumn(pathCol).data(Qt::DisplayRole).toString();
+    return collator.compare(lPath, rPath) < 0;
 }

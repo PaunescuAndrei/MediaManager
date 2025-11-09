@@ -4,6 +4,7 @@
 #include <QPoint>
 #include <QTreeWidgetItem>
 #include <QPointer>
+#include <QMap>
 #include "IconChanger.h"
 #include <QQueue>
 #include "generateThumbnailManager.h"
@@ -21,6 +22,7 @@
 #include "rapidfuzz_all.hpp"
 #include <QCompleter>
 #include <QThreadPool>
+#include <QPersistentModelIndex>
 
 class MainApp;
 class VideosModel;
@@ -155,6 +157,16 @@ public:
     bool randomVideo(RandomModes::Mode random_mode, bool ignore_filters_and_defaults = false, QStringList vid_type_include = {}, QStringList vid_type_exclude = {}, bool reset_progress = true);
     void refreshCurrentVideo();
     void highlightCurrentItem(const QPersistentModelIndex& proxyIndex = QPersistentModelIndex(), bool scrollAndSelectItem = true);
+    struct AuthorVideoModelData {
+        QString author;
+        QList<VideoWeightedData> videos;
+        QPersistentModelIndex firstProxyIndex;
+        int firstSourceRow = -1;
+    };
+    QMap<QString, AuthorVideoModelData> buildAuthorVideoMap(const QString& exclude_author, const QList<VideoWeightedData>& all_videos) const;
+    QList<VideoWeightedData> calculateAuthorWeights(const QMap<QString, AuthorVideoModelData>& author_map) const;
+    QVector<int> authorUnwatchedRows(const QString& authorOrPath) const;
+    int nextAuthorRow(const QVector<int>& rows, int currentRow) const;
     void insertDialogButton();
     bool TagsDialogButton();
     void resetDB(QString directory);

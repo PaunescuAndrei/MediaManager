@@ -193,11 +193,16 @@ int VideosModel::rowById(int id) const {
 }
 
 void VideosModel::setRandomPercentForPath(const QString& path, double value) {
-    int r = findRowByPath(path);
+    int r = rowByPath(path);
     if (r < 0) return;
-    rows[r].randomPercent = value;
+    setRandomPercentAtRow(r, value);
+}
+
+void VideosModel::setRandomPercentAtRow(int row, double value) {
+    if (row < 0 || row >= rows.size()) return;
+    rows[row].randomPercent = value;
     const int col = ListColumns["RANDOM%_COLUMN"];
-    emit dataChanged(index(r, col), index(r, col), { Qt::DisplayRole });
+    emit dataChanged(index(row, col), index(row, col), { Qt::DisplayRole });
 }
 
 void VideosModel::setHighlightedPath(const QString& path) {

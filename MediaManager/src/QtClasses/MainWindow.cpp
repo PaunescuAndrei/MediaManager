@@ -3619,12 +3619,26 @@ QMap<QString, MainWindow::AuthorVideoModelData> MainWindow::buildAuthorVideoMap(
     QMap<QString, AuthorVideoModelData> author_map;
     if (!this->videosModel) return author_map;
 
+    // Cache column indices
+    const int watchedCol = ListColumns["WATCHED_COLUMN"];
+    const int authorCol = ListColumns["AUTHOR_COLUMN"];
+    const int pathCol = ListColumns["PATH_COLUMN"];
+
+    // First pass: build author map from all_videos
     for (const VideoWeightedData& video : all_videos) {
         int row = this->videosModel->rowByPath(video.path);
         if (row < 0) continue;
-        if (this->videosModel->index(row, ListColumns["WATCHED_COLUMN"]).data(Qt::DisplayRole).toString() != "No") continue;
-        QString author = this->videosModel->index(row, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
-        QString path = this->videosModel->index(row, ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+
+        // Cache the indices to avoid repeated index() calls
+        const QModelIndex watchedIdx = this->videosModel->index(row, watchedCol);
+        if (watchedIdx.data(Qt::DisplayRole).toString() != "No") continue;
+
+        const QModelIndex authorIdx = this->videosModel->index(row, authorCol);
+        const QModelIndex pathIdx = this->videosModel->index(row, pathCol);
+
+        QString author = authorIdx.data(Qt::DisplayRole).toString();
+        QString path = pathIdx.data(Qt::DisplayRole).toString();
+
         if (author.isEmpty()) author = path;
         if (!exclude_author.isEmpty() && author == exclude_author) continue;
 
@@ -3636,13 +3650,22 @@ QMap<QString, MainWindow::AuthorVideoModelData> MainWindow::buildAuthorVideoMap(
         }
     }
 
+    // Second pass: find first proxy index for each author
     if (this->videosProxy) {
-        for (int proxyRow = 0; proxyRow < this->videosProxy->rowCount(); ++proxyRow) {
-            const QModelIndex watchedIdx = this->videosProxy->index(proxyRow, ListColumns["WATCHED_COLUMN"]);
+        const int proxyRowCount = this->videosProxy->rowCount();
+
+        for (int proxyRow = 0; proxyRow < proxyRowCount; ++proxyRow) {
+            const QModelIndex watchedIdx = this->videosProxy->index(proxyRow, watchedCol);
             if (watchedIdx.data(Qt::DisplayRole).toString() != "No") continue;
-            QString author = this->videosProxy->index(proxyRow, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
-            QString path = this->videosProxy->index(proxyRow, ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+
+            const QModelIndex authorIdx = this->videosProxy->index(proxyRow, authorCol);
+            const QModelIndex pathIdx = this->videosProxy->index(proxyRow, pathCol);
+
+            QString author = authorIdx.data(Qt::DisplayRole).toString();
+            QString path = pathIdx.data(Qt::DisplayRole).toString();
+
             if (author.isEmpty()) author = path;
+
             auto it = author_map.find(author);
             if (it != author_map.end() && !it->firstProxyIndex.isValid()) {
                 it->firstProxyIndex = QPersistentModelIndex(this->videosProxy->index(proxyRow, 0));
@@ -3650,6 +3673,7 @@ QMap<QString, MainWindow::AuthorVideoModelData> MainWindow::buildAuthorVideoMap(
         }
     }
 
+    // Third pass: set fallback proxy indices
     if (this->videosModel) {
         for (auto it = author_map.begin(); it != author_map.end(); ++it) {
             if (!it->firstProxyIndex.isValid() && it->firstSourceRow >= 0) {
@@ -3664,7 +3688,10 @@ QMap<QString, MainWindow::AuthorVideoModelData> MainWindow::buildAuthorVideoMap(
 QList<VideoWeightedData> MainWindow::calculateAuthorWeights(const QMap<QString, AuthorVideoModelData>& author_map) const {
     QList<VideoWeightedData> author_weighted_data;
     if (!this->videosModel) return author_weighted_data;
+
     author_weighted_data.reserve(author_map.size());
+    const int pathCol = ListColumns["PATH_COLUMN"];
+
     for (auto it = author_map.constBegin(); it != author_map.constEnd(); ++it) {
         const AuthorVideoModelData& data = it.value();
         if (data.videos.isEmpty()) continue;
@@ -3678,45 +3705,75 @@ QList<VideoWeightedData> MainWindow::calculateAuthorWeights(const QMap<QString, 
         }
         if (!idx.isValid() || idx.model() != this->videosModel) continue;
 
+        // Aggregate stats in single pass
         double total_views = 0, total_rating = 0, total_tags = 0;
+        const int count = data.videos.size();
+
         for (const VideoWeightedData& v : data.videos) {
             total_views += v.views;
             total_rating += v.rating;
             total_tags += v.tagsWeight;
         }
-        const int count = data.videos.size();
+
+        // Build result with cached pathIdx
+        const QModelIndex pathIdx = idx.siblingAtColumn(pathCol);
+
         VideoWeightedData author_data;
-        const QModelIndex pathIdx = idx.siblingAtColumn(ListColumns["PATH_COLUMN"]);
         author_data.id = pathIdx.data(CustomRoles::id).toInt();
         author_data.path = pathIdx.data(Qt::DisplayRole).toString();
         author_data.views = count ? total_views / count : 0.0;
         author_data.rating = count ? total_rating / count : 0.0;
         author_data.tagsWeight = count ? total_tags / count : 0.0;
+
         author_weighted_data.append(author_data);
     }
+
     return author_weighted_data;
 }
 
 QVector<int> MainWindow::authorUnwatchedRows(const QString& authorOrPath) const {
     QVector<int> rows;
     if (!this->videosProxy) return rows;
-    for (int r = 0; r < this->videosProxy->rowCount(); ++r) {
-        if (this->videosProxy->index(r, ListColumns["WATCHED_COLUMN"]).data(Qt::DisplayRole).toString() != "No")
+
+    // Cache column indices
+    const int watchedCol = ListColumns["WATCHED_COLUMN"];
+    const int authorCol = ListColumns["AUTHOR_COLUMN"];
+    const int pathCol = ListColumns["PATH_COLUMN"];
+    const int rowCount = this->videosProxy->rowCount();
+
+    // Pre-allocate reasonable capacity
+    rows.reserve(rowCount / 10); // Estimate 10% might match
+
+    for (int r = 0; r < rowCount; ++r) {
+        const QModelIndex watchedIdx = this->videosProxy->index(r, watchedCol);
+        if (watchedIdx.data(Qt::DisplayRole).toString() != "No")
             continue;
-        QString author = this->videosProxy->index(r, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
-        QString path = this->videosProxy->index(r, ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+
+        const QModelIndex authorIdx = this->videosProxy->index(r, authorCol);
+        const QModelIndex pathIdx = this->videosProxy->index(r, pathCol);
+
+        QString author = authorIdx.data(Qt::DisplayRole).toString();
+        QString path = pathIdx.data(Qt::DisplayRole).toString();
+
         if (author.isEmpty()) author = path;
-        if (author == authorOrPath) rows.append(r);
+        if (author == authorOrPath) {
+            rows.append(r);
+        }
     }
+
     return rows;
 }
 
 int MainWindow::nextAuthorRow(const QVector<int>& rows, int currentRow) const {
     if (rows.isEmpty()) return -1;
-    int idx = rows.indexOf(currentRow);
+
+    const int idx = rows.indexOf(currentRow);
     if (idx == -1) return -1;
-    if (idx + 1 < rows.size()) return rows[idx + 1];
+
+    const int nextIdx = idx + 1;
+    if (nextIdx < rows.size()) return rows[nextIdx];
     if (rows.size() > 1) return rows.first();
+
     return -1;
 }
 

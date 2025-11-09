@@ -2,8 +2,8 @@
 #include <string>
 #include <QSqlDatabase>
 #include <QTreeWidget>
+#include "VideoData.h"
 #include "sqlite3.h"
-#include "videosTreeWidget.h"
 #include <tuple>
 #include "definitions.h"
 
@@ -16,6 +16,7 @@ public:
     ~sqliteDB();
     void createTables();
     QList<QTreeWidgetItem*> getVideos(QString category);
+    QVector<VideoRow> getVideosData(QString category);
     QSet<Tag> getAllTags();
     QSet<Tag> getTags(int video_id);
     void insertTag(int video_id, int tag_id);

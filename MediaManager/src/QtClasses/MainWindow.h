@@ -3,6 +3,7 @@
 #include "ui_MainWindow.h"
 #include <QPoint>
 #include <QTreeWidgetItem>
+#include <QPointer>
 #include "IconChanger.h"
 #include <QQueue>
 #include "generateThumbnailManager.h"
@@ -22,12 +23,16 @@
 #include <QThreadPool>
 
 class MainApp;
+class VideosModel;
+class VideosProxyModel;
 
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
 
 public:
+    VideosModel* videosModel = nullptr;
+    VideosProxyModel* videosProxy = nullptr;
     QCompleter* search_completer = nullptr;
     Ui::MainWindow ui;
     MainApp *App = nullptr;
@@ -69,12 +74,9 @@ public:
     void initStyleSheets();
     void initRatingIcons();
     void updateRating(QPersistentModelIndex index, double old_value, double new_value);
-    void updateAuthors(QList<QTreeWidgetItem*> items);
-    void updateAuthors(QString value, QList<QTreeWidgetItem*> items);
-    void updateNames(QList<QTreeWidgetItem*> items);
-    void updateNames(QString value, QList<QTreeWidgetItem*> items);
+    
     void updatePath(int video_id, QString new_path);
-    void syncItems(QTreeWidgetItem* main_item, QList<QTreeWidgetItem*> items);
+    
     void toggleSearchBar();
     void toggleDates(bool scroll = true);
     void init_icons();
@@ -106,22 +108,38 @@ public:
     void updateVideoListRandomProbabilities();
     void updateVideoListRandomProbabilitiesIfVisible();
     void updateSearchCompleter();
-    static bool determineVisibility(QTreeWidgetItem* item, const QString& watched_option, const QString& search_text, const rapidfuzz::fuzz::CachedPartialRatio<char>* cached_search_text_ratio, const QSet<QString>& authorsWithUnwatched);
+    
     void refreshVisibility(QString search_text);
     void refreshVisibility();
+    // Model helpers
+    QModelIndex sourceIndexByPath(const QString& path) const;
+    QModelIndex sourceIndexById(int id) const;
+    QModelIndex proxyIndexByPath(const QString& path) const;
+    QPersistentModelIndex persistentProxyIndexByPath(const QString& path) const;
+    QStringList selectedPaths() const;
+    QList<int> selectedIds() const;
+    QString pathById(int id) const;
+    // Model-based batch operations
+    void updateAuthors(const QList<int>& ids);
+    void updateAuthors(QString value, const QList<int>& ids);
+    void updateNames(const QList<int>& ids);
+    void updateNames(QString value, const QList<int>& ids);
+    void setType(QString type, const QList<int>& ids);
+    void setViews(int value, const QList<int>& ids);
+    void incrementViews(int count, const QList<int>& ids);
+    void setWatched(QString value, const QList<int>& ids);
+    void DeleteDialogButton(const QList<int>& ids);
     void refreshHeadersVisibility();
     void videosWidgetHeaderContextMenu(QPoint point);
     void updateHeaderSettings(QStringList settings);
     void videosWidgetContextMenu(QPoint point);
-    VideosTagsDialog* editTags(QList<QTreeWidgetItem*> items, QWidget* parent = nullptr);
+    
     void setCurrent(int id, QString path, QString name, QString author, QString tags, bool reset_progress = false);
     QString getWatchedVisibilityOption(bool watched_yes, bool watched_no, bool watched_mixed, bool search_bar_visible, bool visible_only_checkbox);
-    void DeleteDialogButton(QList<QTreeWidgetItem*> items);
-    void setWatched(QString value, QList<QTreeWidgetItem*> items);
+    
     void selectItems(QStringList items, bool clear_selection = true);
     void selectItemsDelayed(QStringList items, bool clear_selection = true);
-    void incrementViews(int count, QList<QTreeWidgetItem*> items);
-    void setType(QString type, QList<QTreeWidgetItem*> items);
+    
     bool InsertVideoFiles(QStringList files,bool update_state = true, QString currentdb = "", QString type = "");
     void openEmptyVideoPlayer();
     void incrementtimeWatchedIncrement(double value);
@@ -136,7 +154,7 @@ public:
     QJsonObject getRandomSettings(RandomModes::Mode random_mode, bool ignore_filters_and_defaults = false, QStringList vid_type_include = {}, QStringList vid_type_exclude = {});
     bool randomVideo(RandomModes::Mode random_mode, bool ignore_filters_and_defaults = false, QStringList vid_type_include = {}, QStringList vid_type_exclude = {}, bool reset_progress = true);
     void refreshCurrentVideo();
-    void selectCurrentItem(QTreeWidgetItem* item = nullptr, bool selectcurrent = true);
+    void highlightCurrentItem(const QPersistentModelIndex& proxyIndex = QPersistentModelIndex(), bool scrollAndSelectItem = true);
     void insertDialogButton();
     bool TagsDialogButton();
     void resetDB(QString directory);
@@ -158,12 +176,9 @@ public:
     NextVideoSettings getNextVideoSettings();
     NextVideoModes::Mode getNextVideoMode();
     bool NextVideo(NextVideoModes::Mode mode, bool increment, bool update_watched_state);
-    bool NextVideo(bool random, bool increment, bool update_watched_state); // Legacy function for backward compatibility
-    bool setNextVideo(QTreeWidgetItem* item);
-    QMap<QString, AuthorVideoData> getAuthorVideoMap(const QString& exclude_author, const QList<VideoWeightedData>& all_videos);
-    void findFirstItemsForAuthors(QMap<QString, AuthorVideoData>& author_map);
-    QList<VideoWeightedData> calculateAuthorWeights(const QMap<QString, AuthorVideoData>& author_map);
-    bool seriesRandomVideo(QTreeWidgetItem* current_item);
+    bool NextVideo(bool random, bool increment, bool update_watched_state);
+    bool setNextVideo(const QPersistentModelIndex& current_proxy_index);
+    bool seriesRandomVideo(const QPersistentModelIndex& current_proxy_index);
     int calculate_sv_target();
     void setCounterDialogButton();
     void loadIcons(QString path);
@@ -192,7 +207,7 @@ public:
     void bringWindowToFront();
     void center();
     void resize_center(int w, int h);
-    void setViews(int value, QList<QTreeWidgetItem*> items);
+    
     void dragEnterEvent(QDragEnterEvent* e) override;
     void dragMoveEvent(QDragMoveEvent* e) override;
     void dropEvent(QDropEvent* e) override;

@@ -108,3 +108,27 @@ void VideosTagsDialog::updateTags()
 VideosTagsDialog::~VideosTagsDialog() {
 
 }
+
+VideosTagsDialog::VideosTagsDialog(const QList<int>& ids, MainWindow* MW, QWidget* parent) : QDialog(parent) {
+    this->MW = MW;
+    for (auto id : ids) {
+        // derive current tags text via DB or model; DB preferable for consistency
+        // we only need an initial tags string for show_empty_included logic
+        this->items.append({ id, QString() });
+    }
+    ui.setupUi(this);
+    this->setWindowModality(Qt::WindowModal);
+    QString tags = this->items.first().second;
+    for (auto& item : this->items) {
+        if (item.second != tags) {
+            this->show_empty_included = true;
+            break;
+        }
+    }
+    this->initTags();
+    connect(this->ui.editTagsButton, &QPushButton::clicked, this, [this] {if (this->MW) { if (this->MW->TagsDialogButton()) { this->updateTags(); } } });
+    connect(this->ui.InsertButton, &QPushButton::clicked, this, [this] {if (this->MW) { this->insertTags(this->ui.listWidgetAvailable->selectedItems()); } });
+    connect(this->ui.RemoveButton, &QPushButton::clicked, this, [this] {if (this->MW) { this->removeTags(this->ui.listWidgetAdded->selectedItems()); } });
+    connect(this->ui.listWidgetAvailable, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* item) { this->insertTags({ item }); });
+    connect(this->ui.listWidgetAdded, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* item) { this->removeTags({ item }); });
+}

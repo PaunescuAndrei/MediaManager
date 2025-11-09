@@ -15,7 +15,9 @@
 #include <QAction>
 #include <QModelIndex>
 #include <QPushButton>
-#include "videosTreeWidget.h"
+#include "VideosTreeView.h"
+#include "Models/VideosModel.h"
+#include "Models/VideosProxyModel.h"
 #include "DeleteDialog.h"
 #include <QScrollBar>
 #include <QMimeDatabase>
@@ -46,7 +48,7 @@
 #include "generalEventFilter.h"
 #include "customQButton.h"
 #include "scrollAreaEventFilter.h"
-#include "TreeWidgetItem.h"
+
 #include "ProgressBarQLabel.h"
 #include <QColorDialog>
 #include "FilterDialog.h"
@@ -56,6 +58,7 @@
 #include "loadBackupDialog.h"
 #include "TagsDialog.h"
 #include "UpdatePathsDialog.h"
+#include "TreeWidgetItem.h"
 
 #pragma warning(push ,3)
 #include "rapidfuzz_all.hpp"
@@ -168,36 +171,44 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         (void)value; // Suppress unused variable warning
     });
 
-    DateItemDelegate* datedelegate = new DateItemDelegate(this->ui.videosWidget,"dd/MM/yyyy hh:mm");
-    this->ui.videosWidget->setItemDelegateForColumn(ListColumns["RATING_COLUMN"], new StarDelegate(this->active,this->halfactive,this->inactive,this->ui.videosWidget,this));
+    // Setup model + proxy on the view
+    this->videosModel = new VideosModel(this);
+    this->videosProxy = new VideosProxyModel(this);
+    this->videosProxy->setSourceModel(this->videosModel);
+    this->ui.videosWidget->setModel(this->videosProxy);
+    DateItemDelegate* datedelegate = new DateItemDelegate(this->ui.videosWidget, "dd/MM/yyyy hh:mm");
+    this->ui.videosWidget->setItemDelegateForColumn(ListColumns["RATING_COLUMN"], new StarDelegate(this->active, this->halfactive, this->inactive, this->ui.videosWidget, this));
     this->ui.videosWidget->setItemDelegateForColumn(ListColumns["DATE_CREATED_COLUMN"], datedelegate);
     this->ui.videosWidget->setItemDelegateForColumn(ListColumns["LAST_WATCHED_COLUMN"], datedelegate);
     this->ui.videosWidget->setEditTriggers(this->ui.videosWidget->NoEditTriggers);
     this->ui.videosWidget->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
-    connect(this->ui.videosWidget, &videosTreeWidget::itemDoubleClicked, this, [this](QTreeWidgetItem* item,int column) {
-        if (column == ListColumns["RATING_COLUMN"]) {
-            item->setFlags(item->flags() | Qt::ItemIsEditable);
-            this->ui.videosWidget->editItem(item, column);
-        }
-        else
-            this->watchSelected(item->data(ListColumns["PATH_COLUMN"],CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]));
-    });
-    connect(this->ui.videosWidget, &videosTreeWidget::itemMiddleClicked, this, [this](QTreeWidgetItem* item) { this->openThumbnails(item->text(ListColumns["PATH_COLUMN"])); });
     this->ui.videosWidget->setContextMenuPolicy(Qt::CustomContextMenu);
     this->ui.videosWidget->header()->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(this->ui.videosWidget, &QTreeWidget::customContextMenuRequested, this, &MainWindow::videosWidgetContextMenu);
-    connect(this->ui.videosWidget->header(), &QTreeWidget::customContextMenuRequested, this, &MainWindow::videosWidgetHeaderContextMenu);
+    connect(this->ui.videosWidget, &QWidget::customContextMenuRequested, this, &MainWindow::videosWidgetContextMenu);
+    connect(this->ui.videosWidget->header(), &QWidget::customContextMenuRequested, this, &MainWindow::videosWidgetHeaderContextMenu);
+    this->ui.videosWidget->configureHeader();
+    int savedSortColumn = ListColumns[this->App->config->get("sort_column")];
+    Qt::SortOrder savedSortOrder = static_cast<Qt::SortOrder>(sortingDict[this->App->config->get("sort_order")]);
+    this->ui.videosWidget->sortByColumn(savedSortColumn, savedSortOrder);
     auto header = this->ui.videosWidget->header();
-    header->setSortIndicator(ListColumns[this->App->config->get("sort_column")], (Qt::SortOrder)sortingDict[this->App->config->get("sort_order")]);
-    header->setSectionResizeMode(QHeaderView::ResizeToContents);
-    header->setStretchLastSection(false);
-    header->setSectionResizeMode(ListColumns["AUTHOR_COLUMN"], QHeaderView::Interactive);
-    this->ui.videosWidget->headerItem()->setText(ListColumns["WATCHED_COLUMN"], "W");
-    header->setSectionResizeMode(ListColumns["NAME_COLUMN"], QHeaderView::Stretch);
-    header->setSectionResizeMode(ListColumns["PATH_COLUMN"], QHeaderView::Stretch);
-    header->setSectionResizeMode(ListColumns["TAGS_COLUMN"], QHeaderView::Fixed);
-    header->resizeSection(ListColumns["TAGS_COLUMN"], 150);
     connect(header, &QHeaderView::sectionClicked, this, [this] { if(!this->toggleDatesFlag) this->updateSortConfig(); });
+    connect(this->ui.videosWidget, &QTreeView::doubleClicked, this, [this](const QModelIndex& proxyIndex) {
+        if (!proxyIndex.isValid()) return;
+        if (proxyIndex.column() == ListColumns["RATING_COLUMN"]) {
+            this->ui.videosWidget->edit(proxyIndex);
+        } else {
+            QModelIndex src = this->videosProxy->mapToSource(proxyIndex);
+            int id = this->videosModel->index(src.row(), ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
+            QString path = this->videosModel->index(src.row(), ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+            this->watchSelected(id, path);
+        }
+    });
+    connect(this->ui.videosWidget, &VideosTreeView::itemMiddleClicked, this, [this](const QModelIndex& proxyIndex) {
+        if (!proxyIndex.isValid()) return;
+        QModelIndex src = this->videosProxy->mapToSource(proxyIndex);
+        QString path = this->videosModel->index(src.row(), ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+        this->openThumbnails(path);
+    });
     connect(this, &MainWindow::fileDropped, this, [this](QStringList files, QWidget *widget) {
         if (files.size() == 1) {
             QMimeDatabase db;
@@ -429,14 +440,18 @@ void MainWindow::VideoInfoNotification() {
     else
         this->notification_dialog->ui.tags->setText(this->ui.currentVideo->tags);
     StarRating starRating = StarRating(this->active, this->halfactive, this->inactive, 0, 5.0);
-    if (this->ui.videosWidget->last_selected) {
-        bool ok = true;
-        double stars = this->ui.videosWidget->last_selected->data(ListColumns["RATING_COLUMN"], CustomRoles::rating).toDouble(&ok);
-        if (not ok)
-            stars = 0;
-        starRating.setStarCount(stars);
-        this->notification_dialog->ui.starsLabel->setText(QString(" %1 ").arg(stars));
-        this->notification_dialog->ui.viewsLabel->setText(QString(" %1 Views ").arg(this->ui.videosWidget->last_selected->text(ListColumns["VIEWS_COLUMN"])));
+    {
+        // Use current video path to fetch rating/views
+        QString path = this->ui.currentVideo->path;
+        QModelIndex srcIdx = this->sourceIndexByPath(path);
+        if (srcIdx.isValid()) {
+            const QModelIndex ratingIdx = this->videosModel->index(srcIdx.row(), ListColumns["RATING_COLUMN"]);
+            const QModelIndex viewsIdx = this->videosModel->index(srcIdx.row(), ListColumns["VIEWS_COLUMN"]);
+            double stars = ratingIdx.data(CustomRoles::rating).toDouble();
+            starRating.setStarCount(stars);
+            this->notification_dialog->ui.starsLabel->setText(QString(" %1 ").arg(stars));
+            this->notification_dialog->ui.viewsLabel->setText(QString(" %1 Views ").arg(viewsIdx.data(Qt::DisplayRole).toString()));
+        }
     }
     this->notification_dialog->ui.rating->setStarRating(starRating);
 
@@ -465,7 +480,7 @@ void MainWindow::changePalette(QPalette palette) {
     this->App->setPalette(palette);
     this->initRatingIcons();
     this->initStyleSheets();
-    this->selectCurrentItem(nullptr, false);
+    this->highlightCurrentItem(QPersistentModelIndex(), false);
 }
 
 void MainWindow::initStyleSheets() {
@@ -514,74 +529,66 @@ void MainWindow::initRatingIcons() {
     delete oldicon;
 }
 
+QModelIndex MainWindow::sourceIndexByPath(const QString& path) const {
+    if (!this->videosModel) return QModelIndex();
+    int r = this->videosModel->rowByPath(path);
+    if (r < 0) return QModelIndex();
+    return this->videosModel->index(r, 0);
+}
+
+QModelIndex MainWindow::proxyIndexByPath(const QString& path) const {
+    QModelIndex src = sourceIndexByPath(path);
+    if (!src.isValid()) return QModelIndex();
+    return this->videosProxy ? this->videosProxy->mapFromSource(src) : src;
+}
+
+QPersistentModelIndex MainWindow::persistentProxyIndexByPath(const QString& path) const {
+    return QPersistentModelIndex(proxyIndexByPath(path));
+}
+
+QStringList MainWindow::selectedPaths() const {
+    QStringList out;
+    if (!this->videosProxy) return out;
+    const auto rows = this->ui.videosWidget->selectionModel()->selectedRows(ListColumns["PATH_COLUMN"]);
+    out.reserve(rows.size());
+    for (const QModelIndex& proxyIdx : rows) {
+        out.push_back(proxyIdx.data(Qt::DisplayRole).toString());
+    }
+    return out;
+}
+
+QList<int> MainWindow::selectedIds() const {
+    QList<int> out;
+    if (!this->videosProxy) return out;
+    const auto rows = this->ui.videosWidget->selectionModel()->selectedRows(ListColumns["PATH_COLUMN"]);
+    out.reserve(rows.size());
+    for (const QModelIndex& proxyIdx : rows) {
+        out.push_back(proxyIdx.data(CustomRoles::id).toInt());
+    }
+    return out;
+}
+
+QString MainWindow::pathById(int id) const {
+    QModelIndex src = this->sourceIndexById(id);
+    if (!src.isValid()) return QString();
+    return this->videosModel->index(src.row(), ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+}
+
+QModelIndex MainWindow::sourceIndexById(int id) const {
+    if (!this->videosModel) return QModelIndex();
+    int r = this->videosModel->rowById(id);
+    if (r < 0) return QModelIndex();
+    return this->videosModel->index(r, 0);
+}
+
 void MainWindow::updateRating(QPersistentModelIndex index, double old_value, double new_value) {
-    QTreeWidgetItem* item = this->ui.videosWidget->itemFromIndex(index);
-    if (not item)
-        return;
-    qMainApp->logger->log(QString("Updating rating from %1 to %2 for \"%3\"").arg(old_value).arg(new_value).arg(item->text(ListColumns["PATH_COLUMN"])), "Stats", item->text(ListColumns["PATH_COLUMN"]));
-    this->App->db->updateRating(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), new_value);
-}
-
-void MainWindow::updateAuthors(QList<QTreeWidgetItem*> items) {
-    QString last = items.last()->text(ListColumns["PATH_COLUMN"]);
-    int lastScroll = this->ui.videosWidget->verticalScrollBar()->value();
-    if (!items.isEmpty()) {
-        this->App->db->db.transaction();
-        for (auto const& item : items) {
-            QString author = InsertSettingsDialog::get_author(item->text(ListColumns["PATH_COLUMN"]));
-            this->App->db->updateAuthor(item->data(ListColumns["PATH_COLUMN"],CustomRoles::id).toInt(), author);
-        }
-        this->App->db->db.commit();
-        this->refreshVideosWidget(false, true);
-        this->ui.videosWidget->findAndScrollToDelayed(last, false);
-        this->ui.videosWidget->scrollToVerticalPositionDelayed(lastScroll);
-    }
-}
-
-void MainWindow::updateAuthors(QString value, QList<QTreeWidgetItem*> items) {
-    QString last = items.last()->text(ListColumns["PATH_COLUMN"]);
-    int lastScroll = this->ui.videosWidget->verticalScrollBar()->value();
-    if (!items.isEmpty()) {
-        this->App->db->db.transaction();
-        for (auto const& item : items) {
-            this->App->db->updateAuthor(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), value);
-        }
-        this->App->db->db.commit();
-        this->refreshVideosWidget(false, true);
-        this->ui.videosWidget->findAndScrollToDelayed(last, false);
-        this->ui.videosWidget->scrollToVerticalPositionDelayed(lastScroll);
-    }
-}
-
-void MainWindow::updateNames(QList<QTreeWidgetItem*> items) {
-    QString last = items.last()->text(ListColumns["PATH_COLUMN"]);
-    int lastScroll = this->ui.videosWidget->verticalScrollBar()->value();
-    if (!items.isEmpty()) {
-        this->App->db->db.transaction();
-        for (auto const& item : items) {
-            QString name = InsertSettingsDialog::get_name(item->text(ListColumns["PATH_COLUMN"]));
-            this->App->db->updateName(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), name);
-        }
-        this->App->db->db.commit();
-        this->refreshVideosWidget(false, true);
-        this->ui.videosWidget->findAndScrollToDelayed(last, false);
-        this->ui.videosWidget->scrollToVerticalPositionDelayed(lastScroll);
-    }
-}
-
-void MainWindow::updateNames(QString value, QList<QTreeWidgetItem*> items) {
-    QString last = items.last()->text(ListColumns["PATH_COLUMN"]);
-    int lastScroll = this->ui.videosWidget->verticalScrollBar()->value();
-    if (!items.isEmpty()) {
-        this->App->db->db.transaction();
-        for (auto const& item : items) {
-            this->App->db->updateName(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), value);
-        }
-        this->App->db->db.commit();
-        this->refreshVideosWidget(false, true);
-        this->ui.videosWidget->findAndScrollToDelayed(last, false);
-        this->ui.videosWidget->scrollToVerticalPositionDelayed(lastScroll);
-    }
+    if (!index.isValid()) return;
+    QModelIndex src = this->videosProxy->mapToSource(index);
+    if (!src.isValid()) return;
+    QString path = this->videosModel->index(src.row(), ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+    int id = this->videosModel->index(src.row(), ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
+    qMainApp->logger->log(QString("Updating rating from %1 to %2 for \"%3\"").arg(old_value).arg(new_value).arg(path), "Stats", path);
+    this->App->db->updateRating(id, new_value);
 }
 
 void MainWindow::updatePath(int video_id, QString new_path) {
@@ -606,20 +613,7 @@ void MainWindow::updatePath(int video_id, QString new_path) {
     }
 }
 
-void MainWindow::syncItems(QTreeWidgetItem* main_item, QList<QTreeWidgetItem*> items) {
-    QString last = items.last()->text(ListColumns["PATH_COLUMN"]);
-    int lastScroll = this->ui.videosWidget->verticalScrollBar()->value();
-    if (!items.isEmpty()) {
-        this->App->db->db.transaction();
-        for (auto const& item : items) {
-            this->App->db->updateItem(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), "", "", "", "", "", "", main_item->text(ListColumns["WATCHED_COLUMN"]), main_item->text(ListColumns["VIEWS_COLUMN"]), main_item->data(ListColumns["RATING_COLUMN"], CustomRoles::rating).toString());
-        }
-        this->App->db->db.commit();
-        this->refreshVideosWidget(false, true);
-        this->ui.videosWidget->findAndScrollToDelayed(last, false);
-        this->ui.videosWidget->scrollToVerticalPositionDelayed(lastScroll);
-    }
-}
+ 
 
 void MainWindow::toggleSearchBar() {
     if (!this->ui.searchWidget->isVisible()) {
@@ -638,7 +632,8 @@ void MainWindow::toggleSearchBar() {
             this->search_timer->stop();
         do {
             if (this->lastScrolls.isEmpty()) {
-                this->ui.videosWidget->scrollToItemCustom(this->ui.videosWidget->last_selected, false, QAbstractItemView::PositionAtCenter);
+                QPersistentModelIndex pidx = this->persistentProxyIndexByPath(this->ui.currentVideo->path);
+                if (pidx.isValid()) this->ui.videosWidget->scrollTo(pidx, QAbstractItemView::PositionAtCenter);
                 break;
             }
             QPair<QString, int> scroll_value = this->lastScrolls.takeLast();
@@ -680,8 +675,10 @@ void MainWindow::toggleDates(bool scroll) {
         header->setSortIndicator(ListColumns[this->App->config->get("sort_column")], (Qt::SortOrder)sortingDict[this->App->config->get("sort_order")]);
         do {
             if (this->lastScrolls.isEmpty()) {
-                if(scroll)
-                    this->ui.videosWidget->scrollToItemCustom(this->ui.videosWidget->last_selected, false, QAbstractItemView::PositionAtCenter);
+                if (scroll) {
+                    QPersistentModelIndex pidx = this->persistentProxyIndexByPath(this->ui.currentVideo->path);
+                    if (pidx.isValid()) this->ui.videosWidget->scrollTo(pidx, QAbstractItemView::PositionAtCenter);
+                }
                 break;
             }
             QPair<QString, int> scroll_value = this->lastScrolls.takeLast();
@@ -695,101 +692,132 @@ void MainWindow::toggleDates(bool scroll) {
     }
 }
 
-bool MainWindow::determineVisibility(QTreeWidgetItem* item, const QString& watched_option, const QString& search_text, const rapidfuzz::fuzz::CachedPartialRatio<char>* cached_search_text_ratio, const QSet<QString>& authorsWithUnwatched)
-{
-    bool hidden = false;
-
-    //watched
-    if (watched_option == "Mixed") {
-        if (authorsWithUnwatched.contains(item->text(ListColumns["AUTHOR_COLUMN"]))) {
-            hidden = false;
-        }
-        else {
-            hidden = true;
-        }
-    }
-    else if (watched_option == "Yes" && item->text(ListColumns["WATCHED_COLUMN"]) == watched_option)
-        hidden = false;
-    else if (watched_option == "No" && item->text(ListColumns["WATCHED_COLUMN"]) == watched_option)
-        hidden = false;
-    else if (watched_option == "All")
-        hidden = false;
-    else
-        hidden = true;
-
-    //search
-    if (not search_text.isEmpty() and hidden == false) {
-        double score = 0;
-        std::string item_combined_text = (item->text(ListColumns["PATH_COLUMN"]) % " " %
-            item->text(ListColumns["AUTHOR_COLUMN"]) % " " %
-            item->text(ListColumns["TAGS_COLUMN"]) % " " %
-            item->text(ListColumns["TYPE_COLUMN"])).toLower().toStdString();
-
-        if (cached_search_text_ratio) {
-            score = cached_search_text_ratio->similarity(item_combined_text);
-
-        }
-        else {
-            score = rapidfuzz::fuzz::partial_ratio(search_text.toLower().toStdString(), item_combined_text);
-
-        }
-        if (score > 80) {
-            hidden = false;
-
-        }
-        else {
-            hidden = true;
-        }
-    }
-
-    return hidden;
-}
+ 
 
 void MainWindow::refreshVisibility(QString search_text)
 {
-	QList<QTreeWidgetItem*> items_to_filter = QList<QTreeWidgetItem*>();
-	bool watched_yes = true, watched_no = true, watched_mixed = false;
-	QString settings_str = QString();
-	if (this->App->currentDB == "PLUS")
-		settings_str = this->App->config->get("headers_plus_visible");
-	else if (this->App->currentDB == "MINUS")
-		settings_str = this->App->config->get("headers_minus_visible");
-	QStringList settings_list = settings_str.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
-	watched_yes = settings_list.contains("watched_yes");
-	watched_no = settings_list.contains("watched_no");
-	watched_mixed = settings_list.contains("watched_mixed");
-	QString option = this->getWatchedVisibilityOption(watched_yes, watched_no, watched_mixed, this->ui.searchBar->isVisible(), this->ui.visibleOnlyCheckBox->isChecked());
+    bool watched_yes = true, watched_no = true, watched_mixed = false;
+    QString settings_str;
+    if (this->App->currentDB == "PLUS")
+        settings_str = this->App->config->get("headers_plus_visible");
+    else if (this->App->currentDB == "MINUS")
+        settings_str = this->App->config->get("headers_minus_visible");
+    QStringList settings_list = settings_str.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+    watched_yes = settings_list.contains("watched_yes");
+    watched_no = settings_list.contains("watched_no");
+    watched_mixed = settings_list.contains("watched_mixed");
+    QString option = this->getWatchedVisibilityOption(watched_yes, watched_no, watched_mixed, this->ui.searchBar->isVisible(), this->ui.visibleOnlyCheckBox->isChecked());
 
-	std::shared_ptr<rapidfuzz::fuzz::CachedPartialRatio<char>> cached_ratio_ptr_shared;
-	if (!search_text.isEmpty()) {
-		cached_ratio_ptr_shared = std::make_shared<rapidfuzz::fuzz::CachedPartialRatio<char>>(
-			search_text.toLower().toStdString()
-		);
-	}
+    if (this->videosProxy) {
+        this->videosProxy->setWatchedOption(option);
+        this->videosProxy->setSearchText(search_text);
+    }
+    this->old_search = search_text;
+}
 
-	QSet<QString> authorsWithUnwatched;
-	QTreeWidgetItemIterator it(this->ui.videosWidget);
-	while (*it) {
-		QTreeWidgetItem* item = *it;
-		items_to_filter.append(item);
-		if (option == "Mixed" && item->text(ListColumns["WATCHED_COLUMN"]) == "No") {
-			authorsWithUnwatched.insert(item->text(ListColumns["AUTHOR_COLUMN"]));
-		}
-		++it;
-	}
+// Model-based batch operations (ids)
+void MainWindow::updateAuthors(const QList<int>& ids) {
+    if (ids.isEmpty()) return;
+    QString last = pathById(ids.last());
+    int lastScroll = this->ui.videosWidget->verticalScrollBar()->value();
+    this->App->db->db.transaction();
+    for (int id : ids) {
+        QString author = InsertSettingsDialog::get_author(pathById(id));
+        this->App->db->updateAuthor(id, author);
+    }
+    this->App->db->db.commit();
+    this->refreshVideosWidget(false, true);
+    this->ui.videosWidget->findAndScrollToDelayed(last, false);
+    this->ui.videosWidget->scrollToVerticalPositionDelayed(lastScroll);
+}
 
-	QList<bool> hidden_flags = QtConcurrent::blockingMapped(this->searchThreadPool, items_to_filter, [=](QTreeWidgetItem* item) {
-		return determineVisibility(item, option, search_text, cached_ratio_ptr_shared.get(), authorsWithUnwatched);
-		});
+void MainWindow::updateAuthors(QString value, const QList<int>& ids) {
+    if (ids.isEmpty()) return;
+    QString last = pathById(ids.last());
+    int lastScroll = this->ui.videosWidget->verticalScrollBar()->value();
+    this->App->db->db.transaction();
+    for (int id : ids) this->App->db->updateAuthor(id, value);
+    this->App->db->db.commit();
+    this->refreshVideosWidget(false, true);
+    this->ui.videosWidget->findAndScrollToDelayed(last, false);
+    this->ui.videosWidget->scrollToVerticalPositionDelayed(lastScroll);
+}
 
-	for (int i = 0; i < items_to_filter.count(); ++i)
-	{
-		if (i < hidden_flags.count())
-		{
-			items_to_filter[i]->setHidden(hidden_flags[i]);
-		}
-	}
-	this->old_search = search_text;
+void MainWindow::updateNames(const QList<int>& ids) {
+    if (ids.isEmpty()) return;
+    QString last = pathById(ids.last());
+    int lastScroll = this->ui.videosWidget->verticalScrollBar()->value();
+    this->App->db->db.transaction();
+    for (int id : ids) {
+        QString name = InsertSettingsDialog::get_name(pathById(id));
+        this->App->db->updateName(id, name);
+    }
+    this->App->db->db.commit();
+    this->refreshVideosWidget(false, true);
+    this->ui.videosWidget->findAndScrollToDelayed(last, false);
+    this->ui.videosWidget->scrollToVerticalPositionDelayed(lastScroll);
+}
+
+void MainWindow::updateNames(QString value, const QList<int>& ids) {
+    if (ids.isEmpty()) return;
+    QString last = pathById(ids.last());
+    int lastScroll = this->ui.videosWidget->verticalScrollBar()->value();
+    this->App->db->db.transaction();
+    for (int id : ids) this->App->db->updateName(id, value);
+    this->App->db->db.commit();
+    this->refreshVideosWidget(false, true);
+    this->ui.videosWidget->findAndScrollToDelayed(last, false);
+    this->ui.videosWidget->scrollToVerticalPositionDelayed(lastScroll);
+}
+
+void MainWindow::setType(QString type, const QList<int>& ids) {
+    if (ids.isEmpty()) return;
+    this->App->db->db.transaction();
+    for (int id : ids) this->App->db->updateType(id, type);
+    this->App->db->db.commit();
+    this->refreshVideosWidget(true, true);
+}
+
+void MainWindow::setViews(int value, const QList<int>& ids) {
+    if (ids.isEmpty()) return;
+    this->App->db->db.transaction();
+    for (int id : ids) this->App->db->setViews(id, value);
+    this->App->db->db.commit();
+    this->refreshVideosWidget(true, true);
+}
+
+void MainWindow::incrementViews(int count, const QList<int>& ids) {
+    if (ids.isEmpty()) return;
+    this->App->db->db.transaction();
+    for (int id : ids) this->App->db->incrementVideoViews(id, count, false);
+    this->App->db->db.commit();
+    this->refreshVideosWidget(true, true);
+}
+
+void MainWindow::setWatched(QString value, const QList<int>& ids) {
+    if (ids.isEmpty()) return;
+    this->App->db->db.transaction();
+    for (int id : ids) this->App->db->updateWatchedState(id, value, false, value == "Yes");
+    this->App->db->db.commit();
+    this->refreshVideosWidget(true, true);
+}
+
+void MainWindow::DeleteDialogButton(const QList<int>& ids) {
+    DeleteDialog dialog = DeleteDialog(this);
+    int value = dialog.exec();
+    if (value == QDialog::Accepted) {
+        if (!ids.isEmpty()) {
+            this->App->db->db.transaction();
+            for (int id : ids) {
+                QString p = pathById(id);
+                this->App->db->deleteVideo(id);
+                generateThumbnailRunnable::deleteThumbnail(p);
+            }
+            this->App->db->db.commit();
+            this->refreshVideosWidget();
+            this->updateTotalListLabel();
+        }
+    }
 }
 
 void MainWindow::refreshVisibility()
@@ -1257,21 +1285,24 @@ bool MainWindow::NextVideo(bool random, bool increment, bool update_watched_stat
 bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool update_watched_state) {
     bool video_changed = false;
     bool sv_count_reset = false;
-    QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(this->ui.currentVideo->path, Qt::MatchFixedString, ListColumns["PATH_COLUMN"], 1);
-    QTreeWidgetItem* item = (!items.isEmpty()) ? items.first() : nullptr;
+    QPersistentModelIndex currentIdx = this->persistentProxyIndexByPath(this->ui.currentVideo->path);
     this->App->db->db.transaction();
-    if (item != nullptr) {
+    if (currentIdx.isValid()) {
         this->App->db->setMainInfoValue("current", this->App->currentDB, "");
-        QString watched = (update_watched_state) ? "Yes" : items.first()->text(ListColumns["WATCHED_COLUMN"]);
+        QString watched = (update_watched_state)
+            ? "Yes"
+            : currentIdx.model()->index(currentIdx.row(), ListColumns["WATCHED_COLUMN"], currentIdx.parent()).data(Qt::DisplayRole).toString();
+        QModelIndex srcIdx = this->videosProxy->mapToSource(currentIdx);
+        int id = srcIdx.model()->index(srcIdx.row(), ListColumns["PATH_COLUMN"], srcIdx.parent()).data(CustomRoles::id).toInt();
         if (increment)
-            this->App->db->updateWatchedState(items.first()->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), this->position, watched, true, true);
+            this->App->db->updateWatchedState(id, this->position, watched, true, true);
         else
-            this->App->db->updateWatchedState(items.first()->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), watched, false, false);
+            this->App->db->updateWatchedState(id, watched, false, false);
     }
     
     switch (mode) {
         case NextVideoModes::Sequential:
-            video_changed = this->setNextVideo(item);
+            video_changed = this->setNextVideo(currentIdx);
             break;
         case NextVideoModes::Random:
             {
@@ -1288,27 +1319,31 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
             }
             break;
         case NextVideoModes::SeriesRandom:
-            video_changed = this->seriesRandomVideo(item);
+            video_changed = this->seriesRandomVideo(currentIdx);
             break;
     }
     
-    if (item != nullptr and sv_count_reset == false) {
+    if (currentIdx.isValid() and sv_count_reset == false) {
         this->sv_count++;
         this->ui.counterLabel->setProgress(this->sv_count);
         this->App->db->setMainInfoValue("sv_count", "ALL", QString::number(this->sv_count));
     }
     this->App->db->db.commit();
 
-    if (item != nullptr) {
+    if (currentIdx.isValid()) {
         QDateTime currenttime = QDateTime::currentDateTime();
-        item->setData(ListColumns["LAST_WATCHED_COLUMN"], Qt::DisplayRole, currenttime);
-        if (increment)
-            item->setText(ListColumns["VIEWS_COLUMN"], QString::number(item->text(ListColumns["VIEWS_COLUMN"]).toInt() + 1));
-        if (update_watched_state) {
-            item->setText(ListColumns["WATCHED_COLUMN"], "Yes");
-            item->setForeground(ListColumns["WATCHED_COLUMN"], QBrush(QColor("#00e640")));
+        QModelIndex src = this->videosProxy->mapToSource(currentIdx);
+        if (src.isValid()) {
+            if (increment) {
+                int v = this->videosModel->index(src.row(), ListColumns["VIEWS_COLUMN"]).data(Qt::DisplayRole).toInt();
+                this->videosModel->setData(this->videosModel->index(src.row(), ListColumns["VIEWS_COLUMN"]), QString::number(v + 1), Qt::DisplayRole);
+            }
+            if (update_watched_state) {
+                this->videosModel->setData(this->videosModel->index(src.row(), ListColumns["WATCHED_COLUMN"]), QString("Yes"), Qt::DisplayRole);
+            }
+            this->videosModel->setData(this->videosModel->index(src.row(), ListColumns["LAST_WATCHED_COLUMN"]), currenttime, Qt::DisplayRole);
         }
-        this->refreshVisibility();
+        this->refreshVisibility(this->old_search);
 
         this->App->db->db.transaction();
         if (increment) {
@@ -1316,7 +1351,8 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
         }
         if (this->App->currentDB == "MINUS") {
             this->incrementCounterVar(-1);
-            if (svTypes.contains(item->text(ListColumns["TYPE_COLUMN"]))) {
+            QString curType = src.siblingAtColumn(ListColumns["TYPE_COLUMN"]).data(Qt::DisplayRole).toString();
+            if (svTypes.contains(curType)) {
                 int val = this->calculate_sv_target();
                 this->App->db->setMainInfoValue("sv_target_count", "ALL", QString::number(val));
                 this->sv_target_count = val;
@@ -1324,7 +1360,7 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
             }
         }
         else if (this->App->currentDB == "PLUS" && increment)
-            this->incrementtimeWatchedIncrement(this->App->db->getVideoProgress(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), "0").toDouble());
+            this->incrementtimeWatchedIncrement(this->App->db->getVideoProgress(this->videosProxy->mapToSource(currentIdx).siblingAtColumn(ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt(), "0").toDouble());
         this->updateTotalListLabel();
         this->checktimeWatchedIncrement();
         this->updateWatchedProgressBar();
@@ -1333,329 +1369,213 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
     return video_changed;
 }
 
-bool MainWindow::setNextVideo(QTreeWidgetItem* item) {
-    QTreeWidgetItem* item_below = this->ui.videosWidget->itemBelow(item);
+bool MainWindow::setNextVideo(const QPersistentModelIndex& current_proxy_index) {
+    if (!this->videosProxy || !this->videosModel) return false;
+    QPersistentModelIndex cur = current_proxy_index;
+    int rows = this->videosProxy->rowCount();
+    if (rows == 0) {
+        this->setCurrent(-1, "", "", "", "");
+        this->highlightCurrentItem();
+        return false;
+    }
+    int start = cur.isValid() ? cur.row() : -1;
+    int pos = start;
     bool looped_once = false;
     while (true) {
-        if (item_below == nullptr and looped_once == false) {
-            item_below = this->ui.videosWidget->topLevelItem(0);
+        pos = (pos + 1) % rows;
+        if (pos == start) {
+            if (looped_once) {
+                this->setCurrent(-1, "", "", "", "");
+                this->highlightCurrentItem();
+                return false;
+            }
             looped_once = true;
         }
-        if (item == item_below or item_below == nullptr) {
-            this->setCurrent(-1, "", "", "", "");
-            this->selectCurrentItem(nullptr);
-            return false;
-            break;
-        }        
-        if (item_below->text(ListColumns["WATCHED_COLUMN"]) == "No") {
-            this->setCurrent(item_below->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item_below->text(ListColumns["PATH_COLUMN"]), item_below->text(ListColumns["NAME_COLUMN"]), item_below->text(ListColumns["AUTHOR_COLUMN"]), item_below->text(ListColumns["TAGS_COLUMN"]), true);
-            this->selectCurrentItem(item_below);
+        QModelIndex p = this->videosProxy->index(pos, 0);
+        if (!p.isValid()) continue;
+        QString watched = p.siblingAtColumn(ListColumns["WATCHED_COLUMN"]).data(Qt::DisplayRole).toString();
+        if (watched == "No") {
+            QModelIndex s = this->videosProxy->mapToSource(p);
+            int id = s.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
+            QString path = s.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+            QString name = s.siblingAtColumn(ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
+            QString author = s.siblingAtColumn(ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
+            QString tags = s.siblingAtColumn(ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
+            this->setCurrent(id, path, name, author, tags, true);
+            this->highlightCurrentItem();
             return true;
-            break;
         }
-        item_below = this->ui.videosWidget->itemBelow(item_below);
     }
 }
 
-QMap<QString, AuthorVideoData> MainWindow::getAuthorVideoMap(const QString& exclude_author, const QList<VideoWeightedData>& all_videos) {
-    QMap<QString, AuthorVideoData> author_map;
 
-    // Single pass through all videos
-    for (const VideoWeightedData& video : all_videos) {
-        QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(video.path, Qt::MatchExactly, ListColumns["PATH_COLUMN"], 1);
-        if (items.isEmpty() || items.first()->text(ListColumns["WATCHED_COLUMN"]) != "No") {
-            continue;
-        }
-
-        QTreeWidgetItem* item = items.first();
-        QString author = item->text(ListColumns["AUTHOR_COLUMN"]);
-        if (author.isEmpty()) {
-            author = video.path;
-        }
-
-        // Skip excluded author if specified
-        if (!exclude_author.isEmpty() && author == exclude_author) {
-            continue;
-        }
-
-        // Add video to author's list
-        author_map[author].videos.append(video);
-        author_map[author].author = author;
-    }
-
-    return author_map;
-}
-
-// Optimized helper to find first item for each author in a single tree pass
-void MainWindow::findFirstItemsForAuthors(QMap<QString, AuthorVideoData>& author_map) {
-    QTreeWidgetItemIterator it(this->ui.videosWidget);
-    QSet<QString> found_authors;
-
-    while (*it && found_authors.size() < author_map.size()) {
-        QTreeWidgetItem* item = *it;
-        if (item->text(ListColumns["WATCHED_COLUMN"]) == "No") {
-            QString author = item->text(ListColumns["AUTHOR_COLUMN"]);
-            if (author.isEmpty()) {
-                author = item->text(ListColumns["PATH_COLUMN"]);
-            }
-
-            if (author_map.contains(author) && !found_authors.contains(author)) {
-                author_map[author].firstItem = item;
-                found_authors.insert(author);
+int MainWindow::calculate_sv_target() {
+    if (this->App->currentDB == "MINUS") {
+        int special = 0;
+        int others = 0;
+        if (this->videosModel) {
+            for (int r = 0; r < this->videosModel->rowCount(); ++r) {
+                const QString watched = this->videosModel->index(r, ListColumns["WATCHED_COLUMN"]).data(Qt::DisplayRole).toString();
+                if (watched != "No") continue;
+                const QString type = this->videosModel->index(r, ListColumns["TYPE_COLUMN"]).data(Qt::DisplayRole).toString();
+                if (svTypes.contains(type)) ++special; else ++others;
             }
         }
-        ++it;
+        if (special > 0) return floor((double)others / (double)special);
+        return others;
+    }
+    else {
+        return this->sv_target_count;
     }
 }
 
-// Optimized helper to calculate author weighted data
-QList<VideoWeightedData> MainWindow::calculateAuthorWeights(const QMap<QString, AuthorVideoData>& author_map) {
-    QList<VideoWeightedData> author_weighted_data;
-    author_weighted_data.reserve(author_map.size());
-
-    for (auto it = author_map.constBegin(); it != author_map.constEnd(); ++it) {
-        const AuthorVideoData& data = it.value();
-        if (data.videos.isEmpty() || !data.firstItem) {
-            continue;
-        }
-
-        // Calculate average weights
-        double total_views = 0, total_rating = 0, total_tags = 0;
-        for (const VideoWeightedData& v : data.videos) {
-            total_views += v.views;
-            total_rating += v.rating;
-            total_tags += v.tagsWeight;
-        }
-
-        int count = data.videos.size();
-        VideoWeightedData author_data;
-        author_data.id = data.firstItem->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt();
-        author_data.path = data.firstItem->text(ListColumns["PATH_COLUMN"]);
-        author_data.views = total_views / count;
-        author_data.rating = total_rating / count;
-        author_data.tagsWeight = total_tags / count;
-
-        author_weighted_data.append(author_data);
-    }
-
-    return author_weighted_data;
-}
-
-
-bool MainWindow::seriesRandomVideo(QTreeWidgetItem* current_item) {
+bool MainWindow::seriesRandomVideo(const QPersistentModelIndex& current_proxy_index) {
     NextVideoSettings settings = this->getNextVideoSettings();
     QJsonObject json_settings = this->getRandomSettings(settings.random_mode, settings.ignore_filters_and_defaults,
         settings.vid_type_include, settings.vid_type_exclude);
     QString seed = this->App->config->get_bool("random_use_seed") ? this->App->config->get("random_seed") : "";
 
-    if (current_item == nullptr) {
-        // Get all videos once
-        QList<VideoWeightedData> all_videos = this->App->db->getVideos(this->App->currentDB, json_settings);
-
-        // Build author map in single pass
-        QMap<QString, AuthorVideoData> author_map = this->getAuthorVideoMap("", all_videos);
-
-        if (author_map.isEmpty()) {
-            this->setCurrent(-1, "", "", "", "");
-            this->selectCurrentItem(nullptr);
-            return false;
-        }
-
-        // Find first items for all authors in single tree pass
-        this->findFirstItemsForAuthors(author_map);
-
-        // Calculate author weights
-        QList<VideoWeightedData> author_weighted_data = this->calculateAuthorWeights(author_map);
-
-        if (author_weighted_data.isEmpty()) {
-            this->setCurrent(-1, "", "", "", "");
-            this->selectCurrentItem(nullptr);
-            return false;
-        }
-
-        // Use weighted random selection to choose an author
-        QRandomGenerator generator;
-        if (seed.isEmpty()) {
-            generator.seed(QRandomGenerator::global()->generate());
-        }
-        else {
-            generator.seed(utils::stringToSeed(this->saltSeed(seed)));
-        }
-
-        WeightedBiasSettings weighted_settings = this->getWeightedBiasSettings();
-        if (!weighted_settings.weighted_random_enabled) {
-            weighted_settings.bias_general = 0;
-        }
-
-        QString selected_path = utils::weightedRandomChoice(author_weighted_data, generator,
-            weighted_settings.bias_views,
-            weighted_settings.bias_rating,
-            weighted_settings.bias_tags,
-            weighted_settings.bias_general,
-            weighted_settings.no_views_weight,
-            weighted_settings.no_rating_weight,
-            weighted_settings.no_tags_weight);
-
-        // Find the selected author's first item by matching the path
-        if (!selected_path.isEmpty()) {
-            for (auto it = author_map.constBegin(); it != author_map.constEnd(); ++it) {
-                if (it.value().firstItem && it.value().firstItem->text(ListColumns["PATH_COLUMN"]) == selected_path) {
-                    QTreeWidgetItem* target_item = it.value().firstItem;
-                    this->setCurrent(target_item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(),
-                        target_item->text(ListColumns["PATH_COLUMN"]),
-                        target_item->text(ListColumns["NAME_COLUMN"]),
-                        target_item->text(ListColumns["AUTHOR_COLUMN"]),
-                        target_item->text(ListColumns["TAGS_COLUMN"]), true);
-                    this->selectCurrentItem(target_item);
-                    return true;
-                }
-            }
-        }
-
-        this->setCurrent(-1, "", "", "", "");
-        this->selectCurrentItem(nullptr);
-        return false;
-    }
-
-    // Get current author
-    QString current_author = current_item->text(ListColumns["AUTHOR_COLUMN"]);
-    if (current_author.isEmpty()) {
-        current_author = current_item->text(ListColumns["PATH_COLUMN"]);
-    }
-
-    // Get all unwatched videos from same author in single pass
-    QList<QTreeWidgetItem*> author_videos_unwatched;
-    QTreeWidgetItemIterator it(this->ui.videosWidget);
-    while (*it) {
-        QTreeWidgetItem* item = *it;
-        if (item->text(ListColumns["WATCHED_COLUMN"]) == "No") {
-            QString item_author = item->text(ListColumns["AUTHOR_COLUMN"]);
-            if (item_author.isEmpty()) {
-                item_author = item->text(ListColumns["PATH_COLUMN"]);
-            }
-            if (item_author == current_author) {
-                author_videos_unwatched.append(item);
-            }
-        }
-        ++it;
-    }
-
-    // Find current position
-    int current_pos = author_videos_unwatched.indexOf(current_item);
-
-    QTreeWidgetItem* next_item = nullptr;
-
-    // Determine next item
-    if (current_pos != -1 && current_pos + 1 < author_videos_unwatched.size()) {
-        next_item = author_videos_unwatched[current_pos + 1];
-    }
-    else if (current_pos != -1 && current_pos == author_videos_unwatched.size() - 1 && author_videos_unwatched.size() > 1) {
-        next_item = author_videos_unwatched[0];
-    }
-
-    if (next_item != nullptr) {
-        this->setCurrent(next_item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(),
-            next_item->text(ListColumns["PATH_COLUMN"]),
-            next_item->text(ListColumns["NAME_COLUMN"]),
-            next_item->text(ListColumns["AUTHOR_COLUMN"]),
-            next_item->text(ListColumns["TAGS_COLUMN"]), true);
-        this->selectCurrentItem(next_item);
+    // Helper lambdas
+    auto setCurrentByPath = [this](const QString& path) -> bool {
+        QModelIndex src = this->sourceIndexByPath(path);
+        if (!src.isValid()) return false;
+        int id = src.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
+        QString name = src.siblingAtColumn(ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
+        QString author = src.siblingAtColumn(ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
+        QString tags = src.siblingAtColumn(ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
+        QString p = src.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+        this->setCurrent(id, p, name, author, tags, true);
+        this->highlightCurrentItem();
         return true;
-    }
+    };
 
-    // Need to switch to new author - get all videos once
-    QList<VideoWeightedData> all_videos = this->App->db->getVideos(this->App->currentDB, json_settings);
+    if (current_proxy_index.isValid()) {
+        // Determine current author
+        QString current_author = current_proxy_index.model()->index(current_proxy_index.row(), ListColumns["AUTHOR_COLUMN"], current_proxy_index.parent()).data(Qt::DisplayRole).toString();
+        QString current_path = current_proxy_index.model()->index(current_proxy_index.row(), ListColumns["PATH_COLUMN"], current_proxy_index.parent()).data(Qt::DisplayRole).toString();
+        if (current_author.isEmpty()) current_author = current_path;
 
-    // Build author map excluding current author
-    QMap<QString, AuthorVideoData> author_map = this->getAuthorVideoMap(current_author, all_videos);
-
-    if (author_map.isEmpty()) {
-        this->setCurrent(-1, "", "", "", "");
-        this->selectCurrentItem(nullptr);
-        return false;
-    }
-
-    // Find first items for all authors in single tree pass
-    this->findFirstItemsForAuthors(author_map);
-
-    // Calculate author weights
-    QList<VideoWeightedData> author_weighted_data = this->calculateAuthorWeights(author_map);
-
-    if (author_weighted_data.isEmpty()) {
-        this->setCurrent(-1, "", "", "", "");
-        this->selectCurrentItem(nullptr);
-        return false;
-    }
-
-    // Use weighted random selection to choose an author
-    QRandomGenerator generator;
-    if (seed.isEmpty()) {
-        generator.seed(QRandomGenerator::global()->generate());
-    }
-    else {
-        generator.seed(utils::stringToSeed(this->saltSeed(seed)));
-    }
-
-    WeightedBiasSettings weighted_settings = this->getWeightedBiasSettings();
-    if (!weighted_settings.weighted_random_enabled) {
-        weighted_settings.bias_general = 0;
-    }
-
-    QString selected_path = utils::weightedRandomChoice(author_weighted_data, generator,
-        weighted_settings.bias_views,
-        weighted_settings.bias_rating,
-        weighted_settings.bias_tags,
-        weighted_settings.bias_general,
-        weighted_settings.no_views_weight,
-        weighted_settings.no_rating_weight,
-        weighted_settings.no_tags_weight);
-
-    // Find the selected author's first item by matching the path
-    if (!selected_path.isEmpty()) {
-        for (auto it = author_map.constBegin(); it != author_map.constEnd(); ++it) {
-            if (it.value().firstItem && it.value().firstItem->text(ListColumns["PATH_COLUMN"]) == selected_path) {
-                QTreeWidgetItem* target_item = it.value().firstItem;
-                this->setCurrent(target_item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(),
-                    target_item->text(ListColumns["PATH_COLUMN"]),
-                    target_item->text(ListColumns["NAME_COLUMN"]),
-                    target_item->text(ListColumns["AUTHOR_COLUMN"]),
-                    target_item->text(ListColumns["TAGS_COLUMN"]), true);
-                this->selectCurrentItem(target_item);
-                return true;
+        // Collect unwatched videos for current author in model order
+        QStringList author_unwatched_paths;
+        for (int r = 0; r < this->videosModel->rowCount(); ++r) {
+            const QString watched = this->videosModel->index(r, ListColumns["WATCHED_COLUMN"]).data(Qt::DisplayRole).toString();
+            if (watched != "No") continue;
+            QString author = this->videosModel->index(r, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
+            QString path = this->videosModel->index(r, ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+            if (author.isEmpty()) author = path;
+            if (author == current_author) author_unwatched_paths.append(path);
+        }
+        int idx = author_unwatched_paths.indexOf(current_path);
+        if (idx != -1) {
+            int next = (idx + 1) % author_unwatched_paths.size();
+            if (author_unwatched_paths.size() > 1 || next != idx) {
+                return setCurrentByPath(author_unwatched_paths[next]);
             }
         }
+
+        // Need to switch author — fallthrough to weighted author choice excluding current_author
+        QList<VideoWeightedData> all_videos = this->App->db->getVideos(this->App->currentDB, json_settings);
+        // Build author map (videos + first path) excluding current_author
+        QMap<QString, QList<VideoWeightedData>> authorVideos;
+        QMap<QString, QString> authorFirstPath;
+        for (const auto& v : all_videos) {
+            int row = this->videosModel->rowByPath(v.path);
+            if (row < 0) continue;
+            if (this->videosModel->index(row, ListColumns["WATCHED_COLUMN"]).data(Qt::DisplayRole).toString() != "No") continue;
+            QString a = this->videosModel->index(row, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
+            if (a.isEmpty()) a = v.path;
+            if (a == current_author) continue;
+            authorVideos[a].append(v);
+        }
+        // Determine first path in model order for each author
+        for (int r = 0; r < this->videosModel->rowCount(); ++r) {
+            QString watched = this->videosModel->index(r, ListColumns["WATCHED_COLUMN"]).data(Qt::DisplayRole).toString();
+            if (watched != "No") continue;
+            QString a = this->videosModel->index(r, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
+            QString p = this->videosModel->index(r, ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+            if (a.isEmpty()) a = p;
+            if (authorVideos.contains(a) && authorFirstPath.value(a).isEmpty()) authorFirstPath[a] = p;
+        }
+        // Build author weighted data (avg metrics per author, path = first path)
+        QList<VideoWeightedData> author_weighted_data;
+        for (auto it = authorVideos.constBegin(); it != authorVideos.constEnd(); ++it) {
+            const auto& list = it.value();
+            if (list.isEmpty()) continue;
+            QString firstPath = authorFirstPath.value(it.key());
+            if (firstPath.isEmpty()) continue;
+            double total_views = 0, total_rating = 0, total_tags = 0;
+            for (const auto& v : list) { total_views += v.views; total_rating += v.rating; total_tags += v.tagsWeight; }
+            int count = list.size();
+            VideoWeightedData ad; ad.path = firstPath; ad.id = this->videosModel->index(this->videosModel->rowByPath(firstPath), ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
+            ad.views = total_views / count; ad.rating = total_rating / count; ad.tagsWeight = total_tags / count;
+            author_weighted_data.append(ad);
+        }
+        if (!author_weighted_data.isEmpty()) {
+            QRandomGenerator generator;
+            if (seed.isEmpty()) generator.seed(QRandomGenerator::global()->generate());
+            else generator.seed(utils::stringToSeed(this->saltSeed(seed)));
+            WeightedBiasSettings weighted_settings = this->getWeightedBiasSettings();
+            if (!weighted_settings.weighted_random_enabled) weighted_settings.bias_general = 0;
+            QString selected_path = utils::weightedRandomChoice(author_weighted_data, generator,
+                weighted_settings.bias_views, weighted_settings.bias_rating, weighted_settings.bias_tags,
+                weighted_settings.bias_general, weighted_settings.no_views_weight, weighted_settings.no_rating_weight,
+                weighted_settings.no_tags_weight);
+            if (!selected_path.isEmpty()) return setCurrentByPath(selected_path);
+        }
+        this->setCurrent(-1, "", "", "", "");
+        this->highlightCurrentItem();
+        return false;
     }
 
+    // No current video — choose an author based on weighted first items
+    QList<VideoWeightedData> all_videos = this->App->db->getVideos(this->App->currentDB, json_settings);
+    QMap<QString, QList<VideoWeightedData>> authorVideos;
+    QMap<QString, QString> authorFirstPath;
+    for (const auto& v : all_videos) {
+        int row = this->videosModel->rowByPath(v.path);
+        if (row < 0) continue;
+        if (this->videosModel->index(row, ListColumns["WATCHED_COLUMN"]).data(Qt::DisplayRole).toString() != "No") continue;
+        QString a = this->videosModel->index(row, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
+        QString p = this->videosModel->index(row, ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+        if (a.isEmpty()) a = p;
+        authorVideos[a].append(v);
+    }
+    for (int r = 0; r < this->videosModel->rowCount(); ++r) {
+        QString watched = this->videosModel->index(r, ListColumns["WATCHED_COLUMN"]).data(Qt::DisplayRole).toString();
+        if (watched != "No") continue;
+        QString a = this->videosModel->index(r, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
+        QString p = this->videosModel->index(r, ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+        if (a.isEmpty()) a = p;
+        if (authorVideos.contains(a) && authorFirstPath.value(a).isEmpty()) authorFirstPath[a] = p;
+    }
+    QList<VideoWeightedData> author_weighted_data;
+    for (auto it = authorVideos.constBegin(); it != authorVideos.constEnd(); ++it) {
+        const auto& list = it.value();
+        if (list.isEmpty()) continue;
+        QString firstPath = authorFirstPath.value(it.key());
+        if (firstPath.isEmpty()) continue;
+        double total_views = 0, total_rating = 0, total_tags = 0;
+        for (const auto& v : list) { total_views += v.views; total_rating += v.rating; total_tags += v.tagsWeight; }
+        int count = list.size();
+        VideoWeightedData ad; ad.path = firstPath; ad.id = this->videosModel->index(this->videosModel->rowByPath(firstPath), ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
+        ad.views = total_views / count; ad.rating = total_rating / count; ad.tagsWeight = total_tags / count;
+        author_weighted_data.append(ad);
+    }
+    if (!author_weighted_data.isEmpty()) {
+        QRandomGenerator generator;
+        if (seed.isEmpty()) generator.seed(QRandomGenerator::global()->generate());
+        else generator.seed(utils::stringToSeed(this->saltSeed(seed)));
+        WeightedBiasSettings weighted_settings = this->getWeightedBiasSettings();
+        if (!weighted_settings.weighted_random_enabled) weighted_settings.bias_general = 0;
+        QString selected_path = utils::weightedRandomChoice(author_weighted_data, generator,
+            weighted_settings.bias_views, weighted_settings.bias_rating, weighted_settings.bias_tags,
+            weighted_settings.bias_general, weighted_settings.no_views_weight, weighted_settings.no_rating_weight,
+            weighted_settings.no_tags_weight);
+        if (!selected_path.isEmpty()) return setCurrentByPath(selected_path);
+    }
     this->setCurrent(-1, "", "", "", "");
-    this->selectCurrentItem(nullptr);
+    this->highlightCurrentItem();
     return false;
-}
-
-int MainWindow::calculate_sv_target() {
-    if (this->App->currentDB == "MINUS") {
-        QTreeWidgetItem* root = this->ui.videosWidget->invisibleRootItem();
-        int val = 0;
-        int child_count = root->childCount();
-        QStringList sv_types = svTypes;
-        QMap<QString, int> values = { {"SPECIAL_TYPES",0},{"OTHERS",0} };
-        for (int i = 0; i < child_count; i++) {
-            QTreeWidgetItem* item = root->child(i);
-            if (item->text(ListColumns["WATCHED_COLUMN"]) == "No" && sv_types.contains(item->text(ListColumns["TYPE_COLUMN"])))
-                values["SPECIAL_TYPES"]++;
-            else if (item->text(ListColumns["WATCHED_COLUMN"]) == "No")
-                values["OTHERS"]++;
-        }
-        if (values["SPECIAL_TYPES"] > 0) {
-            val = floor((double)values["OTHERS"] / (double)values["SPECIAL_TYPES"]);
-        }
-        else {
-            val = values["OTHERS"];
-        }
-        return val;
-    }
-    else {
-        return this->sv_target_count;
-    }
 }
 
 void MainWindow::insertDialogButton() {
@@ -1705,7 +1625,7 @@ void MainWindow::resetDB(QString directory) {
         qMainApp->logger->log(QString("Resetting database for category %1 to %2").arg(this->getCategoryName(),directory), "Database", directory);
     }
     this->App->db->resetDB(this->App->currentDB);
-    this->ui.videosWidget->clear();
+    if (this->videosModel) this->videosModel->clear();
     this->InsertVideoFiles(QStringList({ directory }));
     this->App->db->setMainInfoValue("sv_target_count", "ALL", QString::number(this->calculate_sv_target()));
     this->initListDetails();
@@ -2296,8 +2216,12 @@ void MainWindow::settingsDialogButton()
 
 QString MainWindow::saltSeed(QString seed) {
     seed = seed % this->ui.currentVideo->path % this->ui.totalListLabel->text() % this->ui.counterLabel->text();
-    if (this->ui.videosWidget->last_selected) {
-        seed = seed % this->ui.videosWidget->last_selected->text(ListColumns["VIEWS_COLUMN"]) % this->ui.videosWidget->last_selected->data(ListColumns["RATING_COLUMN"], CustomRoles::rating).toString();
+    // add current row's views/rating if available
+    QModelIndex srcIdx = this->sourceIndexByPath(this->ui.currentVideo->path);
+    if (srcIdx.isValid()) {
+        QString views = this->videosModel->index(srcIdx.row(), ListColumns["VIEWS_COLUMN"]).data(Qt::DisplayRole).toString();
+        QString rating = this->videosModel->index(srcIdx.row(), ListColumns["RATING_COLUMN"]).data(CustomRoles::rating).toString();
+        seed = seed % views % rating;
     }
     return seed;
 }
@@ -2375,7 +2299,7 @@ QJsonObject MainWindow::getRandomSettings(RandomModes::Mode random_mode, bool ig
 
 bool MainWindow::randomVideo(RandomModes::Mode random_mode, bool ignore_filters_and_defaults, QStringList vid_type_include, QStringList vid_type_exclude, bool reset_progress) {
     // Early exit if no videos
-    if (this->ui.videosWidget->invisibleRootItem()->childCount() == 0) {
+    if (!this->videosModel || this->videosModel->rowCount() == 0) {
         return false;
     }
 
@@ -2389,28 +2313,24 @@ bool MainWindow::randomVideo(RandomModes::Mode random_mode, bool ignore_filters_
     // Early exit if no video selected
     if (item_path.isEmpty()) {
         this->setCurrent(-1, "", "", "", "");
-        this->selectCurrentItem(nullptr);
+        this->highlightCurrentItem();
         return false;
     }
 
-    // Find the item in the tree
-    QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(item_path, Qt::MatchExactly, ListColumns["PATH_COLUMN"], 1);
-
-    if (items.isEmpty()) {
+    // Set current video by path via model
+    QModelIndex src = this->sourceIndexByPath(item_path);
+    if (!src.isValid()) {
         this->setCurrent(-1, "", "", "", "");
-        this->selectCurrentItem(nullptr);
+        this->highlightCurrentItem();
         return false;
     }
-
-    // Set current video
-    QTreeWidgetItem* item = items.first();
-    this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(),
-        item->text(ListColumns["PATH_COLUMN"]),
-        item->text(ListColumns["NAME_COLUMN"]),
-        item->text(ListColumns["AUTHOR_COLUMN"]),
-        item->text(ListColumns["TAGS_COLUMN"]),
-        reset_progress);
-    this->selectCurrentItem(item);
+    int id = src.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
+    QString name = src.siblingAtColumn(ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
+    QString author = src.siblingAtColumn(ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
+    QString tags = src.siblingAtColumn(ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
+    QString path = src.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+    this->setCurrent(id, path, name, author, tags, reset_progress);
+    this->highlightCurrentItem();
     return true;
 }
 
@@ -2498,9 +2418,13 @@ void MainWindow::showEndOfVideoDialog() {
                         this->checktimeWatchedIncrement();
                         this->updateWatchedProgressBar();
                     }
-                    if (this->ui.videosWidget->last_selected and this->ui.videosWidget->last_selected->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt() == this->App->VW->mainPlayer->video_id) {
-                        this->ui.videosWidget->last_selected->setText(ListColumns["VIEWS_COLUMN"], QString::number(this->ui.videosWidget->last_selected->text(ListColumns["VIEWS_COLUMN"]).toInt() + 1));
-                        this->ui.videosWidget->last_selected->setData(ListColumns["LAST_WATCHED_COLUMN"], Qt::DisplayRole, QDateTime::currentDateTime());
+                    // Update model row for current video if present
+                    QModelIndex srcIdx = this->sourceIndexByPath(this->App->VW->mainPlayer->video_path);
+                    if (srcIdx.isValid()) {
+                        QModelIndex viewsIdx = this->videosModel->index(srcIdx.row(), ListColumns["VIEWS_COLUMN"]);
+                        int views = viewsIdx.data(Qt::DisplayRole).toInt();
+                        this->videosModel->setData(viewsIdx, QString::number(views + 1), Qt::DisplayRole);
+                        this->videosModel->setData(this->videosModel->index(srcIdx.row(), ListColumns["LAST_WATCHED_COLUMN"]), QDateTime::currentDateTime(), Qt::DisplayRole);
                     }
                     this->App->db->incrementVideoViews(this->App->VW->mainPlayer->video_id, 1, true);
                     this->App->db->incrementVideosWatchedToday(this->App->currentDB);
@@ -2544,31 +2468,7 @@ void MainWindow::updateProgressBar(QString position, QString duration) {
     this->ui.progressBar->setFormat(QString::fromStdString(std::format("{} / {}", utils::formatSeconds(this->position), utils::formatSeconds(this->duration))));
 }
 
-void MainWindow::DeleteDialogButton(QList<QTreeWidgetItem*> items) {
-    DeleteDialog dialog = DeleteDialog(this);
-    int value = dialog.exec();
-    if (value == QDialog::Accepted) {
-        QTreeWidgetItem* root = this->ui.videosWidget->invisibleRootItem();
-        if (!items.isEmpty()) {
-            this->App->db->db.transaction();
-            for (auto item : items) {
-                if (item->parent()) {
-                    item->parent()->removeChild(item);
-                }
-                else if(root) {
-                    root->removeChild(item);
-                }
-                this->App->db->deleteVideo(item->data(ListColumns["PATH_COLUMN"],CustomRoles::id).toInt());
-                generateThumbnailRunnable::deleteThumbnail(item->text(ListColumns["PATH_COLUMN"]));
-                if (item == this->ui.videosWidget->last_selected)
-                    this->ui.videosWidget->last_selected = nullptr;
-                delete item;
-            }
-            this->App->db->db.commit();
-            this->updateTotalListLabel();
-        }
-    }
-}
+ 
 
 bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString currentdb, QString type) {
     for (QString &video : QStringList(files)) {
@@ -2609,14 +2509,13 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
         current_db = this->App->currentDB;
 
     bool set_first_current = true;
-    QTreeWidgetItem* root = this->ui.videosWidget->invisibleRootItem();
-    QTreeWidgetItemIterator it(this->ui.videosWidget);
-    while (*it) {
-        if ((*it)->text(ListColumns["WATCHED_COLUMN"]) == "No") {
-            set_first_current = false;
-            break;
+    if (this->videosModel) {
+        for (int r = 0; r < this->videosModel->rowCount(); ++r) {
+            if (this->videosModel->index(r, ListColumns["WATCHED_COLUMN"]).data(Qt::DisplayRole).toString() == "No") {
+                set_first_current = false;
+                break;
+            }
         }
-        ++it;
     }
 
     QString namedir_detected = "";
@@ -2681,7 +2580,7 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
     bool updated = false;
     QStringList files_inserted = QStringList();
 
-    it = QTreeWidgetItemIterator(dialog.ui.newFilesTreeWidget);
+    QTreeWidgetItemIterator it(dialog.ui.newFilesTreeWidget);
     while (*it) {
         if (transaction == false) {
             transaction = true;
@@ -2718,11 +2617,15 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
         this->selectItemsDelayed(files_inserted);
         this->thumbnailManager->start();
         if (set_first_current) {
-            QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(first, Qt::MatchExactly, ListColumns["PATH_COLUMN"], 1);
-            if (!items.isEmpty()) {
-                QTreeWidgetItem *item = items.first();
-                this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]), item->text(ListColumns["TAGS_COLUMN"]));
-                this->selectCurrentItem(item,false);
+            QModelIndex src = this->sourceIndexByPath(first);
+            if (src.isValid()) {
+                int id = src.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
+                QString name = src.siblingAtColumn(ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
+                QString author = src.siblingAtColumn(ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
+                QString tags = src.siblingAtColumn(ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
+                QString path = src.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+                this->setCurrent(id, path, name, author, tags);
+                this->highlightCurrentItem(QPersistentModelIndex(), false);
             }
         }
     }
@@ -2784,17 +2687,18 @@ void MainWindow::updateSearchCompleter() {
 }
 
 void MainWindow::refreshVideosWidget(bool selectcurrent, bool remember_selected) {
-    QStringList selected_items = {};
+    QStringList selected_items;
     if (remember_selected) {
-        for (auto item_ : this->ui.videosWidget->selectedItems()) {
-            selected_items.append(item_->text(ListColumns["PATH_COLUMN"]));
-        }
+        selected_items = this->selectedPaths();
     }
-    this->ui.videosWidget->clear();
+    this->videosModel->clear();
     this->populateList(selectcurrent);
     if (!selected_items.isEmpty())
         this->selectItemsDelayed(selected_items);
     this->updateSearchCompleter();
+    if (this->videosModel) {
+        this->videosModel->setHighlightedPath(this->ui.currentVideo->path);
+    }
 }
 
 void MainWindow::switchCurrentDB(QString db) {
@@ -2863,44 +2767,29 @@ bool MainWindow::getCheckedUpdateWatchedToggleButton() {
     return this->App->config->get_bool(config_key);
 }
 
-void MainWindow::selectCurrentItem(QTreeWidgetItem* item,bool selectcurrent) {
-    QTreeWidgetItem* current_item = nullptr;
-    if (item != nullptr) {
-        current_item = item;
+void MainWindow::highlightCurrentItem(const QPersistentModelIndex& proxyIndex, bool scrollAndSelectItem) {
+    QPersistentModelIndex idx = proxyIndex;
+    if (!idx.isValid()) {
+        idx = this->persistentProxyIndexByPath(this->ui.currentVideo->path);
     }
-    else {
-        QString item_name = this->ui.currentVideo->path;
-        QList<QTreeWidgetItem*> items = this->ui.videosWidget->findItemsCustom(item_name, Qt::MatchExactly, ListColumns["PATH_COLUMN"], 1);
-        if (!items.isEmpty()) {
-            current_item = items.first();
-        }
+    if (!idx.isValid()) {
+        if (this->videosModel) this->videosModel->setHighlightedPath(QString());
+        return;
     }
-    if (current_item != nullptr) {
-        if (this->ui.videosWidget->last_selected != nullptr) {
-            for (int i = 0; i < this->ui.videosWidget->last_selected->columnCount(); i++) {
-                this->ui.videosWidget->last_selected->setData(i, Qt::BackgroundRole, QVariant());
-                if (i == ListColumns["WATCHED_COLUMN"]) {
-                    if (this->ui.videosWidget->last_selected->text(i) == "Yes")
-                        this->ui.videosWidget->last_selected->setForeground(i, QBrush(QColor("#00e640")));
-                    else if (this->ui.videosWidget->last_selected->text(i) == "No")
-                        this->ui.videosWidget->last_selected->setForeground(i, QBrush(QColor("#cf000f")));
-                }
-                else {
-                    this->ui.videosWidget->last_selected->setData(i, Qt::ForegroundRole, QVariant());
-                }
-            }
-        }
-        this->ui.videosWidget->last_selected = current_item;
-        if (selectcurrent) {
-            this->ui.videosWidget->scrollToItemCustom(current_item, true, QAbstractItemView::PositionAtCenter);
-        }
-        for (int i = 0; i < current_item->columnCount(); i++) {
-            current_item->setBackground(i, get_highlight_brush(this->App->palette()));
-            current_item->setForeground(i, get_highlighted_text_brush(this->App->palette()));
-        }
+    QModelIndex src = idx;
+    if (this->videosProxy) {
+        src = this->videosProxy->mapToSource(idx);
     }
-    else {
-        this->ui.videosWidget->last_selected = nullptr;
+    if (src.isValid() && this->videosModel) {
+        QString path = src.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+        this->videosModel->setHighlightedPath(path);
+    }
+    if (scrollAndSelectItem) {
+        QItemSelectionModel* sm = this->ui.videosWidget->selectionModel();
+        if (sm) {
+            sm->setCurrentIndex(idx, QItemSelectionModel::Clear | QItemSelectionModel::Select | QItemSelectionModel::Rows);
+        }
+        this->ui.videosWidget->scrollTo(idx, QAbstractItemView::PositionAtCenter);
     }
 }
 
@@ -3094,61 +2983,21 @@ void MainWindow::updateSortConfig() {
 
 
 void MainWindow::populateList(bool selectcurrent) {
-	auto itemlist = this->App->db->getVideos(this->App->currentDB);
-	this->ui.videosWidget->setSortingEnabled(false);
-	this->ui.videosWidget->addTopLevelItems(itemlist);
+    Q_UNUSED(selectcurrent);
+    QVector<VideoRow> rows = this->App->db->getVideosData(this->App->currentDB);
+    this->videosModel->setRows(std::move(rows));
 
-	QString settings_str = QString();
-	if (this->App->currentDB == "PLUS")
-		settings_str = this->App->config->get("headers_plus_visible");
-	else if (this->App->currentDB == "MINUS")
-		settings_str = this->App->config->get("headers_minus_visible");
-	QStringList settings_list = settings_str.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
-	bool watched_yes = settings_list.contains("watched_yes");
-	bool watched_no = settings_list.contains("watched_no");
-	bool watched_mixed = settings_list.contains("watched_mixed");
-	QString option = this->getWatchedVisibilityOption(watched_yes, watched_no, watched_mixed, this->ui.searchBar->isVisible(), this->ui.visibleOnlyCheckBox->isChecked());
-
-	QSet<QString> authorsWithUnwatched;
-	if (option == "Mixed") {
-		for (QTreeWidgetItem* item : itemlist) {
-			if (item->text(ListColumns["WATCHED_COLUMN"]) == "No") {
-				authorsWithUnwatched.insert(item->text(ListColumns["AUTHOR_COLUMN"]));
-			}
-		}
-	}
-
-	QString search_text = this->ui.searchBar->isVisible() ? this->old_search : "";
-	std::shared_ptr<rapidfuzz::fuzz::CachedPartialRatio<char>> cached_ratio_ptr_shared;
-	if (!search_text.isEmpty()) {
-		cached_ratio_ptr_shared = std::make_shared<rapidfuzz::fuzz::CachedPartialRatio<char>>(
-			search_text.toLower().toStdString()
-		);
-	}
-
-	for (auto& item : itemlist)
-	{
-		item->setTextAlignment(ListColumns["WATCHED_COLUMN"], Qt::AlignHCenter);
-		item->setTextAlignment(ListColumns["VIEWS_COLUMN"], Qt::AlignHCenter);
-		item->setTextAlignment(ListColumns["TAGS_COLUMN"], Qt::AlignHCenter);
-		item->setTextAlignment(ListColumns["TYPE_COLUMN"], Qt::AlignHCenter);
-		item->setTextAlignment(ListColumns["DATE_CREATED_COLUMN"], Qt::AlignHCenter);
-		item->setTextAlignment(ListColumns["LAST_WATCHED_COLUMN"], Qt::AlignHCenter);
-		if (item->text(ListColumns["WATCHED_COLUMN"]) == "Yes")
-			item->setForeground(ListColumns["WATCHED_COLUMN"], QBrush(QColor("#00e640")));
-		else if (item->text(ListColumns["WATCHED_COLUMN"]) == "No")
-			item->setForeground(ListColumns["WATCHED_COLUMN"], QBrush(QColor("#cf000f")));
-
-		bool hidden = determineVisibility(item, option, search_text, cached_ratio_ptr_shared.get(), authorsWithUnwatched);
-		item->setHidden(hidden);
-	}
-	// not sure if this alternative method is needed anymore
-	//if (this->ui.searchBar->isVisible())
-	//    QTimer::singleShot(1, [this,itemlist] {this->search(this->old_search);});
-	this->updateTotalListLabel();
-	this->updateVideoListRandomProbabilitiesIfVisible();
-	this->ui.videosWidget->setSortingEnabled(true);
-	this->selectCurrentItem(nullptr, selectcurrent);
+    QString settings_str = (this->App->currentDB == "PLUS") ? this->App->config->get("headers_plus_visible") : this->App->config->get("headers_minus_visible");
+    QStringList settings_list = settings_str.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
+    bool watched_yes = settings_list.contains("watched_yes");
+    bool watched_no = settings_list.contains("watched_no");
+    bool watched_mixed = settings_list.contains("watched_mixed");
+    QString option = this->getWatchedVisibilityOption(watched_yes, watched_no, watched_mixed, this->ui.searchBar->isVisible(), this->ui.visibleOnlyCheckBox->isChecked());
+    this->videosProxy->setWatchedOption(option);
+    const QString search_text = this->ui.searchBar->isVisible() ? this->old_search : "";
+    this->videosProxy->setSearchText(search_text);
+    this->updateTotalListLabel();
+    this->updateVideoListRandomProbabilitiesIfVisible();
 }
 
 void MainWindow::videosWidgetHeaderContextMenu(QPoint point) {
@@ -3337,18 +3186,21 @@ void MainWindow::updateHeaderSettings(QStringList settings) {
 }
 
 void MainWindow::videosWidgetContextMenu(QPoint point) {
-    QModelIndex index = this->ui.videosWidget->indexAt(point);
-    if (!index.isValid())
-        return;
-    
-    QTreeWidgetItem* item = this->ui.videosWidget->itemAt(point);
-    QList<QTreeWidgetItem*> items = this->ui.videosWidget->selectedItems();
+    QModelIndex proxyIndex = this->ui.videosWidget->indexAt(point);
+    if (!proxyIndex.isValid()) return;
+
+    QModelIndex srcIndex = this->videosProxy->mapToSource(proxyIndex);
+    int row = srcIndex.row();
+    const int id = this->videosModel->index(row, ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
+    const QString path = this->videosModel->index(row, ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+
+    QList<int> selIds = this->selectedIds();
 
     QMenu menu = QMenu(this);
     QAction* play_video = new QAction("Play", &menu);
     QAction* sync_items = new QAction("Sync Items", &menu);
     menu.addAction(play_video);
-    if (items.size() > 1) {
+    if (selIds.size() > 1) {
         menu.addAction(sync_items);
     }
     QAction* generate_author = new QAction("Generate Author", &menu);
@@ -3396,75 +3248,99 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
         return;
 
     if (menu_click == play_video)
-        this->watchSelected(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]));
+        this->watchSelected(id, path);
     else if (menu_click == set_current) {
-        this->setCurrent(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), item->text(ListColumns["PATH_COLUMN"]), item->text(ListColumns["NAME_COLUMN"]), item->text(ListColumns["AUTHOR_COLUMN"]), item->text(ListColumns["TAGS_COLUMN"]));
-        this->selectCurrentItem();
+        const QString name = this->videosModel->index(row, ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
+        const QString author = this->videosModel->index(row, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
+        const QString tags = this->videosModel->index(row, ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
+        this->setCurrent(id, path, name, author, tags);
+        this->highlightCurrentItem();
         if (this->App->VW->mainPlayer) {
             this->changePlayerVideo(this->App->VW->mainPlayer, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
         }
     }
     else if (menu_click == open_location) {
-        utils::openFileExplorer(item->text(ListColumns["PATH_COLUMN"]));
+        utils::openFileExplorer(path);
     }
     else if (menu_click == delete_video)
-        this->DeleteDialogButton(items);
+        this->DeleteDialogButton(selIds);
     else if (menu_click == watched_yes)
-        this->setWatched("Yes", items);
+        this->setWatched("Yes", selIds);
     else if (menu_click == watched_no)
-        this->setWatched("No", items);
+        this->setWatched("No", selIds);
     else if (menu_click == views_edit) {
         bool ok;
-        int old_value = item->text(ListColumns["VIEWS_COLUMN"]).toInt();
+        int old_value = this->videosModel->index(row, ListColumns["VIEWS_COLUMN"]).data(Qt::DisplayRole).toInt();
         int i = QInputDialog::getInt(this, "Edit Views",
             "Views", old_value, 0, 2147483647, 1, &ok);
         if (ok)
-            this->setViews(i, items);
+            this->setViews(i, selIds);
     }
     else if (menu_click == views_plus)
-        this->incrementViews(1, items);
+        this->incrementViews(1, selIds);
     else if (menu_click == views_minus)
-        this->incrementViews(-1, items);
+        this->incrementViews(-1, selIds);
     else if (menu_click == generate_author) {
-        this->updateAuthors(items);
+        this->updateAuthors(selIds);
     }
     else if (menu_click == generate_name) {
-        this->updateNames(items);
+        this->updateNames(selIds);
     }
     else if (menu_click == generate_thumbnails) {
-        for (auto const& item : items) {
-            this->thumbnailManager->enqueue_work({ item->text(ListColumns["PATH_COLUMN"]), true, false });
+        for (int sid : selIds) {
+            this->thumbnailManager->enqueue_work({ pathById(sid), true, false });
             this->thumbnailManager->start();
         }
     }
     else if (menu_click == author_edit) {
         bool ok;
-        QString old_value = item->text(ListColumns["AUTHOR_COLUMN"]);
+        QString old_value = this->videosModel->index(row, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
         QString a = QInputDialog::getText(this, "Edit Author",
             "Author", QLineEdit::Normal, old_value, &ok);
         if (ok) {
-            this->updateAuthors(a, items);
+            this->updateAuthors(a, selIds);
         }
     }
     else if (menu_click == name_edit) {
         bool ok;
-        QString old_value = item->text(ListColumns["NAME_COLUMN"]);
+        QString old_value = this->videosModel->index(row, ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
         QString a = QInputDialog::getText(this, "Edit Name",
             "Name", QLineEdit::Normal, old_value, &ok);
         if (ok) {
-            this->updateNames(a, items);
+            this->updateNames(a, selIds);
         }
     }
     else if (menu_click == update_path) {
-        if (not items.isEmpty()) {
+        if (!selIds.isEmpty()) {
             UpdatePathsDialog* dialog = new UpdatePathsDialog(this, this);
-            dialog->addItems(items);
+            QList<QPair<int, QString>> pairs;
+            for (int sid : selIds) pairs.append({ sid, pathById(sid) });
+            dialog->addItems(pairs);
             dialog->exec();
             dialog->deleteLater();
         }
     }
     else if (menu_click == tags_edit) {
-        this->editTags(items);
+        VideosTagsDialog* d = new VideosTagsDialog(selIds, this, this);
+        d->open();
+        connect(d, &VideosTagsDialog::finished, this, [this, d](int result) {
+            if (result == QDialog::Accepted) {
+                this->App->db->db.transaction();
+                for (auto& video : d->items) {
+                    int video_id = video.first;
+                    QSet<int> tags_id = QSet<int>();
+                    for (int i = 0; i < d->ui.listWidgetAdded->count(); ++i) {
+                        QListWidgetItem* item = d->ui.listWidgetAdded->item(i);
+                        tags_id.insert(item->data(Qt::UserRole).value<Tag>().id);
+                    }
+                    this->App->db->deleteExtraTags(video_id, tags_id);
+                    for (auto& tag_id : tags_id) this->App->db->insertTag(video_id, tag_id);
+                }
+                this->App->db->db.commit();
+            }
+            this->refreshVideosWidget(false, true);
+            d->deleteLater();
+        });
     }
     else if (menu_click == sync_items) {
         QMessageBox msgBox;
@@ -3474,71 +3350,29 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
         msgBox.addButton(QMessageBox::No);
         msgBox.setDefaultButton(QMessageBox::Yes);
         if (msgBox.exec() == QMessageBox::Yes) {
-            QList<QTreeWidgetItem*> items_ = items;
-            items_.removeAll(item);
-            this->syncItems(item, items_);
-        }
-    }
-    else if (menu_click->parent() == category_menu)
-        this->setType(menu_click->text(),items);
-}
-
-VideosTagsDialog* MainWindow::editTags(QList<QTreeWidgetItem*> items, QWidget* parent) {
-    if (items.isEmpty())
-        return nullptr;
-    VideosTagsDialog *dialog = new VideosTagsDialog(items, this, parent);
-    dialog->open();
-    connect(dialog, &VideosTagsDialog::finished, this, [this, dialog](int result) {
-        if (result == QDialog::Accepted) {
+            QList<int> others = selIds;
+            others.removeAll(id);
+            // Read main values from model
+            QString watched = this->videosModel->index(row, ListColumns["WATCHED_COLUMN"]).data(Qt::DisplayRole).toString();
+            QString views = this->videosModel->index(row, ListColumns["VIEWS_COLUMN"]).data(Qt::DisplayRole).toString();
+            double rating = this->videosModel->index(row, ListColumns["RATING_COLUMN"]).data(CustomRoles::rating).toDouble();
             this->App->db->db.transaction();
-            for (auto& video : dialog->items) {
-                int video_id = video.first;
-                QSet<int> tags_id = QSet<int>();
-                for (int i = 0; i < dialog->ui.listWidgetAdded->count(); ++i) {
-                    QListWidgetItem* item = dialog->ui.listWidgetAdded->item(i);
-                    tags_id.insert(item->data(Qt::UserRole).value<Tag>().id);
-                    this->App->db->insertTag(video_id, item->data(Qt::UserRole).value<Tag>().id);
-                }
-                this->App->db->deleteExtraTags(video_id, tags_id);
+            for (int oid : others) {
+                this->App->db->updateItem(oid, "", "", "", "", "", "", watched, views, QString::number(rating));
             }
             this->App->db->db.commit();
             this->refreshVideosWidget(false, true);
-            this->refreshCurrentVideo();
         }
-        dialog->deleteLater();
-    });
-    return dialog;
+    }
+    else if (menu_click->parent() == category_menu)
+        this->setType(menu_click->text(), selIds);
 }
 
-void MainWindow::setType(QString type, QList<QTreeWidgetItem*> items) {
-    QString last = items.last()->text(ListColumns["PATH_COLUMN"]);
-    int lastScroll = this->ui.videosWidget->verticalScrollBar()->value();
-    if (!items.isEmpty()) {
-        this->App->db->db.transaction();
-        for (auto const& item : items) {
-            this->App->db->updateType(item->data(ListColumns["PATH_COLUMN"],CustomRoles::id).toInt(), type);
-        }
-        this->App->db->db.commit();
-        this->refreshVideosWidget(false,true);
-        this->ui.videosWidget->findAndScrollToDelayed(last, false);
-        this->ui.videosWidget->scrollToVerticalPositionDelayed(lastScroll);
-    }
-}
+ 
 
-void MainWindow::setViews(int value, QList<QTreeWidgetItem*> items) {
-    QString last = items.last()->text(ListColumns["PATH_COLUMN"]);
-    int lastScroll = this->ui.videosWidget->verticalScrollBar()->value();
-    if (!items.isEmpty()) {
-        this->App->db->db.transaction();
-        for (auto const& item : items) {
-            this->App->db->setViews(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), value);
-        }
-        this->App->db->db.commit();
-        this->refreshVideosWidget(false,true);
-        this->ui.videosWidget->findAndScrollToDelayed(last, false);
-        this->ui.videosWidget->scrollToVerticalPositionDelayed(lastScroll);
-    }
-}
+ 
+
+ 
 
 void MainWindow::dragEnterEvent(QDragEnterEvent* e) {
     if (e->mimeData()->hasUrls()) {
@@ -3608,48 +3442,19 @@ void MainWindow::playSpecialSoundEffect(bool force_play) {
     }
 }
 
-void MainWindow::incrementViews(int count, QList<QTreeWidgetItem*> items) {
-    QString last = items.last()->text(ListColumns["PATH_COLUMN"]);
-    int lastScroll = this->ui.videosWidget->verticalScrollBar()->value();
-    if (!items.isEmpty()) {
-        this->App->db->db.transaction();
-        for (auto const& item : items) {
-            this->App->db->incrementVideoViews(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), count);
-        }
-        this->App->db->db.commit();
-        this->refreshVideosWidget(false,true);
-        this->ui.videosWidget->findAndScrollToDelayed(last, false);
-        this->ui.videosWidget->scrollToVerticalPositionDelayed(lastScroll);
-    }
-}
+ 
 
-void MainWindow::setWatched(QString value, QList<QTreeWidgetItem*> items) {
-    QString last = items.last()->text(ListColumns["PATH_COLUMN"]);
-    int lastScroll = this->ui.videosWidget->verticalScrollBar()->value();
-    if (!items.isEmpty()) {
-        this->App->db->db.transaction();
-        bool update_date = (value == "Yes") ? true : false;
-        for (auto const& item : items) {
-            this->App->db->updateWatchedState(item->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt(), value, false, update_date);
-        }
-        this->App->db->db.commit();
-        this->refreshVideosWidget(false,true);
-        this->ui.videosWidget->findAndScrollToDelayed(last, false);
-        this->ui.videosWidget->scrollToVerticalPositionDelayed(lastScroll);
-    }
-}
+ 
 
 void MainWindow::selectItems(QStringList items, bool clear_selection) {
-    if (items.isEmpty())
-        return;
-    if (clear_selection)
-        this->ui.videosWidget->clearSelection();
-    QTreeWidgetItemIterator it(this->ui.videosWidget);
-    while (*it) {
-        if (items.contains((*it)->text(ListColumns["PATH_COLUMN"]))) {
-            (*it)->setSelected(true);
+    if (items.isEmpty()) return;
+    if (clear_selection && this->ui.videosWidget->selectionModel())
+        this->ui.videosWidget->selectionModel()->clearSelection();
+    for (const QString& path : items) {
+        QModelIndex pidx = this->proxyIndexByPath(path);
+        if (pidx.isValid()) {
+            this->ui.videosWidget->selectionModel()->select(pidx, QItemSelectionModel::Select | QItemSelectionModel::Rows);
         }
-        ++it;
     }
 }
 
@@ -3663,6 +3468,7 @@ void MainWindow::selectItemsDelayed(QStringList items, bool clear_selection) {
 
 void MainWindow::setCurrent(int id, QString path, QString name, QString author, QString tags, bool reset_progress) {
     this->ui.currentVideo->setValues(id, path, name, author, tags);
+    if (this->videosModel) this->videosModel->setHighlightedPath(path);
     if (reset_progress)
         this->updateProgressBar("0", utils::getVideoDuration(this->ui.currentVideo->path));
     else
@@ -3749,16 +3555,16 @@ void MainWindow::refreshHeadersVisibility() {
 }
 
 void MainWindow::updateTotalListLabel(bool force_update) {
-    QTreeWidgetItem *root = this->ui.videosWidget->invisibleRootItem();
-    int child_count = root->childCount();
-    QTreeWidgetItemIterator it(this->ui.videosWidget);
-    std::map<std::string, int> values = { {"Yes",0 },{"No" , 0}, {"All" , child_count}};
-    while (*it) {
-        if ((*it)->text(ListColumns["WATCHED_COLUMN"]) == "No")
-            values["No"]++;
-        ++it;
+    Q_UNUSED(force_update);
+    int all = this->videosModel ? this->videosModel->rowCount() : 0;
+    int no = 0;
+    if (this->videosModel) {
+        for (int r = 0; r < this->videosModel->rowCount(); ++r) {
+            if (this->videosModel->index(r, ListColumns["WATCHED_COLUMN"]).data(Qt::DisplayRole).toString() == "No")
+                ++no;
+        }
     }
-    values["Yes"] = values["All"] - values["No"];
+    std::map<std::string, int> values = { {"Yes", all - no }, {"No", no}, {"All", all} };
     this->ui.totalListLabel->setText(QString::number(values["No"]));
     bool updated = false;
     if (this->ui.totalListLabel->progress() != values["No"]) {
@@ -3785,165 +3591,27 @@ void MainWindow::changePlayerVideo(QSharedPointer<BasePlayer> player, QString pa
 
 void MainWindow::updateVideoListRandomProbabilities() {
     NextVideoSettings next_video_settings = this->getNextVideoSettings();
-    NextVideoModes::Mode current_mode = this->getNextVideoMode();
+    QJsonObject random_settings = this->getRandomSettings(next_video_settings.random_mode, next_video_settings.ignore_filters_and_defaults,
+        next_video_settings.vid_type_include, next_video_settings.vid_type_exclude);
 
-    QJsonObject random_settings;
-    QList<VideoWeightedData> items;
-    QList<QTreeWidgetItem*> relevant_items;
-
-    if (current_mode == NextVideoModes::SeriesRandom) {
-        // Find current video item once
-        QTreeWidgetItem* current_video_item = nullptr;
-        if (!this->ui.currentVideo->path.isEmpty()) {
-            QList<QTreeWidgetItem*> current_items = this->ui.videosWidget->findItemsCustom(this->ui.currentVideo->path, Qt::MatchExactly, ListColumns["PATH_COLUMN"], 1);
-            if (!current_items.isEmpty()) {
-                current_video_item = current_items.first();
-            }
-        }
-
-        if (current_video_item != nullptr) {
-            QString current_author = current_video_item->text(ListColumns["AUTHOR_COLUMN"]);
-            if (current_author.isEmpty()) {
-                current_author = current_video_item->text(ListColumns["PATH_COLUMN"]);
-            }
-
-            // Single pass to get author's unwatched videos
-            QList<QTreeWidgetItem*> author_unwatched_videos;
-            QTreeWidgetItemIterator iter(this->ui.videosWidget);
-            while (*iter) {
-                QTreeWidgetItem* item = *iter;
-                if (item->text(ListColumns["WATCHED_COLUMN"]) == "No") {
-                    QString item_author = item->text(ListColumns["AUTHOR_COLUMN"]);
-                    if (item_author.isEmpty()) {
-                        item_author = item->text(ListColumns["PATH_COLUMN"]);
-                    }
-                    if (item_author == current_author) {
-                        author_unwatched_videos.append(item);
-                    }
-                }
-                ++iter;
-            }
-
-            // Find current position
-            int current_pos = author_unwatched_videos.indexOf(current_video_item);
-
-            // Determine next item
-            if (current_pos != -1 && current_pos + 1 < author_unwatched_videos.size()) {
-                relevant_items.append(author_unwatched_videos[current_pos + 1]);
-            }
-            else if (current_pos != -1 && current_pos == author_unwatched_videos.size() - 1 && author_unwatched_videos.size() > 1) {
-                relevant_items.append(author_unwatched_videos[0]);
-            }
-            else {
-                // Need to switch authors - use optimized helper
-                random_settings = this->getRandomSettings(next_video_settings.random_mode, next_video_settings.ignore_filters_and_defaults,
-                    next_video_settings.vid_type_include, next_video_settings.vid_type_exclude);
-                QList<VideoWeightedData> all_videos = this->App->db->getVideos(this->App->currentDB, random_settings);
-
-                QMap<QString, AuthorVideoData> author_map = this->getAuthorVideoMap(current_author, all_videos);
-                this->findFirstItemsForAuthors(author_map);
-                items = this->calculateAuthorWeights(author_map);
-
-                // Collect relevant items
-                for (const VideoWeightedData& author_data : items) {
-                    for (auto it = author_map.constBegin(); it != author_map.constEnd(); ++it) {
-                        if (it.value().firstItem &&
-                            author_data.path == it.value().firstItem->text(ListColumns["PATH_COLUMN"])) {
-                            relevant_items.append(it.value().firstItem);
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        else {
-            // No current video - use optimized helper
-            random_settings = this->getRandomSettings(next_video_settings.random_mode, next_video_settings.ignore_filters_and_defaults,
-                next_video_settings.vid_type_include, next_video_settings.vid_type_exclude);
-            QList<VideoWeightedData> all_videos = this->App->db->getVideos(this->App->currentDB, random_settings);
-
-            QMap<QString, AuthorVideoData> author_map = this->getAuthorVideoMap("", all_videos);
-            this->findFirstItemsForAuthors(author_map);
-            items = this->calculateAuthorWeights(author_map);
-
-            // Collect relevant items
-            for (const VideoWeightedData& author_data : items) {
-                for (auto it = author_map.constBegin(); it != author_map.constEnd(); ++it) {
-                    if (it.value().firstItem &&
-                        author_data.path == it.value().firstItem->text(ListColumns["PATH_COLUMN"])) {
-                        relevant_items.append(it.value().firstItem);
-                        break;
-                    }
-                }
-            }
-        }
-
-        // If items is empty (staying with current author), get actual video data
-        if (items.isEmpty() && !relevant_items.isEmpty()) {
-            random_settings = this->getRandomSettings(next_video_settings.random_mode, next_video_settings.ignore_filters_and_defaults,
-                next_video_settings.vid_type_include, next_video_settings.vid_type_exclude);
-            QList<VideoWeightedData> all_items = this->App->db->getVideos(this->App->currentDB, random_settings);
-
-            QString target_path = relevant_items.first()->text(ListColumns["PATH_COLUMN"]);
-            for (const VideoWeightedData& video : all_items) {
-                if (video.path == target_path) {
-                    items.append(video);
-                    break;
-                }
-            }
-        }
-    }
-    else {
-        // For other modes, use original behavior
-        random_settings = this->getRandomSettings(next_video_settings.random_mode, next_video_settings.ignore_filters_and_defaults,
-            next_video_settings.vid_type_include, next_video_settings.vid_type_exclude);
-        items = this->App->db->getVideos(this->App->currentDB, random_settings);
-    }
-
+    QList<VideoWeightedData> items = this->App->db->getVideos(this->App->currentDB, random_settings);
     WeightedBiasSettings bias_settings = this->getWeightedBiasSettings();
     if (!bias_settings.weighted_random_enabled) {
         bias_settings.bias_general = 0;
     }
+    QMap<int, long double> probabilities = utils::calculateProbabilities(items, bias_settings.bias_views, bias_settings.bias_rating,
+        bias_settings.bias_tags, bias_settings.bias_general,
+        bias_settings.no_views_weight, bias_settings.no_rating_weight,
+        bias_settings.no_tags_weight);
 
-    // Calculate probabilities
-    QMap<int, long double> probabilities;
-
-    if (current_mode == NextVideoModes::SeriesRandom && !relevant_items.isEmpty()) {
-        if (relevant_items.size() == 1) {
-            // Single deterministic next video - 100%
-            probabilities[items.first().id] = 100.0;
-        }
-        else {
-            // Multiple possible next videos
-            probabilities = utils::calculateProbabilities(items, bias_settings.bias_views, bias_settings.bias_rating,
-                bias_settings.bias_tags, bias_settings.bias_general,
-                bias_settings.no_views_weight, bias_settings.no_rating_weight,
-                bias_settings.no_tags_weight);
-        }
+    if (!this->videosModel) return;
+    for (int r = 0; r < this->videosModel->rowCount(); ++r) {
+        const QModelIndex idIdx = this->videosModel->index(r, ListColumns["PATH_COLUMN"]);
+        const int id = idIdx.data(CustomRoles::id).toInt();
+        const QString path = idIdx.data(Qt::DisplayRole).toString();
+        const double p = static_cast<double>(probabilities.value(id, 0));
+        this->videosModel->setRandomPercentForPath(path, p);
     }
-    else {
-        probabilities = utils::calculateProbabilities(items, bias_settings.bias_views, bias_settings.bias_rating,
-            bias_settings.bias_tags, bias_settings.bias_general,
-            bias_settings.no_views_weight, bias_settings.no_rating_weight,
-            bias_settings.no_tags_weight);
-    }
-
-    // Update UI - single pass
-    QTreeWidgetItemIterator it2(this->ui.videosWidget);
-    bool sorting = this->ui.videosWidget->isSortingEnabled();
-    this->ui.videosWidget->setSortingEnabled(false);
-
-    while (*it2) {
-        bool hidden = (*it2)->isHidden();
-        (*it2)->setHidden(true);
-        int id = (*it2)->data(ListColumns["PATH_COLUMN"], CustomRoles::id).toInt();
-        (*it2)->setText(ListColumns["RANDOM%_COLUMN"], QString::number(probabilities.value(id, 0), 'f', 2) % "%");
-        (*it2)->setTextAlignment(ListColumns["RANDOM%_COLUMN"], Qt::AlignCenter);
-        (*it2)->setHidden(hidden);
-        ++it2;
-    }
-
-    this->ui.videosWidget->setSortingEnabled(sorting);
 }
 
 void MainWindow::updateVideoListRandomProbabilitiesIfVisible() {

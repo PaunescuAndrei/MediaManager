@@ -15,6 +15,10 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <QtMoc Include="src\QtClasses\Models\VideosModel.h" />
+    <QtMoc Include="src\QtClasses\Models\VideosProxyModel.h" />
+    <QtMoc Include="src\QtClasses\Widgets\VideosTreeView.h" />
+    <ClInclude Include="src\general\VideoData.h" />
     <ClCompile Include="src\general\BasePlayer.cpp" />
     <ClCompile Include="src\general\colorPaletteExtractor.cpp" />
     <ClCompile Include="src\general\config.cpp" />
@@ -41,6 +45,9 @@
     <ClCompile Include="src\QtClasses\MainApp.cpp" />
     <ClCompile Include="src\QtClasses\MainWindow.cpp" />
     <ClCompile Include="src\QtClasses\stylesQt.cpp" />
+    <ClCompile Include="src\QtClasses\Models\VideosModel.cpp" />
+    <ClCompile Include="src\QtClasses\Models\VideosProxyModel.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\VideosTreeView.cpp" />
     <ClCompile Include="src\QtClasses\UI\addWatchedDialog.cpp" />
     <ClCompile Include="src\QtClasses\UI\DeleteDialog.cpp" />
     <ClCompile Include="src\QtClasses\UI\FilterDialog.cpp" />

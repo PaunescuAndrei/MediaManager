@@ -9,6 +9,7 @@
 #include "MainApp.h"
 #include <QJsonObject>
 #include <QJsonDocument>
+#include "VideoData.h"
 
 sqliteDB::sqliteDB(QString location,std::string conname) {
     // In the constructor or initialization function of that object      
@@ -83,6 +84,47 @@ QList<QTreeWidgetItem*> sqliteDB::getVideos(QString category) {
         itemlist.append(item);
     }
     return itemlist;
+}
+
+QVector<VideoRow> sqliteDB::getVideosData(QString category) {
+    QSqlQuery query = QSqlQuery(this->db);
+
+    QString query_string = "SELECT v.id,v.path,GROUP_CONCAT(t.name, ', ' ORDER BY t.display_priority ASC, t.id) AS tags,v.type,v.watched,v.views,v.rating,v.author,v.name, datetime(v.date_created, 'localtime'), datetime(v.last_watched, 'localtime') from videodetails v "
+        "LEFT JOIN tags_relations tr ON v.id = tr.video_id "
+        "LEFT JOIN tags t ON tr.tag_id = t.id WHERE v.category = :category "
+        "GROUP BY v.id; ";
+
+    query.prepare(query_string);
+    query.bindValue(":category", category);
+    QVector<VideoRow> result;
+    if (!query.exec()) {
+        if (qMainApp) {
+            qMainApp->logger->log(QString("Database Error at getVideosData (%1): %2").arg(category, query.lastError().text()), "Database", query.lastError().text());
+            qMainApp->showErrorMessage("getVideosData " + category + " " + query.lastError().text());
+        }
+        return result;
+    }
+
+    result.reserve(query.size() > 0 ? query.size() : 0);
+    while (query.next()) {
+        VideoRow row;
+        row.id = query.value(0).toInt();
+        row.path = query.value(1).toString();
+        row.tags = query.value(2).toString();
+        row.type = query.value(3).toString();
+        if (row.type.isEmpty()) {
+            row.type = "None";
+        }
+        row.watched = query.value(4).toString();
+        row.views = query.value(5).toString();
+        row.rating = query.value(6).toDouble();
+        row.author = query.value(7).toString();
+        row.name = query.value(8).toString();
+        row.dateCreated = query.value(9).toDateTime();
+        row.lastWatched = query.value(10).toDateTime();
+        result.push_back(std::move(row));
+    }
+    return result;
 }
 
 QSet<Tag> sqliteDB::getAllTags() {

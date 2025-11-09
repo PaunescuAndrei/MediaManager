@@ -29,7 +29,10 @@ QVariant VideosModel::data(const QModelIndex& index, int role) const {
         if (c == ListColumns["TYPE_COLUMN"]) return r.type;
         if (c == ListColumns["WATCHED_COLUMN"]) return r.watched;
         if (c == ListColumns["VIEWS_COLUMN"]) return r.views;
-        if (c == ListColumns["RANDOM%_COLUMN"]) return r.randomPercent > 0 ? QVariant(QString::number(r.randomPercent, 'f', 2)) : QVariant();
+        if (c == ListColumns["RANDOM%_COLUMN"]) {
+            const QString percentText = QStringLiteral("%1%").arg(QString::number(r.randomPercent, 'f', 2));
+            return percentText;
+        }
         if (c == ListColumns["DATE_CREATED_COLUMN"]) return r.dateCreated;
         if (c == ListColumns["LAST_WATCHED_COLUMN"]) return r.lastWatched;
     }

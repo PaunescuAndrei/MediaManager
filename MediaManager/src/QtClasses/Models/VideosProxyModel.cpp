@@ -3,12 +3,11 @@
 #pragma warning(push ,3)
 #include "rapidfuzz_all.hpp"
 #pragma warning(pop)
+#include <QAbstractProxyModel>
 
 VideosProxyModel::VideosProxyModel(QObject* parent)
     : QSortFilterProxyModel(parent) {
     setDynamicSortFilter(true);
-    collator.setNumericMode(true);
-    collator.setCaseSensitivity(Qt::CaseInsensitive);
 }
 
 void VideosProxyModel::setSearchText(const QString& text) {
@@ -120,28 +119,11 @@ bool VideosProxyModel::filterAcceptsRow(int source_row, const QModelIndex& sourc
     return true;
 }
 
-bool VideosProxyModel::lessThan(const QModelIndex& left, const QModelIndex& right) const {
-    const int col = left.column();
-
-    // Special handling for rating column
-    if (col == ListColumns["RATING_COLUMN"]) {
-        const double l = left.data(CustomRoles::rating).toDouble();
-        const double r = right.data(CustomRoles::rating).toDouble();
-        return l < r;
+void VideosProxyModel::sort(int column, Qt::SortOrder order) {
+    if (auto chainedProxy = qobject_cast<QAbstractProxyModel*>(sourceModel())) {
+        chainedProxy->sort(column, order);
     }
-
-    // Standard string comparison with collator
-    const QString lKey = left.data(Qt::DisplayRole).toString();
-    const QString rKey = right.data(Qt::DisplayRole).toString();
-    const int cmp = collator.compare(lKey, rKey);
-
-    if (cmp != 0) {
-        return cmp < 0;
+    else if (sourceModel()) {
+        sourceModel()->sort(column, order);
     }
-
-    // Tie-breaker: compare by path
-    static const int pathCol = ListColumns["PATH_COLUMN"];
-    const QString lPath = left.siblingAtColumn(pathCol).data(Qt::DisplayRole).toString();
-    const QString rPath = right.siblingAtColumn(pathCol).data(Qt::DisplayRole).toString();
-    return collator.compare(lPath, rPath) < 0;
 }

@@ -27,6 +27,7 @@
 class MainApp;
 class VideosModel;
 class VideosProxyModel;
+class VideosSortProxyModel;
 
 class MainWindow : public QMainWindow
 {
@@ -34,6 +35,7 @@ class MainWindow : public QMainWindow
 
 public:
     VideosModel* videosModel = nullptr;
+    VideosSortProxyModel* videosSortProxy = nullptr;
     VideosProxyModel* videosProxy = nullptr;
     QCompleter* search_completer = nullptr;
     Ui::MainWindow ui;
@@ -114,10 +116,14 @@ public:
     void refreshVisibility(QString search_text);
     void refreshVisibility();
     // Model helpers
-    QModelIndex sourceIndexByPath(const QString& path) const;
-    QModelIndex sourceIndexById(int id) const;
-    QModelIndex proxyIndexByPath(const QString& path) const;
-    QPersistentModelIndex persistentProxyIndexByPath(const QString& path) const;
+    QModelIndex modelIndexByPath(const QString& path) const;
+    QModelIndex modelIndexById(int id) const;
+    QModelIndex sortProxyIndexByPath(const QString& path) const;
+    QModelIndex sortProxyIndexById(int id) const;
+    QModelIndex filterProxyIndexByPath(const QString& path) const;
+    QPersistentModelIndex persistentFilterProxyIndexByPath(const QString& path) const;
+    QModelIndex sortProxyIndexFromFilterIndex(const QModelIndex& filterIndex) const;
+    QModelIndex modelIndexFromFilterIndex(const QModelIndex& filterIndex) const;
     QStringList selectedPaths() const;
     QList<int> selectedIds() const;
     QString pathById(int id) const;
@@ -156,7 +162,7 @@ public:
     QJsonObject getRandomSettings(RandomModes::Mode random_mode, bool ignore_filters_and_defaults = false, QStringList vid_type_include = {}, QStringList vid_type_exclude = {});
     bool randomVideo(RandomModes::Mode random_mode, bool ignore_filters_and_defaults = false, QStringList vid_type_include = {}, QStringList vid_type_exclude = {}, bool reset_progress = true);
     void refreshCurrentVideo();
-    void highlightCurrentItem(const QPersistentModelIndex& proxyIndex = QPersistentModelIndex(), bool scrollAndSelectItem = true);
+    void highlightCurrentItem(const QPersistentModelIndex& sourceIndex = QPersistentModelIndex(), bool scrollAndSelectItem = true);
     struct AuthorVideoModelData {
         QString author;
         QList<VideoWeightedData> videos;

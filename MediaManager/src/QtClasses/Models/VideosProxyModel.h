@@ -1,6 +1,5 @@
 #pragma once
 #include <QSortFilterProxyModel>
-#include <QCollator>
 #include <QSet>
 #include <QString>
 #include <memory>
@@ -16,9 +15,10 @@ public:
     void setWatchedOption(const QString& option);
     void setVisibleOnlyChecked(bool enabled);
     void rebuildAuthorsWithUnwatched();
-    bool lessThan(const QModelIndex& left, const QModelIndex& right) const override;
+
 protected:
     bool filterAcceptsRow(int source_row, const QModelIndex& source_parent) const override;
+    void sort(int column, Qt::SortOrder order = Qt::AscendingOrder) override;
 
 private:
     QString search_text;
@@ -27,5 +27,4 @@ private:
     bool visible_only = false;
     QSet<QString> authorsWithUnwatched;
     std::shared_ptr<rapidfuzz::fuzz::CachedPartialRatio<char>> cached_ratio;
-    QCollator collator;
 };

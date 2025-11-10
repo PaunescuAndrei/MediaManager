@@ -17,6 +17,7 @@
   <ItemGroup>
     <QtMoc Include="src\QtClasses\Models\VideosModel.h" />
     <QtMoc Include="src\QtClasses\Models\VideosProxyModel.h" />
+    <QtMoc Include="src\QtClasses\Models\VideosSortProxyModel.h" />
     <QtMoc Include="src\QtClasses\Widgets\VideosTreeView.h" />
     <ClInclude Include="src\general\VideoData.h" />
     <ClCompile Include="src\general\BasePlayer.cpp" />
@@ -47,6 +48,7 @@
     <ClCompile Include="src\QtClasses\stylesQt.cpp" />
     <ClCompile Include="src\QtClasses\Models\VideosModel.cpp" />
     <ClCompile Include="src\QtClasses\Models\VideosProxyModel.cpp" />
+    <ClCompile Include="src\QtClasses\Models\VideosSortProxyModel.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\VideosTreeView.cpp" />
     <ClCompile Include="src\QtClasses\UI\addWatchedDialog.cpp" />
     <ClCompile Include="src\QtClasses\UI\DeleteDialog.cpp" />

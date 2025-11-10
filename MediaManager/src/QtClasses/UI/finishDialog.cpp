@@ -33,10 +33,12 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 	this->ui.scrollArea_name->installEventFilter(new scrollAreaEventFilter(this->ui.scrollArea_name));
     this->ui.author_label->setText(MW->ui.currentVideo->author);
     this->ui.name_label->setText(MW->ui.currentVideo->name);
-    QPersistentModelIndex index = QPersistentModelIndex(MW->proxyIndexByPath(MW->ui.currentVideo->path).sibling(ListColumns["RATING_COLUMN"], 0));
-    if (index.isValid()) {
-        StarRating starRating = StarRating(MW->active, MW->halfactive, MW->inactive, index.data(CustomRoles::rating).value<double>(), 5.0);
-        starEditorWidget * starEditor = new starEditorWidget(this, index);
+    QModelIndex proxyPathIdx = MW->filterProxyIndexByPath(MW->ui.currentVideo->path);
+    const QModelIndex ratingIdx = proxyPathIdx.siblingAtColumn(ListColumns["RATING_COLUMN"]);
+    const QPersistentModelIndex ratingProxyIndex(ratingIdx);
+    if (ratingProxyIndex.isValid()) {
+        StarRating starRating = StarRating(MW->active, MW->halfactive, MW->inactive, ratingIdx.data(CustomRoles::rating).value<double>(), 5.0);
+        starEditorWidget * starEditor = new starEditorWidget(this, ratingProxyIndex);
 		starEditor->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
 		starEditor->setEditMode(starEditorWidget::EditMode::DoubleClick);
 		starEditor->setStarRating(starRating);
@@ -53,15 +55,15 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 		lt->insertWidget(3, avg_rating_label);
 
         // Tags label
-        this->ui.tags_label->setText(index.sibling(ListColumns["TAGS_COLUMN"], 0).data(Qt::DisplayRole).toString());
+        this->ui.tags_label->setText(ratingIdx.siblingAtColumn(ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString());
 		
 		// Set views count
-        QString viewsText = index.sibling(ListColumns["VIEWS_COLUMN"], 0).data(Qt::DisplayRole).toString();
+        QString viewsText = ratingIdx.siblingAtColumn(ListColumns["VIEWS_COLUMN"]).data(Qt::DisplayRole).toString();
         this->ui.viewsValueLabel->setText(viewsText);
 		
 		// Set last watched date in human-readable format
-        QString lastWatchedText = index.sibling(ListColumns["LAST_WATCHED_COLUMN"], 0).data(Qt::DisplayRole).toString();
-        QVariant lastWatchedData = index.sibling(ListColumns["LAST_WATCHED_COLUMN"], 0).data(Qt::DisplayRole);
+        QString lastWatchedText = ratingIdx.siblingAtColumn(ListColumns["LAST_WATCHED_COLUMN"]).data(Qt::DisplayRole).toString();
+        QVariant lastWatchedData = ratingIdx.siblingAtColumn(ListColumns["LAST_WATCHED_COLUMN"]).data(Qt::DisplayRole);
 		
 		if (!lastWatchedText.isEmpty() && lastWatchedData.type() == QVariant::DateTime) {
 			QDateTime lastWatchedDateTime = lastWatchedData.toDateTime();
@@ -86,7 +88,7 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 		}
 
         connect(this->ui.tagsButton, &QPushButton::clicked, this, [this, MW]() {
-            QModelIndex src = MW->sourceIndexByPath(MW->ui.currentVideo->path);
+            QModelIndex src = MW->modelIndexByPath(MW->ui.currentVideo->path);
             if (src.isValid()) {
                 this->timer.stop();
                 Qt::WindowFlags flags = windowFlags();
@@ -101,8 +103,8 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
                             this->setWindowFlag(Qt::WindowStaysOnTopHint, isOnTop);
                             this->show();
                             this->timer.start(250);
-                            QModelIndex src = MW->sourceIndexByPath(MW->ui.currentVideo->path);
-                            if (src.isValid()) this->ui.tags_label->setText(src.sibling(ListColumns["TAGS_COLUMN"], 0).data(Qt::DisplayRole).toString());
+                            QModelIndex src = MW->modelIndexByPath(MW->ui.currentVideo->path);
+                            if (src.isValid()) this->ui.tags_label->setText(src.siblingAtColumn(ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString());
                         }
                     });
                 }

@@ -166,6 +166,7 @@ public:
     QJsonObject getRandomSettings(RandomModes::Mode random_mode, bool ignore_filters_and_defaults = false, QStringList vid_type_include = {}, QStringList vid_type_exclude = {});
     bool randomVideo(RandomModes::Mode random_mode, bool ignore_filters_and_defaults = false, QStringList vid_type_include = {}, QStringList vid_type_exclude = {}, bool reset_progress = true);
     void refreshCurrentVideo();
+    void syncCurrentVideoFromModel();
     void highlightCurrentItem(const QPersistentModelIndex& sourceIndex = QPersistentModelIndex(), bool scrollAndSelectItem = true);
     struct AuthorVideoModelData {
         QString author;

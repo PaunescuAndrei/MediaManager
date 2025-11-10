@@ -2419,6 +2419,27 @@ void MainWindow::refreshCurrentVideo() {
     this->ui.currentVideo->setValues(this->App->db->getCurrentVideo(this->App->currentDB));
 }
 
+void MainWindow::syncCurrentVideoFromModel() {
+    if (!this->videosModel || !this->ui.currentVideo)
+        return;
+    const QString currentPath = this->ui.currentVideo->path;
+    if (currentPath.isEmpty())
+        return;
+    const QPersistentModelIndex src = this->modelIndexByPath(currentPath);
+    if (!src.isValid()) {
+        // Current path no longer exists in the model; fall back to DB snapshot.
+        this->refreshCurrentVideo();
+        return;
+    }
+    const QModelIndex srcModelIdx(src);
+    const int id = srcModelIdx.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
+    const QString path = srcModelIdx.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+    const QString name = srcModelIdx.siblingAtColumn(ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
+    const QString author = srcModelIdx.siblingAtColumn(ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
+    const QString tags = srcModelIdx.siblingAtColumn(ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
+    this->ui.currentVideo->setValues(id, path, name, author, tags);
+}
+
 void MainWindow::initListDetails() {
     this->App->db->db.transaction();
     this->refreshCurrentVideo();
@@ -2780,6 +2801,7 @@ void MainWindow::refreshVideosWidget(bool selectcurrent, bool remember_selected)
     this->updateSearchCompleter();
     bool scrollToCurrent = selectcurrent && (!remember_selected || selected_items.isEmpty());
     this->highlightCurrentItem(QPersistentModelIndex(), scrollToCurrent);
+    this->syncCurrentVideoFromModel();
 }
 
 void MainWindow::switchCurrentDB(QString db) {

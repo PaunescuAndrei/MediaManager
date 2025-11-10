@@ -21,11 +21,14 @@ public:
     double maxStarCount() const { return myMaxStarCount; }
     void setStarCount(double starCount) { myStarCount = starCount; }
     void setMaxStarCount(double maxStarCount) { myMaxStarCount = maxStarCount; }
+    void setStarPixelSize(int pixelSize);
+    int starPixelSize() const { return this->paintingScaleFactor; }
 
 private:
     QPolygonF starPolygon;
     QPolygonF diamondPolygon;
     double myStarCount;
     double myMaxStarCount;
+    int paintingScaleFactor = 15;
 };
 Q_DECLARE_METATYPE(StarRating)

@@ -6,6 +6,7 @@
 NotificationDialog::NotificationDialog(QWidget* parent) : QDialog(parent)
 {
 	ui.setupUi(this);
+	this->ui.rating->setStarPixelSize(17);
 	this->setWindowModality(Qt::NonModal);
 	this->ui.rating->setEditMode(starEditorWidget::EditMode::NoEdit);
 	this->ui.durationProgressBar->setMaximum(this->time_duration.count());

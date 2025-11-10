@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>183</width>
+    <width>188</width>
     <height>98</height>
    </rect>
   </property>
@@ -126,7 +126,7 @@
              <widget class="QLabel" name="tags">
               <property name="font">
                <font>
-                <pointsize>11</pointsize>
+                <pointsize>12</pointsize>
                </font>
               </property>
               <property name="styleSheet">
@@ -182,7 +182,7 @@ color: #AAAAAA;
                    <widget class="QLabel" name="lastWatchedLabel">
                     <property name="font">
                      <font>
-                      <pointsize>10</pointsize>
+                      <pointsize>11</pointsize>
                      </font>
                     </property>
                     <property name="text">
@@ -194,7 +194,7 @@ color: #AAAAAA;
                    <widget class="QLabel" name="lastWatchedValueLabel">
                     <property name="font">
                      <font>
-                      <pointsize>10</pointsize>
+                      <pointsize>11</pointsize>
                       <bold>true</bold>
                      </font>
                     </property>
@@ -280,7 +280,7 @@ color: #AAAAAA;
                    <widget class="QLabel" name="starsLabel">
                     <property name="font">
                      <font>
-                      <pointsize>10</pointsize>
+                      <pointsize>11</pointsize>
                       <bold>true</bold>
                      </font>
                     </property>
@@ -322,7 +322,7 @@ color: #AAAAAA;
                 <widget class="QLabel" name="viewsLabel">
                  <property name="font">
                   <font>
-                   <pointsize>10</pointsize>
+                   <pointsize>11</pointsize>
                    <bold>true</bold>
                   </font>
                  </property>

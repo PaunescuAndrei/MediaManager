@@ -49,6 +49,7 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 		starEditor->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
 		starEditor->setEditMode(starEditorWidget::EditMode::DoubleClick);
 		starEditor->setStarRating(starRating);
+		starEditor->setStarPixelSize(17);
 		connect(starEditor, &starEditorWidget::editingFinished, this, [MW, starEditor] {
             const double newValue = starEditor->starRating().starCount();
             const double oldValue = starEditor->original_value;

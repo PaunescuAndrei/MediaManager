@@ -15,8 +15,10 @@ ProgressBarQLabel::ProgressBarQLabel(QWidget* parent) : customQLabel(parent) {
 }
 
 void ProgressBarQLabel::copy(ProgressBarQLabel* other) {
-	this->setMinMax(other->minimum(), other->maximum());
-	this->setProgress(other->progress());
+	this->normalFontSize_ = other->normalFontSize();
+	this->highlightFontSize_ = other->highlightFontSize();
+	this->setMinMax(other->minimum(), other->maximum(), false);
+	this->setProgress(other->progress(), false);
 	this->vertical_orientation = other->vertical_orientation;
 	this->w = other->w;
 	this->scaled_mode = other->scaled_mode;
@@ -26,6 +28,8 @@ void ProgressBarQLabel::copy(ProgressBarQLabel* other) {
 	this->setFont(other->font());
 	this->setText(other->text());
 	this->setAlignment(other->alignment());
+	this->applyFontSize(this->highlight_check());
+	this->update();
 }
 
 bool ProgressBarQLabel::scaledOutlineMode() {
@@ -70,16 +74,7 @@ void ProgressBarQLabel::setPen(Qt::GlobalColor color) {
 void ProgressBarQLabel::setProgress(int progress, bool update)
 {
 	this->progress_ = progress;
-	if (highlight_check()) {
-		QFont font_ = this->font();
-		font_.setPointSizeF(24);
-		this->setFont(font_);
-	}
-	else {
-		QFont font_ = this->font();
-		font_.setPointSizeF(16);
-		this->setFont(font_);
-	}
+	this->applyFontSize(this->highlight_check());
 	if(update)
 		this->update();
 }
@@ -87,18 +82,19 @@ void ProgressBarQLabel::setMinMax(int minimum, int maximum, bool update)
 {
 	this->minimum_ = minimum;
 	this->maximum_ = maximum;
-	if (highlight_check()) {
-		QFont font_ = this->font();
-		font_.setPointSizeF(24);
-		this->setFont(font_);
-	}
-	else {
-		QFont font_ = this->font();
-		font_.setPointSizeF(16);
-		this->setFont(font_);
-	}
+	this->applyFontSize(this->highlight_check());
 	if(update)
 		this->update();
+}
+void ProgressBarQLabel::setFontSizes(qreal normalSize, qreal highlightSize) {
+	if (normalSize > 0) {
+		this->normalFontSize_ = normalSize;
+	}
+	if (highlightSize > 0) {
+		this->highlightFontSize_ = highlightSize;
+	}
+	this->applyFontSize(this->highlight_check());
+	this->update();
 }
 int& ProgressBarQLabel::progress()
 {
@@ -125,6 +121,14 @@ bool ProgressBarQLabel::highlight_check() {
 		return true;
 	else
 		return false;
+}
+void ProgressBarQLabel::applyFontSize(bool highlightActive) {
+	const qreal targetSize = highlightActive ? this->highlightFontSize_ : this->normalFontSize_;
+	if (targetSize <= 0)
+		return;
+	QFont font_ = this->font();
+	font_.setPointSizeF(targetSize);
+	this->setFont(font_);
 }
 QSize ProgressBarQLabel::sizeHint() const
 {
@@ -161,10 +165,10 @@ void ProgressBarQLabel::paintEvent(QPaintEvent* e)
 
 	if (highlight_check()) {
 		progress_bar_option.palette.setColor(QPalette::Highlight, utils::get_vibrant_color_exponential(highlight_color,0.12,0.12));
-		font_.setPointSizeF(24);
+		font_.setPointSizeF(this->highlightFontSize_);
 	}
 	else {
-		font_.setPointSizeF(16);
+		font_.setPointSizeF(this->normalFontSize_);
 	}
 	style->drawControl(QStyle::CE_ProgressBar, &progress_bar_option, &painter);
 

@@ -15,12 +15,18 @@ public:
     starEditorWidget(QWidget *parent = nullptr, QPersistentModelIndex item_index = QPersistentModelIndex());
     QSize sizeHint() const override;
     void setStarRating(const StarRating &starRating) {
+        const int previousPixelSize = myStarRating.starPixelSize();
         myStarRating = starRating;
+        if (previousPixelSize > 0) {
+            myStarRating.setStarPixelSize(previousPixelSize);
+        }
         original_value = starRating.starCount();
     }
     void setEditMode(EditMode editMode) {
         this->edit_mode = editMode;
     }
+    void setStarPixelSize(int pixelSize);
+    int starPixelSize() const;
     StarRating starRating() { return myStarRating; }
 signals:
     void editingFinished();

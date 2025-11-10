@@ -15,6 +15,18 @@ QSize starEditorWidget::sizeHint() const
     return myStarRating.sizeHint();
 }
 
+void starEditorWidget::setStarPixelSize(int pixelSize)
+{
+    myStarRating.setStarPixelSize(pixelSize);
+    this->updateGeometry();
+    this->update();
+}
+
+int starEditorWidget::starPixelSize() const
+{
+    return myStarRating.starPixelSize();
+}
+
 void starEditorWidget::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);

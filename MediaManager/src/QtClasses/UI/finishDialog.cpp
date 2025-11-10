@@ -36,11 +36,12 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
     this->ui.name_label->setText(MW->ui.currentVideo->name);
 
     const QString currentPath = MW->ui.currentVideo->path;
-    const QModelIndex sourcePathIdx = MW->modelIndexByPath(currentPath);
-    const QModelIndex sourceRatingIdx = sourcePathIdx.isValid()
-        ? sourcePathIdx.siblingAtColumn(ListColumns["RATING_COLUMN"])
-        : QModelIndex();
-    const QPersistentModelIndex sourceRatingPersistent(sourceRatingIdx);
+    const QPersistentModelIndex sourcePathPersistent = MW->modelIndexByPath(currentPath);
+    const QModelIndex sourcePathIdx(sourcePathPersistent);
+    const QPersistentModelIndex sourceRatingPersistent = sourcePathIdx.isValid()
+        ? QPersistentModelIndex(sourcePathIdx.siblingAtColumn(ListColumns["RATING_COLUMN"]))
+        : QPersistentModelIndex();
+    const QModelIndex sourceRatingIdx(sourceRatingPersistent);
 
     if (sourceRatingIdx.isValid()) {
         StarRating starRating = StarRating(MW->active, MW->halfactive, MW->inactive, sourceRatingIdx.data(CustomRoles::rating).value<double>(), 5.0);
@@ -98,14 +99,14 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 		}
 
         connect(this->ui.tagsButton, &QPushButton::clicked, this, [this, MW]() {
-            QModelIndex src = MW->modelIndexByPath(MW->ui.currentVideo->path);
+            QPersistentModelIndex src = MW->modelIndexByPath(MW->ui.currentVideo->path);
             if (src.isValid()) {
                 this->timer.stop();
                 Qt::WindowFlags flags = windowFlags();
                 bool isOnTop = flags.testFlag(Qt::WindowStaysOnTopHint);
                 this->setWindowFlag(Qt::WindowStaysOnTopHint, false);
                 this->hide();
-                int id = src.sibling(ListColumns["PATH_COLUMN"], 0).data(CustomRoles::id).toInt();
+                int id = QModelIndex(src).sibling(ListColumns["PATH_COLUMN"], 0).data(CustomRoles::id).toInt();
                 VideosTagsDialog* dialog = new VideosTagsDialog(QList<int>{ id }, MW, nullptr);
                 if (dialog) {
                     connect(dialog, &finishDialog::finished, this, [this,MW, isOnTop](int result) {
@@ -113,8 +114,8 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
                             this->setWindowFlag(Qt::WindowStaysOnTopHint, isOnTop);
                             this->show();
                             this->timer.start(250);
-                            QModelIndex src = MW->modelIndexByPath(MW->ui.currentVideo->path);
-                            if (src.isValid()) this->ui.tags_label->setText(src.siblingAtColumn(ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString());
+                            QPersistentModelIndex src = MW->modelIndexByPath(MW->ui.currentVideo->path);
+                            if (src.isValid()) this->ui.tags_label->setText(QModelIndex(src).siblingAtColumn(ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString());
                         }
                     });
                 }

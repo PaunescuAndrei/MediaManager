@@ -1289,24 +1289,31 @@ bool MainWindow::NextVideo(bool random, bool increment, bool update_watched_stat
 bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool update_watched_state) {
     bool video_changed = false;
     bool sv_count_reset = false;
-    QPersistentModelIndex currentIdx = this->persistentProxyIndexByPath(this->ui.currentVideo->path);
+    const QString currentPath = this->ui.currentVideo->path;
+    QModelIndex currentSrcIdx = this->sourceIndexByPath(currentPath);
+    const int pathCol = ListColumns["PATH_COLUMN"];
+    const int watchedCol = ListColumns["WATCHED_COLUMN"];
+    const int typeCol = ListColumns["TYPE_COLUMN"];
+    int currentId = -1;
+    if (currentSrcIdx.isValid()) {
+        currentId = currentSrcIdx.siblingAtColumn(pathCol).data(CustomRoles::id).toInt();
+    }
+
     this->App->db->db.transaction();
-    if (currentIdx.isValid()) {
+    if (currentSrcIdx.isValid() && currentId >= 0) {
         this->App->db->setMainInfoValue("current", this->App->currentDB, "");
         QString watched = (update_watched_state)
             ? "Yes"
-            : currentIdx.model()->index(currentIdx.row(), ListColumns["WATCHED_COLUMN"], currentIdx.parent()).data(Qt::DisplayRole).toString();
-        QModelIndex srcIdx = this->videosProxy->mapToSource(currentIdx);
-        int id = srcIdx.model()->index(srcIdx.row(), ListColumns["PATH_COLUMN"], srcIdx.parent()).data(CustomRoles::id).toInt();
+            : currentSrcIdx.siblingAtColumn(watchedCol).data(Qt::DisplayRole).toString();
         if (increment)
-            this->App->db->updateWatchedState(id, this->position, watched, true, true);
+            this->App->db->updateWatchedState(currentId, this->position, watched, true, true);
         else
-            this->App->db->updateWatchedState(id, watched, false, false);
+            this->App->db->updateWatchedState(currentId, watched, false, false);
     }
     
     switch (mode) {
         case NextVideoModes::Sequential:
-            video_changed = this->setNextVideo(currentIdx);
+            video_changed = this->setNextVideo(currentSrcIdx);
             break;
         case NextVideoModes::Random:
             {
@@ -1323,30 +1330,27 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
             }
             break;
         case NextVideoModes::SeriesRandom:
-            video_changed = this->seriesRandomVideo(currentIdx);
+            video_changed = this->seriesRandomVideo(currentSrcIdx);
             break;
     }
     
-    if (currentIdx.isValid() and sv_count_reset == false) {
+    if (currentSrcIdx.isValid() && sv_count_reset == false) {
         this->sv_count++;
         this->ui.counterLabel->setProgress(this->sv_count);
         this->App->db->setMainInfoValue("sv_count", "ALL", QString::number(this->sv_count));
     }
     this->App->db->db.commit();
 
-    if (currentIdx.isValid()) {
+    if (currentSrcIdx.isValid() && currentId >= 0) {
         QDateTime currenttime = QDateTime::currentDateTime();
-        QModelIndex src = this->videosProxy->mapToSource(currentIdx);
-        if (src.isValid()) {
-            if (increment) {
-                int v = this->videosModel->index(src.row(), ListColumns["VIEWS_COLUMN"]).data(Qt::DisplayRole).toInt();
-                this->videosModel->setData(this->videosModel->index(src.row(), ListColumns["VIEWS_COLUMN"]), QString::number(v + 1), Qt::DisplayRole);
-            }
-            if (update_watched_state) {
-                this->videosModel->setData(this->videosModel->index(src.row(), ListColumns["WATCHED_COLUMN"]), QString("Yes"), Qt::DisplayRole);
-            }
-            this->videosModel->setData(this->videosModel->index(src.row(), ListColumns["LAST_WATCHED_COLUMN"]), currenttime, Qt::DisplayRole);
+        if (increment) {
+            int v = this->videosModel->index(currentSrcIdx.row(), ListColumns["VIEWS_COLUMN"]).data(Qt::DisplayRole).toInt();
+            this->videosModel->setData(this->videosModel->index(currentSrcIdx.row(), ListColumns["VIEWS_COLUMN"]), QString::number(v + 1), Qt::DisplayRole);
         }
+        if (update_watched_state) {
+            this->videosModel->setData(this->videosModel->index(currentSrcIdx.row(), ListColumns["WATCHED_COLUMN"]), QString("Yes"), Qt::DisplayRole);
+        }
+        this->videosModel->setData(this->videosModel->index(currentSrcIdx.row(), ListColumns["LAST_WATCHED_COLUMN"]), currenttime, Qt::DisplayRole);
         this->refreshVisibility(this->old_search);
 
         this->App->db->db.transaction();
@@ -1355,7 +1359,7 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
         }
         if (this->App->currentDB == "MINUS") {
             this->incrementCounterVar(-1);
-            QString curType = src.siblingAtColumn(ListColumns["TYPE_COLUMN"]).data(Qt::DisplayRole).toString();
+            QString curType = currentSrcIdx.siblingAtColumn(typeCol).data(Qt::DisplayRole).toString();
             if (svTypes.contains(curType)) {
                 int val = this->calculate_sv_target();
                 this->App->db->setMainInfoValue("sv_target_count", "ALL", QString::number(val));
@@ -1364,7 +1368,7 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
             }
         }
         else if (this->App->currentDB == "PLUS" && increment)
-            this->incrementtimeWatchedIncrement(this->App->db->getVideoProgress(this->videosProxy->mapToSource(currentIdx).siblingAtColumn(ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt(), "0").toDouble());
+            this->incrementtimeWatchedIncrement(this->App->db->getVideoProgress(currentId, "0").toDouble());
         this->updateTotalListLabel();
         this->checktimeWatchedIncrement();
         this->updateWatchedProgressBar();
@@ -1373,43 +1377,74 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
     return video_changed;
 }
 
-bool MainWindow::setNextVideo(const QPersistentModelIndex& current_proxy_index) {
-    if (!this->videosProxy || !this->videosModel) return false;
-    QPersistentModelIndex cur = current_proxy_index;
-    int rows = this->videosProxy->rowCount();
-    if (rows == 0) {
+bool MainWindow::setNextVideo(const QModelIndex& current_source_index) {
+    if (!this->videosModel) return false;
+
+    const int rowCount = this->videosModel->rowCount();
+    if (rowCount == 0) {
         this->setCurrent(-1, "", "", "", "");
         this->highlightCurrentItem();
         return false;
     }
-    int start = cur.isValid() ? cur.row() : -1;
-    int pos = start;
-    bool looped_once = false;
-    while (true) {
-        pos = (pos + 1) % rows;
-        if (pos == start) {
-            if (looped_once) {
-                this->setCurrent(-1, "", "", "", "");
-                this->highlightCurrentItem();
-                return false;
+
+    QVector<int> sortedRows;
+    sortedRows.reserve(rowCount);
+    for (int r = 0; r < rowCount; ++r) {
+        sortedRows.append(r);
+    }
+
+    if (this->videosProxy) {
+        int sortColumn = this->videosProxy->sortColumn();
+        if (sortColumn < 0) sortColumn = ListColumns["PATH_COLUMN"];
+        Qt::SortOrder sortOrder = this->videosProxy->sortOrder();
+        std::sort(sortedRows.begin(), sortedRows.end(),
+            [this, sortColumn, sortOrder](int leftRow, int rightRow) {
+                QModelIndex leftIdx = this->videosModel->index(leftRow, sortColumn);
+                QModelIndex rightIdx = this->videosModel->index(rightRow, sortColumn);
+                bool less = this->videosProxy->lessThan(leftIdx, rightIdx);
+                return sortOrder == Qt::AscendingOrder ? less : !less;
+            });
+    }
+
+    const int watchedCol = ListColumns["WATCHED_COLUMN"];
+    const int pathCol = ListColumns["PATH_COLUMN"];
+    const int nameCol = ListColumns["NAME_COLUMN"];
+    const int authorCol = ListColumns["AUTHOR_COLUMN"];
+    const int tagsCol = ListColumns["TAGS_COLUMN"];
+
+    int startIdx = -1;
+    if (current_source_index.isValid()) {
+        const int currentRow = current_source_index.row();
+        for (int i = 0; i < sortedRows.size(); ++i) {
+            if (sortedRows[i] == currentRow) {
+                startIdx = i;
+                break;
             }
-            looped_once = true;
         }
-        QModelIndex p = this->videosProxy->index(pos, 0);
-        if (!p.isValid()) continue;
-        QString watched = p.siblingAtColumn(ListColumns["WATCHED_COLUMN"]).data(Qt::DisplayRole).toString();
+    }
+
+    int idx = sortedRows.isEmpty() ? -1 : (startIdx >= 0 ? (startIdx + 1) % sortedRows.size() : 0);
+    int visited = 0;
+    while (idx >= 0 && visited < sortedRows.size()) {
+        const int candidateRow = sortedRows[idx];
+        const QString watched = this->videosModel->index(candidateRow, watchedCol).data(Qt::DisplayRole).toString();
         if (watched == "No") {
-            QModelIndex s = this->videosProxy->mapToSource(p);
-            int id = s.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
-            QString path = s.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
-            QString name = s.siblingAtColumn(ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
-            QString author = s.siblingAtColumn(ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
-            QString tags = s.siblingAtColumn(ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
+            const int id = this->videosModel->index(candidateRow, pathCol).data(CustomRoles::id).toInt();
+            const QString path = this->videosModel->index(candidateRow, pathCol).data(Qt::DisplayRole).toString();
+            const QString name = this->videosModel->index(candidateRow, nameCol).data(Qt::DisplayRole).toString();
+            const QString author = this->videosModel->index(candidateRow, authorCol).data(Qt::DisplayRole).toString();
+            const QString tags = this->videosModel->index(candidateRow, tagsCol).data(Qt::DisplayRole).toString();
             this->setCurrent(id, path, name, author, tags, true);
             this->highlightCurrentItem();
             return true;
         }
+        idx = (idx + 1) % sortedRows.size();
+        ++visited;
     }
+
+    this->setCurrent(-1, "", "", "", "");
+    this->highlightCurrentItem();
+    return false;
 }
 
 
@@ -1434,7 +1469,7 @@ int MainWindow::calculate_sv_target() {
 }
 
 
-bool MainWindow::seriesRandomVideo(const QPersistentModelIndex& current_proxy_index) {
+bool MainWindow::seriesRandomVideo(const QModelIndex& current_source_index) {
     NextVideoSettings settings = this->getNextVideoSettings();
     QJsonObject json_settings = this->getRandomSettings(settings.random_mode, settings.ignore_filters_and_defaults,
         settings.vid_type_include, settings.vid_type_exclude);
@@ -1456,8 +1491,10 @@ bool MainWindow::seriesRandomVideo(const QPersistentModelIndex& current_proxy_in
     QString current_author;
     QString deterministic_path;
 
-    // Get current video info from source model
-    QModelIndex currentSourceIdx = this->sourceIndexByPath(this->ui.currentVideo->path);
+    QModelIndex currentSourceIdx = current_source_index;
+    if (!currentSourceIdx.isValid()) {
+        currentSourceIdx = this->sourceIndexByPath(this->ui.currentVideo->path);
+    }
 
     if (currentSourceIdx.isValid() && this->videosModel) {
         const int authorCol = ListColumns["AUTHOR_COLUMN"];
@@ -2700,22 +2737,35 @@ bool MainWindow::getCheckedUpdateWatchedToggleButton() {
 }
 
 void MainWindow::highlightCurrentItem(const QPersistentModelIndex& proxyIndex, bool scrollAndSelectItem) {
+    const QString currentPath = this->ui.currentVideo ? this->ui.currentVideo->path : QString();
     QPersistentModelIndex idx = proxyIndex;
-    if (!idx.isValid()) {
-        idx = this->persistentProxyIndexByPath(this->ui.currentVideo->path);
+    if (!idx.isValid() && !currentPath.isEmpty()) {
+        idx = this->persistentProxyIndexByPath(currentPath);
     }
-    if (!idx.isValid()) {
-        if (this->videosModel) this->videosModel->setHighlightedPath(QString());
-        return;
+
+    QModelIndex src;
+    if (idx.isValid()) {
+        src = idx;
+        if (this->videosProxy) {
+            src = this->videosProxy->mapToSource(idx);
+        }
     }
-    QModelIndex src = idx;
-    if (this->videosProxy) {
-        src = this->videosProxy->mapToSource(idx);
+    else if (!currentPath.isEmpty()) {
+        src = this->sourceIndexByPath(currentPath);
     }
-    if (src.isValid() && this->videosModel) {
-        QString path = src.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+
+    if (this->videosModel) {
+        QString path;
+        if (src.isValid()) {
+            path = src.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+        }
         this->videosModel->setHighlightedPath(path);
     }
+
+    if (!idx.isValid()) {
+        return;
+    }
+
     if (scrollAndSelectItem) {
         QItemSelectionModel* sm = this->ui.videosWidget->selectionModel();
         if (sm) {
@@ -3569,7 +3619,6 @@ void MainWindow::updateVideoListRandomProbabilities() {
             }
         }
         else {
-            QPersistentModelIndex currentIdx = this->persistentProxyIndexByPath(this->ui.currentVideo->path);
             QList<VideoWeightedData> items = this->App->db->getVideos(this->App->currentDB, random_settings);
             QString exclude_author = currentSourceIdx.isValid() ? current_author : "";
             QMap<QString, AuthorVideoModelData> author_map = this->buildAuthorVideoMap(exclude_author, items);

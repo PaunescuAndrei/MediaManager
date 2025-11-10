@@ -118,12 +118,17 @@ public:
     // Model helpers
     QModelIndex modelIndexByPath(const QString& path) const;
     QModelIndex modelIndexById(int id) const;
+    QPersistentModelIndex persistentModelIndexById(int id) const;
     QModelIndex sortProxyIndexByPath(const QString& path) const;
+    QPersistentModelIndex persistentSortProxyIndexByPath(const QString& path) const;
     QModelIndex sortProxyIndexById(int id) const;
     QModelIndex filterProxyIndexByPath(const QString& path) const;
     QPersistentModelIndex persistentFilterProxyIndexByPath(const QString& path) const;
     QModelIndex sortProxyIndexFromFilterIndex(const QModelIndex& filterIndex) const;
     QModelIndex modelIndexFromFilterIndex(const QModelIndex& filterIndex) const;
+    QModelIndex modelIndexFromSortIndex(const QModelIndex& sortIndex) const;
+    QModelIndex modelIndexFromAny(const QModelIndex& index) const;
+    QModelIndex modelIndexFromAny(const QPersistentModelIndex& index) const;
     QStringList selectedPaths() const;
     QList<int> selectedIds() const;
     QString pathById(int id) const;

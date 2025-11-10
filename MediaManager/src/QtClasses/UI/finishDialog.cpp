@@ -9,6 +9,7 @@
 #include "scrollAreaEventFilter.h"
 #include <QPersistentModelIndex>
 #include "VideosTagsDialog.h"
+#include "VideosModel.h"
 
 finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 {
@@ -33,19 +34,28 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 	this->ui.scrollArea_name->installEventFilter(new scrollAreaEventFilter(this->ui.scrollArea_name));
     this->ui.author_label->setText(MW->ui.currentVideo->author);
     this->ui.name_label->setText(MW->ui.currentVideo->name);
-    QModelIndex proxyPathIdx = MW->filterProxyIndexByPath(MW->ui.currentVideo->path);
-    const QModelIndex ratingIdx = proxyPathIdx.siblingAtColumn(ListColumns["RATING_COLUMN"]);
-    const QPersistentModelIndex ratingProxyIndex(ratingIdx);
-    if (ratingProxyIndex.isValid()) {
-        StarRating starRating = StarRating(MW->active, MW->halfactive, MW->inactive, ratingIdx.data(CustomRoles::rating).value<double>(), 5.0);
-        starEditorWidget * starEditor = new starEditorWidget(this, ratingProxyIndex);
+
+    const QString currentPath = MW->ui.currentVideo->path;
+    const QModelIndex sourcePathIdx = MW->modelIndexByPath(currentPath);
+    const QModelIndex sourceRatingIdx = sourcePathIdx.isValid()
+        ? sourcePathIdx.siblingAtColumn(ListColumns["RATING_COLUMN"])
+        : QModelIndex();
+    const QPersistentModelIndex sourceRatingPersistent(sourceRatingIdx);
+
+    if (sourceRatingIdx.isValid()) {
+        StarRating starRating = StarRating(MW->active, MW->halfactive, MW->inactive, sourceRatingIdx.data(CustomRoles::rating).value<double>(), 5.0);
+        starEditorWidget * starEditor = new starEditorWidget(this, sourceRatingPersistent);
 		starEditor->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
 		starEditor->setEditMode(starEditorWidget::EditMode::DoubleClick);
 		starEditor->setStarRating(starRating);
 		connect(starEditor, &starEditorWidget::editingFinished, this, [MW, starEditor] {
-			MW->updateRating(starEditor->item_index, starEditor->original_value,starEditor->starRating().starCount());
-			MW->ui.videosWidget->model()->setData(starEditor->item_index, starEditor->starRating().starCount(), CustomRoles::rating);
-			starEditor->original_value = starEditor->starRating().starCount();
+            const double newValue = starEditor->starRating().starCount();
+            const double oldValue = starEditor->original_value;
+            if (starEditor->item_index.isValid() && MW->videosModel) {
+                MW->videosModel->setData(QModelIndex(starEditor->item_index), newValue, CustomRoles::rating);
+                MW->updateRating(starEditor->item_index, oldValue, newValue);
+            }
+			starEditor->original_value = newValue;
 		});
 		starEditor->setFocusPolicy(Qt::NoFocus);
 		QHBoxLayout *lt = qobject_cast<QHBoxLayout*>(this->ui.ratingBox->layout());
@@ -55,15 +65,15 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 		lt->insertWidget(3, avg_rating_label);
 
         // Tags label
-        this->ui.tags_label->setText(ratingIdx.siblingAtColumn(ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString());
+        this->ui.tags_label->setText(sourcePathIdx.siblingAtColumn(ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString());
 		
 		// Set views count
-        QString viewsText = ratingIdx.siblingAtColumn(ListColumns["VIEWS_COLUMN"]).data(Qt::DisplayRole).toString();
+        QString viewsText = sourcePathIdx.siblingAtColumn(ListColumns["VIEWS_COLUMN"]).data(Qt::DisplayRole).toString();
         this->ui.viewsValueLabel->setText(viewsText);
 		
 		// Set last watched date in human-readable format
-        QString lastWatchedText = ratingIdx.siblingAtColumn(ListColumns["LAST_WATCHED_COLUMN"]).data(Qt::DisplayRole).toString();
-        QVariant lastWatchedData = ratingIdx.siblingAtColumn(ListColumns["LAST_WATCHED_COLUMN"]).data(Qt::DisplayRole);
+        QString lastWatchedText = sourcePathIdx.siblingAtColumn(ListColumns["LAST_WATCHED_COLUMN"]).data(Qt::DisplayRole).toString();
+        QVariant lastWatchedData = sourcePathIdx.siblingAtColumn(ListColumns["LAST_WATCHED_COLUMN"]).data(Qt::DisplayRole);
 		
 		if (!lastWatchedText.isEmpty() && lastWatchedData.type() == QVariant::DateTime) {
 			QDateTime lastWatchedDateTime = lastWatchedData.toDateTime();

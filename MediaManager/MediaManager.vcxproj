@@ -274,13 +274,13 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
-    <IncludePath>$(ProjectDir)src\;$(ProjectDir)src\QtClasses\;$(ProjectDir)src\QtClasses\UI\;$(ProjectDir)src\QtClasses\Widgets\;$(ProjectDir)src\QtClasses\Form Files\;$(ProjectDir)src\thirdparty\;$(ProjectDir)src\thirdparty\sqlite3\;$(ProjectDir)src\general;$(ProjectDir)src\thirdparty\rapidfuzz;$(IncludePath)</IncludePath>
+    <IncludePath>$(ProjectDir)src\;$(ProjectDir)src\QtClasses\;$(ProjectDir)src\QtClasses\UI\;$(ProjectDir)src\QtClasses\Widgets\;$(ProjectDir)src\QtClasses\Form Files\;$(ProjectDir)src\thirdparty\;$(ProjectDir)src\thirdparty\sqlite3\;$(ProjectDir)src\general;$(ProjectDir)src\thirdparty\rapidfuzz;$(ProjectDir)src\QtClasses\Models\;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
-    <IncludePath>$(ProjectDir)src\;$(ProjectDir)src\QtClasses\;$(ProjectDir)src\QtClasses\UI\;$(ProjectDir)src\QtClasses\Widgets\;$(ProjectDir)src\QtClasses\Form Files\;$(ProjectDir)src\thirdparty\;$(ProjectDir)src\thirdparty\sqlite3\;$(ProjectDir)src\general;$(ProjectDir)src\thirdparty\rapidfuzz;$(IncludePath)</IncludePath>
+    <IncludePath>$(ProjectDir)src\;$(ProjectDir)src\QtClasses\;$(ProjectDir)src\QtClasses\UI\;$(ProjectDir)src\QtClasses\Widgets\;$(ProjectDir)src\QtClasses\Form Files\;$(ProjectDir)src\thirdparty\;$(ProjectDir)src\thirdparty\sqlite3\;$(ProjectDir)src\general;$(ProjectDir)src\thirdparty\rapidfuzz;$(ProjectDir)src\QtClasses\Models\;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">
-    <IncludePath>$(ProjectDir)src\;$(ProjectDir)src\QtClasses\;$(ProjectDir)src\QtClasses\UI\;$(ProjectDir)src\QtClasses\Widgets\;$(ProjectDir)src\QtClasses\Form Files\;$(ProjectDir)src\thirdparty\;$(ProjectDir)src\thirdparty\sqlite3\;$(ProjectDir)src\general;$(ProjectDir)src\thirdparty\rapidfuzz;$(IncludePath)</IncludePath>
+    <IncludePath>$(ProjectDir)src\;$(ProjectDir)src\QtClasses\;$(ProjectDir)src\QtClasses\UI\;$(ProjectDir)src\QtClasses\Widgets\;$(ProjectDir)src\QtClasses\Form Files\;$(ProjectDir)src\thirdparty\;$(ProjectDir)src\thirdparty\sqlite3\;$(ProjectDir)src\general;$(ProjectDir)src\thirdparty\rapidfuzz;$(ProjectDir)src\QtClasses\Models\;$(IncludePath)</IncludePath>
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Label="QtDeploy" Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">

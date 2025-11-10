@@ -5,7 +5,7 @@
 #include <memory>
 #include "definitions.h"
 
-namespace rapidfuzz { namespace fuzz { template <typename T> class CachedPartialRatio; } }
+namespace rapidfuzz { namespace fuzz { template <typename T> struct CachedPartialRatio; } }
 
 class VideosProxyModel : public QSortFilterProxyModel {
     Q_OBJECT

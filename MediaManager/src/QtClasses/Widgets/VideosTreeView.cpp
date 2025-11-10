@@ -2,6 +2,7 @@
 #include "VideosTreeView.h"
 #include <QTimer>
 #include <QScrollBar>
+#include <QPersistentModelIndex>
 #include "definitions.h"
 #include <QFont>
 
@@ -33,6 +34,14 @@ void VideosTreeView::findAndScrollToDelayed(QString value, bool select, QAbstrac
 
 void VideosTreeView::scrollToVerticalPositionDelayed(int scroll_value) {
     QTimer::singleShot(0, [this, scroll_value] { if (this->verticalScrollBar()) this->verticalScrollBar()->setSliderPosition(scroll_value); });
+}
+
+void VideosTreeView::scrollToDelayed(const QModelIndex& index, QAbstractItemView::ScrollHint scrollhint) {
+    QPersistentModelIndex persistent(index);
+    QTimer::singleShot(0, [this, persistent, scrollhint] {
+        if (!persistent.isValid()) return;
+        this->scrollTo(persistent, scrollhint);
+    });
 }
 
 void VideosTreeView::configureHeader() {

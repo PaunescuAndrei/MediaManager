@@ -10,6 +10,7 @@ public:
 
     void findAndScrollToDelayed(QString value, bool select = false, QAbstractItemView::ScrollHint scrollhint = QAbstractItemView::EnsureVisible);
     void scrollToVerticalPositionDelayed(int scroll_value);
+    void scrollToDelayed(const QModelIndex& index, QAbstractItemView::ScrollHint scrollhint = QAbstractItemView::EnsureVisible);
     void configureHeader();
 
 signals:

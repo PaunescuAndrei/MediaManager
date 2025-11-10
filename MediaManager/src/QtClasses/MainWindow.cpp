@@ -637,7 +637,7 @@ void MainWindow::toggleSearchBar() {
         do {
             if (this->lastScrolls.isEmpty()) {
                 QPersistentModelIndex pidx = this->persistentProxyIndexByPath(this->ui.currentVideo->path);
-                if (pidx.isValid()) this->ui.videosWidget->scrollTo(pidx, QAbstractItemView::PositionAtCenter);
+                if (pidx.isValid()) this->ui.videosWidget->scrollToDelayed(pidx, QAbstractItemView::PositionAtCenter);
                 break;
             }
             QPair<QString, int> scroll_value = this->lastScrolls.takeLast();
@@ -681,7 +681,7 @@ void MainWindow::toggleDates(bool scroll) {
             if (this->lastScrolls.isEmpty()) {
                 if (scroll) {
                     QPersistentModelIndex pidx = this->persistentProxyIndexByPath(this->ui.currentVideo->path);
-                    if (pidx.isValid()) this->ui.videosWidget->scrollTo(pidx, QAbstractItemView::PositionAtCenter);
+                    if (pidx.isValid()) this->ui.videosWidget->scrollToDelayed(pidx, QAbstractItemView::PositionAtCenter);
                 }
                 break;
             }
@@ -2771,7 +2771,7 @@ void MainWindow::highlightCurrentItem(const QPersistentModelIndex& proxyIndex, b
         if (sm) {
             sm->setCurrentIndex(idx, QItemSelectionModel::Clear | QItemSelectionModel::Select | QItemSelectionModel::Rows);
         }
-        this->ui.videosWidget->scrollTo(idx, QAbstractItemView::PositionAtCenter);
+        this->ui.videosWidget->scrollToDelayed(idx, QAbstractItemView::PositionAtCenter);
     }
 }
 

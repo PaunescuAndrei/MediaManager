@@ -166,6 +166,7 @@ public:
     QMap<QString, AuthorVideoModelData> buildAuthorVideoMap(const QString& exclude_author, const QList<VideoWeightedData>& all_videos) const;
     QList<VideoWeightedData> calculateAuthorWeights(const QMap<QString, AuthorVideoModelData>& author_map) const;
     QVector<int> authorUnwatchedRows(const QString& authorOrPath) const;
+    QVector<int> authorUnwatchedSourceRows(const QString& authorOrPath) const;
     int nextAuthorRow(const QVector<int>& rows, int currentRow) const;
     void insertDialogButton();
     bool TagsDialogButton();

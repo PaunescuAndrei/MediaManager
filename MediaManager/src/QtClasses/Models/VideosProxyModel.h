@@ -12,15 +12,13 @@ class VideosProxyModel : public QSortFilterProxyModel {
     Q_OBJECT
 public:
     explicit VideosProxyModel(QObject* parent = nullptr);
-
     void setSearchText(const QString& text);
     void setWatchedOption(const QString& option);
     void setVisibleOnlyChecked(bool enabled);
     void rebuildAuthorsWithUnwatched();
-
+    bool lessThan(const QModelIndex& left, const QModelIndex& right) const override;
 protected:
     bool filterAcceptsRow(int source_row, const QModelIndex& source_parent) const override;
-    bool lessThan(const QModelIndex& left, const QModelIndex& right) const override;
 
 private:
     QString search_text;

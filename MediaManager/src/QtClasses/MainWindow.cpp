@@ -478,16 +478,45 @@ void MainWindow::VideoInfoNotification() {
         this->notification_dialog->ui.tags->setText(this->ui.currentVideo->tags);
     StarRating starRating = StarRating(this->active, this->halfactive, this->inactive, 0, 5.0);
     {
+        this->notification_dialog->ui.lastWatchedValueLabel->setText("Never");
+        this->notification_dialog->ui.lastWatchedValueLabel->setToolTip(QString());
         // Use current video path to fetch rating/views
         QString path = this->ui.currentVideo->path;
         QPersistentModelIndex srcIdx = this->modelIndexByPath(path);
         if (srcIdx.isValid()) {
             const QModelIndex ratingIdx = this->videosModel->index(srcIdx.row(), ListColumns["RATING_COLUMN"]);
             const QModelIndex viewsIdx = this->videosModel->index(srcIdx.row(), ListColumns["VIEWS_COLUMN"]);
+            const QModelIndex lastWatchedIdx = this->videosModel->index(srcIdx.row(), ListColumns["LAST_WATCHED_COLUMN"]);
             double stars = ratingIdx.data(CustomRoles::rating).toDouble();
             starRating.setStarCount(stars);
             this->notification_dialog->ui.starsLabel->setText(QString(" %1 ").arg(stars));
             this->notification_dialog->ui.viewsLabel->setText(QString(" %1 Views ").arg(viewsIdx.data(Qt::DisplayRole).toString()));
+
+            QString lastWatchedDisplay = "Never";
+            QString lastWatchedTooltip;
+            if (lastWatchedIdx.isValid()) {
+                const QVariant lastWatchedData = lastWatchedIdx.data(Qt::DisplayRole);
+                const QString lastWatchedRawText = lastWatchedData.toString();
+                if (!lastWatchedRawText.isEmpty()) {
+                    if (lastWatchedData.type() == QVariant::DateTime) {
+                        const QDateTime lastWatchedDateTime = lastWatchedData.toDateTime();
+                        if (lastWatchedDateTime.isValid()) {
+                            const QDateTime currentDateTime = QDateTime::currentDateTime();
+                            const qint64 secondsDiff = lastWatchedDateTime.secsTo(currentDateTime);
+                            if (secondsDiff < 0) {
+                                lastWatchedDisplay = lastWatchedRawText;
+                            } else {
+                                lastWatchedDisplay = utils::formatTimeAgo(secondsDiff);
+                                lastWatchedTooltip = lastWatchedRawText;
+                            }
+                        }
+                    } else {
+                        lastWatchedDisplay = lastWatchedRawText;
+                    }
+                }
+            }
+            this->notification_dialog->ui.lastWatchedValueLabel->setText(lastWatchedDisplay);
+            this->notification_dialog->ui.lastWatchedValueLabel->setToolTip(lastWatchedTooltip);
         }
     }
     this->notification_dialog->ui.rating->setStarRating(starRating);

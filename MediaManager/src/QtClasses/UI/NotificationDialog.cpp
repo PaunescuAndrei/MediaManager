@@ -9,7 +9,6 @@ NotificationDialog::NotificationDialog(QWidget* parent) : QDialog(parent)
 	this->setWindowModality(Qt::NonModal);
 	this->ui.rating->setEditMode(starEditorWidget::EditMode::NoEdit);
 	this->ui.durationProgressBar->setMaximum(this->time_duration.count());
-
 	this->timer = new QTimer(this);
 	connect(this->timer, &QTimer::timeout, this, [this] {
 		auto elapsed = std::chrono::steady_clock::now() - this->time_start;

@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>173</width>
+    <width>183</width>
     <height>98</height>
    </rect>
   </property>
@@ -100,7 +100,7 @@
              <widget class="QLabel" name="author">
               <property name="font">
                <font>
-                <pointsize>12</pointsize>
+                <pointsize>13</pointsize>
                 <bold>true</bold>
                </font>
               </property>
@@ -113,7 +113,7 @@
              <widget class="QLabel" name="name">
               <property name="font">
                <font>
-                <pointsize>12</pointsize>
+                <pointsize>13</pointsize>
                 <bold>true</bold>
                </font>
               </property>
@@ -126,7 +126,7 @@
              <widget class="QLabel" name="tags">
               <property name="font">
                <font>
-                <pointsize>10</pointsize>
+                <pointsize>11</pointsize>
                </font>
               </property>
               <property name="styleSheet">
@@ -180,6 +180,11 @@ color: #AAAAAA;
                   </property>
                   <item>
                    <widget class="QLabel" name="lastWatchedLabel">
+                    <property name="font">
+                     <font>
+                      <pointsize>10</pointsize>
+                     </font>
+                    </property>
                     <property name="text">
                      <string>Last W:</string>
                     </property>
@@ -189,6 +194,7 @@ color: #AAAAAA;
                    <widget class="QLabel" name="lastWatchedValueLabel">
                     <property name="font">
                      <font>
+                      <pointsize>10</pointsize>
                       <bold>true</bold>
                      </font>
                     </property>
@@ -274,6 +280,7 @@ color: #AAAAAA;
                    <widget class="QLabel" name="starsLabel">
                     <property name="font">
                      <font>
+                      <pointsize>10</pointsize>
                       <bold>true</bold>
                      </font>
                     </property>
@@ -315,6 +322,7 @@ color: #AAAAAA;
                 <widget class="QLabel" name="viewsLabel">
                  <property name="font">
                   <font>
+                   <pointsize>10</pointsize>
                    <bold>true</bold>
                   </font>
                  </property>

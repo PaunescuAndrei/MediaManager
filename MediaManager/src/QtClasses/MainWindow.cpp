@@ -167,6 +167,10 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
 
     this->searchThreadPool = new QThreadPool(this);
     this->searchThreadPool->setMaxThreadCount(QThread::idealThreadCount());
+    this->randomProbabilitiesUpdateTimer.setSingleShot(true);
+    connect(&this->randomProbabilitiesUpdateTimer, &QTimer::timeout, this, [this]() {
+        this->updateVideoListRandomProbabilitiesIfVisible();
+    });
     // Warm up the QtConcurrent thread pool
     QList<int> dummy_list = { 1 };
     QFuture<void> dummy_future = QtConcurrent::map(this->searchThreadPool, dummy_list, [](int value) {
@@ -179,6 +183,29 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     this->videosSortProxy->setSourceModel(this->videosModel);
     this->videosProxy = new VideosProxyModel(this);
     this->videosProxy->setSourceModel(this->videosSortProxy);
+
+    connect(this->videosModel, &QAbstractItemModel::dataChanged, this,
+        [this](const QModelIndex& topLeft, const QModelIndex& bottomRight, const QVector<int>& roles) {
+            Q_UNUSED(roles);
+            const int randomCol = ListColumns["RANDOM%_COLUMN"];
+            if (topLeft.column() == randomCol && bottomRight.column() == randomCol) {
+                return;
+            }
+            this->scheduleRandomProbabilitiesUpdate();
+        });
+    connect(this->videosModel, &QAbstractItemModel::rowsInserted, this,
+        [this](const QModelIndex&, int, int) { this->scheduleRandomProbabilitiesUpdate(); });
+    connect(this->videosModel, &QAbstractItemModel::rowsRemoved, this,
+        [this](const QModelIndex&, int, int) { this->scheduleRandomProbabilitiesUpdate(); });
+    connect(this->videosModel, &QAbstractItemModel::rowsMoved, this,
+        [this](const QModelIndex&, int, int, const QModelIndex&, int) { this->scheduleRandomProbabilitiesUpdate(); });
+    connect(this->videosModel, &QAbstractItemModel::modelReset, this,
+        [this]() { this->scheduleRandomProbabilitiesUpdate(); });
+    connect(this->videosModel, &QAbstractItemModel::layoutChanged, this,
+        [this](const QList<QPersistentModelIndex>&, QAbstractItemModel::LayoutChangeHint) {
+            this->scheduleRandomProbabilitiesUpdate();
+        });
+
     this->ui.videosWidget->setModel(this->videosProxy);
     DateItemDelegate* datedelegate = new DateItemDelegate(this->ui.videosWidget, "dd/MM/yyyy hh:mm");
     this->ui.videosWidget->setItemDelegateForColumn(ListColumns["RATING_COLUMN"], new StarDelegate(this->active, this->halfactive, this->inactive, this->ui.videosWidget, this));
@@ -3738,8 +3765,17 @@ void MainWindow::updateVideoListRandomProbabilities() {
 }
 
 void MainWindow::updateVideoListRandomProbabilitiesIfVisible() {
+    if (this->randomProbabilitiesUpdateTimer.isActive()) {
+        this->randomProbabilitiesUpdateTimer.stop();
+    }
     if (not this->ui.videosWidget->header()->isSectionHidden(ListColumns["RANDOM%_COLUMN"]))
         this->updateVideoListRandomProbabilities();
+}
+
+void MainWindow::scheduleRandomProbabilitiesUpdate() {
+    if (this->randomProbabilitiesUpdateTimer.isActive())
+        return;
+    this->randomProbabilitiesUpdateTimer.start(0);
 }
 
 QMap<QString, MainWindow::AuthorVideoModelData> MainWindow::buildAuthorVideoMap(const QString& exclude_author, const QList<VideoWeightedData>& all_videos) const {

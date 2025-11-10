@@ -66,6 +66,7 @@ public:
     QList<QStringList> IconsStage = QList<QStringList>({ QStringList(),QStringList(),QStringList() });
     QMediaPlayer* special_effects_player = nullptr;
     QThreadPool* searchThreadPool;
+    QTimer randomProbabilitiesUpdateTimer;
 
     MainWindow(QWidget *parent = nullptr,MainApp *App = nullptr);
     //void resizeEvent(QResizeEvent* event) override;
@@ -111,6 +112,7 @@ public:
     void changePlayerVideo(QSharedPointer<BasePlayer> player, QString path, int video_id, double position);
     void updateVideoListRandomProbabilities();
     void updateVideoListRandomProbabilitiesIfVisible();
+    void scheduleRandomProbabilitiesUpdate();
     void updateSearchCompleter();
     
     void refreshVisibility(QString search_text);

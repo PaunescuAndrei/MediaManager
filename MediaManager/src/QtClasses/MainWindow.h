@@ -202,6 +202,7 @@ public:
     bool NextVideo(NextVideoModes::Mode mode, bool increment, bool update_watched_state);
     bool NextVideo(bool random, bool increment, bool update_watched_state);
     bool setNextVideo(const QPersistentModelIndex& current_source_index);
+    int nextSequentialRow(const QPersistentModelIndex& current_source_index) const;
     bool seriesRandomVideo(const QPersistentModelIndex& current_source_index);
     int calculate_sv_target();
     void setCounterDialogButton();

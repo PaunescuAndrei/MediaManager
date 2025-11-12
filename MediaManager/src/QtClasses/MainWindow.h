@@ -157,6 +157,8 @@ public:
     void incrementtimeWatchedIncrement(double value);
     void checktimeWatchedIncrement();
     void incrementCounterVar(int value = 1);
+    bool applyPostWatchAdjustments(const QString& videoType, int videoId, bool increment, double watchedProgressOverride = 0.0, bool useOverrideProgress = false);
+    void updateSvCountersAfterPlayback(bool playedSpecialType);
     int getCounterVar();
     void initNextButtonMode(customQButton* nextbutton);
     bool isNextButtonRandom();

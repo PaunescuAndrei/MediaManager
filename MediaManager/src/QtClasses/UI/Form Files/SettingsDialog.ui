@@ -55,7 +55,7 @@
         <x>0</x>
         <y>0</y>
         <width>886</width>
-        <height>1083</height>
+        <height>1029</height>
        </rect>
       </property>
       <layout class="QHBoxLayout" name="horizontalLayout_8">
@@ -116,6 +116,64 @@
                </widget>
               </item>
              </layout>
+            </item>
+            <item>
+             <widget class="QWidget" name="specialSvModeWidget" native="true">
+              <layout class="QHBoxLayout" name="horizontalLayout_31">
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+               <item>
+                <widget class="QLabel" name="specialSvModeLabel">
+                 <property name="text">
+                  <string>Special video mode:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="horizontalSpacer_specialSv">
+                 <property name="orientation">
+                  <enum>Qt::Orientation::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>40</width>
+                   <height>20</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+               <item>
+                <widget class="QComboBox" name="specialSvModeCombo">
+                 <property name="toolTip">
+                  <string>Controls how MINUS special videos update counters and time watched when pressing Next.</string>
+                 </property>
+                 <property name="sizeAdjustPolicy">
+                  <enum>QComboBox::SizeAdjustPolicy::AdjustToContents</enum>
+                 </property>
+                 <item>
+                  <property name="text">
+                   <string>MINUS</string>
+                  </property>
+                 </item>
+                 <item>
+                  <property name="text">
+                   <string>PLUS</string>
+                  </property>
+                 </item>
+                </widget>
+               </item>
+              </layout>
+             </widget>
             </item>
             <item>
              <widget class="QWidget" name="widget" native="true">

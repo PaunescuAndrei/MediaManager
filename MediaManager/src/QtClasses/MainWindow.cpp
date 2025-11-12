@@ -1363,26 +1363,22 @@ void MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool incre
 NextVideoSettings MainWindow::getNextVideoSettings() {
     NextVideoSettings settings;
     settings.random_mode = static_cast<RandomModes::Mode>(this->App->config->get(this->getRandomButtonConfigKey()).toInt());
-    if (this->App->currentDB == "MINUS") {
-        if (this->sv_count >= this->sv_target_count) {
-            settings.vid_type_include = svTypes;
-            settings.vid_type_exclude = {};
-            QJsonObject random_settings = getRandomSettings(settings.random_mode, settings.ignore_filters_and_defaults, settings.vid_type_include, settings.vid_type_exclude);
-            QString seed = this->App->config->get_bool("random_use_seed") ? this->App->config->get("random_seed") : "";
-            settings.sv_is_available = not this->getRandomVideo(seed, this->getWeightedBiasSettings(), random_settings).isEmpty();
-            settings.next_video_is_sv = true;
-            if (!settings.sv_is_available) {
-                settings.vid_type_include = {};
-            }
-        }
-        else {
-            settings.next_video_is_sv = false;
+    const bool specialTypesConfigured = !svTypes.isEmpty();
+    if (specialTypesConfigured && this->sv_count >= this->sv_target_count) {
+        settings.vid_type_include = svTypes;
+        settings.vid_type_exclude = {};
+        QJsonObject random_settings = getRandomSettings(settings.random_mode, settings.ignore_filters_and_defaults, settings.vid_type_include, settings.vid_type_exclude);
+        QString seed = this->App->config->get_bool("random_use_seed") ? this->App->config->get("random_seed") : "";
+        settings.sv_is_available = !this->getRandomVideo(seed, this->getWeightedBiasSettings(), random_settings).isEmpty();
+        settings.next_video_is_sv = true;
+        if (!settings.sv_is_available) {
             settings.vid_type_include = {};
-            settings.vid_type_exclude = svTypes;
         }
     }
     else {
-        //default values are good
+        settings.next_video_is_sv = false;
+        settings.vid_type_include = {};
+        settings.vid_type_exclude = specialTypesConfigured ? svTypes : QStringList{};
     }
     return settings;
 }
@@ -1395,7 +1391,6 @@ bool MainWindow::NextVideo(bool random, bool increment, bool update_watched_stat
 
 bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool update_watched_state) {
     bool video_changed = false;
-    bool sv_count_reset = false;
     const QString currentPath = this->ui.currentVideo->path;
     QPersistentModelIndex currentSrcIdx = this->modelIndexByPath(currentPath);
     const int pathCol = ListColumns["PATH_COLUMN"];
@@ -1426,13 +1421,11 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
         case NextVideoModes::Random:
             {
                 NextVideoSettings settings = this->getNextVideoSettings();
-                if (this->App->currentDB == "MINUS") {
-                    if (this->sv_count >= this->sv_target_count) {
-                        this->sv_count = 0;
-                        sv_count_reset = true;
-                        this->ui.counterLabel->setProgress(this->sv_count);
-                        this->App->db->setMainInfoValue("sv_count", "ALL", QString::number(this->sv_count));
-                    }
+                const bool specialWillBePicked = settings.next_video_is_sv && settings.sv_is_available && this->App->currentDB == "MINUS";
+                if (specialWillBePicked) {
+                    this->sv_count = 0;
+                    this->ui.counterLabel->setProgress(this->sv_count);
+                    this->App->db->setMainInfoValue("sv_count", "ALL", QString::number(this->sv_count));
                 }
                 video_changed = this->randomVideo(settings.random_mode,settings.ignore_filters_and_defaults,settings.vid_type_include,settings.vid_type_exclude);
             }
@@ -1440,12 +1433,6 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
         case NextVideoModes::SeriesRandom:
             video_changed = this->seriesRandomVideo(currentSrcIdx);
             break;
-    }
-    
-    if (currentSrcIdx.isValid() && sv_count_reset == false) {
-        this->sv_count++;
-        this->ui.counterLabel->setProgress(this->sv_count);
-        this->App->db->setMainInfoValue("sv_count", "ALL", QString::number(this->sv_count));
     }
     this->App->db->db.commit();
 
@@ -1465,24 +1452,70 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
         if (increment) {
             this->App->db->incrementVideosWatchedToday(this->App->currentDB);
         }
-        if (this->App->currentDB == "MINUS") {
-            this->incrementCounterVar(-1);
-            QString curType = QModelIndex(currentSrcIdx).siblingAtColumn(typeCol).data(Qt::DisplayRole).toString();
-            if (svTypes.contains(curType)) {
-                int val = this->calculate_sv_target();
-                this->App->db->setMainInfoValue("sv_target_count", "ALL", QString::number(val));
-                this->sv_target_count = val;
-                this->ui.counterLabel->setMinMax(0, val);
-            }
-        }
-        else if (this->App->currentDB == "PLUS" && increment)
-            this->incrementtimeWatchedIncrement(this->App->db->getVideoProgress(currentId, "0").toDouble());
+        const QString curType = QModelIndex(currentSrcIdx).siblingAtColumn(typeCol).data(Qt::DisplayRole).toString();
+        bool playedSpecialType = this->applyPostWatchAdjustments(curType, currentId, increment);
+        this->updateSvCountersAfterPlayback(playedSpecialType);
+
         this->updateTotalListLabel();
         this->checktimeWatchedIncrement();
         this->updateWatchedProgressBar();
         this->App->db->db.commit();
     }
     return video_changed;
+}
+
+bool MainWindow::applyPostWatchAdjustments(const QString& videoType, int videoId, bool increment, double watchedProgressOverride, bool useOverrideProgress) {
+    const bool isSpecialType = svTypes.contains(videoType);
+    const bool treatSpecialAsPlus = this->App->config->get("sv_mode").compare(QStringLiteral("PLUS"), Qt::CaseInsensitive) == 0;
+
+    double watchedProgress = watchedProgressOverride;
+    if (!useOverrideProgress) {
+        watchedProgress = this->App->db->getVideoProgress(videoId, "0").toDouble();
+    }
+
+    int counterDelta = 0;
+    double timeWatchedDelta = 0.0;
+    if (this->App->currentDB == "MINUS") {
+        counterDelta -= 1;
+    }
+    else if (this->App->currentDB == "PLUS" && increment) {
+        timeWatchedDelta += watchedProgress;
+    }
+
+    if (isSpecialType) {
+        int val = this->calculate_sv_target();
+        this->App->db->setMainInfoValue("sv_target_count", "ALL", QString::number(val));
+        this->sv_target_count = val;
+        this->ui.counterLabel->setMinMax(0, val);
+    }
+
+    if (isSpecialType && treatSpecialAsPlus && this->App->currentDB == "MINUS") {
+        counterDelta += 1; // negate the base decrement
+        if (increment) {
+            timeWatchedDelta += watchedProgress;
+        }
+    }
+
+    if (counterDelta != 0) {
+        this->incrementCounterVar(counterDelta);
+    }
+    if (timeWatchedDelta != 0.0) {
+        this->incrementtimeWatchedIncrement(timeWatchedDelta);
+    }
+
+    return isSpecialType;
+}
+
+void MainWindow::updateSvCountersAfterPlayback(bool playedSpecialType) {
+    if (this->App->currentDB != "MINUS") return;
+    if (playedSpecialType) {
+        this->sv_count = 0;
+    }
+    else {
+        this->sv_count++;
+    }
+    this->ui.counterLabel->setProgress(this->sv_count);
+    this->App->db->setMainInfoValue("sv_count", "ALL", QString::number(this->sv_count));
 }
 
 int MainWindow::nextSequentialRow(const QPersistentModelIndex& current_source_index) const {
@@ -2061,6 +2094,10 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         this->ui.counterLabel->setMinMax(0, this->sv_target_count);
         dialog->oldSVmax = dialog->ui.SVspinBox->value();
     }
+    QString specialModeSelection = dialog->ui.specialSvModeCombo->currentText().toUpper();
+    if (specialModeSelection != "PLUS")
+        specialModeSelection = "MINUS";
+    config->set("sv_mode", specialModeSelection);
     if (dialog->ui.mascotsChanceSpinBox->value() != dialog->old_mascotsChanceSpinBox) {
         config->set("mascots_random_chance", QString::number(dialog->ui.mascotsChanceSpinBox->value()));
         this->App->MascotsAnimation->set_random_chance(dialog->ui.mascotsChanceSpinBox->value() / 100.0);
@@ -2509,19 +2546,17 @@ void MainWindow::showEndOfVideoDialog() {
                 else if (result == finishDialog::Replay) {
                     //Replay button
                     this->App->db->db.transaction();
-                    if (this->App->currentDB == "MINUS") {
-                        this->incrementCounterVar(-1);
-                        this->sv_count++;
-                        this->ui.counterLabel->setProgress(sv_count);
-                        this->App->db->setMainInfoValue("sv_count", "ALL", QString::number(this->sv_count));
-                    }
-                    else if (this->App->currentDB == "PLUS") {
-                        this->incrementtimeWatchedIncrement(std::max(0.0, this->App->VW->mainPlayer->position));
-                        this->checktimeWatchedIncrement();
-                        this->updateWatchedProgressBar();
-                    }
-                    // Update model row for current video if present
                     QPersistentModelIndex srcIdx = this->modelIndexByPath(this->App->VW->mainPlayer->video_path);
+                    QString currentType;
+                    if (srcIdx.isValid()) {
+                        currentType = this->videosModel->index(srcIdx.row(), ListColumns["TYPE_COLUMN"]).data(Qt::DisplayRole).toString();
+                    }
+                    double replayProgress = std::max(0.0, this->App->VW->mainPlayer->position);
+                    bool playedSpecialType = this->applyPostWatchAdjustments(currentType, this->App->VW->mainPlayer->video_id, true, replayProgress, true);
+                    this->updateSvCountersAfterPlayback(playedSpecialType);
+                    this->checktimeWatchedIncrement();
+                    this->updateWatchedProgressBar();
+                    // Update model row for current video if present
                     if (srcIdx.isValid()) {
                         QModelIndex viewsIdx = this->videosModel->index(srcIdx.row(), ListColumns["VIEWS_COLUMN"]);
                         int views = viewsIdx.data(Qt::DisplayRole).toInt();

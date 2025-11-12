@@ -136,6 +136,13 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 		int val = mw->calculate_sv_target(); 
 		this->ui.SVspinBox->setValue(val);
 	});
+	QString specialMode = mw->App->config->get("sv_mode").toUpper();
+	if (specialMode != "PLUS" && specialMode != "MINUS")
+		specialMode = "MINUS";
+	int specialModeIndex = this->ui.specialSvModeCombo->findText(specialMode, Qt::MatchFixedString);
+	if (specialModeIndex < 0)
+		specialModeIndex = 0;
+	this->ui.specialSvModeCombo->setCurrentIndex(specialModeIndex);
 	if (mw->App->config->get_bool("mascots_random_change"))
 		this->ui.mascotsRandomChange->setCheckState(Qt::CheckState::Checked);
 	else

@@ -208,6 +208,23 @@ void VideosModel::setRandomPercentAtRow(int row, double value) {
     emit dataChanged(index(row, col), index(row, col), { Qt::DisplayRole });
 }
 
+void VideosModel::setRandomPercentColumn(const QMap<int, long double>& probabilities) {
+    if (rows.isEmpty()) return;
+    const int col = ListColumns["RANDOM%_COLUMN"];
+    bool anyChanged = false;
+    for (int r = 0; r < rows.size(); ++r) {
+        const int id = rows[r].id;
+        const double newValue = static_cast<double>(probabilities.value(id, 0.0L));
+        if (!qFuzzyCompare(rows[r].randomPercent + 1.0, newValue + 1.0)) {
+            rows[r].randomPercent = newValue;
+            anyChanged = true;
+        }
+    }
+    if (anyChanged) {
+        emit dataChanged(index(0, col), index(rows.size() - 1, col), { Qt::DisplayRole });
+    }
+}
+
 void VideosModel::setHighlightedPath(const QString& path) {
     int prevRow = highlightedPath.isEmpty() ? -1 : rowByPath(highlightedPath);
     highlightedPath = path;

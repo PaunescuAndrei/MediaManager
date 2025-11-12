@@ -3812,23 +3812,7 @@ void MainWindow::updateVideoListRandomProbabilities() {
         probabilities[deterministic_id] = deterministic_value;
     }
 
-    // Block signals during bulk update
-    const bool oldSignalState = this->videosModel->blockSignals(true);
-
-    // Cache column and row count
-    const int pathColumn = ListColumns["PATH_COLUMN"];
-    const int rowCount = this->videosModel->rowCount();
-
-    // Update all rows
-    for (int r = 0; r < rowCount; ++r) {
-        const QModelIndex idIdx = this->videosModel->index(r, pathColumn);
-        const int id = idIdx.data(CustomRoles::id).toInt();
-        const double p = static_cast<double>(probabilities.value(id, 0.0));
-        this->videosModel->setRandomPercentAtRow(r, p);
-    }
-
-    // Restore signal state
-    this->videosModel->blockSignals(oldSignalState);
+    this->videosModel->setRandomPercentColumn(probabilities);
 
     if (sortingEnabled) {
         this->ui.videosWidget->setSortingEnabled(true);

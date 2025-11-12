@@ -314,7 +314,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         this->NextButtonClicked(true, this->getCheckedUpdateWatchedToggleButton());
     });
     connect(this->ui.next_button, &customQButton::middleClicked, this, [this] {
-        this->NextButtonClicked(false, this->getCheckedUpdateWatchedToggleButton());
+        this->SkipVideo();
     });
     connect(this->ui.next_button, &customQButton::rightClicked, this, [this] {
         customQButton* buttonSender = qobject_cast<customQButton*>(sender());
@@ -1341,13 +1341,13 @@ void MainWindow::resize_center(int w, int h)
     }
 }
 
-void MainWindow::NextButtonClicked(bool increment, bool update_watched_state) {
-    this->NextButtonClicked(this->App->VW->mainPlayer, increment, update_watched_state);
+void MainWindow::NextButtonClicked(bool increment, bool update_watched_state, bool skipped) {
+    this->NextButtonClicked(this->App->VW->mainPlayer, increment, update_watched_state, skipped);
 }
 
-void MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state) {
+void MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state, bool skipped) {
     NextVideoModes::Mode mode = this->getNextVideoMode();
-    bool video_changed = this->NextVideo(mode, increment, update_watched_state);
+    bool video_changed = this->NextVideo(mode, increment, update_watched_state, skipped);
     if (player) {
         this->changePlayerVideo(player, this->ui.currentVideo->path, this->ui.currentVideo->id, 0);
     }
@@ -1383,13 +1383,13 @@ NextVideoSettings MainWindow::getNextVideoSettings() {
     return settings;
 }
 
-bool MainWindow::NextVideo(bool random, bool increment, bool update_watched_state) {
+bool MainWindow::NextVideo(bool random, bool increment, bool update_watched_state, bool skipped) {
     // Legacy function - convert boolean to enum and call new function
     NextVideoModes::Mode mode = random ? NextVideoModes::Random : NextVideoModes::Sequential;
-    return this->NextVideo(mode, increment, update_watched_state);
+    return this->NextVideo(mode, increment, update_watched_state, skipped);
 }
 
-bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool update_watched_state) {
+bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool update_watched_state, bool skipped) {
     bool video_changed = false;
     const QString currentPath = this->ui.currentVideo->path;
     QPersistentModelIndex currentSrcIdx = this->modelIndexByPath(currentPath);
@@ -1453,8 +1453,8 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
             this->App->db->incrementVideosWatchedToday(this->App->currentDB);
         }
         const QString curType = QModelIndex(currentSrcIdx).siblingAtColumn(typeCol).data(Qt::DisplayRole).toString();
-        bool playedSpecialType = this->applyPostWatchAdjustments(curType, currentId, increment);
-        this->updateSvCountersAfterPlayback(playedSpecialType);
+        bool playedSpecialType = this->applyPostWatchAdjustments(curType, currentId, increment, 0.0, false, skipped);
+        this->updateSvCountersAfterPlayback(playedSpecialType, skipped);
 
         this->updateTotalListLabel();
         this->checktimeWatchedIncrement();
@@ -1464,7 +1464,7 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
     return video_changed;
 }
 
-bool MainWindow::applyPostWatchAdjustments(const QString& videoType, int videoId, bool increment, double watchedProgressOverride, bool useOverrideProgress) {
+bool MainWindow::applyPostWatchAdjustments(const QString& videoType, int videoId, bool increment, double watchedProgressOverride, bool useOverrideProgress, bool skipped) {
     const bool isSpecialType = svTypes.contains(videoType);
     const bool treatSpecialAsPlus = this->App->config->get("sv_mode").compare(QStringLiteral("PLUS"), Qt::CaseInsensitive) == 0;
 
@@ -1475,12 +1475,25 @@ bool MainWindow::applyPostWatchAdjustments(const QString& videoType, int videoId
 
     int counterDelta = 0;
     double timeWatchedDelta = 0.0;
-    if (this->App->currentDB == "MINUS") {
-        counterDelta -= 1;
-    }
-    else if (this->App->currentDB == "PLUS" && increment) {
-        timeWatchedDelta += watchedProgress;
-    }
+
+    if(!skipped) {
+        if (this->App->currentDB == "MINUS") {
+            counterDelta = -1;
+        }
+        else if (this->App->currentDB == "PLUS" && increment) {
+            timeWatchedDelta += watchedProgress;
+        }
+        if (isSpecialType && treatSpecialAsPlus && this->App->currentDB == "MINUS") {
+            counterDelta = 0; // negate the base decrement
+            if (increment) {
+                timeWatchedDelta += watchedProgress;
+            }
+        }
+	} else if (skipped && this->App->config->get_bool("skip_progress_enabled") == true) {
+        if (this->App->currentDB == "MINUS") {
+            counterDelta = -1; // negate the base decrement on skip
+        }
+	}
 
     if (isSpecialType) {
         int val = this->calculate_sv_target();
@@ -1489,29 +1502,20 @@ bool MainWindow::applyPostWatchAdjustments(const QString& videoType, int videoId
         this->ui.counterLabel->setMinMax(0, val);
     }
 
-    if (isSpecialType && treatSpecialAsPlus && this->App->currentDB == "MINUS") {
-        counterDelta += 1; // negate the base decrement
-        if (increment) {
-            timeWatchedDelta += watchedProgress;
-        }
-    }
-
     if (counterDelta != 0) {
         this->incrementCounterVar(counterDelta);
     }
     if (timeWatchedDelta != 0.0) {
         this->incrementtimeWatchedIncrement(timeWatchedDelta);
     }
-
     return isSpecialType;
 }
 
-void MainWindow::updateSvCountersAfterPlayback(bool playedSpecialType) {
-    if (this->App->currentDB != "MINUS") return;
+void MainWindow::updateSvCountersAfterPlayback(bool playedSpecialType, bool skipped) {
     if (playedSpecialType) {
         this->sv_count = 0;
     }
-    else {
+    else if (not skipped or (skipped && this->App->config->get_bool("skip_progress_enabled") == true)){
         this->sv_count++;
     }
     this->ui.counterLabel->setProgress(this->sv_count);
@@ -2240,6 +2244,10 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     else {
         this->setDebugMode(false);
     }
+    if (dialog->ui.skipAllowedProgress->checkState() == Qt::CheckState::Checked)
+        config->set("skip_progress_enabled", "True");
+    else
+        config->set("skip_progress_enabled", "False");
     config->save_config();
 }
 
@@ -2552,8 +2560,8 @@ void MainWindow::showEndOfVideoDialog() {
                         currentType = this->videosModel->index(srcIdx.row(), ListColumns["TYPE_COLUMN"]).data(Qt::DisplayRole).toString();
                     }
                     double replayProgress = std::max(0.0, this->App->VW->mainPlayer->position);
-                    bool playedSpecialType = this->applyPostWatchAdjustments(currentType, this->App->VW->mainPlayer->video_id, true, replayProgress, true);
-                    this->updateSvCountersAfterPlayback(playedSpecialType);
+                    bool playedSpecialType = this->applyPostWatchAdjustments(currentType, this->App->VW->mainPlayer->video_id, true, replayProgress, true, false);
+                    this->updateSvCountersAfterPlayback(playedSpecialType, false);
                     this->checktimeWatchedIncrement();
                     this->updateWatchedProgressBar();
                     // Update model row for current video if present
@@ -2570,16 +2578,21 @@ void MainWindow::showEndOfVideoDialog() {
                     this->position = 0;
                 }
                 else if (result == finishDialog::Skip) {
-                    //Skip button
-                    this->App->VW->mainPlayer->change_in_progress = true;
-                    this->App->VW->mainPlayer->position = -1;
-                    this->NextButtonClicked(this->App->VW->mainPlayer, false, this->getCheckedUpdateWatchedToggleButton());
-                    this->position = 0;
+                    this->SkipVideo();
                 }
                 this->finish_dialog = nullptr;
             });
         }
     }
+}
+
+void MainWindow::SkipVideo() {
+    if (this->App->VW->mainPlayer) {
+        this->App->VW->mainPlayer->change_in_progress = true;
+        this->App->VW->mainPlayer->position = -1;
+    }
+    this->NextButtonClicked(this->App->VW->mainPlayer, false, this->getCheckedUpdateWatchedToggleButton(), true);
+    this->position = 0;
 }
 
 void MainWindow::updateProgressBar(QString position, QString duration) {

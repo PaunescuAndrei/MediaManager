@@ -191,6 +191,10 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 		this->ui.debugMode->setCheckState(Qt::CheckState::Checked);
 	else
 		this->ui.debugMode->setCheckState(Qt::CheckState::Unchecked);
+	if (mw->App->config->get_bool("skip_progress_enabled"))
+		this->ui.skipAllowedProgress->setCheckState(Qt::CheckState::Checked);
+	else
+		this->ui.skipAllowedProgress->setCheckState(Qt::CheckState::Unchecked);
 
 	int time_watched_limit = mw->App->config->get("time_watched_limit").toInt();
 	int minutes_limit = time_watched_limit / 60;

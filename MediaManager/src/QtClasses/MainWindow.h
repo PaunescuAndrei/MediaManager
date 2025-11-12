@@ -107,6 +107,7 @@ public:
     void updateProgressBar(double position, double duration);
     void updateProgressBar(double position, double duration, QSharedPointer<BasePlayer> player, bool running = false);
     void showEndOfVideoDialog();
+    void SkipVideo();
     void updateProgressBar(QString position, QString duration);
     void updateTotalListLabel(bool force_update = false);
     void changePlayerVideo(QSharedPointer<BasePlayer> player, QString path, int video_id, double position);
@@ -157,8 +158,8 @@ public:
     void incrementtimeWatchedIncrement(double value);
     void checktimeWatchedIncrement();
     void incrementCounterVar(int value = 1);
-    bool applyPostWatchAdjustments(const QString& videoType, int videoId, bool increment, double watchedProgressOverride = 0.0, bool useOverrideProgress = false);
-    void updateSvCountersAfterPlayback(bool playedSpecialType);
+    bool applyPostWatchAdjustments(const QString& videoType, int videoId, bool increment, double watchedProgressOverride = 0.0, bool useOverrideProgress = false, bool suppressMinusCounter = false);
+    void updateSvCountersAfterPlayback(bool playedSpecialType, bool suppressMinusIncrement);
     int getCounterVar();
     void initNextButtonMode(customQButton* nextbutton);
     bool isNextButtonRandom();
@@ -197,12 +198,12 @@ public:
     QString saltSeed(QString seed);
     WeightedBiasSettings getWeightedBiasSettings();
     void quit();
-    void NextButtonClicked(bool increment, bool update_watched_state);
-    void NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state);
+    void NextButtonClicked(bool increment, bool update_watched_state, bool skipped = false);
+    void NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state, bool skipped = false);
     NextVideoSettings getNextVideoSettings();
     NextVideoModes::Mode getNextVideoMode();
-    bool NextVideo(NextVideoModes::Mode mode, bool increment, bool update_watched_state);
-    bool NextVideo(bool random, bool increment, bool update_watched_state);
+    bool NextVideo(NextVideoModes::Mode mode, bool increment, bool update_watched_state, bool skipped);
+    bool NextVideo(bool random, bool increment, bool update_watched_state, bool skipped);
     bool setNextVideo(const QPersistentModelIndex& current_source_index);
     int nextSequentialRow(const QPersistentModelIndex& current_source_index) const;
     bool seriesRandomVideo(const QPersistentModelIndex& current_source_index);

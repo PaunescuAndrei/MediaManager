@@ -55,7 +55,7 @@
         <x>0</x>
         <y>0</y>
         <width>886</width>
-        <height>1029</height>
+        <height>1056</height>
        </rect>
       </property>
       <layout class="QHBoxLayout" name="horizontalLayout_8">
@@ -423,6 +423,16 @@
              <widget class="QCheckBox" name="videoAutoplay">
               <property name="text">
                <string>Autoplay Videos</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="skipAllowedProgress">
+              <property name="toolTip">
+               <string>When enabled, pressing Skip in the finish dialog will not decrement the MINUS counter.</string>
+              </property>
+              <property name="text">
+               <string>Allow Skip to progress counters</string>
               </property>
              </widget>
             </item>

@@ -49,6 +49,7 @@ void Config::init_defaults() {
 		{"current_db", "MINUS"},
 		{"video_types",	""},
 		{"sv_types",""},
+		{"skip_progress_enabled", "False"},
 		{"sv_mode", "MINUS"},
 		{"animated_icon_flag", "False"},
 		{"animated_icon_fps_modifier", "1.0"},

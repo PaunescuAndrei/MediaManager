@@ -534,7 +534,8 @@ void MainWindow::VideoInfoNotification() {
     newRect.moveTop((int)(screenGeometry.height() * 0.03));
     this->notification_dialog->setGeometry(newRect);
 
-    this->notification_dialog->showNotification(10000,50);
+    int configuredDuration = this->App->config->get("notification_duration_ms").toInt();
+    this->notification_dialog->showNotification(configuredDuration, 5);
 }
 
 void MainWindow::resetPalette() {
@@ -2063,6 +2064,7 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         config->set("auto_continue", "False");
     config->set("auto_continue_delay", QString::number(dialog->ui.autoContinueDelay->value()));
     config->set("search_timer_interval", QString::number(dialog->ui.searchTimerInterval->value()));
+    config->set("notification_duration_ms", QString::number(dialog->ui.notificationDurationSpinBox->value()));
     if (this->search_timer->isActive()) {
         this->search_timer->stop();
         this->search_timer->start(this->App->config->get("search_timer_interval").toInt());

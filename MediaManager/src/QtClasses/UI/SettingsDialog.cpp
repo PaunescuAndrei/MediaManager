@@ -28,6 +28,7 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 	this->ui.SecondsSpinBox->setStyleSheet(get_stylesheet("spinbox"));
 	this->ui.aicon_fps_modifier_spinBox->setStyleSheet(get_stylesheet("doublespinbox"));
     this->ui.searchTimerInterval->setStyleSheet(get_stylesheet("spinbox"));
+    this->ui.notificationDurationSpinBox->setStyleSheet(get_stylesheet("spinbox"));
 	this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(false);
 
 	MainWindow* mw = (MainWindow*)parent;
@@ -213,6 +214,7 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 		this->ui.seedCheckBox->setCheckState(Qt::CheckState::Unchecked);
 	this->ui.seedLineEdit->setText(mw->App->config->get("random_seed"));
     this->ui.searchTimerInterval->setValue(mw->App->config->get("search_timer_interval").toInt());
+    this->ui.notificationDurationSpinBox->setValue(mw->App->config->get("notification_duration_ms").toInt());
 
 	this->ui.weightedRandMinusGroupBox->setTitle(this->ui.weightedRandMinusGroupBox->title().replace("MINUS", mw->App->config->get("minus_category_name"), Qt::CaseSensitive));
 	this->ui.weightedRandPlusGroupBox->setTitle(this->ui.weightedRandPlusGroupBox->title().replace("PLUS", mw->App->config->get("plus_category_name"), Qt::CaseSensitive));

@@ -44,6 +44,8 @@ void NotificationDialog::closeNotification() {
 void NotificationDialog::showNotification()
 {
 	this->time_start = std::chrono::steady_clock::now();
+    this->ui.durationProgressBar->setMaximum(static_cast<int>(this->time_duration.count()));
+    this->ui.durationProgressBar->setValue(0);
 	this->show();
 	this->timer->start(this->timerInterval);
 	this->timer2->start(250);

@@ -108,6 +108,7 @@ void Config::init_defaults() {
 		{"auto_continue", "False"},
 		{"auto_continue_delay", "5"},
 		{"search_timer_interval", "100"},
+		{"notification_duration_ms", "10000"},
 	});
 }
 

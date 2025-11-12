@@ -39,7 +39,7 @@ void shokoButton::update_new_watching(QString ptw_playlist, bool random) {
     if (new_ptw_items.first.isEmpty()) {
         QMessageBox msg = QMessageBox(this->MW);
         msg.setWindowTitle("ShokoAPI");
-        msg.setText(QString("\"%1\" Playlist is empty.").arg(ptw_playlist));
+        msg.setText(QStringLiteral("\"%1\" Playlist is empty.").arg(ptw_playlist));
         msg.exec();
         return;
     }
@@ -48,7 +48,7 @@ void shokoButton::update_new_watching(QString ptw_playlist, bool random) {
         QStringList item_type_id = new_ptw_items.first.split(';');
         if (item_type_id.length() != 2) {
             qDebug() << "Bad Playlist item format.";
-            qMainApp->logger->log(QString("Shoko update_new_watching error:\n Bad Playlist item format, %1").arg(new_ptw_items.first), "ShokoButton");
+            qMainApp->logger->log(QStringLiteral("Shoko update_new_watching error:\n Bad Playlist item format, %1").arg(new_ptw_items.first), "ShokoButton");
             return;
         }
         QStringList files = qMainApp->shoko_API->get_files(item_type_id[1],item_type_id[0]);
@@ -100,7 +100,7 @@ void shokoButton::mouseReleaseEvent(QMouseEvent* e)
         int i = qMainApp->shoko_API->clean_playlists();
         QMessageBox msg = QMessageBox(this->MW);
         msg.setWindowTitle("Shoko DB Clean Playlist");
-        msg.setText(QString("Cleaned %1 entries.").arg(i));
+        msg.setText(QStringLiteral("Cleaned %1 entries.").arg(i));
         msg.exec();
     }
     QToolButton::mouseReleaseEvent(e);

@@ -54,7 +54,7 @@ void generateThumbnailManager::start() {
 void generateThumbnailManager::rebuildThumbnailCache(QSqlDatabase& db, bool overwrite)
 {
     QSqlQuery query = QSqlQuery(db);
-    query.prepare(QString("SELECT path from videodetails"));
+    query.prepare(QStringLiteral("SELECT path from videodetails"));
     query.exec();
     while (query.next()) {
         this->enqueue_work({ query.value(0).toString(),overwrite, false });

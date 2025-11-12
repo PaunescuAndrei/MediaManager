@@ -41,7 +41,7 @@ bool shokoAPI::auth() {
         if (reply->error() == QNetworkReply::NoError) {
             QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
             QJsonObject obj = doc.object();
-            QJsonValue value = obj.value(QString("apikey"));
+            QJsonValue value = obj.value(QStringLiteral("apikey"));
             if (!value.isUndefined()) {
                 this->apikey = value.toString();
                 is_auth = true;
@@ -50,7 +50,7 @@ bool shokoAPI::auth() {
         else {
             QString err = reply->errorString();
             qDebug() << err;
-            qMainApp->logger->log(QString("Shoko API auth error:\n %1").arg(err), "ShokoAPI");
+            qMainApp->logger->log(QStringLiteral("Shoko API auth error:\n %1").arg(err), "ShokoAPI");
         }
         reply->deleteLater();
     });
@@ -70,7 +70,7 @@ QJsonArray shokoAPI::get_playlists() {
     if (!this->is_auth())
         this->auth();
     if (!this->is_auth()) {
-        qMainApp->logger->log(QString("Shoko API get_playlist error:\n Missing API key."), "ShokoAPI");
+        qMainApp->logger->log(QStringLiteral("Shoko API get_playlist error:\n Missing API key."), "ShokoAPI");
         return output;
     }
 
@@ -89,7 +89,7 @@ QJsonArray shokoAPI::get_playlists() {
         else {
             QString err = reply->errorString();
             qDebug() << err;
-            qMainApp->logger->log(QString("Shoko API get_playlist error:\n %1").arg(err), "ShokoAPI");
+            qMainApp->logger->log(QStringLiteral("Shoko API get_playlist error:\n %1").arg(err), "ShokoAPI");
         }
         reply->deleteLater();
         });
@@ -116,12 +116,12 @@ bool shokoAPI::update_playlist(QString PlaylistName, QJsonObject playlist_obj) {
     if (!this->is_auth())
         this->auth();
     if (!this->is_auth()) {
-        qMainApp->logger->log(QString("Shoko API update_playlist error:\n Missing API key."), "ShokoAPI");
+        qMainApp->logger->log(QStringLiteral("Shoko API update_playlist error:\n Missing API key."), "ShokoAPI");
         return false;
     }
     QJsonObject playlist_to_update = this->get_playlist(PlaylistName);
     if (playlist_to_update.isEmpty()) {
-        qMainApp->logger->log(QString("Shoko API update_playlist error:\n Cant find playlist \"%1\".").arg(PlaylistName), "ShokoAPI");
+        qMainApp->logger->log(QStringLiteral("Shoko API update_playlist error:\n Cant find playlist \"%1\".").arg(PlaylistName), "ShokoAPI");
         return false;
     }
     playlist_obj.remove("PlaylistID");
@@ -148,7 +148,7 @@ bool shokoAPI::update_playlist(QString PlaylistName, QJsonObject playlist_obj) {
             success = false;
             QString err = reply->errorString();
             qDebug() << err;
-            qMainApp->logger->log(QString("Shoko API update_playlist error:\n %1").arg(err), "ShokoAPI");
+            qMainApp->logger->log(QStringLiteral("Shoko API update_playlist error:\n %1").arg(err), "ShokoAPI");
         }
         reply->deleteLater();
         });
@@ -167,7 +167,7 @@ bool shokoAPI::check_if_exists(QString id) {
     if (!this->is_auth())
         this->auth();
     if (!this->is_auth()) {
-        qMainApp->logger->log(QString("Shoko API check_if_exists error:\n Missing API key."), "ShokoAPI");
+        qMainApp->logger->log(QStringLiteral("Shoko API check_if_exists error:\n Missing API key."), "ShokoAPI");
         return false;
     }
 
@@ -188,7 +188,7 @@ bool shokoAPI::check_if_exists(QString id) {
             if (!(reply->error() == QNetworkReply::ContentNotFoundError && reply->readAll() == "No Series entry for the given seriesID")) {
                 QString err = reply->errorString();
                 qDebug() << err;
-                qMainApp->logger->log(QString("Shoko API update_playlist error:\n %1").arg(err), "ShokoAPI");
+                qMainApp->logger->log(QStringLiteral("Shoko API update_playlist error:\n %1").arg(err), "ShokoAPI");
             }
         }
         reply->deleteLater();
@@ -249,7 +249,7 @@ QJsonArray shokoAPI::get_import_folders() {
     if (!this->is_auth())
         this->auth();
     if (!this->is_auth()) {
-        qMainApp->logger->log(QString("Shoko API get_import_folders error:\n Missing API key."), "ShokoAPI");
+        qMainApp->logger->log(QStringLiteral("Shoko API get_import_folders error:\n Missing API key."), "ShokoAPI");
         return output;
     }
 
@@ -268,7 +268,7 @@ QJsonArray shokoAPI::get_import_folders() {
         else {
             QString err = reply->errorString();
             qDebug() << err;
-            qMainApp->logger->log(QString("Shoko API get_import_folders error:\n %1").arg(err), "ShokoAPI");
+            qMainApp->logger->log(QStringLiteral("Shoko API get_import_folders error:\n %1").arg(err), "ShokoAPI");
         }
         reply->deleteLater();
         });
@@ -281,7 +281,7 @@ QStringList shokoAPI::get_files(QString id, QString type) {
     if (!this->is_auth())
         this->auth();
     if (!this->is_auth()) {
-        qMainApp->logger->log(QString("Shoko API getFiles error:\n Missing API key."), "ShokoAPI");
+        qMainApp->logger->log(QStringLiteral("Shoko API getFiles error:\n Missing API key."), "ShokoAPI");
         return output_files;
     }
 
@@ -304,13 +304,13 @@ QStringList shokoAPI::get_files(QString id, QString type) {
                 }
                 else {
                     qDebug() << "Bad response, no List found.";
-                    qMainApp->logger->log(QString("Shoko API getFiles error:\n %1").arg("Bad response, no List found."), "ShokoAPI");
+                    qMainApp->logger->log(QStringLiteral("Shoko API getFiles error:\n %1").arg("Bad response, no List found."), "ShokoAPI");
                 }
             }
             else {
                 QString err = reply->errorString();
                 qDebug() << err;
-                qMainApp->logger->log(QString("Shoko API getFiles error:\n %1").arg(err), "ShokoAPI");
+                qMainApp->logger->log(QStringLiteral("Shoko API getFiles error:\n %1").arg(err), "ShokoAPI");
             }
             reply->deleteLater();
             });
@@ -343,13 +343,13 @@ QStringList shokoAPI::get_files(QString id, QString type) {
                 }
                 else {
                     qDebug() << "Bad response, no Files found.";
-                    qMainApp->logger->log(QString("Shoko API getFiles error:\n %1").arg("Bad response, no Files found."), "ShokoAPI");
+                    qMainApp->logger->log(QStringLiteral("Shoko API getFiles error:\n %1").arg("Bad response, no Files found."), "ShokoAPI");
                 }
             }
             else {
                 QString err = reply->errorString();
                 qDebug() << err;
-                qMainApp->logger->log(QString("Shoko API getFiles error:\n %1").arg(err), "ShokoAPI");
+                qMainApp->logger->log(QStringLiteral("Shoko API getFiles error:\n %1").arg(err), "ShokoAPI");
             }
             reply->deleteLater();
             });

@@ -25,7 +25,7 @@ shokoDB::shokoDB(std::string location, std::string conname) {
 QMap<QString,QString> shokoDB::get_playlist(QString playlist) {
     QMap<QString, QString> results = QMap<QString, QString>();
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QString("SELECT PlaylistID, PlaylistName, PlaylistItems, DefaultPlayOrder, PlayWatched, PlayUnwatched FROM Playlist WHERE PlaylistName = ? "));
+    query.prepare(QStringLiteral("SELECT PlaylistID, PlaylistName, PlaylistItems, DefaultPlayOrder, PlayWatched, PlayUnwatched FROM Playlist WHERE PlaylistName = ? "));
     query.addBindValue(playlist);
     query.exec();
     bool found = query.first();
@@ -43,7 +43,7 @@ QMap<QString,QString> shokoDB::get_playlist(QString playlist) {
 bool shokoDB::check_if_exists(QString id) {
     QMap<QString, QString> results = QMap<QString, QString>();
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QString("SELECT AnimeSeriesid, anidb_id FROM AnimeSeries WHERE animeseriesid = ? ;"));
+    query.prepare(QStringLiteral("SELECT AnimeSeriesid, anidb_id FROM AnimeSeries WHERE animeseriesid = ? ;"));
     query.addBindValue(id);
     query.exec();
     return query.first();
@@ -51,7 +51,7 @@ bool shokoDB::check_if_exists(QString id) {
 
 void shokoDB::update_playlist_items(QString items, QString playlist) {
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QString("UPDATE Playlist SET PlaylistItems = ? WHERE PlaylistName = ? ;"));
+    query.prepare(QStringLiteral("UPDATE Playlist SET PlaylistItems = ? WHERE PlaylistName = ? ;"));
 
     query.addBindValue(items);
     query.addBindValue(playlist);
@@ -101,7 +101,7 @@ int shokoDB::clean_playlists() {
 
 QStringList shokoDB::getFiles(std::string animegroupid) {
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QString("SELECT ans.animegroupid,ans.anidb_id, ip.importfolderlocation || vlp.filepath as filepath FROM CrossRef_File_Episode cfe INNER JOIN AnimeSeries ans on cfe.AnimeID = ans.AniDB_ID INNER JOIN VideoLocal vl on vl.Hash = cfe.Hash INNER JOIN VideoLocal_Place vlp on vl.VideoLocalID = vlp.VideoLocalID INNER JOIN ImportFolder ip on ip.importfolderid = vlp.importfolderid where ans.AnimeSeriesID = ?;"));
+    query.prepare(QStringLiteral("SELECT ans.animegroupid,ans.anidb_id, ip.importfolderlocation || vlp.filepath as filepath FROM CrossRef_File_Episode cfe INNER JOIN AnimeSeries ans on cfe.AnimeID = ans.AniDB_ID INNER JOIN VideoLocal vl on vl.Hash = cfe.Hash INNER JOIN VideoLocal_Place vlp on vl.VideoLocalID = vlp.VideoLocalID INNER JOIN ImportFolder ip on ip.importfolderid = vlp.importfolderid where ans.AnimeSeriesID = ?;"));
     query.addBindValue(QString::fromStdString(animegroupid));
     if (!query.exec()) {
         qDebug() << "getFiles " << query.lastError().text();

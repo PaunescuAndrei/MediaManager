@@ -185,7 +185,7 @@ bool finishDialog::eventFilter(QObject* obj, QEvent* event) {
 }
 
 void finishDialog::updateCountdownText() {
-	this->ui.mainmsg->setText(QString("Continue? (Auto in %1s)").arg(this->countdownSeconds));
+	this->ui.mainmsg->setText(QStringLiteral("Continue? (Auto in %1s)").arg(this->countdownSeconds));
 }
 
 void finishDialog::stopCountdown()

@@ -440,7 +440,7 @@ void MainWindow::UpdateWindowTitle() {
     QString session_time;
     QString watched_time;
     QString thumb_work_count;
-    QString main_title = QString("Media Manager %1 %2").arg(this->getCategoryName()).arg(VERSION_TEXT);
+    QString main_title = QStringLiteral("Media Manager %1 %2").arg(this->getCategoryName()).arg(VERSION_TEXT);
     if (this->App->VW and this->App->VW->mainPlayer) {
         int sessionSeconds = this->App->VW->mainPlayer->getSessionTime();
         int watchedSeconds = this->App->VW->mainPlayer->getTotalWatchedTime();
@@ -489,8 +489,8 @@ void MainWindow::VideoInfoNotification() {
             const QModelIndex lastWatchedIdx = this->videosModel->index(srcIdx.row(), ListColumns["LAST_WATCHED_COLUMN"]);
             double stars = ratingIdx.data(CustomRoles::rating).toDouble();
             starRating.setStarCount(stars);
-            this->notification_dialog->ui.starsLabel->setText(QString(" %1 ").arg(stars));
-            this->notification_dialog->ui.viewsLabel->setText(QString(" %1 Views ").arg(viewsIdx.data(Qt::DisplayRole).toString()));
+            this->notification_dialog->ui.starsLabel->setText(QStringLiteral(" %1 ").arg(stars));
+            this->notification_dialog->ui.viewsLabel->setText(QStringLiteral(" %1 Views ").arg(viewsIdx.data(Qt::DisplayRole).toString()));
 
             QString lastWatchedDisplay = "Never";
             QString lastWatchedTooltip;
@@ -698,7 +698,7 @@ void MainWindow::updateRating(QPersistentModelIndex index, double old_value, dou
     const QModelIndex pathIdx = QModelIndex(modelIdx).siblingAtColumn(ListColumns["PATH_COLUMN"]);
     const QString path = pathIdx.data(Qt::DisplayRole).toString();
     const int id = pathIdx.data(CustomRoles::id).toInt();
-    qMainApp->logger->log(QString("Updating rating from %1 to %2 for \"%3\"").arg(old_value).arg(new_value).arg(path), "Stats", path);
+    qMainApp->logger->log(QStringLiteral("Updating rating from %1 to %2 for \"%3\"").arg(old_value).arg(new_value).arg(path), "Stats", path);
     this->App->db->updateRating(id, new_value);
 }
 
@@ -706,7 +706,7 @@ void MainWindow::updatePath(int video_id, QString new_path) {
     QMimeDatabase db;
     QMimeType guess_type = db.mimeTypeForFile(new_path);
     if (guess_type.isValid() && guess_type.name().startsWith("video")) {
-        qMainApp->logger->log(QString("Updating video with id \"%1\" to %2").arg(video_id).arg(new_path), "UpdatePath", new_path);
+        qMainApp->logger->log(QStringLiteral("Updating video with id \"%1\" to %2").arg(video_id).arg(new_path), "UpdatePath", new_path);
         this->App->db->db.transaction();
         this->App->db->updateItem(video_id, new_path);
         QString author = InsertSettingsDialog::get_author(new_path);
@@ -1028,7 +1028,7 @@ QMenu* MainWindow::trayIconContextMenu(QWidget* parent) {
     traycontextmenu->addAction(mode_text, [this] {
         this->NextButtonClicked(true, this->getCheckedUpdateWatchedToggleButton());
     });
-    traycontextmenu->addAction(QString("Change (%1)").arg(this->getCategoryName()), [this] {
+    traycontextmenu->addAction(QStringLiteral("Change (%1)").arg(this->getCategoryName()), [this] {
         this->switchCurrentDB();
     });
     traycontextmenu->addSeparator();
@@ -1456,7 +1456,7 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
             this->videosModel->setData(this->videosModel->index(currentSrcIdx.row(), ListColumns["VIEWS_COLUMN"]), QString::number(v + 1), Qt::DisplayRole);
         }
         if (update_watched_state) {
-            this->videosModel->setData(this->videosModel->index(currentSrcIdx.row(), ListColumns["WATCHED_COLUMN"]), QString("Yes"), Qt::DisplayRole);
+            this->videosModel->setData(this->videosModel->index(currentSrcIdx.row(), ListColumns["WATCHED_COLUMN"]), QStringLiteral("Yes"), Qt::DisplayRole);
         }
         this->videosModel->setData(this->videosModel->index(currentSrcIdx.row(), ListColumns["LAST_WATCHED_COLUMN"]), currenttime, Qt::DisplayRole);
         this->refreshVisibility(this->old_search);
@@ -1702,7 +1702,7 @@ bool MainWindow::TagsDialogButton() {
 
 void MainWindow::resetDB(QString directory) {
     if (qMainApp && qMainApp->logger) {
-        qMainApp->logger->log(QString("Resetting database for category %1 to %2").arg(this->getCategoryName(),directory), "Database", directory);
+        qMainApp->logger->log(QStringLiteral("Resetting database for category %1 to %2").arg(this->getCategoryName(),directory), "Database", directory);
     }
     this->App->db->resetDB(this->App->currentDB);
     if (this->videosModel) this->videosModel->clear();
@@ -1727,7 +1727,7 @@ void MainWindow::resetDBDialogButton(QWidget* parent) {
 
 bool MainWindow::loadDB(QString path, QWidget* parent) {
     QFileInfo file(path);
-    qMainApp->logger->log(QString("Loading Backup Database from \"%1\"").arg(path), "Database", path);
+    qMainApp->logger->log(QStringLiteral("Loading Backup Database from \"%1\"").arg(path), "Database", path);
     QMessageBox *msg = new QMessageBox(parent);
     msg->setAttribute(Qt::WA_DeleteOnClose, true);
     msg->setWindowTitle("Load DB");
@@ -1746,21 +1746,21 @@ bool MainWindow::loadDB(QString path, QWidget* parent) {
             }
             if (return_code == 0) {
                 //msg->setIcon(QMessageBox::Information); // they trigger windows notifications sound, stupid
-                msg->setText(QString("<p align='center'>Load complete!<br>%1</p>").arg(file.fileName()));
+                msg->setText(QStringLiteral("<p align='center'>Load complete!<br>%1</p>").arg(file.fileName()));
             }
             else {
                 //msg->setIcon(QMessageBox::Warning); // they trigger windows notifications sound, stupid
-                msg->setText(QString("<p align='center'>Load failed!<br>%1</p>").arg(file.fileName()));
+                msg->setText(QStringLiteral("<p align='center'>Load failed!<br>%1</p>").arg(file.fileName()));
             }
         }
         else {
             //msg->setIcon(QMessageBox::Warning); // they trigger windows notifications sound, stupid
-            msg->setText(QString("<p align='center'>Load failed! Backup file not found.<br>%1</p>").arg(file.fileName()));
+            msg->setText(QStringLiteral("<p align='center'>Load failed! Backup file not found.<br>%1</p>").arg(file.fileName()));
         }
     }
     catch (...) {
         //msg->setIcon(QMessageBox::Warning); // they trigger windows notifications sound, stupid
-        msg->setText(QString("<p align='center'>Load failed!<br>%1</p>").arg(file.fileName()));
+        msg->setText(QStringLiteral("<p align='center'>Load failed!<br>%1</p>").arg(file.fileName()));
     }
     msg->show();
     return return_code == 0;
@@ -1793,7 +1793,7 @@ bool MainWindow::loadDB(QWidget* parent)
 }
 
 bool MainWindow::backupDB(QString path, QWidget* parent) {
-    qMainApp->logger->log(QString("Creating Backup Database to \"%1\"").arg(path), "Database", path);
+    qMainApp->logger->log(QStringLiteral("Creating Backup Database to \"%1\"").arg(path), "Database", path);
     QMessageBox *msg = new QMessageBox(parent);
     msg->setAttribute(Qt::WA_DeleteOnClose, true);
     msg->setWindowTitle("Backup DB");
@@ -1805,11 +1805,11 @@ bool MainWindow::backupDB(QString path, QWidget* parent) {
     }
     if (return_code == 0) {
         //msg->setIcon(QMessageBox::Information); // they trigger windows notifications sound, stupid
-        msg->setText(QString("<p align='center'>Backup complete!<br>%1</p>").arg(QFileInfo(path).fileName()));
+        msg->setText(QStringLiteral("<p align='center'>Backup complete!<br>%1</p>").arg(QFileInfo(path).fileName()));
     }
     else {
         //msg->setIcon(QMessageBox::Warning); // they trigger windows notifications sound, stupid
-        msg->setText(QString("<p align='center'>Backup failed!<br>%1</p>").arg(QFileInfo(path).fileName()));
+        msg->setText(QStringLiteral("<p align='center'>Backup failed!<br>%1</p>").arg(QFileInfo(path).fileName()));
     }
     msg->show();
     return return_code == 0;
@@ -2744,7 +2744,7 @@ void MainWindow::openEmptyVideoPlayer() {
         this->App->VW->setMainPlayer(l);
         l->openPlayer(l->video_path, l->position);
         this->VideoInfoNotification();
-        qMainApp->logger->log(QString("Opening empty Video Player."),"Video");
+        qMainApp->logger->log(QStringLiteral("Opening empty Video Player."),"Video");
     }
     else {
         utils::bring_hwnd_to_foreground_uiautomation_method(this->App->VW->mainPlayer->player_hwnd, this->App->uiAutomation);
@@ -2764,7 +2764,7 @@ void MainWindow::watchCurrent() {
         l->openPlayer(this->ui.currentVideo->path, seconds);
         connect(l.data(), &BasePlayer::endOfVideoSignal, this, &MainWindow::showEndOfVideoDialog);
         this->VideoInfoNotification();
-        qMainApp->logger->log(QString("Playing Current Video \"%1\" from %2").arg(this->ui.currentVideo->path).arg(utils::formatSecondsQt(seconds)), "Video", this->ui.currentVideo->path);
+        qMainApp->logger->log(QStringLiteral("Playing Current Video \"%1\" from %2").arg(this->ui.currentVideo->path).arg(utils::formatSecondsQt(seconds)), "Video", this->ui.currentVideo->path);
     }
     else {
         utils::bring_hwnd_to_foreground_uiautomation_method(this->App->VW->mainPlayer->player_hwnd, this->App->uiAutomation);
@@ -2777,7 +2777,7 @@ void MainWindow::watchSelected(int video_id, QString path) {
     if (seconds < 0.001)
         seconds = 0.001;
     l->openPlayer(path, seconds);
-    qMainApp->logger->log(QString("Playing Video \"%1\" from %2").arg(path).arg(utils::formatSecondsQt(seconds)), "Video", path);
+    qMainApp->logger->log(QStringLiteral("Playing Video \"%1\" from %2").arg(path).arg(utils::formatSecondsQt(seconds)), "Video", path);
 }
 
 void MainWindow::updateSearchCompleter() {
@@ -2822,7 +2822,7 @@ void MainWindow::switchCurrentDB(QString db) {
     else if (this->App->currentDB == "PLUS") {
         this->App->currentDB = "MINUS";
     }
-    qMainApp->logger->log(QString("Switching Current DB to \"%1\"").arg(this->getCategoryName()), "Database");
+    qMainApp->logger->log(QStringLiteral("Switching Current DB to \"%1\"").arg(this->getCategoryName()), "Database");
     this->UpdateWindowTitle();
     this->init_icons();
     this->initListDetails();
@@ -2920,7 +2920,7 @@ void MainWindow::addWatchedDialogButton() {
 
 void MainWindow::incrementtimeWatchedIncrement(double value) {
     if (value > 0)
-        qMainApp->logger->log(QString("Increasing time watched by %1").arg(utils::formatSecondsQt(value)), "Stats");
+        qMainApp->logger->log(QStringLiteral("Increasing time watched by %1").arg(utils::formatSecondsQt(value)), "Stats");
     double time = this->App->db->getMainInfoValue("timeWatchedIncrement", "ALL", "0").toDouble();
     time += value;
     this->App->db->setMainInfoValue("timeWatchedIncrement", "ALL", QString::number(time));
@@ -2937,9 +2937,9 @@ void MainWindow::checktimeWatchedIncrement() {
 
 void MainWindow::incrementCounterVar(int value) {
     if (value >= 0)
-        qMainApp->logger->log(QString("Increasing Counter by %1").arg(value), "Stats");
+        qMainApp->logger->log(QStringLiteral("Increasing Counter by %1").arg(value), "Stats");
     else
-        qMainApp->logger->log(QString("Decreasing Counter by %1").arg(value), "Stats");
+        qMainApp->logger->log(QStringLiteral("Decreasing Counter by %1").arg(value), "Stats");
     int oldval = this->ui.counterLabel->text().toInt();
     this->setCounterVar(oldval + value);
 }
@@ -3591,7 +3591,7 @@ void MainWindow::setCurrent(int id, QString path, QString name, QString author, 
     else
         this->updateProgressBar(this->App->db->getVideoProgress(this->ui.currentVideo->id), utils::getVideoDuration(this->ui.currentVideo->path));
     this->App->db->setMainInfoValue("current", this->App->currentDB, path);
-    qMainApp->logger->log(QString("Setting current Video to \"%1\"").arg(path), "Video",path);
+    qMainApp->logger->log(QStringLiteral("Setting current Video to \"%1\"").arg(path), "Video",path);
 }
 
 QString MainWindow::getWatchedVisibilityOption(bool watched_yes, bool watched_no, bool watched_mixed, bool search_bar_visible, bool visible_only_checkbox) {
@@ -3703,7 +3703,7 @@ void MainWindow::changePlayerVideo(QSharedPointer<BasePlayer> player, QString pa
         this->finish_dialog = nullptr;
     }
     this->VideoInfoNotification();
-    qMainApp->logger->log(QString("Changing Video to \"%1\"").arg(path), "Video", path);
+    qMainApp->logger->log(QStringLiteral("Changing Video to \"%1\"").arg(path), "Video", path);
 }
 
 void MainWindow::updateVideoListRandomProbabilities() {

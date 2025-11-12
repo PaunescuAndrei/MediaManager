@@ -39,7 +39,7 @@ void IconChanger::initIcon(bool instant)
 void IconChanger::setIcon(QString path, bool cache_check,bool instant)
 {
 	if(qMainApp)
-		qMainApp->logger->log(QString("Setting icon to \"%1\"").arg(path), "Icon", path);
+		qMainApp->logger->log(QStringLiteral("Setting icon to \"%1\"").arg(path), "Icon", path);
 	if (QFileInfo::exists(path)) {
 
 		this->setIcon_lock.clear();
@@ -132,7 +132,7 @@ void IconChanger::setIcon(QString path, bool cache_check,bool instant)
 				QFile file(cachepath);
 				if (!file.open(QIODevice::WriteOnly)) {
 					if (qMainApp)
-						qMainApp->logger->log(QString("Failed to open cache file for writing: %1").arg(cachepath), "IconChanger", "ERROR");
+						qMainApp->logger->log(QStringLiteral("Failed to open cache file for writing: %1").arg(cachepath), "IconChanger", "ERROR");
 				} else {
 					QDataStream out(&file);  
 					out << this->icon;   
@@ -184,7 +184,7 @@ bool IconChanger::checkIconCache(QString path, QMap<QString, QIcon>* icon, QMap<
 	if (file.exists() && file.size() > 0) {
 		if (!file.open(QIODevice::ReadOnly)) {
 			if (qMainApp)
-				qMainApp->logger->log(QString("Failed to open cache file for reading: %1").arg(cachepath), "IconChanger", "ERROR");
+				qMainApp->logger->log(QStringLiteral("Failed to open cache file for reading: %1").arg(cachepath), "IconChanger", "ERROR");
 			file.close();
 			return false;
 		} else {
@@ -266,7 +266,7 @@ void IconChanger::rebuildIconCache() {
 		QFile file(cachepath);
 		if (!file.open(QIODevice::WriteOnly)) {
 			if (qMainApp)
-				qMainApp->logger->log(QString("Failed to open cache file for writing: %1").arg(cachepath), "IconChanger", "ERROR");
+				qMainApp->logger->log(QStringLiteral("Failed to open cache file for writing: %1").arg(cachepath), "IconChanger", "ERROR");
 		} else {
 			QDataStream out(&file);
 			out << _icon;

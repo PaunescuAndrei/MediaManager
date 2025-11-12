@@ -39,7 +39,7 @@ void generateThumbnailRunnable::run()
 
                 if (process.exitCode() != MtnSuccess && process.exitCode() != MtnSuccessNoFrame) {
                     if (qMainApp)
-                        qMainApp->logger->log(QString("mtn.exe exit code %1 for \"%2\"").arg(QString::number(process.exitCode()), item.path), "Thumbnail", item.path);
+                        qMainApp->logger->log(QStringLiteral("mtn.exe exit code %1 for \"%2\"").arg(QString::number(process.exitCode()), item.path), "Thumbnail", item.path);
                     else
                         qDebug() << "mtn.exe exit code " << process.exitCode();
                 }

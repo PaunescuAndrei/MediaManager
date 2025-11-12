@@ -90,7 +90,7 @@ LRESULT RawInputKeyboard::OnCopyData(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
 			//	raw->data.keyboard.Message,
 			//	raw->data.keyboard.VKey);
             
-            //qDebug() << QString("Kbd: make=%1 Flags=%2 Reserved=%3 ExtraInformation=%4, msg=%5 VK=%6")
+            //qDebug() << QStringLiteral("Kbd: make=%1 Flags=%2 Reserved=%3 ExtraInformation=%4, msg=%5 VK=%6")
             //    .arg(raw->data.keyboard.MakeCode, 4, 16, QChar('0'))
             //    .arg(raw->data.keyboard.Flags, 4, 16, QChar('0'))
             //    .arg(raw->data.keyboard.Reserved, 4, 16, QChar('0'))

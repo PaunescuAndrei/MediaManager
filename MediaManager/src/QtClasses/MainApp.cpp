@@ -179,9 +179,9 @@ void MainApp::startSingleInstanceServer(QString appid) {
 		}
 	});
 	if(this->instanceServer->listen(appid)){
-		this->logger->log(QString("Single instance server started with id: %1").arg(appid), "INFO");
+		this->logger->log(QStringLiteral("Single instance server started with id: %1").arg(appid), "INFO");
 	} else {
-		this->logger->log(QString("Single instance server failed to start with id: %1").arg(appid), "ERROR");
+		this->logger->log(QStringLiteral("Single instance server failed to start with id: %1").arg(appid), "ERROR");
 	}
 }
 
@@ -274,4 +274,3 @@ MainApp::~MainApp()
 	this->logger->deleteLater();
 	this->ErrorDialog->deleteLater();
 }
-

@@ -100,40 +100,42 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 		}
 
         connect(this->ui.tagsButton, &QPushButton::clicked, this, [this, MW]() {
-            QPersistentModelIndex src = MW->modelIndexByPath(MW->ui.currentVideo->path);
-            if (src.isValid()) {
-                this->timer.stop();
-                Qt::WindowFlags flags = windowFlags();
-                bool isOnTop = flags.testFlag(Qt::WindowStaysOnTopHint);
-                this->setWindowFlag(Qt::WindowStaysOnTopHint, false);
-                this->hide();
-                int id = QModelIndex(src).sibling(ListColumns["PATH_COLUMN"], 0).data(CustomRoles::id).toInt();
-                VideosTagsDialog* dialog = new VideosTagsDialog(QList<int>{ id }, MW, nullptr);
-                if (dialog) {
-                    connect(dialog, &finishDialog::finished, this, [this,MW, isOnTop](int result) {
-                        if (this) {
-                            this->setWindowFlag(Qt::WindowStaysOnTopHint, isOnTop);
-                            this->show();
-                            this->timer.start(250);
-                            QPersistentModelIndex src = MW->modelIndexByPath(MW->ui.currentVideo->path);
-                            if (src.isValid()) this->ui.tags_label->setText(QModelIndex(src).siblingAtColumn(ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString());
-                        }
-                    });
-                }
-                else {
+            const QPersistentModelIndex src = MW->modelIndexByPath(MW->ui.currentVideo->path);
+            if (!src.isValid())
+                return;
+            this->timer.stop();
+            const Qt::WindowFlags flags = windowFlags();
+            const bool isOnTop = flags.testFlag(Qt::WindowStaysOnTopHint);
+            this->setWindowFlag(Qt::WindowStaysOnTopHint, false);
+            this->hide();
+            const QPersistentModelIndex pathIdx = src.sibling(src.row(), ListColumns["PATH_COLUMN"]);
+            const int id = pathIdx.data(CustomRoles::id).toInt();
+            VideosTagsDialog* dialog = MW->editTags(QList<int>{ id }, nullptr);
+            if (dialog) {
+                connect(dialog, &VideosTagsDialog::finished, this, [this, MW, isOnTop](int) {
                     this->setWindowFlag(Qt::WindowStaysOnTopHint, isOnTop);
                     this->show();
                     this->timer.start(250);
-                }
-                QTimer::singleShot(100, [dialog] {
-                    if (dialog) {
-                        utils::bring_hwnd_to_foreground_uiautomation_method((HWND)dialog->winId(), qMainApp->uiAutomation);
-                        dialog->raise();
-                        dialog->show();
-                        dialog->activateWindow();
+                    const QPersistentModelIndex updatedSrc = MW->modelIndexByPath(MW->ui.currentVideo->path);
+                    if (updatedSrc.isValid()) {
+                        const QPersistentModelIndex tagsIdx = updatedSrc.sibling(updatedSrc.row(), ListColumns["TAGS_COLUMN"]);
+                        this->ui.tags_label->setText(tagsIdx.data(Qt::DisplayRole).toString());
                     }
                 });
             }
+            else {
+                this->setWindowFlag(Qt::WindowStaysOnTopHint, isOnTop);
+                this->show();
+                this->timer.start(250);
+            }
+            QTimer::singleShot(100, [dialog] {
+                if (dialog) {
+                    utils::bring_hwnd_to_foreground_uiautomation_method((HWND)dialog->winId(), qMainApp->uiAutomation);
+                    dialog->raise();
+                    dialog->show();
+                    dialog->activateWindow();
+                }
+            });
         });
 	}
 	connect(this->ui.NextButton, &QPushButton::clicked, this, [this]() {this->timer.stop(); this->done(finishDialog::Accepted); } );

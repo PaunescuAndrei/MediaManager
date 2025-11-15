@@ -648,9 +648,9 @@ QString MainWindow::pathById(int id) const {
 }
 
 QPersistentModelIndex MainWindow::modelIndexById(int id) const {
-    if (!this->videosModel) return QModelIndex();
+    if (!this->videosModel) return QPersistentModelIndex();
     int r = this->videosModel->rowById(id);
-    if (r < 0) return QModelIndex();
+    if (r < 0) return QPersistentModelIndex();
     return QPersistentModelIndex(this->videosModel->index(r, 0));
 }
 
@@ -3489,26 +3489,7 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
         }
     }
     else if (menu_click == tags_edit) {
-        VideosTagsDialog* d = new VideosTagsDialog(selIds, this, this);
-        d->open();
-        connect(d, &VideosTagsDialog::finished, this, [this, d](int result) {
-            if (result == QDialog::Accepted) {
-                this->App->db->db.transaction();
-                for (auto& video : d->items) {
-                    int video_id = video.first;
-                    QSet<int> tags_id = QSet<int>();
-                    for (int i = 0; i < d->ui.listWidgetAdded->count(); ++i) {
-                        QListWidgetItem* item = d->ui.listWidgetAdded->item(i);
-                        tags_id.insert(item->data(Qt::UserRole).value<Tag>().id);
-                    }
-                    this->App->db->deleteExtraTags(video_id, tags_id);
-                    for (auto& tag_id : tags_id) this->App->db->insertTag(video_id, tag_id);
-                }
-                this->App->db->db.commit();
-            }
-            this->refreshVideosWidget(false, true);
-            d->deleteLater();
-        });
+        this->editTags(selIds, this);
     }
     else if (menu_click == sync_items) {
         QMessageBox msgBox;
@@ -3534,6 +3515,35 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
     }
     else if (menu_click->parent() == category_menu)
         this->setType(menu_click->text(), selIds);
+}
+
+VideosTagsDialog* MainWindow::editTags(const QList<int>& ids, QWidget* parent) {
+    if (ids.isEmpty())
+        return nullptr;
+    VideosTagsDialog* dialog = new VideosTagsDialog(ids, this, parent);
+    dialog->open();
+    connect(dialog, &VideosTagsDialog::finished, this, [this, dialog](int result) {
+        if (result == QDialog::Accepted) {
+            this->App->db->db.transaction();
+            for (const auto& video : dialog->items) {
+                const int videoId = video.first;
+                QSet<int> tagsIds;
+                for (int i = 0; i < dialog->ui.listWidgetAdded->count(); ++i) {
+                    const QListWidgetItem* item = dialog->ui.listWidgetAdded->item(i);
+                    tagsIds.insert(item->data(Qt::UserRole).value<Tag>().id);
+                }
+                this->App->db->deleteExtraTags(videoId, tagsIds);
+                for (int tagId : tagsIds) {
+                    this->App->db->insertTag(videoId, tagId);
+                }
+            }
+            this->App->db->db.commit();
+            this->refreshVideosWidget(false, true);
+            this->refreshCurrentVideo();
+        }
+        dialog->deleteLater();
+    });
+    return dialog;
 }
 
  

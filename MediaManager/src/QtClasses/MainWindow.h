@@ -146,6 +146,7 @@ public:
     void videosWidgetHeaderContextMenu(QPoint point);
     void updateHeaderSettings(QStringList settings);
     void videosWidgetContextMenu(QPoint point);
+    VideosTagsDialog* editTags(const QList<int>& ids, QWidget* parent = nullptr);
     
     void setCurrent(int id, QString path, QString name, QString author, QString tags, bool reset_progress = false);
     QString getWatchedVisibilityOption(bool watched_yes, bool watched_no, bool watched_mixed, bool search_bar_visible, bool visible_only_checkbox);

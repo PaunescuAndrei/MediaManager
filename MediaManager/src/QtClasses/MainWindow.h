@@ -106,7 +106,7 @@ public:
     void updateWatchedProgressBar();
     void updateProgressBar(double position, double duration);
     void updateProgressBar(double position, double duration, QSharedPointer<BasePlayer> player, bool running = false);
-    void showEndOfVideoDialog();
+    void showEndOfVideoDialog(bool ignore_end_of_video = false);
     void SkipVideo();
     void updateProgressBar(QString position, QString duration);
     void updateTotalListLabel(bool force_update = false);

@@ -2547,8 +2547,11 @@ void MainWindow::updateProgressBar(double position, double duration, QSharedPoin
         this->updateProgressBar(position, duration);
 }
 
-void MainWindow::showEndOfVideoDialog() {
-    if (this->App->VW->mainPlayer and not this->App->VW->mainPlayer->video_path.isEmpty() and this->App->VW->mainPlayer->end_of_video == true and this->App->VW->mainPlayer->change_in_progress == false) {
+void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video) {
+    if (this->App->VW->mainPlayer
+        && !this->App->VW->mainPlayer->video_path.isEmpty()
+        && (ignore_end_of_video || this->App->VW->mainPlayer->end_of_video)
+        && this->App->VW->mainPlayer->change_in_progress == false) {
         if (not this->finish_dialog) {
             this->finish_dialog = new finishDialog(this);
             this->finish_dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -2830,7 +2833,9 @@ void MainWindow::watchCurrent() {
 			seconds = this->duration - 0.1; // mpc-hc bugs out a bit if we try to play from the end of the video, so we set it to a bit before the end
         }
         l->openPlayer(this->ui.currentVideo->path, seconds);
-        connect(l.data(), &BasePlayer::endOfVideoSignal, this, &MainWindow::showEndOfVideoDialog);
+        connect(l.data(), &BasePlayer::endOfVideoSignal, this, [this]() {
+            this->showEndOfVideoDialog();
+        });
         this->VideoInfoNotification();
         qMainApp->logger->log(QStringLiteral("Playing Current Video \"%1\" from %2").arg(this->ui.currentVideo->path).arg(utils::formatSecondsQt(seconds)), "Video", this->ui.currentVideo->path);
     }

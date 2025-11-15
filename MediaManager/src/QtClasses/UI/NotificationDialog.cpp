@@ -73,6 +73,12 @@ NotificationDialog::~NotificationDialog()
 void NotificationDialog::mousePressEvent(QMouseEvent* event)
 {
 	event->accept();
-	this->closeNotification();
+	const bool isRightClick = event->button() == Qt::RightButton;
+	if (isRightClick && this->MW) {
+		this->MW->showEndOfVideoDialog(true);
+	}
+	else {
+		this->closeNotification();
+	}
 	//return QWidget::mousePressEvent(event);
 }

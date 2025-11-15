@@ -2547,7 +2547,7 @@ void MainWindow::updateProgressBar(double position, double duration, QSharedPoin
         this->updateProgressBar(position, duration);
 }
 
-void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video) {
+void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notification) {
     if (this->App->VW->mainPlayer
         && !this->App->VW->mainPlayer->video_path.isEmpty()
         && (ignore_end_of_video || this->App->VW->mainPlayer->end_of_video)
@@ -2560,7 +2560,7 @@ void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video) {
             this->finish_dialog->raise();
             this->finish_dialog->activateWindow();
             this->finish_dialog->open();
-            connect(this->finish_dialog, &finishDialog::finished, this, [this](int result) {
+            connect(this->finish_dialog, &finishDialog::finished, this, [this, show_notification](int result) mutable {
                 if (result == finishDialog::Accepted) {
                     this->App->VW->mainPlayer->change_in_progress = true;
                     if (this->App->VW->mainPlayer && this->App->VW->mainPlayer->position != -1) {
@@ -2597,11 +2597,16 @@ void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video) {
                     this->App->db->db.commit();
                     this->App->VW->mainPlayer->queue.push(std::make_shared<MpcDirectCommand>(CMD_SETPOSITION, "0"));
                     this->position = 0;
+					show_notification = true;
                 }
                 else if (result == finishDialog::Skip) {
                     this->SkipVideo();
                 }
                 this->finish_dialog = nullptr;
+                if (show_notification) {
+				qDebug() << "Finish dialog result:" << result;
+                    this->VideoInfoNotification();
+                }
             });
         }
     }

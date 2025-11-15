@@ -28,11 +28,11 @@ LogDialog::LogDialog(QWidget* parent) : QDialog(parent)
 	});
 
 	this->ui.treeWidget->setContextMenuPolicy(Qt::CustomContextMenu);
-	connect(this->ui.treeWidget, &QTreeWidget::customContextMenuRequested, this, [this](QPoint point) {
-		QModelIndex index = this->ui.treeWidget->indexAt(point);
-		if (!index.isValid())
-			return;
-		QTreeWidgetItem* item = this->ui.treeWidget->itemAt(point);
+    connect(this->ui.treeWidget, &QTreeWidget::customContextMenuRequested, this, [this](QPoint point) {
+        const QPersistentModelIndex index(this->ui.treeWidget->indexAt(point));
+        if (!index.isValid())
+            return;
+        QTreeWidgetItem* item = this->ui.treeWidget->itemFromIndex(index);
 		QMenu menu = QMenu(this);
 		menu.setObjectName("LogQMenuClass");
 		QAction* open_fileexp = new QAction("Open File Location", &menu);

@@ -36,16 +36,14 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
     this->ui.name_label->setText(MW->ui.currentVideo->name);
 
     const QString currentPath = MW->ui.currentVideo->path;
-    const QPersistentModelIndex sourcePathPersistent = MW->modelIndexByPath(currentPath);
-    const QPersistentModelIndex sourcePathIdx(sourcePathPersistent);
-    const QPersistentModelIndex sourceRatingPersistent = sourcePathIdx.isValid()
+    const QPersistentModelIndex sourcePathIdx = MW->modelIndexByPath(currentPath);
+    const QPersistentModelIndex sourceRatingIdx = sourcePathIdx.isValid()
         ? QPersistentModelIndex(sourcePathIdx.sibling(sourcePathIdx.row(), ListColumns["RATING_COLUMN"]))
         : QPersistentModelIndex();
-    const QModelIndex sourceRatingIdx(sourceRatingPersistent);
 
     if (sourceRatingIdx.isValid()) {
         StarRating starRating = StarRating(MW->active, MW->halfactive, MW->inactive, sourceRatingIdx.data(CustomRoles::rating).value<double>(), 5.0);
-        starEditorWidget * starEditor = new starEditorWidget(this, sourceRatingPersistent);
+        starEditorWidget * starEditor = new starEditorWidget(this, sourceRatingIdx);
 		starEditor->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
 		starEditor->setEditMode(starEditorWidget::EditMode::DoubleClick);
 		starEditor->setStarRating(starRating);
@@ -54,7 +52,7 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
             const double newValue = starEditor->starRating().starCount();
             const double oldValue = starEditor->original_value;
             if (starEditor->item_index.isValid() && MW->videosModel) {
-                MW->videosModel->setData(QModelIndex(starEditor->item_index), newValue, CustomRoles::rating);
+                MW->videosModel->setData(starEditor->item_index, newValue, CustomRoles::rating);
                 MW->updateRating(starEditor->item_index, oldValue, newValue);
             }
 			starEditor->original_value = newValue;

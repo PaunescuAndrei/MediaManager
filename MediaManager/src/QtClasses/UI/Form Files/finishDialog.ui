@@ -69,11 +69,6 @@
           </property>
           <item>
            <widget class="QLabel" name="lastWatchedLabel">
-            <property name="styleSheet">
-             <string notr="true">QLabel {
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
-}</string>
-            </property>
             <property name="text">
              <string>Last Watched</string>
             </property>
@@ -89,11 +84,6 @@
               <pointsize>11</pointsize>
               <bold>true</bold>
              </font>
-            </property>
-            <property name="styleSheet">
-             <string notr="true">QLabel {
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
-}</string>
             </property>
             <property name="text">
              <string>Never</string>
@@ -112,17 +102,13 @@
          <widget class="QLabel" name="mainmsg">
           <property name="font">
            <font>
-            <pointsize>16</pointsize>
+            <family>Euphorigenic</family>
+            <pointsize>25</pointsize>
             <italic>false</italic>
-            <bold>true</bold>
+            <bold>false</bold>
             <underline>false</underline>
             <strikeout>false</strikeout>
            </font>
-          </property>
-          <property name="styleSheet">
-           <string notr="true">QLabel {
-    text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.9);
-}</string>
           </property>
           <property name="text">
            <string>Continue?</string>
@@ -139,11 +125,6 @@
           </property>
           <item>
            <widget class="QLabel" name="viewsLabel">
-            <property name="styleSheet">
-             <string notr="true">QLabel {
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
-}</string>
-            </property>
             <property name="text">
              <string>Views</string>
             </property>
@@ -159,11 +140,6 @@
               <pointsize>16</pointsize>
               <bold>true</bold>
              </font>
-            </property>
-            <property name="styleSheet">
-             <string notr="true">QLabel {
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
-}</string>
             </property>
             <property name="text">
              <string>0</string>
@@ -282,11 +258,6 @@
                   <font>
                    <pointsize>12</pointsize>
                   </font>
-                 </property>
-                 <property name="styleSheet">
-                  <string notr="true">QLabel {
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
-}</string>
                  </property>
                  <property name="text">
                   <string>Author:</string>

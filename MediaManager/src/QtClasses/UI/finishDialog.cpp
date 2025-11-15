@@ -14,6 +14,7 @@
 finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 {
 	ui.setupUi(this);
+
 	this->MW = MW;
 	this->updateWindowTitle();
 	this->setWindowModality(Qt::NonModal);
@@ -47,7 +48,7 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 		starEditor->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
 		starEditor->setEditMode(starEditorWidget::EditMode::DoubleClick);
 		starEditor->setStarRating(starRating);
-		starEditor->setStarPixelSize(17);
+		starEditor->setStarPixelSize(19);
 		connect(starEditor, &starEditorWidget::editingFinished, this, [MW, starEditor] {
             const double newValue = starEditor->starRating().starCount();
             const double oldValue = starEditor->original_value;
@@ -61,8 +62,11 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 		QHBoxLayout *lt = qobject_cast<QHBoxLayout*>(this->ui.ratingBox->layout());
 		double avg_rating = MW->App->db->getAverageRatingAuthor(MW->ui.currentVideo->author, MW->App->currentDB);
 		QLabel* avg_rating_label = new QLabel("Avg. " + QString::number(avg_rating, 'f', 2), this);
+		avg_rating_label->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
 		lt->insertWidget(2, starEditor);
+		lt->setAlignment(starEditor, Qt::AlignVCenter);
 		lt->insertWidget(3, avg_rating_label);
+		lt->setAlignment(avg_rating_label, Qt::AlignVCenter);
 
         // Tags label
         this->ui.tags_label->setText(sourcePathIdx.sibling(sourcePathIdx.row(), ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString());

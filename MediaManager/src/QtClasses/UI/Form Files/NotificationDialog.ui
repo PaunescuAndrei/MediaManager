@@ -160,7 +160,7 @@ color: #AAAAAA;
                <property name="bottomMargin">
                 <number>0</number>
                </property>
-               <item>
+               <item alignment="Qt::AlignmentFlag::AlignVCenter">
                 <widget class="QWidget" name="lastWatchedContainer" native="true">
                  <layout class="QHBoxLayout" name="lastWatchedLayout">
                   <property name="spacing">
@@ -235,7 +235,7 @@ color: #AAAAAA;
                  </property>
                 </spacer>
                </item>
-               <item>
+               <item alignment="Qt::AlignmentFlag::AlignVCenter">
                 <widget class="QWidget" name="ratingContainer" native="true">
                  <layout class="QHBoxLayout" name="ratingLayout">
                   <property name="spacing">
@@ -318,7 +318,7 @@ color: #AAAAAA;
                  </property>
                 </spacer>
                </item>
-               <item>
+               <item alignment="Qt::AlignmentFlag::AlignVCenter">
                 <widget class="QLabel" name="viewsLabel">
                  <property name="font">
                   <font>

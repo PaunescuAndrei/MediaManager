@@ -14,6 +14,7 @@ public:
     double original_value = 0;
     starEditorWidget(QWidget *parent = nullptr, QPersistentModelIndex item_index = QPersistentModelIndex());
     QSize sizeHint() const override;
+    QSize minimumSizeHint() const override;
     void setStarRating(const StarRating &starRating) {
         const int previousPixelSize = myStarRating.starPixelSize();
         myStarRating = starRating;

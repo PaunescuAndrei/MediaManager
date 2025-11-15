@@ -12,7 +12,14 @@ starEditorWidget::starEditorWidget(QWidget *parent, QPersistentModelIndex item_i
 
 QSize starEditorWidget::sizeHint() const
 {
-    return myStarRating.sizeHint();
+    const QSize starSize = myStarRating.sizeHint();
+    const QMargins margins = contentsMargins();
+    return starSize + QSize(margins.left() + margins.right(), margins.top() + margins.bottom());
+}
+
+QSize starEditorWidget::minimumSizeHint() const
+{
+    return sizeHint();
 }
 
 void starEditorWidget::setStarPixelSize(int pixelSize)

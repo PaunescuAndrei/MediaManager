@@ -36,6 +36,7 @@ void NotificationDialog::setMainWindow(MainWindow* MW) {
 void NotificationDialog::closeNotification() {
 	this->timer->stop();
 	this->close();
+	this->paused = false;
 	if (this) {
 		this->deleteLater();
 	}
@@ -44,6 +45,7 @@ void NotificationDialog::closeNotification() {
 void NotificationDialog::showNotification()
 {
 	this->time_start = std::chrono::steady_clock::now();
+	this->paused = false;
     this->ui.durationProgressBar->setMaximum(static_cast<int>(this->time_duration.count()));
     this->ui.durationProgressBar->setValue(0);
 	this->show();
@@ -75,10 +77,19 @@ void NotificationDialog::mousePressEvent(QMouseEvent* event)
 	event->accept();
 	const bool isRightClick = event->button() == Qt::RightButton;
 	if (isRightClick && this->MW) {
+		this->pauseNotification();
 		this->MW->showEndOfVideoDialog(true, true);
-	}
-	else {
+	} else {
 		this->closeNotification();
 	}
 	//return QWidget::mousePressEvent(event);
+}
+
+void NotificationDialog::pauseNotification()
+{
+	if (this->paused)
+		return;
+	this->timer->stop();
+	this->timer2->stop();
+	this->paused = true;
 }

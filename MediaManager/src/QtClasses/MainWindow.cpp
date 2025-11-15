@@ -2604,7 +2604,6 @@ void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notifi
                 }
                 this->finish_dialog = nullptr;
                 if (show_notification) {
-				qDebug() << "Finish dialog result:" << result;
                     this->VideoInfoNotification();
                 }
             });

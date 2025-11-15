@@ -232,7 +232,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         } else {
             const QPersistentModelIndex modelIdx = this->modelIndexFromFilterIndex(proxyIndex);
             if (!modelIdx.isValid()) return;
-            const QModelIndex pathIdx = QModelIndex(modelIdx).siblingAtColumn(ListColumns["PATH_COLUMN"]);
+            const QPersistentModelIndex pathIdx = modelIdx.sibling(modelIdx.row(), ListColumns["PATH_COLUMN"]);
             const int id = pathIdx.data(CustomRoles::id).toInt();
             const QString path = pathIdx.data(Qt::DisplayRole).toString();
             this->watchSelected(id, path);
@@ -242,7 +242,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         if (!proxyIndex.isValid()) return;
         const QPersistentModelIndex modelIdx = this->modelIndexFromFilterIndex(proxyIndex);
         if (!modelIdx.isValid()) return;
-        const QString path = QModelIndex(modelIdx).siblingAtColumn(ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+        const QString path = modelIdx.sibling(modelIdx.row(), ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
         this->openThumbnails(path);
     });
     connect(this, &MainWindow::fileDropped, this, [this](QStringList files, QWidget *widget) {
@@ -644,7 +644,7 @@ QList<int> MainWindow::selectedIds() const {
 QString MainWindow::pathById(int id) const {
     const QPersistentModelIndex src = this->modelIndexById(id);
     if (!src.isValid()) return QString();
-    return QModelIndex(src).siblingAtColumn(ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+    return src.sibling(src.row(), ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
 }
 
 QPersistentModelIndex MainWindow::modelIndexById(int id) const {
@@ -696,7 +696,7 @@ void MainWindow::updateRating(QPersistentModelIndex index, double old_value, dou
     if (!index.isValid()) return;
     const QPersistentModelIndex modelIdx = modelIndexFromAny(index);
     if (!modelIdx.isValid()) return;
-    const QModelIndex pathIdx = QModelIndex(modelIdx).siblingAtColumn(ListColumns["PATH_COLUMN"]);
+    const QPersistentModelIndex pathIdx = modelIdx.sibling(modelIdx.row(), ListColumns["PATH_COLUMN"]);
     const QString path = pathIdx.data(Qt::DisplayRole).toString();
     const int id = pathIdx.data(CustomRoles::id).toInt();
     qMainApp->logger->log(QStringLiteral("Updating rating from %1 to %2 for \"%3\"").arg(old_value).arg(new_value).arg(path), "Stats", path);
@@ -1399,8 +1399,8 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
     const int typeCol = ListColumns["TYPE_COLUMN"];
     int currentId = -1;
     if (currentSrcIdx.isValid()) {
-        const QModelIndex currentModelIdx(currentSrcIdx);
-        currentId = currentModelIdx.siblingAtColumn(pathCol).data(CustomRoles::id).toInt();
+        const QPersistentModelIndex currentModelIdx(currentSrcIdx);
+        currentId = currentModelIdx.sibling(currentModelIdx.row(), pathCol).data(CustomRoles::id).toInt();
     }
 
     this->App->db->db.transaction();
@@ -1408,7 +1408,7 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
         this->App->db->setMainInfoValue("current", this->App->currentDB, "");
         QString watched = (update_watched_state)
             ? "Yes"
-            : QModelIndex(currentSrcIdx).siblingAtColumn(watchedCol).data(Qt::DisplayRole).toString();
+            : currentSrcIdx.sibling(currentSrcIdx.row(), watchedCol).data(Qt::DisplayRole).toString();
         if (increment)
             this->App->db->updateWatchedState(currentId, this->position, watched, true, true);
         else
@@ -1453,7 +1453,7 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
         if (increment) {
             this->App->db->incrementVideosWatchedToday(this->App->currentDB);
         }
-        const QString curType = QModelIndex(currentSrcIdx).siblingAtColumn(typeCol).data(Qt::DisplayRole).toString();
+        const QString curType = currentSrcIdx.sibling(currentSrcIdx.row(), typeCol).data(Qt::DisplayRole).toString();
         bool playedSpecialType = this->applyPostWatchAdjustments(curType, currentId, increment, 0.0, false, skipped);
         this->updateSvCountersAfterPlayback(playedSpecialType, skipped);
 
@@ -1529,7 +1529,7 @@ int MainWindow::nextSequentialRow(const QPersistentModelIndex& current_source_in
 
     auto isUnwatchedRow = [&](const QPersistentModelIndex& srcIdx) -> bool {
         if (!srcIdx.isValid()) return false;
-        return QModelIndex(srcIdx).siblingAtColumn(watchedCol).data(Qt::DisplayRole).toString() == "No";
+        return srcIdx.sibling(srcIdx.row(), watchedCol).data(Qt::DisplayRole).toString() == "No";
     };
 
     const int proxyRowCount = this->videosSortProxy->rowCount();
@@ -1624,12 +1624,13 @@ bool MainWindow::seriesRandomVideo(const QPersistentModelIndex& current_source_i
     auto setCurrentByPath = [this](const QString& path) -> bool {
         const QPersistentModelIndex src = this->modelIndexByPath(path);
         if (!src.isValid()) return false;
-        const QModelIndex modelIdx = src;
-        int id = modelIdx.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
-        QString name = modelIdx.siblingAtColumn(ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
-        QString author = modelIdx.siblingAtColumn(ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
-        QString tags = modelIdx.siblingAtColumn(ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
-        QString p = modelIdx.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+        const QPersistentModelIndex modelIdx = src;
+        const int row = modelIdx.row();
+        int id = modelIdx.sibling(row, ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
+        QString name = modelIdx.sibling(row, ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
+        QString author = modelIdx.sibling(row, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
+        QString tags = modelIdx.sibling(row, ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
+        QString p = modelIdx.sibling(row, ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
         this->setCurrent(id, p, name, author, tags, true);
         this->highlightCurrentItem();
         return true;
@@ -1647,9 +1648,10 @@ bool MainWindow::seriesRandomVideo(const QPersistentModelIndex& current_source_i
         const int authorCol = ListColumns["AUTHOR_COLUMN"];
         const int pathCol = ListColumns["PATH_COLUMN"];
 
-        const QModelIndex currentModelIdx(currentSourceIdx);
-        current_author = currentModelIdx.siblingAtColumn(authorCol).data(Qt::DisplayRole).toString();
-        QString current_path = currentModelIdx.siblingAtColumn(pathCol).data(Qt::DisplayRole).toString();
+        const QPersistentModelIndex currentModelIdx(currentSourceIdx);
+        const int currentRow = currentModelIdx.row();
+        current_author = currentModelIdx.sibling(currentRow, authorCol).data(Qt::DisplayRole).toString();
+        QString current_path = currentModelIdx.sibling(currentRow, pathCol).data(Qt::DisplayRole).toString();
         if (current_author.isEmpty()) current_author = current_path;
 
         // Get unwatched rows from source model, sorted by proxy order
@@ -2451,12 +2453,13 @@ bool MainWindow::randomVideo(RandomModes::Mode random_mode, bool ignore_filters_
         this->highlightCurrentItem();
         return false;
     }
-    const QModelIndex srcModelIdx(src);
-    int id = srcModelIdx.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
-    QString name = srcModelIdx.siblingAtColumn(ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
-    QString author = srcModelIdx.siblingAtColumn(ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
-    QString tags = srcModelIdx.siblingAtColumn(ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
-    QString path = srcModelIdx.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+    const QPersistentModelIndex srcModelIdx(src);
+    const int row = srcModelIdx.row();
+    int id = srcModelIdx.sibling(row, ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
+    QString name = srcModelIdx.sibling(row, ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
+    QString author = srcModelIdx.sibling(row, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
+    QString tags = srcModelIdx.sibling(row, ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
+    QString path = srcModelIdx.sibling(row, ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
     this->setCurrent(id, path, name, author, tags, reset_progress);
     this->highlightCurrentItem();
     return true;
@@ -2478,12 +2481,13 @@ void MainWindow::syncCurrentVideoFromModel() {
         this->refreshCurrentVideo();
         return;
     }
-    const QModelIndex srcModelIdx(src);
-    const int id = srcModelIdx.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
-    const QString path = srcModelIdx.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
-    const QString name = srcModelIdx.siblingAtColumn(ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
-    const QString author = srcModelIdx.siblingAtColumn(ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
-    const QString tags = srcModelIdx.siblingAtColumn(ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
+    const QPersistentModelIndex srcModelIdx(src);
+    const int row = srcModelIdx.row();
+    const int id = srcModelIdx.sibling(row, ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
+    const QString path = srcModelIdx.sibling(row, ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+    const QString name = srcModelIdx.sibling(row, ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
+    const QString author = srcModelIdx.sibling(row, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
+    const QString tags = srcModelIdx.sibling(row, ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
     this->ui.currentVideo->setValues(id, path, name, author, tags);
 }
 
@@ -2771,12 +2775,13 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
         if (set_first_current) {
             QPersistentModelIndex src = this->modelIndexByPath(first);
             if (src.isValid()) {
-                const QModelIndex modelIdx(src);
-                int id = modelIdx.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
-                QString name = modelIdx.siblingAtColumn(ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
-                QString author = modelIdx.siblingAtColumn(ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
-                QString tags = modelIdx.siblingAtColumn(ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
-                QString path = modelIdx.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+                const QPersistentModelIndex modelIdx(src);
+                const int row = modelIdx.row();
+                int id = modelIdx.sibling(row, ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
+                QString name = modelIdx.sibling(row, ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
+                QString author = modelIdx.sibling(row, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
+                QString tags = modelIdx.sibling(row, ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
+                QString path = modelIdx.sibling(row, ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
                 this->setCurrent(id, path, name, author, tags);
                 this->highlightCurrentItem(QPersistentModelIndex(), false);
             }
@@ -2928,11 +2933,11 @@ void MainWindow::highlightCurrentItem(const QPersistentModelIndex& sourceIndex, 
         resolvedSource = QPersistentModelIndex(this->modelIndexByPath(currentPath));
     }
 
-    const QModelIndex resolvedModelIdx(resolvedSource);
+    const QPersistentModelIndex resolvedModelIdx(resolvedSource);
 
     QString highlightPath;
     if (resolvedModelIdx.isValid()) {
-        highlightPath = resolvedModelIdx.siblingAtColumn(ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+        highlightPath = resolvedModelIdx.sibling(resolvedModelIdx.row(), ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
     }
     if (this->videosModel) {
         this->videosModel->setHighlightedPath(highlightPath);
@@ -3355,7 +3360,7 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
     const QPersistentModelIndex sourceIndex = this->modelIndexFromFilterIndex(proxyIndex);
     if (!sourceIndex.isValid()) return;
     const int row = sourceIndex.row();
-    const QModelIndex pathIdx = QModelIndex(sourceIndex).siblingAtColumn(ListColumns["PATH_COLUMN"]);
+    const QPersistentModelIndex pathIdx = sourceIndex.sibling(row, ListColumns["PATH_COLUMN"]);
     const int id = pathIdx.data(CustomRoles::id).toInt();
     const QString path = pathIdx.data(Qt::DisplayRole).toString();
 
@@ -3415,9 +3420,9 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
     if (menu_click == play_video)
         this->watchSelected(id, path);
     else if (menu_click == set_current) {
-        const QModelIndex nameIdx = QModelIndex(sourceIndex).siblingAtColumn(ListColumns["NAME_COLUMN"]);
-        const QModelIndex authorIdx = QModelIndex(sourceIndex).siblingAtColumn(ListColumns["AUTHOR_COLUMN"]);
-        const QModelIndex tagsIdx = QModelIndex(sourceIndex).siblingAtColumn(ListColumns["TAGS_COLUMN"]);
+        const QPersistentModelIndex nameIdx = sourceIndex.sibling(row, ListColumns["NAME_COLUMN"]);
+        const QPersistentModelIndex authorIdx = sourceIndex.sibling(row, ListColumns["AUTHOR_COLUMN"]);
+        const QPersistentModelIndex tagsIdx = sourceIndex.sibling(row, ListColumns["TAGS_COLUMN"]);
         const QString name = nameIdx.data(Qt::DisplayRole).toString();
         const QString author = authorIdx.data(Qt::DisplayRole).toString();
         const QString tags = tagsIdx.data(Qt::DisplayRole).toString();
@@ -3438,7 +3443,7 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
         this->setWatched("No", selIds);
     else if (menu_click == views_edit) {
         bool ok;
-        int old_value = QModelIndex(sourceIndex).siblingAtColumn(ListColumns["VIEWS_COLUMN"]).data(Qt::DisplayRole).toInt();
+        int old_value = sourceIndex.sibling(row, ListColumns["VIEWS_COLUMN"]).data(Qt::DisplayRole).toInt();
         int i = QInputDialog::getInt(this, "Edit Views",
             "Views", old_value, 0, 2147483647, 1, &ok);
         if (ok)
@@ -3462,7 +3467,7 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
     }
     else if (menu_click == author_edit) {
         bool ok;
-        QString old_value = QModelIndex(sourceIndex).siblingAtColumn(ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
+        QString old_value = sourceIndex.sibling(row, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
         QString a = QInputDialog::getText(this, "Edit Author",
             "Author", QLineEdit::Normal, old_value, &ok);
         if (ok) {
@@ -3471,7 +3476,7 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
     }
     else if (menu_click == name_edit) {
         bool ok;
-        QString old_value = QModelIndex(sourceIndex).siblingAtColumn(ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
+        QString old_value = sourceIndex.sibling(row, ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
         QString a = QInputDialog::getText(this, "Edit Name",
             "Name", QLineEdit::Normal, old_value, &ok);
         if (ok) {
@@ -3805,9 +3810,9 @@ void MainWindow::updateVideoListRandomProbabilities() {
                     const int authorCol = ListColumns["AUTHOR_COLUMN"];
                     const int pathCol = ListColumns["PATH_COLUMN"];
 
-                    const QModelIndex currentModelIdx(currentSourceIdx);
-                    current_author = currentModelIdx.siblingAtColumn(authorCol).data(Qt::DisplayRole).toString();
-                    QString current_path = currentModelIdx.siblingAtColumn(pathCol).data(Qt::DisplayRole).toString();
+                    const QPersistentModelIndex currentModelIdx(currentSourceIdx);
+                    current_author = currentModelIdx.sibling(currentModelIdx.row(), authorCol).data(Qt::DisplayRole).toString();
+                    QString current_path = currentModelIdx.sibling(currentModelIdx.row(), pathCol).data(Qt::DisplayRole).toString();
                     if (current_author.isEmpty()) current_author = current_path;
 
                     QVector<int> author_source_rows = this->authorUnwatchedSourceRows(current_author);
@@ -3822,7 +3827,7 @@ void MainWindow::updateVideoListRandomProbabilities() {
                 if (!deterministic_path.isEmpty()) {
                     QPersistentModelIndex src = this->modelIndexByPath(deterministic_path);
                     if (src.isValid()) {
-                        deterministic_id = QModelIndex(src).siblingAtColumn(ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
+                        deterministic_id = src.sibling(src.row(), ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
                         deterministic_value = 100.0;
                     }
                 }
@@ -3993,7 +3998,7 @@ QList<VideoWeightedData> MainWindow::calculateAuthorWeights(const QMap<QString, 
         }
 
         // Build result with cached pathIdx
-        const QModelIndex pathIdx = QModelIndex(idx).siblingAtColumn(pathCol);
+        const QPersistentModelIndex pathIdx = idx.sibling(idx.row(), pathCol);
 
         VideoWeightedData author_data;
         author_data.id = pathIdx.data(CustomRoles::id).toInt();
@@ -4057,11 +4062,12 @@ QVector<int> MainWindow::authorUnwatchedSourceRows(const QString& authorOrPath) 
             const QPersistentModelIndex srcIdx = modelIndexFromSortIndex(sortIdx);
             if (!srcIdx.isValid()) continue;
 
-            const QModelIndex watchedIdx = QModelIndex(srcIdx).siblingAtColumn(watchedCol);
+            const int row = srcIdx.row();
+            const QPersistentModelIndex watchedIdx = srcIdx.sibling(row, watchedCol);
             if (watchedIdx.data(Qt::DisplayRole).toString() != "No") continue;
 
-            const QModelIndex authorIdx = QModelIndex(srcIdx).siblingAtColumn(authorCol);
-            const QModelIndex pathIdx = QModelIndex(srcIdx).siblingAtColumn(pathCol);
+            const QPersistentModelIndex authorIdx = srcIdx.sibling(row, authorCol);
+            const QPersistentModelIndex pathIdx = srcIdx.sibling(row, pathCol);
 
             QString author = authorIdx.data(Qt::DisplayRole).toString();
             const QString path = pathIdx.data(Qt::DisplayRole).toString();

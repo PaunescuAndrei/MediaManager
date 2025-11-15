@@ -37,9 +37,9 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 
     const QString currentPath = MW->ui.currentVideo->path;
     const QPersistentModelIndex sourcePathPersistent = MW->modelIndexByPath(currentPath);
-    const QModelIndex sourcePathIdx(sourcePathPersistent);
+    const QPersistentModelIndex sourcePathIdx(sourcePathPersistent);
     const QPersistentModelIndex sourceRatingPersistent = sourcePathIdx.isValid()
-        ? QPersistentModelIndex(sourcePathIdx.siblingAtColumn(ListColumns["RATING_COLUMN"]))
+        ? QPersistentModelIndex(sourcePathIdx.sibling(sourcePathIdx.row(), ListColumns["RATING_COLUMN"]))
         : QPersistentModelIndex();
     const QModelIndex sourceRatingIdx(sourceRatingPersistent);
 
@@ -67,15 +67,15 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 		lt->insertWidget(3, avg_rating_label);
 
         // Tags label
-        this->ui.tags_label->setText(sourcePathIdx.siblingAtColumn(ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString());
+        this->ui.tags_label->setText(sourcePathIdx.sibling(sourcePathIdx.row(), ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString());
 		
 		// Set views count
-        QString viewsText = sourcePathIdx.siblingAtColumn(ListColumns["VIEWS_COLUMN"]).data(Qt::DisplayRole).toString();
+        QString viewsText = sourcePathIdx.sibling(sourcePathIdx.row(), ListColumns["VIEWS_COLUMN"]).data(Qt::DisplayRole).toString();
         this->ui.viewsValueLabel->setText(viewsText);
 		
 		// Set last watched date in human-readable format
-        QString lastWatchedText = sourcePathIdx.siblingAtColumn(ListColumns["LAST_WATCHED_COLUMN"]).data(Qt::DisplayRole).toString();
-        QVariant lastWatchedData = sourcePathIdx.siblingAtColumn(ListColumns["LAST_WATCHED_COLUMN"]).data(Qt::DisplayRole);
+        QString lastWatchedText = sourcePathIdx.sibling(sourcePathIdx.row(), ListColumns["LAST_WATCHED_COLUMN"]).data(Qt::DisplayRole).toString();
+        QVariant lastWatchedData = sourcePathIdx.sibling(sourcePathIdx.row(), ListColumns["LAST_WATCHED_COLUMN"]).data(Qt::DisplayRole);
 		
 		if (!lastWatchedText.isEmpty() && lastWatchedData.type() == QVariant::DateTime) {
 			QDateTime lastWatchedDateTime = lastWatchedData.toDateTime();

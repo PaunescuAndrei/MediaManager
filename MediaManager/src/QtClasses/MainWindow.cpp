@@ -1372,7 +1372,8 @@ NextVideoSettings MainWindow::getNextVideoSettings() {
         settings.vid_type_exclude = {};
         QJsonObject random_settings = getRandomSettings(settings.random_mode, settings.ignore_filters_and_defaults, settings.vid_type_include, settings.vid_type_exclude);
         QString seed = this->App->config->get_bool("random_use_seed") ? this->App->config->get("random_seed") : "";
-        settings.sv_is_available = !this->getRandomVideo(seed, this->getWeightedBiasSettings(), random_settings).isEmpty();
+        //settings.sv_is_available = !this->getRandomVideo(seed, this->getWeightedBiasSettings(), random_settings).isEmpty();
+        settings.sv_is_available = !this->App->db->getVideos(this->App->currentDB, random_settings).isEmpty();
         settings.next_video_is_sv = true;
         if (!settings.sv_is_available) {
             settings.vid_type_include = {};

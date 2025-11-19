@@ -21,11 +21,11 @@ public:
 
     // Loading
     void clear();
-    void setRows(const QVector<VideoRow>& data);
-    void setRows(QVector<VideoRow>&& data);
+    void setRows(const QVector<VideoData>& data);
+    void setRows(QVector<VideoData>&& data);
 
     // Helpers
-    const VideoRow* rowAt(int r) const { return (r >= 0 && r < rows.size()) ? &rows[r] : nullptr; }
+    const VideoData* rowAt(int r) const { return (r >= 0 && r < rows.size()) ? &rows[r] : nullptr; }
     int findRowByPath(const QString& path) const;
     int findRowById(int id) const;
     int rowByPath(const QString& path) const;
@@ -39,7 +39,7 @@ public:
 
 private:
     // Fast lookup caches; populated on setRows and lazily on fallback lookups
-    QVector<VideoRow> rows;
+    QVector<VideoData> rows;
     mutable QHash<int, int> idToRow;
     mutable QHash<QString, int> pathToRow;
     QString highlightedPath;

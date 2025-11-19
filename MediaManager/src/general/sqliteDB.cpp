@@ -11,7 +11,7 @@
 #include <QJsonDocument>
 #include "VideoData.h"
 
-sqliteDB::sqliteDB(QString location,std::string conname) {
+sqliteDB::sqliteDB(QString location, std::string conname) {
     // In the constructor or initialization function of that object      
     this->db = QSqlDatabase::addDatabase("QSQLITE", conname.c_str());
     this->location = location;
@@ -46,7 +46,7 @@ QList<QTreeWidgetItem*> sqliteDB::getVideos(QString category) {
         "GROUP BY v.id; ";
 
     query.prepare(query_string);
-    query.bindValue(":category",category);
+    query.bindValue(":category", category);
     if (!query.exec()) {
         if (qMainApp) {
             qMainApp->logger->log(QStringLiteral("Database Error at getVideos (%1): %2").arg(category, query.lastError().text()), "Database", query.lastError().text());
@@ -69,7 +69,7 @@ QList<QTreeWidgetItem*> sqliteDB::getVideos(QString category) {
         QString name = query.value(8).toString();
         QDateTime date_created = query.value(9).toDateTime();
         QDateTime last_watched = query.value(10).toDateTime();
-        TreeWidgetItem *item = new TreeWidgetItem(nullptr);
+        TreeWidgetItem* item = new TreeWidgetItem(nullptr);
         item->setData(ListColumns["AUTHOR_COLUMN"], Qt::DisplayRole, author);
         item->setData(ListColumns["NAME_COLUMN"], Qt::DisplayRole, name);
         item->setData(ListColumns["PATH_COLUMN"], Qt::DisplayRole, path);
@@ -80,13 +80,13 @@ QList<QTreeWidgetItem*> sqliteDB::getVideos(QString category) {
         item->setData(ListColumns["DATE_CREATED_COLUMN"], Qt::DisplayRole, date_created);
         item->setData(ListColumns["LAST_WATCHED_COLUMN"], Qt::DisplayRole, last_watched);
         item->setData(ListColumns["PATH_COLUMN"], CustomRoles::id, id);
-        item->setData(ListColumns["RATING_COLUMN"], CustomRoles::rating,rating);
+        item->setData(ListColumns["RATING_COLUMN"], CustomRoles::rating, rating);
         itemlist.append(item);
     }
     return itemlist;
 }
 
-QVector<VideoRow> sqliteDB::getVideosData(QString category) {
+QVector<VideoData> sqliteDB::getVideosData(QString category) {
     QSqlQuery query = QSqlQuery(this->db);
 
     QString query_string = "SELECT v.id,v.path,GROUP_CONCAT(t.name, ', ' ORDER BY t.display_priority ASC, t.id) AS tags,v.type,v.watched,v.views,v.rating,v.author,v.name, datetime(v.date_created, 'localtime'), datetime(v.last_watched, 'localtime') from videodetails v "
@@ -96,7 +96,7 @@ QVector<VideoRow> sqliteDB::getVideosData(QString category) {
 
     query.prepare(query_string);
     query.bindValue(":category", category);
-    QVector<VideoRow> result;
+    QVector<VideoData> result;
     if (!query.exec()) {
         if (qMainApp) {
             qMainApp->logger->log(QStringLiteral("Database Error at getVideosData (%1): %2").arg(category, query.lastError().text()), "Database", query.lastError().text());
@@ -107,7 +107,7 @@ QVector<VideoRow> sqliteDB::getVideosData(QString category) {
 
     result.reserve(query.size() > 0 ? query.size() : 0);
     while (query.next()) {
-        VideoRow row;
+        VideoData row;
         row.id = query.value(0).toInt();
         row.path = query.value(1).toString();
         row.tags = query.value(2).toString();
@@ -127,6 +127,46 @@ QVector<VideoRow> sqliteDB::getVideosData(QString category) {
     return result;
 }
 
+VideoData sqliteDB::getVideoData(QString path, QString category)
+{
+    VideoData video = VideoData();
+    QSqlQuery query = QSqlQuery(this->db);
+
+    QString query_string = "SELECT v.id,v.path,GROUP_CONCAT(t.name, ', ' ORDER BY t.display_priority ASC, t.id) AS tags,v.type,v.watched,v.views,v.rating,v.author,v.name, datetime(v.date_created, 'localtime'), datetime(v.last_watched, 'localtime') from videodetails v "
+        "LEFT JOIN tags_relations tr ON v.id = tr.video_id "
+        "LEFT JOIN tags t ON tr.tag_id = t.id WHERE v.path = :path and v.category = :category"
+        "GROUP BY v.id; ";
+
+    query.prepare(query_string);
+    query.bindValue(":path", path);
+    query.bindValue(":category", category);
+
+    if (!query.exec()) {
+        if (qMainApp) {
+            qMainApp->logger->log(QStringLiteral("Database Error at getVideoData (%1, %2): %3").arg(path, category, query.lastError().text()), "Database", query.lastError().text());
+            qMainApp->showErrorMessage("getVideoData " + path + category + " " + query.lastError().text());
+        }
+    }
+    bool found = query.first();
+    if (found == true) {
+        video.id = query.value(0).toInt();
+        video.path = query.value(1).toString();
+        video.tags = query.value(2).toString();
+        video.type = query.value(3).toString();
+        if (video.type.isEmpty()) {
+            video.type = "None";
+        }
+        video.watched = query.value(4).toString();
+        video.views = query.value(5).toString();
+        video.rating = query.value(6).toDouble();
+        video.author = query.value(7).toString();
+        video.name = query.value(8).toString();
+        video.dateCreated = query.value(9).toDateTime();
+        video.lastWatched = query.value(10).toDateTime();
+    }
+    return video;
+}
+
 QSet<Tag> sqliteDB::getAllTags() {
     QSqlQuery query = QSqlQuery(this->db);
     QString query_string = "SELECT id, name, display_priority from tags";
@@ -135,7 +175,7 @@ QSet<Tag> sqliteDB::getAllTags() {
     query.prepare(query_string);
     if (!query.exec()) {
         if (qMainApp) {
-			qMainApp->logger->log(QStringLiteral("Database Error at getAllTags: %1").arg(query.lastError().text()), "Database", query.lastError().text());
+            qMainApp->logger->log(QStringLiteral("Database Error at getAllTags: %1").arg(query.lastError().text()), "Database", query.lastError().text());
             qMainApp->showErrorMessage("getAllTags " + query.lastError().text());
         }
     }
@@ -159,11 +199,11 @@ QSet<Tag> sqliteDB::getTags(int video_id) {
     query.bindValue(":video_id", video_id);
     if (!query.exec()) {
         if (qMainApp) {
-			qMainApp->logger->log(QStringLiteral("Database Error at getTags (%1): %2").arg(QString::number(video_id), query.lastError().text()), "Database", query.lastError().text());
+            qMainApp->logger->log(QStringLiteral("Database Error at getTags (%1): %2").arg(QString::number(video_id), query.lastError().text()), "Database", query.lastError().text());
             qMainApp->showErrorMessage("getTags " + QString::number(video_id) + " " + query.lastError().text());
         }
     }
-    while (query.next()) 
+    while (query.next())
     {
         int id = query.value(0).toInt();
         QString name = query.value(1).toString();
@@ -180,7 +220,7 @@ void sqliteDB::insertTag(int video_id, int tag_id) {
     query.addBindValue(tag_id);
     if (!query.exec()) {
         if (qMainApp) {
-			qMainApp->logger->log(QStringLiteral("Database Error at insertTag (%1, %2): %3").arg(QString::number(video_id), QString::number(tag_id), query.lastError().text()), "Database", query.lastError().text());
+            qMainApp->logger->log(QStringLiteral("Database Error at insertTag (%1, %2): %3").arg(QString::number(video_id), QString::number(tag_id), query.lastError().text()), "Database", query.lastError().text());
             qMainApp->showErrorMessage("insertTag " + QString::number(video_id) + QString::number(tag_id) + " " + query.lastError().text());
         }
     }
@@ -196,7 +236,7 @@ void sqliteDB::deleteExtraTags(int video_id, QSet<int> tags_id) {
     query.addBindValue(video_id);
     if (!query.exec()) {
         if (qMainApp) {
-			qMainApp->logger->log(QStringLiteral("Database Error at deleteExtraTags (%1): %2").arg(QString::number(video_id), query.lastError().text()), "Database", query.lastError().text());
+            qMainApp->logger->log(QStringLiteral("Database Error at deleteExtraTags (%1): %2").arg(QString::number(video_id), query.lastError().text()), "Database", query.lastError().text());
             qMainApp->showErrorMessage("deleteExtraTags " + QString::number(video_id) + " " + query.lastError().text());
         }
     }
@@ -208,7 +248,7 @@ QStringList sqliteDB::getAuthors(QString category) {
     query.addBindValue(category);
     if (!query.exec()) {
         if (qMainApp) {
-			qMainApp->logger->log(QStringLiteral("Database Error at getAuthors (%1): %2").arg(category, query.lastError().text()), "Database", query.lastError().text());
+            qMainApp->logger->log(QStringLiteral("Database Error at getAuthors (%1): %2").arg(category, query.lastError().text()), "Database", query.lastError().text());
             qMainApp->showErrorMessage("getAuthors " + category + " " + query.lastError().text());
         }
     }
@@ -226,7 +266,7 @@ QStringList sqliteDB::getUniqueNames(QString category) {
     query.addBindValue(category);
     if (!query.exec()) {
         if (qMainApp) {
-			qMainApp->logger->log(QStringLiteral("Database Error at getUniqueNames (%1): %2").arg(category, query.lastError().text()), "Database", query.lastError().text());
+            qMainApp->logger->log(QStringLiteral("Database Error at getUniqueNames (%1): %2").arg(category, query.lastError().text()), "Database", query.lastError().text());
             qMainApp->showErrorMessage("getUniqueNames " + category + " " + query.lastError().text());
         }
     }
@@ -243,7 +283,7 @@ QStringList sqliteDB::getUniqueTags(QString category) {
     query.prepare(QStringLiteral("SELECT DISTINCT name from tags"));
     if (!query.exec()) {
         if (qMainApp) {
-			qMainApp->logger->log(QStringLiteral("Database Error at getUniqueTags (%1): %2").arg(category, query.lastError().text()), "Database", query.lastError().text());
+            qMainApp->logger->log(QStringLiteral("Database Error at getUniqueTags (%1): %2").arg(category, query.lastError().text()), "Database", query.lastError().text());
             qMainApp->showErrorMessage("getUniqueTags " + category + " " + query.lastError().text());
         }
     }
@@ -261,7 +301,7 @@ QStringList sqliteDB::getTypes(QString category) {
     query.addBindValue(category);
     if (!query.exec()) {
         if (qMainApp) {
-			qMainApp->logger->log(QStringLiteral("Database Error at getTypes (%1): %2").arg(category, query.lastError().text()), "Database", query.lastError().text());
+            qMainApp->logger->log(QStringLiteral("Database Error at getTypes (%1): %2").arg(category, query.lastError().text()), "Database", query.lastError().text());
             qMainApp->showErrorMessage("getTypes " + category + " " + query.lastError().text());
         }
     }
@@ -273,7 +313,7 @@ QStringList sqliteDB::getTypes(QString category) {
     return itemlist;
 }
 
-void sqliteDB::setFilterSettings(QString value,QString category) {
+void sqliteDB::setFilterSettings(QString value, QString category) {
     QSqlQuery query = QSqlQuery(this->db);
     query.prepare(QStringLiteral("INSERT OR REPLACE INTO maininfo(name, value, category) VALUES(\"FilterSettings\",?,?)"));
     if (value.isEmpty())
@@ -283,7 +323,7 @@ void sqliteDB::setFilterSettings(QString value,QString category) {
     query.addBindValue(category);
     if (!query.exec()) {
         if (qMainApp) {
-			qMainApp->logger->log(QStringLiteral("Database Error at setFilterSettings (%2, %3): %1").arg(query.lastError().text(), category, value), "Database", query.lastError().text());
+            qMainApp->logger->log(QStringLiteral("Database Error at setFilterSettings (%2, %3): %1").arg(query.lastError().text(), category, value), "Database", query.lastError().text());
             qMainApp->showErrorMessage("setFilterSettings " + category + value + " " + query.lastError().text());
         }
     }
@@ -295,7 +335,7 @@ QJsonObject sqliteDB::getFilterSettings(QString category) {
     query.addBindValue(category);
     if (!query.exec()) {
         if (qMainApp) {
-			qMainApp->logger->log(QStringLiteral("Database Error at getFilterSettings (%1): %2").arg(category, query.lastError().text()), "Database", query.lastError().text());
+            qMainApp->logger->log(QStringLiteral("Database Error at getFilterSettings (%1): %2").arg(category, query.lastError().text()), "Database", query.lastError().text());
             qMainApp->showErrorMessage("getFilterSettings " + category + " " + query.lastError().text());
         }
     }
@@ -362,7 +402,7 @@ bool sqliteDB::checkIfVideoInDB(QString path, QString category) {
 
 int sqliteDB::getVideosWatched(QString category, int fallback) {
     QSqlQuery query = QSqlQuery(this->db);
-    if(category == "ALL")
+    if (category == "ALL")
         query.prepare(QStringLiteral("SELECT SUM(views) FROM videodetails;"));
     else {
         query.prepare(QStringLiteral("SELECT SUM(views) FROM videodetails where category = ?;"));
@@ -427,7 +467,7 @@ double sqliteDB::getAverageRatingAuthor(QString author, QString category, double
 void sqliteDB::setMainInfoValue(QString name, QString category, QString value) {
     QSqlQuery query = QSqlQuery(this->db);
     query.prepare(QStringLiteral("UPDATE maininfo SET value = ? WHERE name = ? AND category = ?"));
-    if(value.isEmpty())
+    if (value.isEmpty())
         query.addBindValue(QVariant(QVariant::String));
     else
         query.addBindValue(value);
@@ -461,7 +501,7 @@ void sqliteDB::updateWatchedState(int video_id, double progress, QString watched
     QString end_query_string = " WHERE id = ?";
     QString final_string = main_query_string % views_increment_string % update_last_watched_string % end_query_string;
     query.prepare(final_string);
-    query.addBindValue(QString::number(progress,'f',4));
+    query.addBindValue(QString::number(progress, 'f', 4));
     query.addBindValue(watched);
     query.addBindValue(video_id);
     if (!query.exec()) {
@@ -609,7 +649,7 @@ QString sqliteDB::getMainInfoValue(QString name, QString category, QString fallb
 
 std::tuple<int, QString, QString, QString, QString> sqliteDB::getCurrentVideo(QString category, std::tuple<int, QString, QString, QString, QString> fallback) {
     QSqlQuery query = QSqlQuery(this->db);
-    
+
     QString query_string = "SELECT vd.id, mi.value, vd.name, vd.author, GROUP_CONCAT(t.name, ', ' ORDER BY t.display_priority ASC, t.id) AS tags FROM maininfo mi "
         "LEFT JOIN videodetails vd ON mi.value = vd.path "
         "LEFT JOIN tags_relations tr ON vd.id = tr.video_id "
@@ -635,11 +675,11 @@ QList<VideoWeightedData> sqliteDB::getVideos(QString category, QJsonObject setti
     QSqlQuery query = QSqlQuery(this->db);
     QString main_query_string = "SELECT v.id, v.path,SUM(t.weight) AS tags, v.views, v.rating FROM videodetails v";
     QString join_query_string = " LEFT JOIN tags_relations tr ON v.id = tr.video_id "
-                               "LEFT JOIN tags t ON tr.tag_id = t.id";
+        "LEFT JOIN tags t ON tr.tag_id = t.id";
     QString category_query_string = " WHERE v.category == :cat_bound_value";
     QString rating_query_string = QStringLiteral(" AND (v.rating %1 %2 %3)").arg(settings.value("rating_mode").toString(), settings.value("rating").toString(), utils::text_to_bool(settings.value("include_unrated").toString().toStdString()) ? "OR rating == 0" : "");
     QString views_query_string = QStringLiteral(" AND v.views %1 %2").arg(settings.value("views_mode").toString(), settings.value("views").toString());
-    QString end_query_string =" GROUP BY v.id; ";
+    QString end_query_string = " GROUP BY v.id; ";
 
     QString authors_query_string;
     QJsonArray authors_values = settings.value("authors").toArray();
@@ -747,7 +787,7 @@ void sqliteDB::updateVideoProgress(int video_id, double progress)
 {
     QSqlQuery query = QSqlQuery(this->db);
     query.prepare(QStringLiteral("UPDATE videodetails SET progress=? WHERE id = ?"));
-    query.addBindValue(QString::number(progress,'f',4));
+    query.addBindValue(QString::number(progress, 'f', 4));
     query.addBindValue(video_id);
     if (!query.exec()) {
         if (qMainApp) {
@@ -799,9 +839,9 @@ void sqliteDB::updateItem(int video_id, QString new_path, QString new_author, QS
 
 void sqliteDB::resetWatched(QString category, double progress, QString watched) {
     QSqlQuery query = QSqlQuery(this->db);
-    QString query_string = QStringLiteral("UPDATE videodetails SET %1 watched = ? WHERE category = ?").arg(progress >=0 ? "progress = ? ," : "");
+    QString query_string = QStringLiteral("UPDATE videodetails SET %1 watched = ? WHERE category = ?").arg(progress >= 0 ? "progress = ? ," : "");
     query.prepare(query_string);
-    if(progress >= 0)
+    if (progress >= 0)
         query.addBindValue(progress);
     query.addBindValue(watched);
     query.addBindValue(category);
@@ -943,7 +983,7 @@ QMap<double, int> sqliteDB::getRatingDistribution() {
         }
         return QMap<double, int>();
     }
-    
+
     QMap<double, int> ratingCounts;
     while (query.next()) {
         double rating = query.value(0).toDouble();
@@ -1071,7 +1111,7 @@ void sqliteDB::createTables() {
 void sqliteDB::resetDB(QString category) {
     if (category == "ALL") {
         this->db.transaction();
-        QSqlQuery query = QSqlQuery("DROP TABLE videodetails",this->db);
+        QSqlQuery query = QSqlQuery("DROP TABLE videodetails", this->db);
         if (!query.exec()) {
             if (qMainApp) {
                 qMainApp->logger->log(QStringLiteral("Database Error at resetDB (%1): %2").arg(category, query.lastError().text()), "Database", query.lastError().text());

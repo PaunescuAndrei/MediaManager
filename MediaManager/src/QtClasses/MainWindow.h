@@ -39,7 +39,7 @@ public:
     VideosProxyModel* videosProxy = nullptr;
     QCompleter* search_completer = nullptr;
     Ui::MainWindow ui;
-    MainApp *App = nullptr;
+    MainApp* App = nullptr;
     FilterSettings filterSettings;
     IconChanger* animatedIcon = nullptr;
     QSystemTrayIcon* trayIcon;
@@ -54,10 +54,10 @@ public:
     bool animatedIconFlag = false;
     bool toggleDatesFlag = false;
     bool intro_played = true;
-    QList<QPair<QString,int>> lastScrolls = QList<QPair<QString, int>>();
+    QList<QPair<QString, int>> lastScrolls = QList<QPair<QString, int>>();
     QString old_search = "";
     QString last_backup = "";
-    generateThumbnailManager *thumbnailManager = nullptr;
+    generateThumbnailManager* thumbnailManager = nullptr;
     QIcon* active = new QIcon();
     QIcon* inactive = new QIcon();
     QIcon* halfactive = new QIcon();
@@ -68,7 +68,7 @@ public:
     QThreadPool* searchThreadPool;
     QTimer randomProbabilitiesUpdateTimer;
 
-    MainWindow(QWidget *parent = nullptr,MainApp *App = nullptr);
+    MainWindow(QWidget* parent = nullptr, MainApp* App = nullptr);
     //void resizeEvent(QResizeEvent* event) override;
     QString getCategoryName(QString currentdb);
     QString getCategoryName();
@@ -79,9 +79,9 @@ public:
     void initStyleSheets();
     void initRatingIcons();
     void updateRating(QPersistentModelIndex index, double old_value, double new_value);
-    
+
     void updatePath(int video_id, QString new_path);
-    
+
     void toggleSearchBar();
     void toggleDates(bool scroll = true);
     void init_icons();
@@ -115,7 +115,7 @@ public:
     void updateVideoListRandomProbabilitiesIfVisible();
     void scheduleRandomProbabilitiesUpdate();
     void updateSearchCompleter();
-    
+
     void refreshVisibility(QString search_text);
     void refreshVisibility();
     // Model helpers
@@ -147,14 +147,15 @@ public:
     void updateHeaderSettings(QStringList settings);
     void videosWidgetContextMenu(QPoint point);
     VideosTagsDialog* editTags(const QList<int>& ids, QWidget* parent = nullptr);
-    
-    void setCurrent(int id, QString path, QString name, QString author, QString tags, bool reset_progress = false);
+
+    void setCurrentVideo(int id, QString path, QString name, QString author, QString tags, bool reset_progress = false);
+    bool setCurrentVideoByPathFromModel(QString path, bool reset_progress = false);
     QString getWatchedVisibilityOption(bool watched_yes, bool watched_no, bool watched_mixed, bool search_bar_visible, bool visible_only_checkbox);
-    
+
     void selectItems(QStringList items, bool clear_selection = true);
     void selectItemsDelayed(QStringList items, bool clear_selection = true);
-    
-    bool InsertVideoFiles(QStringList files,bool update_state = true, QString currentdb = "", QString type = "");
+
+    bool InsertVideoFiles(QStringList files, bool update_state = true, QString currentdb = "", QString type = "");
     void openEmptyVideoPlayer();
     void incrementtimeWatchedIncrement(double value);
     void checktimeWatchedIncrement();
@@ -166,7 +167,7 @@ public:
     bool isNextButtonRandom();
     QString getNextButtonConfigKey();
     void setCounterVar(int value);
-    QString getRandomVideo(QString seed, WeightedBiasSettings weighted_settings, QJsonObject settings);
+    QString getRandomVideoPath(QString seed, WeightedBiasSettings weighted_settings, QJsonObject settings);
     QJsonObject getRandomSettings(RandomModes::Mode random_mode, bool ignore_filters_and_defaults = false, QStringList vid_type_include = {}, QStringList vid_type_exclude = {});
     bool randomVideo(RandomModes::Mode random_mode, bool ignore_filters_and_defaults = false, QStringList vid_type_include = {}, QStringList vid_type_exclude = {}, bool reset_progress = true);
     void refreshCurrentVideo();
@@ -187,9 +188,9 @@ public:
     bool TagsDialogButton();
     void resetDB(QString directory);
     void resetDBDialogButton(QWidget* parent = nullptr);
-    bool loadDB(QString path, QWidget * parent = nullptr);
+    bool loadDB(QString path, QWidget* parent = nullptr);
     bool loadDB(QWidget* parent = nullptr);
-    bool backupDB(QString path, QWidget * parent = nullptr);
+    bool backupDB(QString path, QWidget* parent = nullptr);
     bool backupDB(QWidget* parent = nullptr);
     void resetWatchedDB(QWidget* parent = nullptr);
     void handleMascotClickEvents(customGraphicsView* mascot, Qt::MouseButton button, Qt::KeyboardModifiers modifiers);
@@ -236,7 +237,7 @@ public:
     void bringWindowToFront();
     void center();
     void resize_center(int w, int h);
-    
+
     void dragEnterEvent(QDragEnterEvent* e) override;
     void dragMoveEvent(QDragMoveEvent* e) override;
     void dropEvent(QDropEvent* e) override;

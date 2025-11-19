@@ -16,7 +16,8 @@ public:
     ~sqliteDB();
     void createTables();
     QList<QTreeWidgetItem*> getVideos(QString category);
-    QVector<VideoRow> getVideosData(QString category);
+    QVector<VideoData> getVideosData(QString category);
+    VideoData getVideoData(QString path, QString category);
     QSet<Tag> getAllTags();
     QSet<Tag> getTags(int video_id);
     void insertTag(int video_id, int tag_id);
@@ -28,7 +29,7 @@ public:
     void setFilterSettings(QString value, QString category);
     QJsonObject getFilterSettings(QString category);
     QString getMainInfoValue(QString name, QString category, QString fallback = "");
-    std::tuple<int, QString, QString, QString, QString> getCurrentVideo(QString category, std::tuple<int, QString, QString, QString, QString> fallback = {-1,"","","",""});
+    std::tuple<int, QString, QString, QString, QString> getCurrentVideo(QString category, std::tuple<int, QString, QString, QString, QString> fallback = { -1,"","","","" });
     QString getVideoProgress(int video_id, QString fallback = "");
     int getVideoId(QString path, QString category);
     bool checkIfVideoInDB(QString path, QString category);
@@ -39,14 +40,14 @@ public:
     void setMainInfoValue(QString name, QString category, QString value);
     void deleteVideo(int video_id);
     void updateWatchedState(int video_id, QString watched, bool increment = false, bool update_last_watched = false);
-    void updateWatchedState(int video_id, double progress, QString watched,bool increment = false, bool update_last_watched = false);
+    void updateWatchedState(int video_id, double progress, QString watched, bool increment = false, bool update_last_watched = false);
     void incrementVideoViews(int video_id, int value, bool update_last_watched = false);
     void updateType(int video_id, QString type_val);
     void updateAuthor(int video_id, QString author);
     void updateName(int video_id, QString name);
     void updateRating(int video_id, double rating);
     void setViews(int video_id, int value);
-    void insertVideo(QString path, QString category, QString name , QString author = "", QString type = "");
+    void insertVideo(QString path, QString category, QString name, QString author = "", QString type = "");
     void updateVideoProgress(int video_id, double progress);
     void updateItem(int video_id, QString new_path = "", QString new_author = "", QString new_name = "", QString new_type = "", QString new_category = "", QString new_progress = "", QString new_watched = "", QString new_views = "", QString new_rating = "");
     QList<VideoWeightedData> getVideos(QString category, QJsonObject settings);

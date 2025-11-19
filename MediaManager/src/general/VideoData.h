@@ -3,7 +3,7 @@
 #include <QDateTime>
 
 // Shared row data structure for videos table view/model.
-struct VideoRow {
+struct VideoData {
     int id = -1;
     QString author;
     QString name;

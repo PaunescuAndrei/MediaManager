@@ -12,7 +12,12 @@ public:
     void setChoices(const QList<NextVideoChoice>& newChoices);
     NextVideoChoice selectedChoice() const;
 private:
-    void updateSelectionState();
+    void rebuildCards();
+    QWidget* buildCard(const NextVideoChoice& choice, int index);
+    void applySelection(int index);
     QList<NextVideoChoice> choices;
     Ui::NextChoiceDialog ui;
+    int currentIndex = -1;
+protected:
+    bool eventFilter(QObject* obj, QEvent* event) override;
 };

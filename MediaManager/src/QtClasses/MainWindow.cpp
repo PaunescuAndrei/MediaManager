@@ -1432,6 +1432,21 @@ std::optional<NextVideoChoice> MainWindow::buildChoiceFromPath(const QString& pa
     choice.name = src.sibling(row, ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
     choice.author = src.sibling(row, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
     choice.tags = src.sibling(row, ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
+    choice.type = src.sibling(row, ListColumns["TYPE_COLUMN"]).data(Qt::DisplayRole).toString();
+    const QVariant lastWatchedData = src.sibling(row, ListColumns["LAST_WATCHED_COLUMN"]).data(Qt::DisplayRole);
+    if (lastWatchedData.type() == QVariant::DateTime) {
+        const QDateTime dt = lastWatchedData.toDateTime();
+        if (dt.isValid()) {
+            const QDateTime now = QDateTime::currentDateTime();
+            const qint64 secondsDiff = dt.secsTo(now);
+            choice.lastWatched = utils::formatTimeAgo(secondsDiff);
+        }
+    }
+    if (choice.lastWatched.isEmpty()) {
+        choice.lastWatched = lastWatchedData.toString();
+    }
+    choice.views = src.sibling(row, ListColumns["VIEWS_COLUMN"]).data(Qt::DisplayRole).toInt();
+    choice.rating = src.sibling(row, ListColumns["RATING_COLUMN"]).data(CustomRoles::rating).toDouble();
     choice.resetProgress = reset_progress;
     return choice;
 }
@@ -1461,10 +1476,14 @@ QList<NextVideoChoice> MainWindow::buildRandomCandidates(const NextVideoSettings
         return choices;
     }
 
+    QMap<int, long double> probabilities;
     WeightedBiasSettings weighted_settings = this->getWeightedBiasSettings();
     if (!weighted_settings.weighted_random_enabled) {
         weighted_settings.bias_general = 0;
     }
+    probabilities = utils::calculateProbabilities(pool, weighted_settings.bias_views, weighted_settings.bias_rating,
+        weighted_settings.bias_tags, weighted_settings.bias_general, weighted_settings.no_views_weight, weighted_settings.no_rating_weight,
+        weighted_settings.no_tags_weight);
 
     QRandomGenerator generator;
     if (seed.isEmpty()) {
@@ -1489,6 +1508,9 @@ QList<NextVideoChoice> MainWindow::buildRandomCandidates(const NextVideoSettings
             remaining.erase(it);
         }
         if (choice.has_value()) {
+            if (probabilities.contains(choice->id)) {
+                choice->probability = static_cast<double>(probabilities.value(choice->id));
+            }
             choices.append(choice.value());
         }
     }
@@ -1537,6 +1559,7 @@ QList<NextVideoChoice> MainWindow::buildSeriesRandomCandidates(const QPersistent
         continuedSeries = true;
         auto choice = this->buildChoiceFromPath(deterministic_path, true);
         if (choice.has_value()) {
+            choice->probability = 100.0;
             choices.append(choice.value());
         }
         return choices;
@@ -1553,6 +1576,10 @@ QList<NextVideoChoice> MainWindow::buildSeriesRandomCandidates(const QPersistent
 
     WeightedBiasSettings weighted_settings = this->getWeightedBiasSettings();
     if (!weighted_settings.weighted_random_enabled) weighted_settings.bias_general = 0;
+    QMap<int, long double> probabilities = utils::calculateProbabilities(author_weighted_data, weighted_settings.bias_views, weighted_settings.bias_rating,
+        weighted_settings.bias_tags, weighted_settings.bias_general,
+        weighted_settings.no_views_weight, weighted_settings.no_rating_weight,
+        weighted_settings.no_tags_weight);
 
     QRandomGenerator generator;
     if (seed.isEmpty()) generator.seed(QRandomGenerator::global()->generate());
@@ -1576,6 +1603,9 @@ QList<NextVideoChoice> MainWindow::buildSeriesRandomCandidates(const QPersistent
             remaining.erase(it);
         }
         if (choice.has_value()) {
+            if (probabilities.contains(choice->id)) {
+                choice->probability = static_cast<double>(probabilities.value(choice->id));
+            }
             choices.append(choice.value());
         }
     }

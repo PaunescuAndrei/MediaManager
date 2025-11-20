@@ -26,6 +26,11 @@ struct NextVideoChoice {
 	QString name;
 	QString author;
 	QString tags;
+	QString type;
+	QString lastWatched;
+	int views = 0;
+	double rating = 0.0;
+	double probability = -1.0; // percent, -1 when not available
 	bool resetProgress = true;
 };
 

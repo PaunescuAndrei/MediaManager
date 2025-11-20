@@ -3,6 +3,7 @@
 #include <QFileInfo>
 #include <QVBoxLayout>
 #include <QGridLayout>
+#include <QHBoxLayout>
 #include <QFrame>
 #include <QLabel>
 #include <QScrollArea>
@@ -11,9 +12,11 @@
 #include <QEvent>
 #include <QScreen>
 #include <QGuiApplication>
+#include <QDialogButtonBox>
 #include <algorithm>
 #include <QWheelEvent>
 #include <QScrollBar>
+#include "starEditorWidget.h"
 
 namespace {
 class HorizontalScrollArea : public QScrollArea {
@@ -157,7 +160,35 @@ QWidget* NextChoiceDialog::buildCard(const NextVideoChoice& choice, int index)
 
     addStat(QStringLiteral("Type"), choice.type, 0);
     addStat(QStringLiteral("Views"), QString::number(choice.views), 1);
-    addStat(QStringLiteral("Rating"), choice.rating > 0 ? QString::number(choice.rating, 'f', 1) : QStringLiteral("-"), 2);
+
+    if (choice.rating > 0.0 && this->activeIcon && this->inactiveIcon) {
+        // Build rating stat inline with stars + numeric value
+        QWidget* ratingContainer = new QWidget(card);
+        QHBoxLayout* ratingLayout = new QHBoxLayout(ratingContainer);
+        ratingLayout->setContentsMargins(0, 0, 0, 0);
+        ratingLayout->setSpacing(4);
+
+        starEditorWidget* stars = new starEditorWidget(ratingContainer);
+        stars->setEditMode(starEditorWidget::EditMode::NoEdit);
+        stars->setStarPixelSize(16);
+        StarRating sr(this->activeIcon, this->halfIcon, this->inactiveIcon, choice.rating, 5.0);
+        sr.setStarPixelSize(16);
+        stars->setStarRating(sr);
+        stars->setFocusPolicy(Qt::NoFocus);
+
+        QLabel* ratingLabel = new QLabel(QString::number(choice.rating, 'f', 1), ratingContainer);
+        ratingLabel->setStyleSheet("color: #c0c0c0; font-size: 11px;");
+
+        ratingLayout->addWidget(stars, 0, Qt::AlignLeft | Qt::AlignVCenter);
+        ratingLayout->addWidget(ratingLabel, 0, Qt::AlignLeft | Qt::AlignVCenter);
+        ratingLayout->addStretch(1);
+
+        grid->addWidget(new QLabel(QStringLiteral("Rating"), card), 2, 0);
+        grid->addWidget(ratingContainer, 2, 1);
+    } else {
+        addStat(QStringLiteral("Rating"), QStringLiteral("-"), 2);
+    }
+
     addStat(QStringLiteral("Last W"), choice.lastWatched.isEmpty() ? QStringLiteral("-") : choice.lastWatched, 3);
 
     layout->addLayout(grid);

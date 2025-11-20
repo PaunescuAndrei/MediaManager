@@ -294,6 +294,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         std::optional<NextVideoChoice> selectedChoice;
         if (multichoiceEnabled && candidates.size() > 1) {
             NextChoiceDialog dialog(this);
+            dialog.setStarIcons(this->active, this->halfactive, this->inactive);
             dialog.setChoices(candidates);
             if (dialog.exec() == QDialog::Accepted) {
                 selectedChoice = dialog.selectedChoice();
@@ -1678,17 +1679,18 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
     const bool offerChoiceDialog = multichoiceEnabled && candidates.size() > 1 &&
         (mode == NextVideoModes::Random || (mode == NextVideoModes::SeriesRandom && !continuedSeries));
 
-    std::optional<NextVideoChoice> selectedChoice;
-    if (offerChoiceDialog) {
-        NextChoiceDialog dialog(this);
-        dialog.setChoices(candidates);
-        if (dialog.exec() == QDialog::Accepted) {
-            selectedChoice = dialog.selectedChoice();
+        std::optional<NextVideoChoice> selectedChoice;
+        if (offerChoiceDialog) {
+            NextChoiceDialog dialog(this);
+            dialog.setStarIcons(this->active, this->halfactive, this->inactive);
+            dialog.setChoices(candidates);
+            if (dialog.exec() == QDialog::Accepted) {
+                selectedChoice = dialog.selectedChoice();
+            }
+            else {
+                return false;
+            }
         }
-        else {
-            return false;
-        }
-    }
     else if (!candidates.isEmpty()) {
         selectedChoice = candidates.first();
     }

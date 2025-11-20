@@ -12,6 +12,7 @@
 #include <QSystemTrayIcon>
 #include "SettingsDialog.h"
 #include "FilterSettings.h"
+#include <optional>
 #include "NotificationDialog.h"
 #include "finishDialog.h"
 #include "NonBlockingQueue.h"
@@ -168,7 +169,7 @@ public:
     QString getNextButtonConfigKey();
     void setCounterVar(int value);
     QString getRandomVideoPath(QString seed, WeightedBiasSettings weighted_settings, QJsonObject settings);
-    QJsonObject getRandomSettings(RandomModes::Mode random_mode, bool ignore_filters_and_defaults = false, QStringList vid_type_include = {}, QStringList vid_type_exclude = {});
+    QJsonObject getRandomSettings(RandomModes::Mode random_mode, bool ignore_filters_and_defaults = false, QStringList vid_type_include = {}, QStringList vid_type_exclude = {}) const;
     bool randomVideo(RandomModes::Mode random_mode, bool ignore_filters_and_defaults = false, QStringList vid_type_include = {}, QStringList vid_type_exclude = {}, bool reset_progress = true);
     void refreshCurrentVideo();
     void syncCurrentVideoFromModel();
@@ -197,8 +198,8 @@ public:
     void applySettings(SettingsDialog* dialog);
     void setDebugMode(bool debug);
     void settingsDialogButton();
-    QString saltSeed(QString seed);
-    WeightedBiasSettings getWeightedBiasSettings();
+    QString saltSeed(QString seed) const;
+    WeightedBiasSettings getWeightedBiasSettings() const;
     void quit();
     void NextButtonClicked(bool increment, bool update_watched_state, bool skipped = false);
     void NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state, bool skipped = false);
@@ -206,6 +207,12 @@ public:
     NextVideoModes::Mode getNextVideoMode();
     bool NextVideo(NextVideoModes::Mode mode, bool increment, bool update_watched_state, bool skipped);
     bool NextVideo(bool random, bool increment, bool update_watched_state, bool skipped);
+    std::optional<NextVideoChoice> buildChoiceFromPath(const QString& path, bool reset_progress = true) const;
+    std::optional<NextVideoChoice> buildSequentialCandidate(const QPersistentModelIndex& current_source_index) const;
+    QList<NextVideoChoice> buildRandomCandidates(const NextVideoSettings& settings, int maxCount, bool reset_progress = true) const;
+    QList<NextVideoChoice> buildSeriesRandomCandidates(const QPersistentModelIndex& current_source_index, const NextVideoSettings& settings, int maxCount, bool& continuedSeries) const;
+    bool applyNextChoice(const std::optional<NextVideoChoice>& choice);
+    int nextChoiceCountFromConfig() const;
     bool setNextVideo(const QPersistentModelIndex& current_source_index);
     int nextSequentialRow(const QPersistentModelIndex& current_source_index) const;
     bool seriesRandomVideo(const QPersistentModelIndex& current_source_index);

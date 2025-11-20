@@ -83,6 +83,9 @@
     <ClCompile Include="src\QtClasses\UI\finishDialog.cpp">
       <Filter>Source Files\QtClasses\UI</Filter>
     </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\NextChoiceDialog.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
     <ClCompile Include="src\QtClasses\UI\InsertDialog.cpp">
       <Filter>Source Files\QtClasses\UI</Filter>
     </ClCompile>
@@ -376,6 +379,9 @@
     <QtUic Include="src\QtClasses\UI\Form Files\finishDialog.ui">
       <Filter>Form Files</Filter>
     </QtUic>
+    <QtUic Include="src\QtClasses\UI\Form Files\NextChoiceDialog.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
     <QtUic Include="src\QtClasses\UI\Form Files\InsertDialog.ui">
       <Filter>Form Files</Filter>
     </QtUic>
@@ -442,6 +448,9 @@
       <Filter>Header Files\QtClasses\UI</Filter>
     </QtMoc>
     <QtMoc Include="src\QtClasses\UI\finishDialog.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\NextChoiceDialog.h">
       <Filter>Header Files\QtClasses\UI</Filter>
     </QtMoc>
     <QtMoc Include="src\QtClasses\UI\DeleteDialog.h">

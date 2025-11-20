@@ -46,6 +46,8 @@ void Config::init_defaults() {
 		{"minus_random_next", "0"}, // Sequential by default
 		{"plus_get_random_mode", "2"},
 		{"minus_get_random_mode", "2"},
+		{"next_multichoice_enabled", "False"},
+		{"next_multichoice_count", "3"},
 		{"current_db", "MINUS"},
 		{"video_types",	""},
 		{"sv_types",""},

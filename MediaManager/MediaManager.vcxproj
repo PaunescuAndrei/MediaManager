@@ -61,6 +61,7 @@
     <ClCompile Include="src\QtClasses\UI\loadBackupDialog.cpp" />
     <ClCompile Include="src\QtClasses\UI\LogDialog.cpp" />
     <ClCompile Include="src\QtClasses\UI\NotificationDialog.cpp" />
+    <ClCompile Include="src\QtClasses\UI\NextChoiceDialog.cpp" />
     <ClCompile Include="src\QtClasses\UI\ResetDBDialog.cpp" />
     <ClCompile Include="src\QtClasses\UI\setCounterDialog.cpp" />
     <ClCompile Include="src\QtClasses\UI\SettingsDialog.cpp" />
@@ -172,6 +173,7 @@
     <QtMoc Include="src\QtClasses\UI\ResetDBDialog.h" />
     <QtMoc Include="src\QtClasses\UI\InsertDialog.h" />
     <QtMoc Include="src\QtClasses\UI\finishDialog.h" />
+    <QtMoc Include="src\QtClasses\UI\NextChoiceDialog.h" />
     <QtMoc Include="src\QtClasses\UI\DeleteDialog.h" />
     <QtMoc Include="src\QtClasses\UI\addWatchedDialog.h" />
     <QtMoc Include="src\QtClasses\MainWindow.h" />
@@ -197,6 +199,7 @@
     <QtUic Include="src\QtClasses\UI\Form Files\LogDialog.ui" />
     <QtUic Include="src\QtClasses\UI\Form Files\MainWindow.ui" />
     <QtUic Include="src\QtClasses\UI\Form Files\NotificationDialog.ui" />
+    <QtUic Include="src\QtClasses\UI\Form Files\NextChoiceDialog.ui" />
     <QtUic Include="src\QtClasses\UI\Form Files\ResetDBDialog.ui" />
     <QtUic Include="src\QtClasses\UI\Form Files\setCounterDialog.ui" />
     <QtUic Include="src\QtClasses\UI\Form Files\SettingsDialog.ui" />

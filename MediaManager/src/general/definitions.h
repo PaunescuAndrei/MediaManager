@@ -20,6 +20,15 @@ struct VideoWeightedData {
 	double tagsWeight;
 };
 
+struct NextVideoChoice {
+	int id = -1;
+	QString path;
+	QString name;
+	QString author;
+	QString tags;
+	bool resetProgress = true;
+};
+
 struct AuthorVideoData {
 	QString author;
 	QList<VideoWeightedData> videos;

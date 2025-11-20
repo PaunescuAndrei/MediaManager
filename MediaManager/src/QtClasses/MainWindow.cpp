@@ -2665,6 +2665,9 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
         }
     }
 
+    const QString target_db = currentdb.isEmpty() ? this->App->currentDB : currentdb;
+    const bool insertingIntoCurrentDb = (target_db == this->App->currentDB);
+
     QMimeDatabase db;
     QList<QPair<QString, int>> valid_files = QList<QPair<QString, int>>();
     int new_files_counter = 0;
@@ -2672,7 +2675,7 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
         QMimeType guess_type = db.mimeTypeForFile(file);
         QString path = QDir::toNativeSeparators(file);
         if (guess_type.isValid() && guess_type.name().startsWith("video")) {
-            int video_id_if_exists = this->App->db->getVideoId(path, this->App->currentDB);
+            int video_id_if_exists = this->App->db->getVideoId(path, target_db);
             valid_files.append({ path,video_id_if_exists });
             if (video_id_if_exists == -1)
                 new_files_counter++;
@@ -2682,14 +2685,8 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
     if (valid_files.isEmpty())
         return false;
 
-    QString current_db;
-    if (!currentdb.isEmpty())
-        current_db = currentdb;
-    else
-        current_db = this->App->currentDB;
-
-    bool set_first_current = true;
-    if (this->videosModel) {
+    bool set_first_current = insertingIntoCurrentDb;
+    if (set_first_current && this->videosModel) {
         for (int r = 0; r < this->videosModel->rowCount(); ++r) {
             const QPersistentModelIndex rowIdx(this->videosModel->index(r, 0));
             if (rowIdx.sibling(r, ListColumns["WATCHED_COLUMN"]).data(Qt::DisplayRole).toString() == "No") {
@@ -2775,7 +2772,7 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
             ++it;
             continue;
         }
-        this->App->db->insertVideo((*it)->text(0), current_db, (*it)->text(2), (*it)->text(1), (*it)->text(3));
+        this->App->db->insertVideo((*it)->text(0), target_db, (*it)->text(2), (*it)->text(1), (*it)->text(3));
         count++;
         if (count == 100) {
             this->App->db->db.commit();
@@ -2789,30 +2786,33 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
 
     if (count > 0) {
         this->App->db->db.commit();
+        this->thumbnailManager->start();
     }
     if (!files_inserted.isEmpty()) {
-        this->refreshVideosWidget(false, false);
-        this->updateTotalListLabel();
-        QString first = files_inserted.first();
-        this->ui.videosWidget->findAndScrollToDelayed(first, false);
-        this->selectItemsDelayed(files_inserted);
-        this->thumbnailManager->start();
-        if (set_first_current) {
-            QPersistentModelIndex src = this->modelIndexByPath(first);
-            if (src.isValid()) {
-                const QPersistentModelIndex modelIdx(src);
-                const int row = modelIdx.row();
-                int id = modelIdx.sibling(row, ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
-                QString name = modelIdx.sibling(row, ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
-                QString author = modelIdx.sibling(row, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
-                QString tags = modelIdx.sibling(row, ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
-                QString path = modelIdx.sibling(row, ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
-                this->setCurrentVideo(id, path, name, author, tags);
-                this->highlightCurrentItem(QPersistentModelIndex(), false);
+        if (insertingIntoCurrentDb) {
+            this->refreshVideosWidget(false, false);
+            this->updateTotalListLabel();
+            QString first = files_inserted.first();
+            this->ui.videosWidget->findAndScrollToDelayed(first, false);
+            this->selectItemsDelayed(files_inserted);
+
+            if (set_first_current) {
+                QPersistentModelIndex src = this->modelIndexByPath(first);
+                if (src.isValid()) {
+                    const QPersistentModelIndex modelIdx(src);
+                    const int row = modelIdx.row();
+                    int id = modelIdx.sibling(row, ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
+                    QString name = modelIdx.sibling(row, ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
+                    QString author = modelIdx.sibling(row, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
+                    QString tags = modelIdx.sibling(row, ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
+                    QString path = modelIdx.sibling(row, ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+                    this->setCurrentVideo(id, path, name, author, tags);
+                    this->highlightCurrentItem(QPersistentModelIndex(), false);
+                }
             }
         }
     }
-    else if (updated) {
+    else if (updated && insertingIntoCurrentDb) {
         this->refreshVideosWidget(false, true);
     }
     return true;

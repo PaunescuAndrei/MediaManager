@@ -29,6 +29,7 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 	this->ui.aicon_fps_modifier_spinBox->setStyleSheet(get_stylesheet("doublespinbox"));
     this->ui.searchTimerInterval->setStyleSheet(get_stylesheet("spinbox"));
     this->ui.notificationDurationSpinBox->setStyleSheet(get_stylesheet("spinbox"));
+    this->ui.nextMultiChoiceCount->setStyleSheet(get_stylesheet("spinbox"));
 	this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(false);
 
 	MainWindow* mw = (MainWindow*)parent;
@@ -130,6 +131,18 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 		this->ui.autoContinue->setCheckState(Qt::CheckState::Unchecked);
 
 	this->ui.autoContinueDelay->setValue(mw->App->config->get("auto_continue_delay").toInt());
+	if (mw->App->config->get_bool("next_multichoice_enabled"))
+		this->ui.nextMultiChoiceEnabled->setCheckState(Qt::CheckState::Checked);
+	else
+		this->ui.nextMultiChoiceEnabled->setCheckState(Qt::CheckState::Unchecked);
+	int nextChoices = mw->App->config->get("next_multichoice_count").toInt();
+	if (nextChoices < this->ui.nextMultiChoiceCount->minimum())
+		nextChoices = this->ui.nextMultiChoiceCount->minimum();
+	this->ui.nextMultiChoiceCount->setValue(nextChoices);
+	this->ui.nextMultiChoiceCount->setEnabled(this->ui.nextMultiChoiceEnabled->isChecked());
+	connect(this->ui.nextMultiChoiceEnabled, &QCheckBox::toggled, this, [this](bool checked) {
+		this->ui.nextMultiChoiceCount->setEnabled(checked);
+	});
 
 	this->ui.SVspinBox->setValue(mw->App->db->getMainInfoValue("sv_target_count", "ALL","0").toInt());
 	this->oldSVmax = this->ui.SVspinBox->value();

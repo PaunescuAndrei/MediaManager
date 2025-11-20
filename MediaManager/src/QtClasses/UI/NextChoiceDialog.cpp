@@ -1,0 +1,269 @@
+#include "stdafx.h"
+#include "NextChoiceDialog.h"
+#include <QFileInfo>
+#include <QVBoxLayout>
+#include <QGridLayout>
+#include <QHBoxLayout>
+#include <QFrame>
+#include <QLabel>
+#include <QScrollArea>
+#include <QSizePolicy>
+#include <QMouseEvent>
+#include <QEvent>
+#include <QScreen>
+#include <QGuiApplication>
+#include <QDialogButtonBox>
+#include <algorithm>
+#include <QWheelEvent>
+#include <QScrollBar>
+#include "starEditorWidget.h"
+
+namespace {
+class HorizontalScrollArea : public QScrollArea {
+public:
+    explicit HorizontalScrollArea(QWidget* parent = nullptr) : QScrollArea(parent) {
+        this->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        this->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        this->setWidgetResizable(false);
+        this->setFrameShape(QFrame::NoFrame);
+        this->setFocusPolicy(Qt::NoFocus);
+        this->setStyleSheet("QScrollArea { background: transparent; } QWidget { background: transparent; }");
+    }
+protected:
+    void wheelEvent(QWheelEvent* e) override {
+        int delta = e->angleDelta().y();
+        if (delta == 0) delta = e->angleDelta().x();
+        if (QScrollBar* bar = this->horizontalScrollBar()) {
+            bar->setValue(bar->value() - delta);
+        }
+        e->accept(); // prevent parent scroll area from scrolling
+    }
+};
+}
+
+NextChoiceDialog::NextChoiceDialog(QWidget* parent) : QDialog(parent)
+{
+    this->ui.setupUi(this);
+    this->setWindowModality(Qt::WindowModal);
+    if (auto buttonBox = this->findChild<QDialogButtonBox*>()) {
+        connect(buttonBox, &QDialogButtonBox::rejected, this, &NextChoiceDialog::reject);
+    }
+}
+
+void NextChoiceDialog::setChoices(const QList<NextVideoChoice>& newChoices)
+{
+    this->choices = newChoices;
+    this->rebuildCards();
+    if (!this->choices.isEmpty()) {
+        this->applySelection(0);
+    }
+
+    // Dynamically size the dialog to fit cards while respecting screen bounds
+    const int availableChoices = this->choices.size() > 0 ? this->choices.size() : 1;
+    int columns = availableChoices;
+    if (columns < 1) columns = 1;
+    if (columns > 3) columns = 3;
+    int rows = this->choices.isEmpty() ? 1 : ((this->choices.size() + columns - 1) / columns);
+
+    int screenWidth = 1280;
+    int screenHeight = 720;
+    if (QScreen* screen = QGuiApplication::primaryScreen()) {
+        QRect avail = screen->availableGeometry();
+        screenWidth = avail.width();
+        screenHeight = avail.height();
+    }
+
+    const int cardMaxWidth = screenWidth / 4; // aim for ~1/4 screen per card
+    const int cardWidth = cardMaxWidth;
+    const int cardHeight = 190; // closer to real rendered height including tags/stats
+
+    int hSpacing = 12;
+    int vSpacing = 12;
+    if (auto* grid = qobject_cast<QGridLayout*>(this->ui.cardsLayout)) {
+        hSpacing = grid->horizontalSpacing();
+        vSpacing = grid->verticalSpacing();
+    }
+
+    int desiredWidth = columns * cardWidth + (columns - 1) * hSpacing + 40;
+    int desiredHeight = rows * cardHeight + (rows - 1) * vSpacing + 80;
+
+    if (desiredWidth > screenWidth - 40) desiredWidth = screenWidth - 40;
+    if (desiredHeight > screenHeight - 40) desiredHeight = screenHeight - 40;
+
+    this->resize(desiredWidth, desiredHeight);
+}
+
+NextVideoChoice NextChoiceDialog::selectedChoice() const
+{
+    if (this->currentIndex >= 0 && this->currentIndex < this->choices.size()) {
+        return this->choices[this->currentIndex];
+    }
+    return NextVideoChoice();
+}
+
+QWidget* NextChoiceDialog::buildCard(const NextVideoChoice& choice, int index)
+{
+    QWidget* card = new QWidget(this);
+    card->setObjectName(QStringLiteral("choiceCard_%1").arg(index));
+    card->setStyleSheet(QStringLiteral(
+        "QWidget#choiceCard_%1 {"
+        "  border: 1px solid #555;"
+        "  border-radius: 8px;"
+        "  padding: 6px;"
+        "  background: #2b2b2b;"
+        "}").arg(index));
+
+    auto* layout = new QVBoxLayout(card);
+    layout->setContentsMargins(8, 6, 8, 6);
+    layout->setSpacing(4);
+
+    QString title = choice.name.isEmpty() ? QFileInfo(choice.path).completeBaseName() : choice.name;
+    QString authorText = choice.author.isEmpty() ? QStringLiteral("Unknown") : choice.author;
+
+    auto makeScrollableLabel = [&](const QString& text, const QString& style, int fixedHeight) -> QWidget* {
+        HorizontalScrollArea* area = new HorizontalScrollArea(card);
+        QLabel* lbl = new QLabel(text, area);
+        lbl->setStyleSheet(style);
+        lbl->setWordWrap(false);
+        lbl->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        area->setWidget(lbl);
+        area->setFixedHeight(fixedHeight);
+        return area;
+    };
+
+    QWidget* titleWidget = makeScrollableLabel(QStringLiteral("%1").arg(title), "font-size: 15px; font-weight: 700;", 22);
+    layout->addWidget(titleWidget);
+
+    QLabel* authorLabel = new QLabel(QStringLiteral("%1").arg(authorText), card);
+    authorLabel->setStyleSheet("color: #c0c0c0; font-size: 12px;");
+    layout->addWidget(authorLabel);
+
+    if (!choice.tags.isEmpty()) {
+        QLabel* tagsLabel = new QLabel(choice.tags, card);
+        tagsLabel->setWordWrap(true);
+        tagsLabel->setStyleSheet("color: #8aa; font-size: 11px;");
+        layout->addWidget(tagsLabel);
+    }
+
+    auto* grid = new QGridLayout();
+    grid->setHorizontalSpacing(10);
+    grid->setVerticalSpacing(2);
+
+    auto addStat = [&](const QString& label, const QString& value, int row) {
+        QLabel* l = new QLabel(label, card);
+        l->setStyleSheet("color: #a0a0a0; font-size: 11px;");
+        QLabel* v = new QLabel(value, card);
+        v->setStyleSheet("font-weight: 600; font-size: 11px;");
+        grid->addWidget(l, row, 0);
+        grid->addWidget(v, row, 1);
+    };
+
+    addStat(QStringLiteral("Type"), choice.type, 0);
+    addStat(QStringLiteral("Views"), QString::number(choice.views), 1);
+
+    if (choice.rating > 0.0 && this->activeIcon && this->inactiveIcon) {
+        // Build rating stat inline with stars + numeric value
+        QWidget* ratingContainer = new QWidget(card);
+        QHBoxLayout* ratingLayout = new QHBoxLayout(ratingContainer);
+        ratingLayout->setContentsMargins(0, 0, 0, 0);
+        ratingLayout->setSpacing(4);
+
+        starEditorWidget* stars = new starEditorWidget(ratingContainer);
+        stars->setEditMode(starEditorWidget::EditMode::NoEdit);
+        stars->setStarPixelSize(16);
+        StarRating sr(this->activeIcon, this->halfIcon, this->inactiveIcon, choice.rating, 5.0);
+        sr.setStarPixelSize(16);
+        stars->setStarRating(sr);
+        stars->setFocusPolicy(Qt::NoFocus);
+
+        QLabel* ratingLabel = new QLabel(QString::number(choice.rating, 'f', 1), ratingContainer);
+        ratingLabel->setStyleSheet("color: #c0c0c0; font-size: 11px;");
+
+        ratingLayout->addWidget(stars, 0, Qt::AlignLeft | Qt::AlignVCenter);
+        ratingLayout->addWidget(ratingLabel, 0, Qt::AlignLeft | Qt::AlignVCenter);
+        ratingLayout->addStretch(1);
+
+        grid->addWidget(new QLabel(QStringLiteral("Rating"), card), 2, 0);
+        grid->addWidget(ratingContainer, 2, 1);
+    } else {
+        addStat(QStringLiteral("Rating"), QStringLiteral("-"), 2);
+    }
+
+    addStat(QStringLiteral("Last W"), choice.lastWatched.isEmpty() ? QStringLiteral("-") : choice.lastWatched, 3);
+
+    layout->addLayout(grid);
+
+    if (choice.probability >= 0.0) {
+        QLabel* prob = new QLabel(QStringLiteral("Chance: %1%").arg(QString::number(choice.probability, 'f', 2)), card);
+        prob->setStyleSheet("color: #80d080; font-weight: 700;");
+        layout->addWidget(prob);
+    }
+
+    QWidget* pathWidget = makeScrollableLabel(choice.path, "color: #999; font-size: 10px;", 18);
+    layout->addWidget(pathWidget);
+
+    card->setProperty("choiceIndex", index);
+    card->installEventFilter(this);
+    card->setCursor(Qt::PointingHandCursor);
+    card->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+    if (QScreen* screen = QGuiApplication::primaryScreen()) {
+        int maxWidth = std::max(220, screen->availableGeometry().width() / 4);
+        card->setMaximumWidth(maxWidth);
+    }
+    return card;
+}
+
+void NextChoiceDialog::applySelection(int index)
+{
+    this->currentIndex = index;
+}
+
+void NextChoiceDialog::rebuildCards()
+{
+    QGridLayout* grid = qobject_cast<QGridLayout*>(this->ui.cardsLayout);
+    if (!grid) return;
+    while (QLayoutItem* item = grid->takeAt(0)) {
+        if (QWidget* w = item->widget()) {
+            w->deleteLater();
+        }
+        delete item;
+    }
+
+    const int maxColumns = 3;
+    int row = 0;
+    int col = 0;
+    for (int i = 0; i < this->choices.size(); ++i) {
+        QWidget* card = this->buildCard(this->choices[i], i);
+        grid->addWidget(card, row, col);
+        col++;
+        if (col >= maxColumns) {
+            col = 0;
+            row++;
+        }
+    }
+    int usedColumns = this->choices.isEmpty() ? 1 : this->choices.size();
+    if (usedColumns < 1) usedColumns = 1;
+    if (usedColumns > maxColumns) usedColumns = maxColumns;
+    for (int c = 0; c < maxColumns; ++c) {
+        grid->setColumnStretch(c, c < usedColumns ? 1 : 0);
+    }
+}
+
+bool NextChoiceDialog::eventFilter(QObject* obj, QEvent* event)
+{
+    if (event->type() == QEvent::MouseButtonRelease) {
+        QObject* cur = obj;
+        QVariant prop;
+        while (cur && !(prop = cur->property("choiceIndex")).isValid()) {
+            cur = cur->parent();
+        }
+        bool ok = false;
+        int idx = prop.toInt(&ok);
+        if (ok && idx >= 0 && idx < this->choices.size()) {
+            this->applySelection(idx);
+            this->accept();
+            return true;
+        }
+    }
+    return QDialog::eventFilter(obj, event);
+}

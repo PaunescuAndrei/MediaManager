@@ -60,6 +60,7 @@
 #include "loadBackupDialog.h"
 #include "TagsDialog.h"
 #include "UpdatePathsDialog.h"
+#include "NextChoiceDialog.h"
 #include "TreeWidgetItem.h"
 
 #pragma warning(push ,3)
@@ -278,9 +279,36 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     });    
     connect(this->ui.random_button, &QPushButton::clicked, this, [this] {
         NextVideoSettings settings = this->getNextVideoSettings();
-        bool ignore_filters_and_defaults = settings.random_mode == RandomModes::All;
-        bool video_changed = this->randomVideo(settings.random_mode, ignore_filters_and_defaults, settings.vid_type_include, settings.vid_type_exclude, false);
-        if (this->App->VW->mainPlayer and video_changed) {
+        const bool multichoiceEnabled = this->App->config->get_bool("next_multichoice_enabled");
+        const int choiceCount = multichoiceEnabled ? this->nextChoiceCountFromConfig() : 1;
+        QList<NextVideoChoice> candidates = this->buildRandomCandidates(settings, choiceCount, false);
+
+        if (candidates.isEmpty()) {
+            bool video_changed = this->applyNextChoice(std::nullopt);
+            if (this->App->VW->mainPlayer && video_changed) {
+                this->changePlayerVideo(this->App->VW->mainPlayer, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
+            }
+            return;
+        }
+
+        std::optional<NextVideoChoice> selectedChoice;
+        if (multichoiceEnabled && candidates.size() > 1) {
+            NextChoiceDialog dialog(this);
+            dialog.setStarIcons(this->active, this->halfactive, this->inactive);
+            dialog.setChoices(candidates);
+            if (dialog.exec() == QDialog::Accepted) {
+                selectedChoice = dialog.selectedChoice();
+            }
+            else {
+                return;
+            }
+        }
+        else {
+            selectedChoice = candidates.first();
+        }
+
+        bool video_changed = this->applyNextChoice(selectedChoice);
+        if (this->App->VW->mainPlayer && video_changed) {
             this->changePlayerVideo(this->App->VW->mainPlayer, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
         }
     });
@@ -718,7 +746,7 @@ void MainWindow::updatePath(int video_id, QString new_path) {
         this->App->db->updateName(video_id, name);
         this->App->db->db.commit();
         if (video_id == this->ui.currentVideo->id) {
-            this->setCurrent(video_id, new_path, name, author, this->ui.currentVideo->tags, false);
+            this->setCurrentVideo(video_id, new_path, name, author, this->ui.currentVideo->tags, false);
         }
         this->thumbnailManager->enqueue_work({ new_path, false, false });
         this->thumbnailManager->start();
@@ -1387,6 +1415,217 @@ NextVideoSettings MainWindow::getNextVideoSettings() {
     return settings;
 }
 
+int MainWindow::nextChoiceCountFromConfig() const {
+    int count = this->App->config->get("next_multichoice_count").toInt();
+    if (count < 1) {
+        count = 1;
+    }
+    return count;
+}
+
+std::optional<NextVideoChoice> MainWindow::buildChoiceFromPath(const QString& path, bool reset_progress) const {
+    const QPersistentModelIndex src = this->modelIndexByPath(path);
+    if (!src.isValid()) return std::nullopt;
+    const int row = src.row();
+    NextVideoChoice choice;
+    choice.id = src.sibling(row, ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
+    choice.path = src.sibling(row, ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+    choice.name = src.sibling(row, ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
+    choice.author = src.sibling(row, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
+    choice.tags = src.sibling(row, ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
+    choice.type = src.sibling(row, ListColumns["TYPE_COLUMN"]).data(Qt::DisplayRole).toString();
+    const QVariant lastWatchedData = src.sibling(row, ListColumns["LAST_WATCHED_COLUMN"]).data(Qt::DisplayRole);
+    if (lastWatchedData.type() == QVariant::DateTime) {
+        const QDateTime dt = lastWatchedData.toDateTime();
+        if (dt.isValid()) {
+            const QDateTime now = QDateTime::currentDateTime();
+            const qint64 secondsDiff = dt.secsTo(now);
+            choice.lastWatched = utils::formatTimeAgo(secondsDiff);
+        }
+    }
+    if (choice.lastWatched.isEmpty()) {
+        choice.lastWatched = lastWatchedData.toString();
+    }
+    choice.views = src.sibling(row, ListColumns["VIEWS_COLUMN"]).data(Qt::DisplayRole).toInt();
+    choice.rating = src.sibling(row, ListColumns["RATING_COLUMN"]).data(CustomRoles::rating).toDouble();
+    choice.resetProgress = reset_progress;
+    return choice;
+}
+
+std::optional<NextVideoChoice> MainWindow::buildSequentialCandidate(const QPersistentModelIndex& current_source_index) const {
+    if (!this->videosModel) return std::nullopt;
+    int nextRow = this->nextSequentialRow(current_source_index);
+    if (nextRow < 0) return std::nullopt;
+
+    const QPersistentModelIndex rowIdx(this->videosModel->index(nextRow, 0));
+    const QString path = rowIdx.sibling(nextRow, ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+    return this->buildChoiceFromPath(path, true);
+}
+
+QList<NextVideoChoice> MainWindow::buildRandomCandidates(const NextVideoSettings& settings, int maxCount, bool reset_progress) const {
+    QList<NextVideoChoice> choices;
+    if (!this->videosModel || maxCount <= 0) {
+        return choices;
+    }
+
+    QJsonObject json_settings = this->getRandomSettings(settings.random_mode, settings.ignore_filters_and_defaults,
+        settings.vid_type_include, settings.vid_type_exclude);
+    QString seed = this->App->config->get_bool("random_use_seed") ? this->App->config->get("random_seed") : "";
+
+    QList<VideoWeightedData> pool = this->App->db->getVideos(this->App->currentDB, json_settings);
+    if (pool.isEmpty()) {
+        return choices;
+    }
+
+    QMap<int, long double> probabilities;
+    WeightedBiasSettings weighted_settings = this->getWeightedBiasSettings();
+    if (!weighted_settings.weighted_random_enabled) {
+        weighted_settings.bias_general = 0;
+    }
+    probabilities = utils::calculateProbabilities(pool, weighted_settings.bias_views, weighted_settings.bias_rating,
+        weighted_settings.bias_tags, weighted_settings.bias_general, weighted_settings.no_views_weight, weighted_settings.no_rating_weight,
+        weighted_settings.no_tags_weight);
+
+    QRandomGenerator generator;
+    if (seed.isEmpty()) {
+        generator.seed(QRandomGenerator::global()->generate());
+    }
+    else {
+        generator.seed(utils::stringToSeed(this->saltSeed(seed)));
+    }
+
+    const int picks = std::max(1, maxCount);
+    QList<VideoWeightedData> remaining = pool;
+    for (int i = 0; i < picks && !remaining.isEmpty(); ++i) {
+        const QString selected_path = utils::weightedRandomChoice(remaining, generator, weighted_settings.bias_views, weighted_settings.bias_rating,
+            weighted_settings.bias_tags, weighted_settings.bias_general, weighted_settings.no_views_weight, weighted_settings.no_rating_weight, weighted_settings.no_tags_weight);
+        if (selected_path.isEmpty()) break;
+
+        auto choice = this->buildChoiceFromPath(selected_path, reset_progress);
+        auto it = std::find_if(remaining.begin(), remaining.end(), [&](const VideoWeightedData& video) {
+            return video.path == selected_path;
+        });
+        if (it != remaining.end()) {
+            remaining.erase(it);
+        }
+        if (choice.has_value()) {
+            if (probabilities.contains(choice->id)) {
+                choice->probability = static_cast<double>(probabilities.value(choice->id));
+            }
+            choices.append(choice.value());
+        }
+    }
+
+    return choices;
+}
+
+QList<NextVideoChoice> MainWindow::buildSeriesRandomCandidates(const QPersistentModelIndex& current_source_index, const NextVideoSettings& settings, int maxCount, bool& continuedSeries) const {
+    QList<NextVideoChoice> choices;
+    continuedSeries = false;
+    if (!this->videosModel) return choices;
+
+    QJsonObject json_settings = this->getRandomSettings(settings.random_mode, settings.ignore_filters_and_defaults,
+        settings.vid_type_include, settings.vid_type_exclude);
+    QString seed = this->App->config->get_bool("random_use_seed") ? this->App->config->get("random_seed") : "";
+
+    QString current_author;
+    QString deterministic_path;
+
+    QPersistentModelIndex currentSourceIdx = current_source_index;
+    if (!currentSourceIdx.isValid()) {
+        currentSourceIdx = this->modelIndexByPath(this->ui.currentVideo->path);
+    }
+
+    if (currentSourceIdx.isValid() && this->videosModel) {
+        const int authorCol = ListColumns["AUTHOR_COLUMN"];
+        const int pathCol = ListColumns["PATH_COLUMN"];
+
+        const QPersistentModelIndex currentModelIdx(currentSourceIdx);
+        const int currentRow = currentModelIdx.row();
+        current_author = currentModelIdx.sibling(currentRow, authorCol).data(Qt::DisplayRole).toString();
+        QString current_path = currentModelIdx.sibling(currentRow, pathCol).data(Qt::DisplayRole).toString();
+        if (current_author.isEmpty()) current_author = current_path;
+
+        QVector<int> author_source_rows = this->authorUnwatchedSourceRows(current_author);
+        int currentSourceRow = currentSourceIdx.row();
+        int nextSourceRow = this->nextAuthorRow(author_source_rows, currentSourceRow);
+
+        if (nextSourceRow >= 0) {
+            const QPersistentModelIndex rowIdx(this->videosModel->index(nextSourceRow, 0));
+            deterministic_path = rowIdx.sibling(nextSourceRow, pathCol).data(Qt::DisplayRole).toString();
+        }
+    }
+
+    if (!deterministic_path.isEmpty()) {
+        continuedSeries = true;
+        auto choice = this->buildChoiceFromPath(deterministic_path, true);
+        if (choice.has_value()) {
+            choice->probability = 100.0;
+            choices.append(choice.value());
+        }
+        return choices;
+    }
+
+    QList<VideoWeightedData> all_videos = this->App->db->getVideos(this->App->currentDB, json_settings);
+    QString exclude_author = currentSourceIdx.isValid() ? current_author : "";
+    QMap<QString, AuthorVideoModelData> author_map = this->buildAuthorVideoMap(exclude_author, all_videos);
+    QList<VideoWeightedData> author_weighted_data = this->calculateAuthorWeights(author_map);
+
+    if (author_weighted_data.isEmpty()) {
+        return choices;
+    }
+
+    WeightedBiasSettings weighted_settings = this->getWeightedBiasSettings();
+    if (!weighted_settings.weighted_random_enabled) weighted_settings.bias_general = 0;
+    QMap<int, long double> probabilities = utils::calculateProbabilities(author_weighted_data, weighted_settings.bias_views, weighted_settings.bias_rating,
+        weighted_settings.bias_tags, weighted_settings.bias_general,
+        weighted_settings.no_views_weight, weighted_settings.no_rating_weight,
+        weighted_settings.no_tags_weight);
+
+    QRandomGenerator generator;
+    if (seed.isEmpty()) generator.seed(QRandomGenerator::global()->generate());
+    else generator.seed(utils::stringToSeed(this->saltSeed(seed)));
+
+    const int picks = std::max(1, maxCount);
+    QList<VideoWeightedData> remaining = author_weighted_data;
+    for (int i = 0; i < picks && !remaining.isEmpty(); ++i) {
+        QString selected_path = utils::weightedRandomChoice(remaining, generator,
+            weighted_settings.bias_views, weighted_settings.bias_rating, weighted_settings.bias_tags,
+            weighted_settings.bias_general, weighted_settings.no_views_weight, weighted_settings.no_rating_weight,
+            weighted_settings.no_tags_weight);
+
+        if (selected_path.isEmpty()) break;
+
+        auto choice = this->buildChoiceFromPath(selected_path, true);
+        auto it = std::find_if(remaining.begin(), remaining.end(), [&](const VideoWeightedData& video) {
+            return video.path == selected_path;
+        });
+        if (it != remaining.end()) {
+            remaining.erase(it);
+        }
+        if (choice.has_value()) {
+            if (probabilities.contains(choice->id)) {
+                choice->probability = static_cast<double>(probabilities.value(choice->id));
+            }
+            choices.append(choice.value());
+        }
+    }
+
+    return choices;
+}
+
+bool MainWindow::applyNextChoice(const std::optional<NextVideoChoice>& choice) {
+    if (choice.has_value() && !choice->path.isEmpty()) {
+        const NextVideoChoice& data = choice.value();
+        this->setCurrentVideo(data.id, data.path, data.name, data.author, data.tags, data.resetProgress);
+        this->highlightCurrentItem();
+        return true;
+    }
+    this->setCurrentVideo(-1, "", "", "", "");
+    this->highlightCurrentItem();
+    return false;
+}
+
 bool MainWindow::NextVideo(bool random, bool increment, bool update_watched_state, bool skipped) {
     // Legacy function - convert boolean to enum and call new function
     NextVideoModes::Mode mode = random ? NextVideoModes::Random : NextVideoModes::Sequential;
@@ -1406,7 +1645,66 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
         currentId = currentModelIdx.sibling(currentModelIdx.row(), pathCol).data(CustomRoles::id).toInt();
     }
 
+    const bool multichoiceEnabled = this->App->config->get_bool("next_multichoice_enabled");
+    const int requestedChoices = (mode == NextVideoModes::Random || mode == NextVideoModes::SeriesRandom) && multichoiceEnabled
+        ? this->nextChoiceCountFromConfig()
+        : 1;
+
+    NextVideoSettings settings;
+    bool hasSettings = false;
+    QList<NextVideoChoice> candidates;
+    bool continuedSeries = false;
+
+    switch (mode) {
+        case NextVideoModes::Sequential:
+            {
+                auto choice = this->buildSequentialCandidate(currentSrcIdx);
+                if (choice.has_value()) {
+                    candidates.append(choice.value());
+                }
+            }
+            break;
+        case NextVideoModes::Random:
+            settings = this->getNextVideoSettings();
+            hasSettings = true;
+            candidates = this->buildRandomCandidates(settings, requestedChoices);
+            break;
+        case NextVideoModes::SeriesRandom:
+            settings = this->getNextVideoSettings();
+            hasSettings = true;
+            candidates = this->buildSeriesRandomCandidates(currentSrcIdx, settings, requestedChoices, continuedSeries);
+            break;
+    }
+
+    const bool offerChoiceDialog = multichoiceEnabled && candidates.size() > 1 &&
+        (mode == NextVideoModes::Random || (mode == NextVideoModes::SeriesRandom && !continuedSeries));
+
+        std::optional<NextVideoChoice> selectedChoice;
+        if (offerChoiceDialog) {
+            NextChoiceDialog dialog(this);
+            dialog.setStarIcons(this->active, this->halfactive, this->inactive);
+            dialog.setChoices(candidates);
+            if (dialog.exec() == QDialog::Accepted) {
+                selectedChoice = dialog.selectedChoice();
+            }
+            else {
+                return false;
+            }
+        }
+    else if (!candidates.isEmpty()) {
+        selectedChoice = candidates.first();
+    }
+
     this->App->db->db.transaction();
+    if (mode == NextVideoModes::Random && hasSettings) {
+        const bool specialWillBePicked = settings.next_video_is_sv && settings.sv_is_available && this->App->currentDB == "MINUS";
+        if (specialWillBePicked && selectedChoice.has_value()) {
+            this->sv_count = 0;
+            this->ui.counterLabel->setProgress(this->sv_count);
+            this->App->db->setMainInfoValue("sv_count", "ALL", QString::number(this->sv_count));
+        }
+    }
+
     if (currentSrcIdx.isValid() && currentId >= 0) {
         this->App->db->setMainInfoValue("current", this->App->currentDB, "");
         QString watched = (update_watched_state)
@@ -1417,27 +1715,8 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
         else
             this->App->db->updateWatchedState(currentId, watched, false, false);
     }
-    
-    switch (mode) {
-        case NextVideoModes::Sequential:
-            video_changed = this->setNextVideo(currentSrcIdx);
-            break;
-        case NextVideoModes::Random:
-            {
-                NextVideoSettings settings = this->getNextVideoSettings();
-                const bool specialWillBePicked = settings.next_video_is_sv && settings.sv_is_available && this->App->currentDB == "MINUS";
-                if (specialWillBePicked) {
-                    this->sv_count = 0;
-                    this->ui.counterLabel->setProgress(this->sv_count);
-                    this->App->db->setMainInfoValue("sv_count", "ALL", QString::number(this->sv_count));
-                }
-                video_changed = this->randomVideo(settings.random_mode,settings.ignore_filters_and_defaults,settings.vid_type_include,settings.vid_type_exclude);
-            }
-            break;
-        case NextVideoModes::SeriesRandom:
-            video_changed = this->seriesRandomVideo(currentSrcIdx);
-            break;
-    }
+
+    video_changed = this->applyNextChoice(selectedChoice);
     this->App->db->db.commit();
 
     if (currentSrcIdx.isValid() && currentId >= 0) {
@@ -1569,36 +1848,8 @@ int MainWindow::nextSequentialRow(const QPersistentModelIndex& current_source_in
 }
 
 bool MainWindow::setNextVideo(const QPersistentModelIndex& current_source_index) {
-    if (!this->videosModel) return false;
-
-    const int rowCount = this->videosModel->rowCount();
-    if (rowCount == 0) {
-        this->setCurrent(-1, "", "", "", "");
-        this->highlightCurrentItem();
-        return false;
-    }
-
-    const int pathCol = ListColumns["PATH_COLUMN"];
-    const int nameCol = ListColumns["NAME_COLUMN"];
-    const int authorCol = ListColumns["AUTHOR_COLUMN"];
-    const int tagsCol = ListColumns["TAGS_COLUMN"];
-
-    int nextRow = this->nextSequentialRow(current_source_index);
-    if (nextRow >= 0) {
-        const QPersistentModelIndex rowIdx(this->videosModel->index(nextRow, 0));
-        const int id = rowIdx.sibling(nextRow, pathCol).data(CustomRoles::id).toInt();
-        const QString path = rowIdx.sibling(nextRow, pathCol).data(Qt::DisplayRole).toString();
-        const QString name = rowIdx.sibling(nextRow, nameCol).data(Qt::DisplayRole).toString();
-        const QString author = rowIdx.sibling(nextRow, authorCol).data(Qt::DisplayRole).toString();
-        const QString tags = rowIdx.sibling(nextRow, tagsCol).data(Qt::DisplayRole).toString();
-        this->setCurrent(id, path, name, author, tags, true);
-        this->highlightCurrentItem();
-        return true;
-    }
-
-    this->setCurrent(-1, "", "", "", "");
-    this->highlightCurrentItem();
-    return false;
+    auto choice = this->buildSequentialCandidate(current_source_index);
+    return this->applyNextChoice(choice);
 }
 
 
@@ -1623,89 +1874,30 @@ int MainWindow::calculate_sv_target() {
     }
 }
 
+bool MainWindow::setCurrentVideoByPathFromModel(QString path, bool reset_progress){
+    const QPersistentModelIndex src = this->modelIndexByPath(path);
+    if (!src.isValid()) return false;
+    const QPersistentModelIndex modelIdx = src;
+    const int row = modelIdx.row();
+    int id = modelIdx.sibling(row, ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
+    QString name = modelIdx.sibling(row, ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
+    QString author = modelIdx.sibling(row, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
+    QString tags = modelIdx.sibling(row, ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
+    QString p = modelIdx.sibling(row, ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+    this->setCurrentVideo(id, p, name, author, tags, true);
+    return true;
+}
 
 bool MainWindow::seriesRandomVideo(const QPersistentModelIndex& current_source_index) {
+    bool continuedSeries = false;
     NextVideoSettings settings = this->getNextVideoSettings();
-    QJsonObject json_settings = this->getRandomSettings(settings.random_mode, settings.ignore_filters_and_defaults,
-        settings.vid_type_include, settings.vid_type_exclude);
-    QString seed = this->App->config->get_bool("random_use_seed") ? this->App->config->get("random_seed") : "";
-
-    auto setCurrentByPath = [this](const QString& path) -> bool {
-        const QPersistentModelIndex src = this->modelIndexByPath(path);
-        if (!src.isValid()) return false;
-        const QPersistentModelIndex modelIdx = src;
-        const int row = modelIdx.row();
-        int id = modelIdx.sibling(row, ListColumns["PATH_COLUMN"]).data(CustomRoles::id).toInt();
-        QString name = modelIdx.sibling(row, ListColumns["NAME_COLUMN"]).data(Qt::DisplayRole).toString();
-        QString author = modelIdx.sibling(row, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
-        QString tags = modelIdx.sibling(row, ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
-        QString p = modelIdx.sibling(row, ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
-        this->setCurrent(id, p, name, author, tags, true);
-        this->highlightCurrentItem();
-        return true;
-        };
-
-    QString current_author;
-    QString deterministic_path;
-
-    QPersistentModelIndex currentSourceIdx = current_source_index;
-    if (!currentSourceIdx.isValid()) {
-        currentSourceIdx = this->modelIndexByPath(this->ui.currentVideo->path);
-    }
-
-    if (currentSourceIdx.isValid() && this->videosModel) {
-        const int authorCol = ListColumns["AUTHOR_COLUMN"];
-        const int pathCol = ListColumns["PATH_COLUMN"];
-
-        const QPersistentModelIndex currentModelIdx(currentSourceIdx);
-        const int currentRow = currentModelIdx.row();
-        current_author = currentModelIdx.sibling(currentRow, authorCol).data(Qt::DisplayRole).toString();
-        QString current_path = currentModelIdx.sibling(currentRow, pathCol).data(Qt::DisplayRole).toString();
-        if (current_author.isEmpty()) current_author = current_path;
-
-        // Get unwatched rows from source model, sorted by proxy order
-        QVector<int> author_source_rows = this->authorUnwatchedSourceRows(current_author);
-        int currentSourceRow = currentSourceIdx.row();
-        int nextSourceRow = this->nextAuthorRow(author_source_rows, currentSourceRow);
-
-        if (nextSourceRow >= 0) {
-            const QPersistentModelIndex rowIdx(this->videosModel->index(nextSourceRow, 0));
-            deterministic_path = rowIdx.sibling(nextSourceRow, pathCol).data(Qt::DisplayRole).toString();
-        }
-    }
-
-    if (!deterministic_path.isEmpty()) {
-        return setCurrentByPath(deterministic_path);
-    }
-
-    QList<VideoWeightedData> all_videos = this->App->db->getVideos(this->App->currentDB, json_settings);
-    QString exclude_author = currentSourceIdx.isValid() ? current_author : "";
-    QMap<QString, AuthorVideoModelData> author_map = this->buildAuthorVideoMap(exclude_author, all_videos);
-    QList<VideoWeightedData> author_weighted_data = this->calculateAuthorWeights(author_map);
-
-    if (author_weighted_data.isEmpty()) {
-        this->setCurrent(-1, "", "", "", "");
+    QList<NextVideoChoice> choices = this->buildSeriesRandomCandidates(current_source_index, settings, 1, continuedSeries);
+    if (choices.isEmpty()) {
+        this->setCurrentVideo(-1, "", "", "", "");
         this->highlightCurrentItem();
         return false;
     }
-
-    QRandomGenerator generator;
-    if (seed.isEmpty()) generator.seed(QRandomGenerator::global()->generate());
-    else generator.seed(utils::stringToSeed(this->saltSeed(seed)));
-
-    WeightedBiasSettings weighted_settings = this->getWeightedBiasSettings();
-    if (!weighted_settings.weighted_random_enabled) weighted_settings.bias_general = 0;
-
-    QString selected_path = utils::weightedRandomChoice(author_weighted_data, generator,
-        weighted_settings.bias_views, weighted_settings.bias_rating, weighted_settings.bias_tags,
-        weighted_settings.bias_general, weighted_settings.no_views_weight, weighted_settings.no_rating_weight,
-        weighted_settings.no_tags_weight);
-
-    if (!selected_path.isEmpty()) return setCurrentByPath(selected_path);
-
-    this->setCurrent(-1, "", "", "", "");
-    this->highlightCurrentItem();
-    return false;
+    return this->applyNextChoice(choices.first());
 }
 
 void MainWindow::insertDialogButton() {
@@ -2075,6 +2267,8 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     else if (dialog->ui.autoContinue->checkState() == Qt::CheckState::Unchecked)
         config->set("auto_continue", "False");
     config->set("auto_continue_delay", QString::number(dialog->ui.autoContinueDelay->value()));
+    config->set("next_multichoice_enabled", dialog->ui.nextMultiChoiceEnabled->isChecked() ? "True" : "False");
+    config->set("next_multichoice_count", QString::number(dialog->ui.nextMultiChoiceCount->value()));
     config->set("search_timer_interval", QString::number(dialog->ui.searchTimerInterval->value()));
     config->set("notification_duration_ms", QString::number(dialog->ui.notificationDurationSpinBox->value()));
     if (this->search_timer->isActive()) {
@@ -2353,7 +2547,7 @@ void MainWindow::settingsDialogButton()
     }
 }
 
-QString MainWindow::saltSeed(QString seed) {
+QString MainWindow::saltSeed(QString seed) const {
     seed = seed % this->ui.currentVideo->path % this->ui.totalListLabel->text() % this->ui.counterLabel->text();
     // add current row's views/rating if available
     QPersistentModelIndex srcIdx = this->modelIndexByPath(this->ui.currentVideo->path);
@@ -2366,7 +2560,7 @@ QString MainWindow::saltSeed(QString seed) {
     return seed;
 }
 
-WeightedBiasSettings MainWindow::getWeightedBiasSettings() {
+WeightedBiasSettings MainWindow::getWeightedBiasSettings() const {
     WeightedBiasSettings settings;
     if (this->App->currentDB == "PLUS") {
         settings.weighted_random_enabled = this->App->config->get_bool("weighted_random_plus");
@@ -2391,7 +2585,7 @@ WeightedBiasSettings MainWindow::getWeightedBiasSettings() {
     return settings;
 }
 
-QString MainWindow::getRandomVideo(QString seed, WeightedBiasSettings weighted_settings, QJsonObject settings) {
+QString MainWindow::getRandomVideoPath(QString seed, WeightedBiasSettings weighted_settings, QJsonObject settings) {
     QList<VideoWeightedData> videos = this->App->db->getVideos(this->App->currentDB, settings);
     if (!videos.isEmpty()) {
         QRandomGenerator generator;
@@ -2409,7 +2603,7 @@ QString MainWindow::getRandomVideo(QString seed, WeightedBiasSettings weighted_s
     return "";
 }
 
-QJsonObject MainWindow::getRandomSettings(RandomModes::Mode random_mode, bool ignore_filters_and_defaults, QStringList vid_type_include, QStringList vid_type_exclude) {
+QJsonObject MainWindow::getRandomSettings(RandomModes::Mode random_mode, bool ignore_filters_and_defaults, QStringList vid_type_include, QStringList vid_type_exclude) const {
     QJsonObject settings = FilterSettings().json; //default settings
     if (ignore_filters_and_defaults) {
         settings.insert("ignore_defaults", "True");
@@ -2448,11 +2642,11 @@ bool MainWindow::randomVideo(RandomModes::Mode random_mode, bool ignore_filters_
     QString seed = this->App->config->get_bool("random_use_seed") ? this->App->config->get("random_seed") : "";
 
     // Get random video path
-    QString item_path = this->getRandomVideo(seed, this->getWeightedBiasSettings(), settings);
+    QString item_path = this->getRandomVideoPath(seed, this->getWeightedBiasSettings(), settings);
 
     // Early exit if no video selected
     if (item_path.isEmpty()) {
-        this->setCurrent(-1, "", "", "", "");
+        this->setCurrentVideo(-1, "", "", "", "");
         this->highlightCurrentItem();
         return false;
     }
@@ -2460,7 +2654,7 @@ bool MainWindow::randomVideo(RandomModes::Mode random_mode, bool ignore_filters_
     // Set current video by path via model
     QPersistentModelIndex src = this->modelIndexByPath(item_path);
     if (!src.isValid()) {
-        this->setCurrent(-1, "", "", "", "");
+        this->setCurrentVideo(-1, "", "", "", "");
         this->highlightCurrentItem();
         return false;
     }
@@ -2471,7 +2665,7 @@ bool MainWindow::randomVideo(RandomModes::Mode random_mode, bool ignore_filters_
     QString author = srcModelIdx.sibling(row, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
     QString tags = srcModelIdx.sibling(row, ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
     QString path = srcModelIdx.sibling(row, ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
-    this->setCurrent(id, path, name, author, tags, reset_progress);
+    this->setCurrentVideo(id, path, name, author, tags, reset_progress);
     this->highlightCurrentItem();
     return true;
 }
@@ -2791,6 +2985,7 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
             QString first = files_inserted.first();
             this->ui.videosWidget->findAndScrollToDelayed(first, false);
             this->selectItemsDelayed(files_inserted);
+
             if (set_first_current) {
                 QPersistentModelIndex src = this->modelIndexByPath(first);
                 if (src.isValid()) {
@@ -2801,7 +2996,7 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
                     QString author = modelIdx.sibling(row, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
                     QString tags = modelIdx.sibling(row, ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
                     QString path = modelIdx.sibling(row, ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
-                    this->setCurrent(id, path, name, author, tags);
+                    this->setCurrentVideo(id, path, name, author, tags);
                     this->highlightCurrentItem(QPersistentModelIndex(), false);
                 }
             }
@@ -3174,7 +3369,7 @@ void MainWindow::updateSortConfig() {
 
 void MainWindow::populateList(bool selectcurrent) {
     Q_UNUSED(selectcurrent);
-    QVector<VideoRow> rows = this->App->db->getVideosData(this->App->currentDB);
+    QVector<VideoData> rows = this->App->db->getVideosData(this->App->currentDB);
     this->videosModel->setRows(std::move(rows));
 
     QString settings_str = (this->App->currentDB == "PLUS") ? this->App->config->get("headers_plus_visible") : this->App->config->get("headers_minus_visible");
@@ -3448,7 +3643,7 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
         const QString name = nameIdx.data(Qt::DisplayRole).toString();
         const QString author = authorIdx.data(Qt::DisplayRole).toString();
         const QString tags = tagsIdx.data(Qt::DisplayRole).toString();
-        this->setCurrent(id, path, name, author, tags);
+        this->setCurrentVideo(id, path, name, author, tags);
         this->highlightCurrentItem();
         if (this->App->VW->mainPlayer) {
             this->changePlayerVideo(this->App->VW->mainPlayer, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
@@ -3672,7 +3867,7 @@ void MainWindow::selectItemsDelayed(QStringList items, bool clear_selection) {
     });
 }
 
-void MainWindow::setCurrent(int id, QString path, QString name, QString author, QString tags, bool reset_progress) {
+void MainWindow::setCurrentVideo(int id, QString path, QString name, QString author, QString tags, bool reset_progress) {
     this->ui.currentVideo->setValues(id, path, name, author, tags);
     if (this->videosModel) this->videosModel->setHighlightedPath(path);
     if (reset_progress)

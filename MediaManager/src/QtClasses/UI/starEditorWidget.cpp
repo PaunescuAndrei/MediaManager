@@ -6,7 +6,8 @@
 starEditorWidget::starEditorWidget(QWidget *parent, QPersistentModelIndex item_index) : QWidget(parent)
 {
     setMouseTracking(true);
-    setAutoFillBackground(true);
+    setAutoFillBackground(false);
+    setAttribute(Qt::WA_TranslucentBackground, true);
     this->item_index = item_index;
 }
 
@@ -37,6 +38,7 @@ int starEditorWidget::starPixelSize() const
 void starEditorWidget::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing, true);
     myStarRating.paint(&painter, rect(), palette(), (this->editing_finished == true) ? QStyle::StateFlag::State_None : QStyle::StateFlag::State_Selected, StarRating::EditMode::Editable);
 }
 

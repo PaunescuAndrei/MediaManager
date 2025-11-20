@@ -4,7 +4,8 @@
 #include "stylesQt.h"
 
 VideosModel::VideosModel(QObject* parent)
-    : QAbstractTableModel(parent) {}
+    : QAbstractTableModel(parent) {
+}
 
 int VideosModel::rowCount(const QModelIndex& parent) const {
     if (parent.isValid()) return 0;
@@ -18,7 +19,7 @@ int VideosModel::columnCount(const QModelIndex& parent) const {
 
 QVariant VideosModel::data(const QModelIndex& index, int role) const {
     if (!index.isValid()) return QVariant();
-    const VideoRow& r = rows[index.row()];
+    const VideoData& r = rows[index.row()];
     const int c = index.column();
 
     if (role == Qt::DisplayRole) {
@@ -69,7 +70,7 @@ QVariant VideosModel::data(const QModelIndex& index, int role) const {
 
 bool VideosModel::setData(const QModelIndex& index, const QVariant& value, int role) {
     if (!index.isValid()) return false;
-    VideoRow& r = rows[index.row()];
+    VideoData& r = rows[index.row()];
     const int c = index.column();
     bool changed = false;
     if (role == CustomRoles::rating && c == ListColumns["RATING_COLUMN"]) {
@@ -80,10 +81,12 @@ bool VideosModel::setData(const QModelIndex& index, const QVariant& value, int r
         if (c == ListColumns["WATCHED_COLUMN"]) {
             const QString nv = value.toString();
             if (r.watched != nv) { r.watched = nv; changed = true; }
-        } else if (c == ListColumns["VIEWS_COLUMN"]) {
+        }
+        else if (c == ListColumns["VIEWS_COLUMN"]) {
             const QString nv = value.toString();
             if (r.views != nv) { r.views = nv; changed = true; }
-        } else if (c == ListColumns["LAST_WATCHED_COLUMN"]) {
+        }
+        else if (c == ListColumns["LAST_WATCHED_COLUMN"]) {
             QDateTime nv = value.toDateTime();
             if (r.lastWatched != nv) { r.lastWatched = nv; changed = true; }
         }
@@ -141,7 +144,7 @@ void VideosModel::clear() {
     endResetModel();
 }
 
-void VideosModel::setRows(const QVector<VideoRow>& data) {
+void VideosModel::setRows(const QVector<VideoData>& data) {
     beginResetModel();
     rows = data;
     idToRow.clear();
@@ -153,7 +156,7 @@ void VideosModel::setRows(const QVector<VideoRow>& data) {
     endResetModel();
 }
 
-void VideosModel::setRows(QVector<VideoRow>&& data) {
+void VideosModel::setRows(QVector<VideoData>&& data) {
     beginResetModel();
     rows = std::move(data);
     idToRow.clear();

@@ -28,6 +28,7 @@ private:
     QIcon* activeIcon = nullptr;
     QIcon* halfIcon = nullptr;
     QIcon* inactiveIcon = nullptr;
+    QTimer bringToFrontTimer;
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
 };

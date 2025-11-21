@@ -17,6 +17,8 @@
 #include <QWheelEvent>
 #include <QScrollBar>
 #include "starEditorWidget.h"
+#include "utils.h"
+#include "MainApp.h"
 
 namespace {
 class HorizontalScrollArea : public QScrollArea {
@@ -45,9 +47,23 @@ NextChoiceDialog::NextChoiceDialog(QWidget* parent) : QDialog(parent)
 {
     this->ui.setupUi(this);
     this->setWindowModality(Qt::WindowModal);
+    this->setWindowFlag(Qt::WindowStaysOnTopHint, true);
     if (auto buttonBox = this->findChild<QDialogButtonBox*>()) {
         connect(buttonBox, &QDialogButtonBox::rejected, this, &NextChoiceDialog::reject);
     }
+    this->bringToFrontTimer.setInterval(250);
+    connect(&this->bringToFrontTimer, &QTimer::timeout, this, [this] {
+        if (QGuiApplication::queryKeyboardModifiers() & Qt::AltModifier)
+            return;
+        utils::bring_hwnd_to_foreground_uiautomation_method((HWND)this->winId(), qMainApp->uiAutomation);
+        this->raise();
+        this->show();
+        this->activateWindow();
+        });
+    this->bringToFrontTimer.start();
+    connect(this, &QDialog::finished, this, [this](int) {
+        this->bringToFrontTimer.stop();
+        });
 }
 
 void NextChoiceDialog::setChoices(const QList<NextVideoChoice>& newChoices)

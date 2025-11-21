@@ -1372,15 +1372,20 @@ void MainWindow::resize_center(int w, int h)
     }
 }
 
-void MainWindow::NextButtonClicked(bool increment, bool update_watched_state, bool skipped) {
-    this->NextButtonClicked(this->App->VW->mainPlayer, increment, update_watched_state, skipped);
+bool MainWindow::NextButtonClicked(bool increment, bool update_watched_state, bool skipped) {
+    return this->NextButtonClicked(this->App->VW->mainPlayer, increment, update_watched_state, skipped);
 }
 
-void MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state, bool skipped) {
+bool MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state, bool skipped) {
     NextVideoModes::Mode mode = this->getNextVideoMode();
     bool video_changed = this->NextVideo(mode, increment, update_watched_state, skipped);
     if (player) {
-        this->changePlayerVideo(player, this->ui.currentVideo->path, this->ui.currentVideo->id, 0);
+        if (video_changed) {
+            this->changePlayerVideo(player, this->ui.currentVideo->path, this->ui.currentVideo->id, 0);
+        }
+        else {
+            player->change_in_progress = false;
+        }
     }
     if (video_changed) {
         if (this->animatedIconFlag)
@@ -1389,6 +1394,7 @@ void MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool incre
             this->updateMascots();
     }
     this->updateVideoListRandomProbabilitiesIfVisible();
+    return video_changed;
 }
 
 NextVideoSettings MainWindow::getNextVideoSettings() {
@@ -2807,12 +2813,22 @@ void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notifi
 }
 
 void MainWindow::SkipVideo() {
+    const double previousUiPosition = this->position;
+    double previousPlayerPosition = -1;
     if (this->App->VW->mainPlayer) {
+        previousPlayerPosition = this->App->VW->mainPlayer->position;
         this->App->VW->mainPlayer->change_in_progress = true;
         this->App->VW->mainPlayer->position = -1;
     }
-    this->NextButtonClicked(this->App->VW->mainPlayer, false, this->getCheckedUpdateWatchedToggleButton(), true);
-    this->position = 0;
+    const bool video_changed = this->NextButtonClicked(this->App->VW->mainPlayer, false, this->getCheckedUpdateWatchedToggleButton(), true);
+    if (video_changed) {
+        this->position = 0;
+    } else {
+        this->position = previousUiPosition;
+        if (this->App->VW->mainPlayer) {
+            this->App->VW->mainPlayer->position = previousPlayerPosition;
+        }
+    }
 }
 
 void MainWindow::updateProgressBar(QString position, QString duration) {

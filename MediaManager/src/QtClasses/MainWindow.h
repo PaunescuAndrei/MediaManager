@@ -201,8 +201,8 @@ public:
     QString saltSeed(QString seed) const;
     WeightedBiasSettings getWeightedBiasSettings() const;
     void quit();
-    void NextButtonClicked(bool increment, bool update_watched_state, bool skipped = false);
-    void NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state, bool skipped = false);
+    bool NextButtonClicked(bool increment, bool update_watched_state, bool skipped = false);
+    bool NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state, bool skipped = false);
     NextVideoSettings getNextVideoSettings();
     NextVideoModes::Mode getNextVideoMode();
     bool NextVideo(NextVideoModes::Mode mode, bool increment, bool update_watched_state, bool skipped);

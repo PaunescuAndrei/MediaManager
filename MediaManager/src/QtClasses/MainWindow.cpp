@@ -4017,14 +4017,6 @@ void MainWindow::updateVideoListRandomProbabilities() {
     int deterministic_id = -1;
     long double deterministic_value = 0.0L;
 
-    bool sortingEnabled = this->ui.videosWidget->isSortingEnabled();
-    int sortSection = this->ui.videosWidget->header()->sortIndicatorSection();
-    Qt::SortOrder sortOrder = this->ui.videosWidget->header()->sortIndicatorOrder();
-
-    if (sortingEnabled) {
-        this->ui.videosWidget->setSortingEnabled(false);
-    }
-
     switch (current_mode) {
             case NextVideoModes::Sequential:
                 if (this->videosModel) {
@@ -4102,24 +4094,13 @@ void MainWindow::updateVideoListRandomProbabilities() {
             break;
     }
 
-    if (!this->videosModel) {
-        if (sortingEnabled) {
-            this->ui.videosWidget->setSortingEnabled(true);
-            this->ui.videosWidget->sortByColumn(sortSection, sortOrder);
-        }
-        return;
-    }
+    if (!this->videosModel) return;
 
     if (deterministic_id >= 0) {
         probabilities[deterministic_id] = deterministic_value;
     }
 
     this->videosModel->setRandomPercentColumn(probabilities);
-
-    if (sortingEnabled) {
-        this->ui.videosWidget->setSortingEnabled(true);
-        this->ui.videosWidget->sortByColumn(sortSection, sortOrder);
-    }
 }
 
 void MainWindow::updateVideoListRandomProbabilitiesIfVisible() {

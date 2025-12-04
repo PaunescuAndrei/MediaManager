@@ -234,14 +234,18 @@ void VideoPreviewWidget::startPreview()
     }
 }
 
-void VideoPreviewWidget::stopPreview()
+void VideoPreviewWidget::stopPreview(bool forceStop)
 {
     this->startTimer.stop();
     if (this->player) {
-        if (!this->randomEachHover) {
+        if (forceStop) {
+            this->player->stop();
+        } else if (!this->randomEachHover) {
             this->lastPosition = this->player->position();
+            this->player->pause();
+        } else {
+            this->player->pause();
         }
-        this->player->pause();
         emit this->previewStopped(this->sourcePath);
     }
 }

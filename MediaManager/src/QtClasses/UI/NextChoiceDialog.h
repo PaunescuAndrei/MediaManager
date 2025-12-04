@@ -12,7 +12,7 @@ class NextChoiceDialog : public QDialog
     Q_OBJECT
 public:
     explicit NextChoiceDialog(QWidget* parent = nullptr);
-    ~NextChoiceDialog() = default;
+    ~NextChoiceDialog();
     void setChoices(const QList<NextVideoChoice>& newChoices);
     NextVideoChoice selectedChoice() const;
     void setTitle(const QString& text);
@@ -40,4 +40,5 @@ private:
     bool previewEnabled = true;
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
+    void closeEvent(QCloseEvent* e) override;
 };

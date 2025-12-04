@@ -27,7 +27,7 @@ private slots:
     void onMediaStatusChanged(QMediaPlayer::MediaStatus status);
 public slots:
     void startPreview();
-    void stopPreview();
+    void stopPreview(bool forceStop = false);
 signals:
     void previewStarted(const QString& path);
     void previewStopped(const QString& path);

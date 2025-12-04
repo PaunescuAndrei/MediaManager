@@ -126,6 +126,11 @@ NextChoiceDialog::NextChoiceDialog(QWidget* parent) : QDialog(parent)
         });
 }
 
+NextChoiceDialog::~NextChoiceDialog()
+{
+    this->stopAllPreviews();
+}
+
 void NextChoiceDialog::setChoices(const QList<NextVideoChoice>& newChoices)
 {
     this->choices = newChoices;
@@ -357,14 +362,11 @@ void NextChoiceDialog::stopAllPreviews()
 {
     for (auto* preview : this->previewWidgets) {
         if (preview) {
-            if (this->previewAutoplayAllMute) {
-                preview->setMuted(true);
-            } else {
-                preview->stopPreview();
-            }
+            preview->stopPreview(true);
         }
     }
 }
+
 
 void NextChoiceDialog::applySelection(int index)
 {
@@ -421,7 +423,6 @@ bool NextChoiceDialog::eventFilter(QObject* obj, QEvent* event)
     case QEvent::MouseButtonRelease: {
         int idx = findChoiceIndex();
         if (idx >= 0 && idx < this->choices.size()) {
-            this->stopAllPreviews();
             this->applySelection(idx);
             this->accept();
             return true;
@@ -448,4 +449,11 @@ bool NextChoiceDialog::eventFilter(QObject* obj, QEvent* event)
         break;
     }
     return QDialog::eventFilter(obj, event);
+}
+
+
+void NextChoiceDialog::closeEvent(QCloseEvent* e)
+{
+    this->stopAllPreviews();
+    QDialog::closeEvent(e);
 }

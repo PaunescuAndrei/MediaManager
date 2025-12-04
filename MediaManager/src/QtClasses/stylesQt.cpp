@@ -34,13 +34,13 @@ QPalette get_palette(std::string palette) {
 QString get_stylesheet(QString stylesheet) {
     QString ss = QString();
     if (stylesheet == "spinbox") {
-        ss = QString("QSpinBox { selection-background-color: transparent; selection-color: palette(Text);}");
+        ss = QStringLiteral("QSpinBox { selection-background-color: transparent; selection-color: palette(Text);}");
     }
     if (stylesheet == "doublespinbox") {
-        ss = QString("QDoubleSpinBox { selection-background-color: transparent; selection-color: palette(Text);}");
+        ss = QStringLiteral("QDoubleSpinBox { selection-background-color: transparent; selection-color: palette(Text);}");
     }
     if (stylesheet == "videoswidget") {
-        ss = QString("QToolTip { color: palette(Text); background-color: palette(Base); border: 0px;}");
+        ss = QStringLiteral("QToolTip { color: palette(Text); background-color: palette(Base); border: 0px;}");
     }
     return ss;
 }

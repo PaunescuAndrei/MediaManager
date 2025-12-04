@@ -204,6 +204,68 @@ void UpdatePathsDialog::addItems(QList<QTreeWidgetItem*> items)
     autoMatchItems();
 }
 
+void UpdatePathsDialog::addItems(const QList<QPair<int, QString>>& id_path_pairs)
+{
+    ui.tableWidget->setRowCount(id_path_pairs.size());
+    int row = 0;
+    for (auto pair : id_path_pairs) {
+        int vid = pair.first;
+        QString currentPath = QDir::toNativeSeparators(pair.second);
+        QString name = InsertSettingsDialog::get_name(currentPath);
+        QFileInfo fileInfo(currentPath);
+        QDir main_path = QDir(InsertSettingsDialog::get_maindir_path(currentPath));
+
+        QTableWidgetItem* currentItem = new QTableWidgetItem(currentPath);
+        currentItem->setData(Qt::UserRole, vid);
+        currentItem->setData(Qt::DisplayRole, currentPath);
+        currentItem->setToolTip(currentPath);
+        ui.tableWidget->setItem(row, 0, currentItem);
+
+        QWidget* pathWidget = new QWidget();
+        QHBoxLayout* layout = new QHBoxLayout(pathWidget);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(2);
+
+        QComboBox* pathCombo = new QComboBox();
+        pathCombo->setFocusPolicy(Qt::StrongFocus);
+        pathCombo->installEventFilter(this->filter);
+        pathCombo->setEditable(true);
+
+        QPushButton* browseBtn = new QPushButton("...");
+        browseBtn->setMaximumWidth(30);
+
+        layout->addWidget(pathCombo);
+        layout->addWidget(browseBtn);
+
+        QTableWidgetItem* similarityItem = new QTableWidgetItem();
+        similarityItem->setTextAlignment(Qt::AlignCenter);
+        ui.tableWidget->setItem(row, 2, similarityItem);
+
+        connect(pathCombo, &QComboBox::editTextChanged, this, [this, row](const QString&) {
+            updateSimilarityText(row);
+        });
+        connect(pathCombo, &QComboBox::currentTextChanged, this, [this, row](const QString&) {
+            updateSimilarityText(row);
+        });
+
+        QString browsePath = main_path.exists() ? main_path.absolutePath() : fileInfo.absolutePath();
+        connect(browseBtn, &QPushButton::clicked, this, [pathCombo, browsePath]() {
+            QString newPath = QFileDialog::getOpenFileName(nullptr, "Select new path", browsePath);
+            if (!newPath.isEmpty()) {
+                pathCombo->setCurrentText(QDir::toNativeSeparators(newPath));
+            }
+        });
+
+        if (main_path.exists()) {
+            populateComboBox(pathCombo, currentPath, name, main_path, false);
+        }
+
+        ui.tableWidget->setCellWidget(row, 1, pathWidget);
+        row++;
+    }
+    autoMatchItems();
+}
+
 void UpdatePathsDialog::acceptDialog()
 {
     for (int row = 0; row < ui.tableWidget->rowCount(); ++row) {

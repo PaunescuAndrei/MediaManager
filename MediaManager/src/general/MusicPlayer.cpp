@@ -66,7 +66,7 @@ void MusicPlayer::init(QString initTrack, QString trackPlaylistFolder, bool loop
 
 void MusicPlayer::playSpecificSong(QString path) {
 	//qDebug() << QString::fromStdString(path) << QFile(QString::fromStdString(path)).exists();
-	qMainApp->logger->log(QString("Playing Music \"%1\"").arg(path),"MusicPlayer", path);
+	qMainApp->logger->log(QStringLiteral("Playing Music \"%1\"").arg(path),"MusicPlayer", path);
 	this->player->setSource(QUrl::fromLocalFile(path));
 	this->player->play();
 }

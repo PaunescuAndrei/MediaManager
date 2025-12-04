@@ -24,7 +24,7 @@ TagsDialog::TagsDialog(QSqlDatabase& db, QWidget* parent) : QDialog(parent) {
 }
 
 void TagsDialog::contextMenu(const QPoint &point) {
-    QModelIndex index = this->ui.tableView->indexAt(point);
+    const QPersistentModelIndex index(this->ui.tableView->indexAt(point));
     if (!index.isValid())
         return;
 

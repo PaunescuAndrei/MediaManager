@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>168</width>
+    <width>188</width>
     <height>98</height>
    </rect>
   </property>
@@ -100,7 +100,7 @@
              <widget class="QLabel" name="author">
               <property name="font">
                <font>
-                <pointsize>12</pointsize>
+                <pointsize>13</pointsize>
                 <bold>true</bold>
                </font>
               </property>
@@ -113,7 +113,7 @@
              <widget class="QLabel" name="name">
               <property name="font">
                <font>
-                <pointsize>12</pointsize>
+                <pointsize>13</pointsize>
                 <bold>true</bold>
                </font>
               </property>
@@ -124,16 +124,29 @@
             </item>
             <item>
              <widget class="QLabel" name="tags">
+              <property name="font">
+               <font>
+                <pointsize>12</pointsize>
+               </font>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">QLabel {
+color: #AAAAAA;
+}</string>
+              </property>
               <property name="text">
                <string/>
+              </property>
+              <property name="wordWrap">
+               <bool>true</bool>
               </property>
              </widget>
             </item>
             <item>
-             <widget class="QWidget" name="widget" native="true">
-              <layout class="QHBoxLayout" name="horizontalLayout">
+             <widget class="QWidget" name="statsWidget" native="true">
+              <layout class="QHBoxLayout" name="statsLayout" stretch="0,0,2,0,1">
                <property name="spacing">
-                <number>0</number>
+                <number>12</number>
                </property>
                <property name="leftMargin">
                 <number>0</number>
@@ -147,33 +160,177 @@
                <property name="bottomMargin">
                 <number>0</number>
                </property>
-               <item>
-                <widget class="starEditorWidget" name="rating" native="true"/>
-               </item>
-               <item>
-                <widget class="QLabel" name="starsLabel">
-                 <property name="text">
-                  <string/>
-                 </property>
+               <item alignment="Qt::AlignmentFlag::AlignVCenter">
+                <widget class="QWidget" name="lastWatchedContainer" native="true">
+                 <layout class="QHBoxLayout" name="lastWatchedLayout">
+                  <property name="spacing">
+                   <number>4</number>
+                  </property>
+                  <property name="leftMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>0</number>
+                  </property>
+                  <item>
+                   <widget class="QLabel" name="lastWatchedLabel">
+                    <property name="font">
+                     <font>
+                      <pointsize>11</pointsize>
+                     </font>
+                    </property>
+                    <property name="text">
+                     <string>Last W:</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QLabel" name="lastWatchedValueLabel">
+                    <property name="font">
+                     <font>
+                      <pointsize>11</pointsize>
+                      <bold>true</bold>
+                     </font>
+                    </property>
+                    <property name="text">
+                     <string>Never</string>
+                    </property>
+                    <property name="wordWrap">
+                     <bool>false</bool>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <spacer name="horizontalSpacer">
+                    <property name="orientation">
+                     <enum>Qt::Orientation::Horizontal</enum>
+                    </property>
+                    <property name="sizeHint" stdset="0">
+                     <size>
+                      <width>0</width>
+                      <height>0</height>
+                     </size>
+                    </property>
+                   </spacer>
+                  </item>
+                 </layout>
                 </widget>
                </item>
                <item>
-                <spacer name="horizontalSpacer">
+                <spacer name="statsSpacerLeft">
                  <property name="orientation">
                   <enum>Qt::Orientation::Horizontal</enum>
                  </property>
                  <property name="sizeHint" stdset="0">
                   <size>
-                   <width>0</width>
+                   <width>8</width>
                    <height>0</height>
                   </size>
                  </property>
                 </spacer>
                </item>
+               <item alignment="Qt::AlignmentFlag::AlignVCenter">
+                <widget class="QWidget" name="ratingContainer" native="true">
+                 <layout class="QHBoxLayout" name="ratingLayout">
+                  <property name="spacing">
+                   <number>4</number>
+                  </property>
+                  <property name="leftMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>0</number>
+                  </property>
+                  <item>
+                   <spacer name="ratingLeftSpacer">
+                    <property name="orientation">
+                     <enum>Qt::Orientation::Horizontal</enum>
+                    </property>
+                    <property name="sizeHint" stdset="0">
+                     <size>
+                      <width>10</width>
+                      <height>0</height>
+                     </size>
+                    </property>
+                   </spacer>
+                  </item>
+                  <item>
+                   <widget class="starEditorWidget" name="rating" native="true">
+                    <property name="sizePolicy">
+                     <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
+                      <horstretch>0</horstretch>
+                      <verstretch>0</verstretch>
+                     </sizepolicy>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QLabel" name="starsLabel">
+                    <property name="font">
+                     <font>
+                      <pointsize>11</pointsize>
+                      <bold>true</bold>
+                     </font>
+                    </property>
+                    <property name="text">
+                     <string/>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <spacer name="ratingRightSpacer">
+                    <property name="orientation">
+                     <enum>Qt::Orientation::Horizontal</enum>
+                    </property>
+                    <property name="sizeHint" stdset="0">
+                     <size>
+                      <width>10</width>
+                      <height>0</height>
+                     </size>
+                    </property>
+                   </spacer>
+                  </item>
+                 </layout>
+                </widget>
+               </item>
                <item>
+                <spacer name="statsSpacerRight">
+                 <property name="orientation">
+                  <enum>Qt::Orientation::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>8</width>
+                   <height>0</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+               <item alignment="Qt::AlignmentFlag::AlignVCenter">
                 <widget class="QLabel" name="viewsLabel">
+                 <property name="font">
+                  <font>
+                   <pointsize>11</pointsize>
+                   <bold>true</bold>
+                  </font>
+                 </property>
                  <property name="text">
                   <string/>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignmentFlag::AlignRight</set>
                  </property>
                 </widget>
                </item>

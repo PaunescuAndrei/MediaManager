@@ -93,7 +93,9 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 
 	QTimer::singleShot(0, [this] {this->initTaskbar(); });
 
-	connect(this->VW, &VideoWatcherQt::updateProgressBarSignal, this, [this](double position,double duration, QSharedPointer<BasePlayer> player,bool running) {this->mainWindow->updateProgressBar(position, duration, player,running); });
+	connect(this->VW, &VideoWatcherQt::updateProgressBarSignal, this, [this](double position,double duration, QSharedPointer<BasePlayer> player,bool running) {
+		this->mainWindow->updateProgressBar(position, duration, player,running); 
+	});
 	connect(this->VW, &VideoWatcherQt::updateTaskbarIconSignal, this, [this](bool watching) {
 		this->mainWindow->setIconWatchingState(watching);
 		this->mainWindow->updateIconByWatchingState();
@@ -179,9 +181,9 @@ void MainApp::startSingleInstanceServer(QString appid) {
 		}
 	});
 	if(this->instanceServer->listen(appid)){
-		this->logger->log(QString("Single instance server started with id: %1").arg(appid), "INFO");
+		this->logger->log(QStringLiteral("Single instance server started with id: %1").arg(appid), "INFO");
 	} else {
-		this->logger->log(QString("Single instance server failed to start with id: %1").arg(appid), "ERROR");
+		this->logger->log(QStringLiteral("Single instance server failed to start with id: %1").arg(appid), "ERROR");
 	}
 }
 
@@ -274,4 +276,3 @@ MainApp::~MainApp()
 	this->logger->deleteLater();
 	this->ErrorDialog->deleteLater();
 }
-

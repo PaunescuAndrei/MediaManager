@@ -11,7 +11,7 @@
 void manageSegFailure(int signalCode)
 {
     QString dump_name_win = QFileInfo(QCoreApplication::applicationFilePath()).fileName() + "." + QString::number(QCoreApplication::applicationPid()) + ".dmp";
-    int userResult = QMessageBox::critical(nullptr, "Error", QString("Unexpected error has occurred!\nCrash dump: %1").arg(dump_name_win), QMessageBox::Ok);
+    int userResult = QMessageBox::critical(nullptr, "Error", QStringLiteral("Unexpected error has occurred!\nCrash dump: %1").arg(dump_name_win), QMessageBox::Ok);
 
     if (userResult == QMessageBox::Ok) {
         utils::openFileExplorer(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/CrashDumps");
@@ -34,7 +34,7 @@ int main(int argc, char *argv[])
     signal(SIGSEGV, manageSegFailure);
     int exitCode = App.exec();
     if (qMainApp && qMainApp->logger) {
-        qMainApp->logger->log(QString("Application Exited with code: %1").arg(exitCode), "INFO");
+        qMainApp->logger->log(QStringLiteral("Application Exited with code: %1").arg(exitCode), "INFO");
     }
     return exitCode;
     //try

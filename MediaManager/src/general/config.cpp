@@ -46,9 +46,13 @@ void Config::init_defaults() {
 		{"minus_random_next", "0"}, // Sequential by default
 		{"plus_get_random_mode", "2"},
 		{"minus_get_random_mode", "2"},
+		{"next_multichoice_enabled", "False"},
+		{"next_multichoice_count", "3"},
 		{"current_db", "MINUS"},
 		{"video_types",	""},
 		{"sv_types",""},
+		{"skip_progress_enabled", "False"},
+		{"sv_mode", "MINUS"},
 		{"animated_icon_flag", "False"},
 		{"animated_icon_fps_modifier", "1.0"},
 		{"random_icon", "False"},
@@ -106,6 +110,15 @@ void Config::init_defaults() {
 		{"auto_continue", "False"},
 		{"auto_continue_delay", "5"},
 		{"search_timer_interval", "100"},
+		{"notification_duration_ms", "10000"},
+		{"preview_volume", "15"},
+		{"preview_random_start", "True"},
+		{"preview_autoplay_all_mute", "False"},
+		{"preview_remember_position", "True"},
+		{"preview_random_each_hover", "False"},
+		{"preview_seeded_random", "True"},
+		{"preview_seek_seconds", "10"},
+		{"preview_next_choices_enabled", "True"},
 	});
 }
 

@@ -41,8 +41,8 @@ void StatsDialog::setupVideoStats(MainApp* app) {
     int totalWatched = plusWatched + minusWatched;
     
     addStatToGrid(layout, row++, "Total Videos Watched:", QString::number(totalWatched));
-    addStatToGrid(layout, row++, QString("%1 Videos Watched:").arg(app->config->get("plus_category_name")), QString::number(plusWatched));
-    addStatToGrid(layout, row++, QString("%1 Videos Watched:").arg(app->config->get("minus_category_name")), QString::number(minusWatched));
+    addStatToGrid(layout, row++, QStringLiteral("%1 Videos Watched:").arg(app->config->get("plus_category_name")), QString::number(plusWatched));
+    addStatToGrid(layout, row++, QStringLiteral("%1 Videos Watched:").arg(app->config->get("minus_category_name")), QString::number(minusWatched));
     
     // Videos watched today by category
     int plusWatchedToday = app->db->getMainInfoValue("videosWatchedToday", "PLUS", "0").toInt();
@@ -50,16 +50,16 @@ void StatsDialog::setupVideoStats(MainApp* app) {
     int videosWatchedToday = plusWatchedToday + minusWatchedToday;
     
     addStatToGrid(layout, row++, "Videos Watched Today:", QString::number(videosWatchedToday));
-    addStatToGrid(layout, row++, QString("%1 Videos Watched Today:").arg(app->config->get("plus_category_name")), QString::number(plusWatchedToday));
-    addStatToGrid(layout, row++, QString("%1 Videos Watched Today:").arg(app->config->get("minus_category_name")), QString::number(minusWatchedToday));
+    addStatToGrid(layout, row++, QStringLiteral("%1 Videos Watched Today:").arg(app->config->get("plus_category_name")), QString::number(plusWatchedToday));
+    addStatToGrid(layout, row++, QStringLiteral("%1 Videos Watched Today:").arg(app->config->get("minus_category_name")), QString::number(minusWatchedToday));
     
     // Database totals using new functions
     int plusTotal = app->db->getVideoCount("PLUS");
     int minusTotal = app->db->getVideoCount("MINUS");
     
     addStatToGrid(layout, row++, "Total Videos in Database:", QString::number(plusTotal + minusTotal));
-    addStatToGrid(layout, row++, QString("Total %1 Videos:").arg(app->config->get("plus_category_name")), QString::number(plusTotal));
-    addStatToGrid(layout, row++, QString("Total %1 Videos:").arg(app->config->get("minus_category_name")), QString::number(minusTotal));
+    addStatToGrid(layout, row++, QStringLiteral("Total %1 Videos:").arg(app->config->get("plus_category_name")), QString::number(plusTotal));
+    addStatToGrid(layout, row++, QStringLiteral("Total %1 Videos:").arg(app->config->get("minus_category_name")), QString::number(minusTotal));
     
     // Completion percentages using unique videos watched
     int plusUniqueWatched = app->db->getUniqueVideosWatched("PLUS");
@@ -67,11 +67,11 @@ void StatsDialog::setupVideoStats(MainApp* app) {
     
     if (plusTotal > 0) {
         double plusPercent = (double)plusUniqueWatched / plusTotal * 100;
-        addStatToGrid(layout, row++, QString("%1 Completion:").arg(app->config->get("plus_category_name")), QString::number(plusPercent, 'f', 1) + "%");
+        addStatToGrid(layout, row++, QStringLiteral("%1 Completion:").arg(app->config->get("plus_category_name")), QString::number(plusPercent, 'f', 1) + "%");
     }
     if (minusTotal > 0) {
         double minusPercent = (double)minusUniqueWatched / minusTotal * 100;
-        addStatToGrid(layout, row++, QString("%1 Completion:").arg(app->config->get("minus_category_name")), QString::number(minusPercent, 'f', 1) + "%");
+        addStatToGrid(layout, row++, QStringLiteral("%1 Completion:").arg(app->config->get("minus_category_name")), QString::number(minusPercent, 'f', 1) + "%");
     }
 }
 
@@ -85,8 +85,8 @@ void StatsDialog::setupRatingStats(MainApp* app) {
     double totalAvgRating = (plusAvgRating + minusAvgRating) / 2;
     
     addStatToGrid(layout, row++, "Overall Average Rating:", QString::number(totalAvgRating, 'f', 2));
-    addStatToGrid(layout, row++, QString("%1 Average Rating:").arg(app->config->get("plus_category_name")), QString::number(plusAvgRating, 'f', 2));
-    addStatToGrid(layout, row++, QString("%1 Average Rating:").arg(app->config->get("minus_category_name")), QString::number(minusAvgRating, 'f', 2));
+    addStatToGrid(layout, row++, QStringLiteral("%1 Average Rating:").arg(app->config->get("plus_category_name")), QString::number(plusAvgRating, 'f', 2));
+    addStatToGrid(layout, row++, QStringLiteral("%1 Average Rating:").arg(app->config->get("minus_category_name")), QString::number(minusAvgRating, 'f', 2));
     
     // Unrated videos
     int unratedCount = app->db->getUnratedVideoCount();

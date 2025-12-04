@@ -11,6 +11,13 @@ class SettingsDialog :
     Q_OBJECT
 public:
     int oldVolume = 0;
+    int oldPreviewVolume = 0;
+    bool oldPreviewRandomStart = false;
+    bool oldPreviewAutoplayAllMute = false;
+    bool oldPreviewRememberPosition = false;
+    bool oldPreviewRandomEachHover = false;
+    bool oldPreviewNextChoicesEnabled = true;
+    bool oldPreviewSeededRandom = false;
     int oldSVmax = 0;
     double old_mascotsChanceSpinBox = 0;
     double old_aicon_fps_modifier = 1.0;

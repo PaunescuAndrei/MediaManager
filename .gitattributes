@@ -4,6 +4,18 @@
 * text=auto
 
 ###############################################################################
+# Enforce Windows line endings for C++/Qt sources so IDEs stay consistent.
+###############################################################################
+*.cpp text eol=crlf
+*.h   text eol=crlf
+*.hpp text eol=crlf
+*.inl text eol=crlf
+*.ui  text eol=crlf
+*.qrc text eol=crlf
+*.pri text eol=crlf
+*.pro text eol=crlf
+
+###############################################################################
 # Set default behavior for command prompt diff.
 #
 # This is need for earlier builds of msysgit that does not have it on by

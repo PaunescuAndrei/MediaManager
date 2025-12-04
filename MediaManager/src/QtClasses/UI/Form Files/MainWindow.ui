@@ -603,7 +603,7 @@
           </layout>
          </item>
          <item>
-          <widget class="videosTreeWidget" name="videosWidget">
+          <widget class="VideosTreeView" name="videosWidget">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
              <horstretch>0</horstretch>
@@ -611,7 +611,7 @@
             </sizepolicy>
            </property>
            <property name="focusPolicy">
-            <enum>Qt::FocusPolicy::NoFocus</enum>
+            <enum>Qt::FocusPolicy::StrongFocus</enum>
            </property>
            <property name="contextMenuPolicy">
             <enum>Qt::ContextMenuPolicy::CustomContextMenu</enum>
@@ -839,9 +839,9 @@
    <header>currentvideoqlabel.h</header>
   </customwidget>
   <customwidget>
-   <class>videosTreeWidget</class>
-   <extends>QTreeWidget</extends>
-   <header>videostreewidget.h</header>
+   <class>VideosTreeView</class>
+   <extends>QTreeView</extends>
+   <header>VideosTreeView.h</header>
   </customwidget>
  </customwidgets>
  <resources>

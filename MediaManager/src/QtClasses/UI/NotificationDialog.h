@@ -22,11 +22,14 @@ public:
     void closeNotification();
     void showNotification();
     void showNotification(int duration, int interval);
+    void pauseNotification();
     void resizeEvent(QResizeEvent*) override;
     ~NotificationDialog();
    void mousePressEvent(QMouseEvent* event) override;
     Ui::NotificationDialog ui;
 signals:
     void showEventSignal();
-};
 
+private:
+    bool paused = false;
+};

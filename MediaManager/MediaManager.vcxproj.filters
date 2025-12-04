@@ -83,6 +83,9 @@
     <ClCompile Include="src\QtClasses\UI\finishDialog.cpp">
       <Filter>Source Files\QtClasses\UI</Filter>
     </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\NextChoiceDialog.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
     <ClCompile Include="src\QtClasses\UI\InsertDialog.cpp">
       <Filter>Source Files\QtClasses\UI</Filter>
     </ClCompile>
@@ -254,6 +257,9 @@
     <ClCompile Include="src\QtClasses\Widgets\WheelStrongFocusEventFilter.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\VideoPreviewWidget.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\resource.h">
@@ -376,6 +382,9 @@
     <QtUic Include="src\QtClasses\UI\Form Files\finishDialog.ui">
       <Filter>Form Files</Filter>
     </QtUic>
+    <QtUic Include="src\QtClasses\UI\Form Files\NextChoiceDialog.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
     <QtUic Include="src\QtClasses\UI\Form Files\InsertDialog.ui">
       <Filter>Form Files</Filter>
     </QtUic>
@@ -444,6 +453,9 @@
     <QtMoc Include="src\QtClasses\UI\finishDialog.h">
       <Filter>Header Files\QtClasses\UI</Filter>
     </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\NextChoiceDialog.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
     <QtMoc Include="src\QtClasses\UI\DeleteDialog.h">
       <Filter>Header Files\QtClasses\UI</Filter>
     </QtMoc>
@@ -472,6 +484,9 @@
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
     <QtMoc Include="src\QtClasses\Widgets\watchedFrame.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\VideoPreviewWidget.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
     <QtMoc Include="src\general\generateThumbnailRunnable.h">

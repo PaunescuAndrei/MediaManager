@@ -9,10 +9,12 @@
 #include "scrollAreaEventFilter.h"
 #include <QPersistentModelIndex>
 #include "VideosTagsDialog.h"
+#include "VideosModel.h"
 
 finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 {
 	ui.setupUi(this);
+
 	this->MW = MW;
 	this->updateWindowTitle();
 	this->setWindowModality(Qt::NonModal);
@@ -31,37 +33,51 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 	this->ui.counterLabel->setMinimumWidth(std::max(total_width, counter_width));
 	this->ui.scrollArea_author->installEventFilter(new scrollAreaEventFilter(this->ui.scrollArea_author));
 	this->ui.scrollArea_name->installEventFilter(new scrollAreaEventFilter(this->ui.scrollArea_name));
-	this->ui.author_label->setText(MW->ui.currentVideo->author);
-	this->ui.name_label->setText(MW->ui.currentVideo->name);
-	QList<QTreeWidgetItem*> items = MW->ui.videosWidget->findItems(MW->ui.currentVideo->path, Qt::MatchExactly, ListColumns["PATH_COLUMN"]);
-	if (!items.isEmpty()) {
-		auto index = QPersistentModelIndex(MW->ui.videosWidget->indexFromItem(items.first(), ListColumns["RATING_COLUMN"]));
-		StarRating starRating = StarRating(MW->active, MW->halfactive, MW->inactive, index.data(CustomRoles::rating).value<double>(), 5.0);
-		starEditorWidget * starEditor = new starEditorWidget(this, index);
+    this->ui.author_label->setText(MW->ui.currentVideo->author);
+    this->ui.name_label->setText(MW->ui.currentVideo->name);
+
+    const QString currentPath = MW->ui.currentVideo->path;
+    const QPersistentModelIndex sourcePathIdx = MW->modelIndexByPath(currentPath);
+    const QPersistentModelIndex sourceRatingIdx = sourcePathIdx.isValid()
+        ? QPersistentModelIndex(sourcePathIdx.sibling(sourcePathIdx.row(), ListColumns["RATING_COLUMN"]))
+        : QPersistentModelIndex();
+
+    if (sourceRatingIdx.isValid()) {
+        StarRating starRating = StarRating(MW->active, MW->halfactive, MW->inactive, sourceRatingIdx.data(CustomRoles::rating).value<double>(), 5.0);
+        starEditorWidget * starEditor = new starEditorWidget(this, sourceRatingIdx);
 		starEditor->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Maximum);
 		starEditor->setEditMode(starEditorWidget::EditMode::DoubleClick);
 		starEditor->setStarRating(starRating);
+		starEditor->setStarPixelSize(19);
 		connect(starEditor, &starEditorWidget::editingFinished, this, [MW, starEditor] {
-			MW->updateRating(starEditor->item_index, starEditor->original_value,starEditor->starRating().starCount());
-			MW->ui.videosWidget->model()->setData(starEditor->item_index, starEditor->starRating().starCount(), CustomRoles::rating);
-			starEditor->original_value = starEditor->starRating().starCount();
+            const double newValue = starEditor->starRating().starCount();
+            const double oldValue = starEditor->original_value;
+            if (starEditor->item_index.isValid() && MW->videosModel) {
+                MW->videosModel->setData(starEditor->item_index, newValue, CustomRoles::rating);
+                MW->updateRating(starEditor->item_index, oldValue, newValue);
+            }
+			starEditor->original_value = newValue;
 		});
 		starEditor->setFocusPolicy(Qt::NoFocus);
 		QHBoxLayout *lt = qobject_cast<QHBoxLayout*>(this->ui.ratingBox->layout());
 		double avg_rating = MW->App->db->getAverageRatingAuthor(MW->ui.currentVideo->author, MW->App->currentDB);
 		QLabel* avg_rating_label = new QLabel("Avg. " + QString::number(avg_rating, 'f', 2), this);
+		avg_rating_label->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
 		lt->insertWidget(2, starEditor);
+		lt->setAlignment(starEditor, Qt::AlignVCenter);
 		lt->insertWidget(3, avg_rating_label);
+		lt->setAlignment(avg_rating_label, Qt::AlignVCenter);
 
-		this->ui.tags_label->setText(items.first()->text(ListColumns["TAGS_COLUMN"]));
+        // Tags label
+        this->ui.tags_label->setText(sourcePathIdx.sibling(sourcePathIdx.row(), ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString());
 		
 		// Set views count
-		QString viewsText = items.first()->text(ListColumns["VIEWS_COLUMN"]);
-		this->ui.viewsValueLabel->setText(viewsText);
+        QString viewsText = sourcePathIdx.sibling(sourcePathIdx.row(), ListColumns["VIEWS_COLUMN"]).data(Qt::DisplayRole).toString();
+        this->ui.viewsValueLabel->setText(viewsText);
 		
 		// Set last watched date in human-readable format
-		QString lastWatchedText = items.first()->text(ListColumns["LAST_WATCHED_COLUMN"]);
-		QVariant lastWatchedData = items.first()->data(ListColumns["LAST_WATCHED_COLUMN"], Qt::DisplayRole);
+        QString lastWatchedText = sourcePathIdx.sibling(sourcePathIdx.row(), ListColumns["LAST_WATCHED_COLUMN"]).data(Qt::DisplayRole).toString();
+        QVariant lastWatchedData = sourcePathIdx.sibling(sourcePathIdx.row(), ListColumns["LAST_WATCHED_COLUMN"]).data(Qt::DisplayRole);
 		
 		if (!lastWatchedText.isEmpty() && lastWatchedData.type() == QVariant::DateTime) {
 			QDateTime lastWatchedDateTime = lastWatchedData.toDateTime();
@@ -85,43 +101,44 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
 			this->ui.lastWatchedValueLabel->setText("Never");
 		}
 
-		connect(this->ui.tagsButton, &QPushButton::clicked, this, [this, MW]() {
-			QList<QTreeWidgetItem*> items = MW->ui.videosWidget->findItemsCustom(MW->ui.currentVideo->path, Qt::MatchExactly, ListColumns["PATH_COLUMN"],1);
-			if (!items.isEmpty()) {
-				this->timer.stop();
-				Qt::WindowFlags flags = windowFlags();
-				bool isOnTop = flags.testFlag(Qt::WindowStaysOnTopHint);
-				this->setWindowFlag(Qt::WindowStaysOnTopHint, false);
-				this->hide();
-				VideosTagsDialog* dialog = MW->editTags({ items.first() }, nullptr);
-				if (dialog) {
-					connect(dialog, &finishDialog::finished, this, [this,MW, isOnTop](int result) {
-						if (this) {
-							this->setWindowFlag(Qt::WindowStaysOnTopHint, isOnTop);
-							this->show();
-							this->timer.start(250);
-							QList<QTreeWidgetItem*> items = MW->ui.videosWidget->findItemsCustom(MW->ui.currentVideo->path, Qt::MatchExactly, ListColumns["PATH_COLUMN"],1);
-							if (!items.isEmpty()) {
-								this->ui.tags_label->setText(items.first()->text(ListColumns["TAGS_COLUMN"]));
-							}
-						}
-					});
-				}
-				else {
-					this->setWindowFlag(Qt::WindowStaysOnTopHint, isOnTop);
-					this->show();
-					this->timer.start(250);
-				}
-				QTimer::singleShot(100, [dialog] {
-					if (dialog) {
-						utils::bring_hwnd_to_foreground_uiautomation_method((HWND)dialog->winId(), qMainApp->uiAutomation);
-						dialog->raise();
-						dialog->show();
-						dialog->activateWindow();
-					}
-				});
-			}
-		});
+        connect(this->ui.tagsButton, &QPushButton::clicked, this, [this, MW]() {
+            const QPersistentModelIndex src = MW->modelIndexByPath(MW->ui.currentVideo->path);
+            if (!src.isValid())
+                return;
+            this->timer.stop();
+            const Qt::WindowFlags flags = windowFlags();
+            const bool isOnTop = flags.testFlag(Qt::WindowStaysOnTopHint);
+            this->setWindowFlag(Qt::WindowStaysOnTopHint, false);
+            this->hide();
+            const QPersistentModelIndex pathIdx = src.sibling(src.row(), ListColumns["PATH_COLUMN"]);
+            const int id = pathIdx.data(CustomRoles::id).toInt();
+            VideosTagsDialog* dialog = MW->editTags(QList<int>{ id }, nullptr);
+            if (dialog) {
+                connect(dialog, &VideosTagsDialog::finished, this, [this, MW, isOnTop](int) {
+                    this->setWindowFlag(Qt::WindowStaysOnTopHint, isOnTop);
+                    this->show();
+                    this->timer.start(250);
+                    const QPersistentModelIndex updatedSrc = MW->modelIndexByPath(MW->ui.currentVideo->path);
+                    if (updatedSrc.isValid()) {
+                        const QPersistentModelIndex tagsIdx = updatedSrc.sibling(updatedSrc.row(), ListColumns["TAGS_COLUMN"]);
+                        this->ui.tags_label->setText(tagsIdx.data(Qt::DisplayRole).toString());
+                    }
+                });
+            }
+            else {
+                this->setWindowFlag(Qt::WindowStaysOnTopHint, isOnTop);
+                this->show();
+                this->timer.start(250);
+            }
+            QTimer::singleShot(100, [dialog] {
+                if (dialog) {
+                    utils::bring_hwnd_to_foreground_uiautomation_method((HWND)dialog->winId(), qMainApp->uiAutomation);
+                    dialog->raise();
+                    dialog->show();
+                    dialog->activateWindow();
+                }
+            });
+        });
 	}
 	connect(this->ui.NextButton, &QPushButton::clicked, this, [this]() {this->timer.stop(); this->done(finishDialog::Accepted); } );
 	connect(this->ui.cancelButton, &QPushButton::clicked, this, [this]() {this->timer.stop(); this->done(finishDialog::Rejected); });
@@ -172,7 +189,7 @@ bool finishDialog::eventFilter(QObject* obj, QEvent* event) {
 }
 
 void finishDialog::updateCountdownText() {
-	this->ui.mainmsg->setText(QString("Continue? (Auto in %1s)").arg(this->countdownSeconds));
+	this->ui.mainmsg->setText(QStringLiteral("Continue? (Auto in %1s)").arg(this->countdownSeconds));
 }
 
 void finishDialog::stopCountdown()

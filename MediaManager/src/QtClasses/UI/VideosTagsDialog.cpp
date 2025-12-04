@@ -5,6 +5,28 @@
 #include <QSqlRelation>
 #include "definitions.h"
 #include <QListWidgetItem>
+#include <QPersistentModelIndex>
+#include <QStringList>
+#include <algorithm>
+
+namespace {
+QString tagsToString(const QSet<Tag>& tags) {
+    if (tags.isEmpty()) return QString();
+    QList<Tag> sortedTags = tags.values();
+    std::sort(sortedTags.begin(), sortedTags.end(), [](const Tag& lhs, const Tag& rhs) {
+        if (lhs.display_priority == rhs.display_priority) {
+            return lhs.id < rhs.id;
+        }
+        return lhs.display_priority < rhs.display_priority;
+    });
+    QStringList parts;
+    parts.reserve(sortedTags.size());
+    for (const Tag& tag : sortedTags) {
+        parts << tag.name;
+    }
+    return parts.join(", ");
+}
+}
 
 VideosTagsDialog::VideosTagsDialog(QList<QTreeWidgetItem*> items, MainWindow* MW, QWidget* parent) : QDialog(parent) {
     this->MW = MW;
@@ -107,4 +129,39 @@ void VideosTagsDialog::updateTags()
 
 VideosTagsDialog::~VideosTagsDialog() {
 
+}
+
+VideosTagsDialog::VideosTagsDialog(const QList<int> ids, MainWindow* MW, QWidget* parent) : QDialog(parent) {
+    this->MW = MW;
+    for (auto id : ids) {
+        QString tagsText;
+        if (this->MW) {
+            const QPersistentModelIndex srcIdx = this->MW->modelIndexById(id);
+            if (srcIdx.isValid()) {
+                QPersistentModelIndex tagsIdx = srcIdx.sibling(srcIdx.row(), ListColumns["TAGS_COLUMN"]);
+                tagsText = tagsIdx.data(Qt::DisplayRole).toString();
+            }
+            else if (this->MW->App && this->MW->App->db) {
+                tagsText = tagsToString(this->MW->App->db->getTags(id));
+            }
+        }
+        this->items.append({ id, tagsText });
+    }
+    ui.setupUi(this);
+    this->setWindowModality(Qt::WindowModal);
+    if (!this->items.isEmpty()) {
+        QString tags = this->items.first().second;
+        for (auto& item : this->items) {
+            if (item.second != tags) {
+                this->show_empty_included = true;
+                break;
+            }
+        }
+    }
+    this->initTags();
+    connect(this->ui.editTagsButton, &QPushButton::clicked, this, [this] {if (this->MW) { if (this->MW->TagsDialogButton()) { this->updateTags(); } } });
+    connect(this->ui.InsertButton, &QPushButton::clicked, this, [this] {if (this->MW) { this->insertTags(this->ui.listWidgetAvailable->selectedItems()); } });
+    connect(this->ui.RemoveButton, &QPushButton::clicked, this, [this] {if (this->MW) { this->removeTags(this->ui.listWidgetAdded->selectedItems()); } });
+    connect(this->ui.listWidgetAvailable, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* item) { this->insertTags({ item }); });
+    connect(this->ui.listWidgetAdded, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* item) { this->removeTags({ item }); });
 }

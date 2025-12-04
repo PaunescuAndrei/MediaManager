@@ -55,7 +55,7 @@
         <x>0</x>
         <y>0</y>
         <width>886</width>
-        <height>1083</height>
+        <height>1110</height>
        </rect>
       </property>
       <layout class="QHBoxLayout" name="horizontalLayout_8">
@@ -116,6 +116,64 @@
                </widget>
               </item>
              </layout>
+            </item>
+            <item>
+             <widget class="QWidget" name="specialSvModeWidget" native="true">
+              <layout class="QHBoxLayout" name="horizontalLayout_31">
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+               <item>
+                <widget class="QLabel" name="specialSvModeLabel">
+                 <property name="text">
+                  <string>Special video mode:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="horizontalSpacer_specialSv">
+                 <property name="orientation">
+                  <enum>Qt::Orientation::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>40</width>
+                   <height>20</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+               <item>
+                <widget class="QComboBox" name="specialSvModeCombo">
+                 <property name="toolTip">
+                  <string>Controls how MINUS special videos update counters and time watched when pressing Next.</string>
+                 </property>
+                 <property name="sizeAdjustPolicy">
+                  <enum>QComboBox::SizeAdjustPolicy::AdjustToContents</enum>
+                 </property>
+                 <item>
+                  <property name="text">
+                   <string>MINUS</string>
+                  </property>
+                 </item>
+                 <item>
+                  <property name="text">
+                   <string>PLUS</string>
+                  </property>
+                 </item>
+                </widget>
+               </item>
+              </layout>
+             </widget>
             </item>
             <item>
              <widget class="QWidget" name="widget" native="true">
@@ -267,6 +325,66 @@
              </widget>
             </item>
             <item>
+             <widget class="QWidget" name="notificationDurationWidget" native="true">
+              <layout class="QHBoxLayout" name="horizontalLayout_notificationDuration">
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+               <item>
+                <widget class="QLabel" name="notificationDurationLabel">
+                 <property name="text">
+                  <string>Notification Duration (ms):</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="horizontalSpacer_notificationDuration">
+                 <property name="orientation">
+                  <enum>Qt::Orientation::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>40</width>
+                   <height>20</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+               <item>
+                <widget class="QSpinBox" name="notificationDurationSpinBox">
+                 <property name="focusPolicy">
+                  <enum>Qt::FocusPolicy::StrongFocus</enum>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignmentFlag::AlignCenter</set>
+                 </property>
+                 <property name="minimum">
+                  <number>1000</number>
+                 </property>
+                 <property name="maximum">
+                  <number>60000</number>
+                 </property>
+                 <property name="singleStep">
+                  <number>500</number>
+                 </property>
+                 <property name="value">
+                  <number>10000</number>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
              <widget class="QWidget" name="widget_6" native="true">
               <layout class="QHBoxLayout" name="horizontalLayout_14">
                <property name="leftMargin">
@@ -284,12 +402,76 @@
                <item>
                 <widget class="QCheckBox" name="seedCheckBox">
                  <property name="text">
-                  <string>Next Video Seed:</string>
+                  <string>Random Seed:</string>
                  </property>
                 </widget>
                </item>
                <item>
                 <widget class="QLineEdit" name="seedLineEdit"/>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QWidget" name="nextMultiChoiceWidget" native="true">
+              <layout class="QHBoxLayout" name="horizontalLayout_nextMultiChoice">
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+               <item>
+                <widget class="QCheckBox" name="nextMultiChoiceEnabled">
+                 <property name="text">
+                  <string>Show choices for Next (Random)</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="horizontalSpacer_nextMultiChoice">
+                 <property name="orientation">
+                  <enum>Qt::Orientation::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>40</width>
+                   <height>20</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+               <item>
+                <widget class="QLabel" name="nextMultiChoiceCountLabel">
+                 <property name="text">
+                  <string>Choices:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QSpinBox" name="nextMultiChoiceCount">
+                 <property name="focusPolicy">
+                  <enum>Qt::FocusPolicy::StrongFocus</enum>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignmentFlag::AlignCenter</set>
+                 </property>
+                 <property name="minimum">
+                  <number>2</number>
+                 </property>
+                 <property name="maximum">
+                  <number>99</number>
+                 </property>
+                 <property name="value">
+                  <number>3</number>
+                 </property>
+                </widget>
                </item>
               </layout>
              </widget>
@@ -369,6 +551,16 @@
              </widget>
             </item>
             <item>
+             <widget class="QCheckBox" name="skipAllowedProgress">
+              <property name="toolTip">
+               <string>When enabled, pressing Skip in the finish dialog will not decrement the MINUS counter.</string>
+              </property>
+              <property name="text">
+               <string>Allow Skip to progress counters</string>
+              </property>
+             </widget>
+            </item>
+            <item>
              <widget class="QCheckBox" name="singleInstance">
               <property name="text">
                <string>Single Instance</string>
@@ -392,6 +584,155 @@
            </layout>
           </widget>
          </item>
+           <item>
+             <widget class="QGroupBox" name="previewGroupBox">
+             <property name="title">
+              <string>Video Preview</string>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayout_preview">
+            <item>
+             <widget class="QCheckBox" name="previewEnabled">
+              <property name="text">
+               <string>Enable video previews in next choices dialog</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QWidget" name="previewVolumeWidget" native="true">
+              <layout class="QHBoxLayout" name="horizontalLayout_previewVolume">
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+               <item>
+                <widget class="QLabel" name="previewVolumeLabel">
+                 <property name="text">
+                  <string>Preview Volume:</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <spacer name="previewVolumeSpacer">
+                 <property name="orientation">
+                  <enum>Qt::Orientation::Horizontal</enum>
+                 </property>
+                 <property name="sizeHint" stdset="0">
+                  <size>
+                   <width>40</width>
+                   <height>20</height>
+                  </size>
+                 </property>
+                </spacer>
+               </item>
+               <item>
+                <widget class="QSpinBox" name="previewVolumeSpinBox">
+                 <property name="focusPolicy">
+                  <enum>Qt::FocusPolicy::StrongFocus</enum>
+                 </property>
+                 <property name="alignment">
+                  <set>Qt::AlignmentFlag::AlignCenter</set>
+                 </property>
+                 <property name="minimum">
+                  <number>0</number>
+                 </property>
+                 <property name="maximum">
+                  <number>100</number>
+                 </property>
+                 <property name="value">
+                  <number>20</number>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="previewAutoplayAllMute">
+              <property name="text">
+               <string>Autoplay all cards muted (unmute on hover)</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QWidget" name="previewSeekWidget" native="true">
+              <layout class="QHBoxLayout" name="horizontalLayout_previewSeek">
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+               <item>
+                <widget class="QLabel" name="previewSeekLabel">
+                 <property name="text">
+                  <string>Seek distance (seconds):</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QDoubleSpinBox" name="previewSeekSeconds">
+                 <property name="minimum">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="maximum">
+                  <double>120.000000000000000</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.500000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="previewRandomStart">
+              <property name="text">
+               <string>Random start position</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="previewSeededRandom">
+              <property name="text">
+               <string>Use seeded random</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="previewRandomEachHover">
+              <property name="text">
+               <string>Random position on hover</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="previewRememberPosition">
+              <property name="text">
+               <string>Remember preview position</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+         </widget>
+        </item>
          <item>
           <widget class="QGroupBox" name="iconGroupBox">
            <property name="sizePolicy">

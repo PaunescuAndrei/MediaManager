@@ -580,31 +580,31 @@ QString utils::formatTimeAgo(qint64 seconds) {
 		return "Just now";
 	}
 	if (seconds < 60) {
-		return QString("%1 second%2 ago").arg(seconds).arg(seconds == 1 ? "" : "s");
+		return QStringLiteral("%1 second%2 ago").arg(seconds).arg(seconds == 1 ? "" : "s");
 	}
 	else if (seconds < 3600) {
 		int minutes = seconds / 60;
-		return QString("%1 minute%2 ago").arg(minutes).arg(minutes == 1 ? "" : "s");
+		return QStringLiteral("%1 minute%2 ago").arg(minutes).arg(minutes == 1 ? "" : "s");
 	}
 	else if (seconds < 86400) {
 		int hours = seconds / 3600;
-		return QString("%1 hour%2 ago").arg(hours).arg(hours == 1 ? "" : "s");
+		return QStringLiteral("%1 hour%2 ago").arg(hours).arg(hours == 1 ? "" : "s");
 	}
 	else if (seconds < 604800) {
 		int days = seconds / 86400;
-		return QString("%1 day%2 ago").arg(days).arg(days == 1 ? "" : "s");
+		return QStringLiteral("%1 day%2 ago").arg(days).arg(days == 1 ? "" : "s");
 	}
 	else if (seconds < 2592000) {
 		int weeks = seconds / 604800;
-		return QString("%1 week%2 ago").arg(weeks).arg(weeks == 1 ? "" : "s");
+		return QStringLiteral("%1 week%2 ago").arg(weeks).arg(weeks == 1 ? "" : "s");
 	}
 	else if (seconds < 31536000) {
 		int months = seconds / 2592000;
-		return QString("%1 month%2 ago").arg(months).arg(months == 1 ? "" : "s");
+		return QStringLiteral("%1 month%2 ago").arg(months).arg(months == 1 ? "" : "s");
 	}
 	else {
 		int years = seconds / 31536000;
-		return QString("%1 year%2 ago").arg(years).arg(years == 1 ? "" : "s");
+		return QStringLiteral("%1 year%2 ago").arg(years).arg(years == 1 ? "" : "s");
 	}
 }
 

@@ -37,7 +37,9 @@ bool mascotsAnimationsThread::checkBeatsCache(QString path, QList<double>* beats
 	QString cachepath = QString(BEATS_CACHE_PATH) + "/" + iconname + ".beatscache_c";
 	QFile file(cachepath);
 	if (file.exists() && file.size() > 0) {
-		file.open(QIODevice::ReadOnly);
+		if (!file.open(QIODevice::ReadOnly)) {
+			return false;
+		}
 		QDataStream in(&file);
 		in >> *beats;
 		file.close();
@@ -79,10 +81,11 @@ void mascotsAnimationsThread::update_beats(QString track_path,bool cache_check) 
 			cachepath = QString(BEATS_CACHE_PATH) + "/" + cachepath + ".beatscache_c";
 
 			QFile file(cachepath);
-			file.open(QIODevice::WriteOnly);
-			QDataStream out(&file);
-			out << this->beats;
-			file.close();
+			if (file.open(QIODevice::WriteOnly)) {
+				QDataStream out(&file);
+				out << this->beats;
+				file.close();
+			}
 		}
 	}
 }
@@ -125,10 +128,11 @@ void mascotsAnimationsThread::rebuildBeatsCache() {
 			cachepath = QString(BEATS_CACHE_PATH) + "/" + cachepath + ".beatscache_c";
 
 			QFile file(cachepath);
-			file.open(QIODevice::WriteOnly);
-			QDataStream out(&file);
-			out << newbeats;
-			file.close();
+			if (file.open(QIODevice::WriteOnly)) {
+				QDataStream out(&file);
+				out << newbeats;
+				file.close();
+			}
 		}
 	}
 }

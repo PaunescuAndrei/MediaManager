@@ -33,7 +33,7 @@ QMediaPlayer* SoundPlayer::play(QString sound_path, bool auto_delete, bool log)
 {
     if (this->running && !sound_path.isEmpty()) {
         if (log)
-            qMainApp->logger->log(QString("Playing SoundEffect \"%1\"").arg(sound_path), "SoundEffect", sound_path);
+            qMainApp->logger->log(QStringLiteral("Playing SoundEffect \"%1\"").arg(sound_path), "SoundEffect", sound_path);
         QMediaPlayer* player = this->get_player();
         return this->play(player, sound_path, auto_delete, log);
     }
@@ -44,7 +44,7 @@ QMediaPlayer* SoundPlayer::play(QMediaPlayer* player, QString sound_path, bool a
 {
     if (this->running && !sound_path.isEmpty()) {
         if (log)
-            qMainApp->logger->log(QString("Playing SoundEffect \"%1\"").arg(sound_path), "SoundEffect", sound_path);
+            qMainApp->logger->log(QStringLiteral("Playing SoundEffect \"%1\"").arg(sound_path), "SoundEffect", sound_path);
         if (auto_delete) {
             QObject::connect(player, &QMediaPlayer::mediaStatusChanged, [player](QMediaPlayer::MediaStatus status) {if (status == QMediaPlayer::EndOfMedia) { player->deleteLater(); } });
             QObject::connect(player, &QMediaPlayer::errorOccurred, [player](QMediaPlayer::Error error, const QString& errorString) {qDebug() << errorString; player->deleteLater(); });
@@ -147,7 +147,7 @@ void SoundPlayer::loadSoundEffects() {
 //{
 //    if (this->running && !sound_path.isEmpty()) {
 //        if(log)
-//            qMainApp->logger->log(QString("Playing SoundEffect \"%1\"").arg(sound_path),"SoundEffect", sound_path);
+//            qMainApp->logger->log(QStringLiteral("Playing SoundEffect \"%1\"").arg(sound_path),"SoundEffect", sound_path);
 //        QSoundEffect* effect = new QSoundEffect(this->parent);
 //        QObject::connect(effect, &QSoundEffect::playingChanged, [effect] {if (!effect->isPlaying()) { effect->deleteLater(); } });
 //        QObject::connect(effect, &QSoundEffect::statusChanged, [effect] {if (effect->status() == QSoundEffect::Error) { effect->deleteLater(); }});

@@ -15,6 +15,7 @@ public:
     static QString normalizeFilename(const QString& filepath);
     ~UpdatePathsDialog();
     void addItems(QList<QTreeWidgetItem*> items);
+    void addItems(const QList<QPair<int, QString>>& id_path_pairs);
 
 private:
     Ui::UpdatePathsDialog ui;

@@ -91,7 +91,7 @@ color_area customGraphicsView::getColor(bool weighted) {
     if (weighted) {
         if (!this->accepted_colors.isEmpty())
             color = utils::get_weighted_random_color(this->accepted_colors);
-        else if (this->rejected_colors.isEmpty())
+        else if (!this->rejected_colors.isEmpty())
             color = *utils::select_randomly(this->rejected_colors.begin(), this->rejected_colors.end());
     }
     else {

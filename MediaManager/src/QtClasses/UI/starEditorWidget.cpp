@@ -6,18 +6,39 @@
 starEditorWidget::starEditorWidget(QWidget *parent, QPersistentModelIndex item_index) : QWidget(parent)
 {
     setMouseTracking(true);
-    setAutoFillBackground(true);
+    setAutoFillBackground(false);
+    setAttribute(Qt::WA_TranslucentBackground, true);
     this->item_index = item_index;
 }
 
 QSize starEditorWidget::sizeHint() const
 {
-    return myStarRating.sizeHint();
+    const QSize starSize = myStarRating.sizeHint();
+    const QMargins margins = contentsMargins();
+    return starSize + QSize(margins.left() + margins.right(), margins.top() + margins.bottom());
+}
+
+QSize starEditorWidget::minimumSizeHint() const
+{
+    return sizeHint();
+}
+
+void starEditorWidget::setStarPixelSize(int pixelSize)
+{
+    myStarRating.setStarPixelSize(pixelSize);
+    this->updateGeometry();
+    this->update();
+}
+
+int starEditorWidget::starPixelSize() const
+{
+    return myStarRating.starPixelSize();
 }
 
 void starEditorWidget::paintEvent(QPaintEvent *)
 {
     QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing, true);
     myStarRating.paint(&painter, rect(), palette(), (this->editing_finished == true) ? QStyle::StateFlag::State_None : QStyle::StateFlag::State_Selected, StarRating::EditMode::Editable);
 }
 

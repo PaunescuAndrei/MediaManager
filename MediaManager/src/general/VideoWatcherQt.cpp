@@ -102,7 +102,7 @@ void VideoWatcherQt::toggle_window()
 			}
 			player->setPaused(false,true);
 			QTime currentTime = QTime::currentTime();
-			player->displayOsdMessage(QString("%1 / %2 | %3").arg(
+			player->displayOsdMessage(QStringLiteral("%1 / %2 | %3").arg(
 				utils::formatSecondsQt(player->position), 
 				utils::formatSecondsQt(player->duration),
 				currentTime.toString("hh:mm")), 3000, true);

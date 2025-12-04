@@ -3,11 +3,14 @@
 #include <QtWidgets>
 #include <cmath>
 
-constexpr int PaintingScaleFactor = 15;
+namespace {
+constexpr int kDefaultStarPixelSize = 15;
+}
 
 StarRating::StarRating(QIcon* active, QIcon* halfactive, QIcon* inactive, double starCount, double maxStarCount)
     : myStarCount(starCount),
-      myMaxStarCount(maxStarCount)
+      myMaxStarCount(maxStarCount),
+      paintingScaleFactor(kDefaultStarPixelSize)
 {
     this->active = active;
     this->halfactive = halfactive;
@@ -24,7 +27,8 @@ StarRating::StarRating(QIcon* active, QIcon* halfactive, QIcon* inactive, double
 
 QSize StarRating::sizeHint() const
 {
-    return QSize((PaintingScaleFactor+0.1)*myMaxStarCount, PaintingScaleFactor*1);
+    const double width = (static_cast<double>(paintingScaleFactor) + 0.1) * myMaxStarCount;
+    return QSize(static_cast<int>(std::ceil(width)), paintingScaleFactor);
 }
 
 void StarRating::paint(QPainter *painter, const QRect &rect, const QPalette &palette, QStyle::State state, EditMode mode) const
@@ -45,22 +49,30 @@ void StarRating::paint(QPainter *painter, const QRect &rect, const QPalette &pal
     for (int i = 0; i < myMaxStarCount; i++) {
         painter->translate(0.1, 0.0);
         if (myStarCount >= i + 1) {
-            painter->drawPixmap(rect.topLeft(), this->active->pixmap(QSize(PaintingScaleFactor, PaintingScaleFactor)));
+            painter->drawPixmap(rect.topLeft(), this->active->pixmap(QSize(paintingScaleFactor, paintingScaleFactor)));
         }
         else if (myStarCount > i && myStarCount <= i + 0.5) {
-            painter->drawPixmap(rect.topLeft(), this->halfactive->pixmap(QSize(PaintingScaleFactor, PaintingScaleFactor)));
+            painter->drawPixmap(rect.topLeft(), this->halfactive->pixmap(QSize(paintingScaleFactor, paintingScaleFactor)));
         }
         else if (myStarCount < i + 1) {
             if (i == 0 && myStarCount > 0)
-                painter->drawPixmap(rect.topLeft(), this->halfactive->pixmap(QSize(PaintingScaleFactor, PaintingScaleFactor)));
+                painter->drawPixmap(rect.topLeft(), this->halfactive->pixmap(QSize(paintingScaleFactor, paintingScaleFactor)));
             else
-                painter->drawPixmap(rect.topLeft(), this->inactive->pixmap(QSize(PaintingScaleFactor, PaintingScaleFactor)));
+                painter->drawPixmap(rect.topLeft(), this->inactive->pixmap(QSize(paintingScaleFactor, paintingScaleFactor)));
         }
         //    painter->drawPolygon(starPolygon, Qt::WindingFill);
         //else if (mode == EditMode::Editable)
         //    painter->drawPolygon(diamondPolygon, Qt::WindingFill);
-        painter->translate(PaintingScaleFactor, 0.0);
+        painter->translate(paintingScaleFactor, 0.0);
     }
 
     painter->restore();
+}
+
+void StarRating::setStarPixelSize(int pixelSize) {
+    if (pixelSize <= 0) {
+        this->paintingScaleFactor = kDefaultStarPixelSize;
+    } else {
+        this->paintingScaleFactor = pixelSize;
+    }
 }

@@ -21,6 +21,8 @@ public:
     bool vertical_orientation = true;
     QBrush brush_ = QBrush();
     QPen pen_ = QPen();
+    qreal normalFontSize_ = 18.0;
+    qreal highlightFontSize_ = 28.0;
     ProgressBarQLabel(QWidget* parent = nullptr);
     void copy(ProgressBarQLabel* other);
     bool scaledOutlineMode();
@@ -36,6 +38,9 @@ public:
     void setPen(Qt::GlobalColor color);
     void setProgress(int progress, bool update = true);
     void setMinMax(int minimum, int maximum, bool update = true);
+    void setFontSizes(qreal normalSize, qreal highlightSize);
+    qreal normalFontSize() const { return this->normalFontSize_; }
+    qreal highlightFontSize() const { return this->highlightFontSize_; }
     int& progress();
     int& minimum();
     int& maximum();
@@ -45,6 +50,8 @@ public:
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
     void paintEvent(QPaintEvent* e) override;
+private:
+    void applyFontSize(bool highlightActive);
     ~ProgressBarQLabel();
 };
 

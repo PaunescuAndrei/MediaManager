@@ -421,10 +421,18 @@ bool NextChoiceDialog::eventFilter(QObject* obj, QEvent* event)
 
     switch (event->type()) {
     case QEvent::MouseButtonRelease: {
+        QMouseEvent* mouseEvent = static_cast<QMouseEvent*>(event);
         int idx = findChoiceIndex();
         if (idx >= 0 && idx < this->choices.size()) {
-            this->applySelection(idx);
-            this->accept();
+            if (mouseEvent->button() == Qt::LeftButton) {
+                this->applySelection(idx);
+                this->accept();
+            } else if (mouseEvent->button() == Qt::RightButton || mouseEvent->button() == Qt::MiddleButton) {
+                this->startPreviewForIndex(idx);
+                if (auto* preview = this->previewWidgets.value(idx)) {
+                    preview->jumpToRandomPosition();
+                }
+            }
             return true;
         }
         break;

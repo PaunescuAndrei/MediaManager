@@ -176,6 +176,27 @@ void VideoPreviewWidget::startAtPosition(qint64 target, bool pauseAfterSeek)
     }
 }
 
+void VideoPreviewWidget::jumpToRandomPosition()
+{
+    this->ensurePlayer();
+    if (!this->player)
+        return;
+    qint64 duration = this->player->duration();
+    if (duration <= 0)
+        return;
+    qint64 pos = this->pickRandomPosition(duration, ++this->hoverRandomCounter);
+    this->initialPosition = pos;
+    if (this->rememberPosition && !this->randomEachHover) {
+        this->lastPosition = pos;
+    } else if (this->randomEachHover) {
+        this->lastPosition = 0;
+    }
+    this->player->setPosition(pos);
+    if (!this->isPlaying()) {
+        this->player->play();
+    }
+}
+
 void VideoPreviewWidget::onMediaStatusChanged(QMediaPlayer::MediaStatus status)
 {
     if (!this->preloadActive)

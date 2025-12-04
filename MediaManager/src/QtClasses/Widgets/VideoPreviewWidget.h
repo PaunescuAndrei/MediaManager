@@ -21,6 +21,7 @@ public:
     void setRememberPositionEnabled(bool enabled);
     void setRandomOnHoverEnabled(bool enabled);
     void setSeededRandom(bool enabled, const QString& seedValue);
+    void jumpToRandomPosition();
     void prepareInitialFrame(bool keepPlaying);
     bool isPlaying() const;
 private slots:

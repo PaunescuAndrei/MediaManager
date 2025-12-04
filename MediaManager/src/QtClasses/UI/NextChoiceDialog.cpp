@@ -20,6 +20,7 @@
 #include "starEditorWidget.h"
 #include "utils.h"
 #include "MainApp.h"
+#include "VideoPreviewWidget.h"
 
 namespace {
 class ChoiceCardWidget : public QWidget {
@@ -128,6 +129,7 @@ NextChoiceDialog::NextChoiceDialog(QWidget* parent) : QDialog(parent)
 void NextChoiceDialog::setChoices(const QList<NextVideoChoice>& newChoices)
 {
     this->choices = newChoices;
+    this->previewAutoplayAllMute = qMainApp->config->get_bool("preview_autoplay_all_mute");
     this->rebuildCards();
     if (!this->choices.isEmpty()) {
         this->applySelection(0);
@@ -183,7 +185,7 @@ QWidget* NextChoiceDialog::buildCard(const NextVideoChoice& choice, int index)
 
     auto* layout = new QVBoxLayout(card);
     layout->setContentsMargins(8, 6, 8, 6);
-    layout->setSpacing(4);
+    layout->setSpacing(6);
 
     QString title = choice.name.isEmpty() ? QFileInfo(choice.path).completeBaseName() : choice.name;
     QString authorText = choice.author.isEmpty() ? QStringLiteral("Unknown") : choice.author;
@@ -202,15 +204,22 @@ QWidget* NextChoiceDialog::buildCard(const NextVideoChoice& choice, int index)
     QWidget* titleWidget = makeScrollableLabel(QStringLiteral("%1").arg(title), "font-size: 15px; font-weight: 700;", 22);
     layout->addWidget(titleWidget);
 
+    auto* contentLayout = new QHBoxLayout();
+    contentLayout->setSpacing(10);
+
+    auto* infoLayout = new QVBoxLayout();
+    infoLayout->setContentsMargins(0, 0, 0, 0);
+    infoLayout->setSpacing(4);
+
     QLabel* authorLabel = new QLabel(QStringLiteral("%1").arg(authorText), card);
     authorLabel->setStyleSheet("color: #c0c0c0; font-size: 12px;");
-    layout->addWidget(authorLabel);
+    infoLayout->addWidget(authorLabel);
 
     if (!choice.tags.isEmpty()) {
         QLabel* tagsLabel = new QLabel(choice.tags, card);
         tagsLabel->setWordWrap(true);
         tagsLabel->setStyleSheet("color: #8aa; font-size: 11px;");
-        layout->addWidget(tagsLabel);
+        infoLayout->addWidget(tagsLabel);
     }
 
     auto* grid = new QGridLayout();
@@ -230,7 +239,6 @@ QWidget* NextChoiceDialog::buildCard(const NextVideoChoice& choice, int index)
     addStat(QStringLiteral("Views"), QString::number(choice.views), 1);
 
     if (choice.rating > 0.0 && this->activeIcon && this->inactiveIcon) {
-        // Build rating stat inline with stars + numeric value
         QWidget* ratingContainer = new QWidget(card);
         QHBoxLayout* ratingLayout = new QHBoxLayout(ratingContainer);
         ratingLayout->setContentsMargins(0, 0, 0, 0);
@@ -259,13 +267,33 @@ QWidget* NextChoiceDialog::buildCard(const NextVideoChoice& choice, int index)
 
     addStat(QStringLiteral("Last W"), choice.lastWatched.isEmpty() ? QStringLiteral("-") : choice.lastWatched, 3);
 
-    layout->addLayout(grid);
+    infoLayout->addLayout(grid);
 
     if (choice.probability >= 0.0) {
         QLabel* prob = new QLabel(QStringLiteral("Chance: %1%").arg(QString::number(choice.probability, 'f', 2)), card);
         prob->setStyleSheet("color: #80d080; font-weight: 700;");
-        layout->addWidget(prob);
+        infoLayout->addWidget(prob);
     }
+    infoLayout->addStretch(1);
+
+    contentLayout->addLayout(infoLayout, 1);
+
+    VideoPreviewWidget* preview = new VideoPreviewWidget(card);
+    preview->setSource(choice.path);
+    preview->setStartDelay(0);
+    preview->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    int previewVolume = qBound(0, qMainApp->config->get("preview_volume").toInt(), 100);
+    preview->setVolume(previewVolume);
+    preview->setRandomStartEnabled(qMainApp->config->get_bool("preview_random_start"));
+    preview->setRememberPositionEnabled(qMainApp->config->get_bool("preview_remember_position"));
+    preview->setMuted(true);
+    preview->prepareInitialFrame(this->previewAutoplayAllMute);
+    contentLayout->addWidget(preview, 1);
+    contentLayout->setStretch(0, 1);
+    contentLayout->setStretch(1, 1);
+    this->previewWidgets.insert(index, preview);
+
+    layout->addLayout(contentLayout);
 
     QWidget* pathWidget = makeScrollableLabel(choice.path, "color: #999; font-size: 10px;", 18);
     layout->addWidget(pathWidget);
@@ -279,6 +307,56 @@ QWidget* NextChoiceDialog::buildCard(const NextVideoChoice& choice, int index)
     return card;
 }
 
+void NextChoiceDialog::startPreviewForIndex(int index)
+{
+    if (!this->previewWidgets.contains(index))
+        return;
+    if (this->previewAutoplayAllMute) {
+        for (auto it = this->previewWidgets.constBegin(); it != this->previewWidgets.constEnd(); ++it) {
+            if (it.value()) {
+                it.value()->setMuted(it.key() != index);
+                if (it.key() == index) {
+                    if (!it.value()->isPlaying()) {
+                        it.value()->startPreview();
+                    }
+                }
+            }
+        }
+    }
+    else {
+        for (auto it = this->previewWidgets.constBegin(); it != this->previewWidgets.constEnd(); ++it) {
+            if (it.key() != index && it.value()) {
+                it.value()->stopPreview();
+            }
+        }
+        if (auto* preview = this->previewWidgets.value(index)) {
+            preview->setMuted(false);
+            preview->startPreview();
+        }
+    }
+}
+
+void NextChoiceDialog::stopPreviewForIndex(int index)
+{
+    if (auto* preview = this->previewWidgets.value(index)) {
+        if (this->previewAutoplayAllMute) {
+            preview->setMuted(true);
+        } else {
+            preview->setMuted(true);
+            preview->stopPreview();
+        }
+    }
+}
+
+void NextChoiceDialog::stopAllPreviews()
+{
+    for (auto* preview : this->previewWidgets) {
+        if (preview) {
+            preview->stopPreview();
+        }
+    }
+}
+
 void NextChoiceDialog::applySelection(int index)
 {
     this->currentIndex = index;
@@ -288,6 +366,8 @@ void NextChoiceDialog::rebuildCards()
 {
     QGridLayout* grid = qobject_cast<QGridLayout*>(this->ui.cardsLayout);
     if (!grid) return;
+    this->stopAllPreviews();
+    this->previewWidgets.clear();
     while (QLayoutItem* item = grid->takeAt(0)) {
         if (QWidget* w = item->widget()) {
             w->deleteLater();
@@ -317,7 +397,7 @@ void NextChoiceDialog::rebuildCards()
 
 bool NextChoiceDialog::eventFilter(QObject* obj, QEvent* event)
 {
-    if (event->type() == QEvent::MouseButtonRelease) {
+    auto findChoiceIndex = [obj]() -> int {
         QObject* cur = obj;
         QVariant prop;
         while (cur && !(prop = cur->property("choiceIndex")).isValid()) {
@@ -325,11 +405,38 @@ bool NextChoiceDialog::eventFilter(QObject* obj, QEvent* event)
         }
         bool ok = false;
         int idx = prop.toInt(&ok);
-        if (ok && idx >= 0 && idx < this->choices.size()) {
+        return ok ? idx : -1;
+    };
+
+    switch (event->type()) {
+    case QEvent::MouseButtonRelease: {
+        int idx = findChoiceIndex();
+        if (idx >= 0 && idx < this->choices.size()) {
+            this->stopAllPreviews();
             this->applySelection(idx);
             this->accept();
             return true;
         }
+        break;
+    }
+    case QEvent::Enter:
+    case QEvent::HoverEnter: {
+        int idx = findChoiceIndex();
+        if (idx >= 0 && idx < this->choices.size()) {
+            this->startPreviewForIndex(idx);
+        }
+        break;
+    }
+    case QEvent::Leave:
+    case QEvent::HoverLeave: {
+        int idx = findChoiceIndex();
+        if (idx >= 0 && idx < this->choices.size()) {
+            this->stopPreviewForIndex(idx);
+        }
+        break;
+    }
+    default:
+        break;
     }
     return QDialog::eventFilter(obj, event);
 }

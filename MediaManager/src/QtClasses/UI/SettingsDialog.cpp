@@ -125,6 +125,24 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 		this->ui.videoAutoplay->setCheckState(Qt::CheckState::Checked);
 	else
 		this->ui.videoAutoplay->setCheckState(Qt::CheckState::Unchecked);
+	int previewVolume = qBound(0, mw->App->config->get("preview_volume").toInt(), 100);
+	this->ui.previewVolumeSpinBox->setValue(previewVolume);
+	this->oldPreviewVolume = previewVolume;
+	if (mw->App->config->get_bool("preview_random_start"))
+		this->ui.previewRandomStart->setCheckState(Qt::CheckState::Checked);
+	else
+		this->ui.previewRandomStart->setCheckState(Qt::CheckState::Unchecked);
+	this->oldPreviewRandomStart = this->ui.previewRandomStart->isChecked();
+	if (mw->App->config->get_bool("preview_autoplay_all_mute"))
+		this->ui.previewAutoplayAllMute->setCheckState(Qt::CheckState::Checked);
+	else
+		this->ui.previewAutoplayAllMute->setCheckState(Qt::CheckState::Unchecked);
+	this->oldPreviewAutoplayAllMute = this->ui.previewAutoplayAllMute->isChecked();
+	if (mw->App->config->get_bool("preview_remember_position"))
+		this->ui.previewRememberPosition->setCheckState(Qt::CheckState::Checked);
+	else
+		this->ui.previewRememberPosition->setCheckState(Qt::CheckState::Unchecked);
+	this->oldPreviewRememberPosition = this->ui.previewRememberPosition->isChecked();
 	if (mw->App->config->get_bool("auto_continue"))
 		this->ui.autoContinue->setCheckState(Qt::CheckState::Checked);
 	else

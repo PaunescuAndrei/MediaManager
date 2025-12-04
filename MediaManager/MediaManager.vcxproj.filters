@@ -257,6 +257,9 @@
     <ClCompile Include="src\QtClasses\Widgets\WheelStrongFocusEventFilter.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\VideoPreviewWidget.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\resource.h">
@@ -481,6 +484,9 @@
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
     <QtMoc Include="src\QtClasses\Widgets\watchedFrame.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\VideoPreviewWidget.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
     <QtMoc Include="src\general\generateThumbnailRunnable.h">

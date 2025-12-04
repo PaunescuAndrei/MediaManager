@@ -3,6 +3,9 @@
 #include "ui_NextChoiceDialog.h"
 #include "definitions.h"
 #include <QIcon>
+#include <QHash>
+
+class VideoPreviewWidget;
 
 class NextChoiceDialog : public QDialog
 {
@@ -22,6 +25,9 @@ private:
     void rebuildCards();
     QWidget* buildCard(const NextVideoChoice& choice, int index);
     void applySelection(int index);
+    void startPreviewForIndex(int index);
+    void stopPreviewForIndex(int index);
+    void stopAllPreviews();
     QList<NextVideoChoice> choices;
     Ui::NextChoiceDialog ui;
     int currentIndex = -1;
@@ -29,6 +35,8 @@ private:
     QIcon* halfIcon = nullptr;
     QIcon* inactiveIcon = nullptr;
     QTimer bringToFrontTimer;
+    QHash<int, VideoPreviewWidget*> previewWidgets;
+    bool previewAutoplayAllMute = false;
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
 };

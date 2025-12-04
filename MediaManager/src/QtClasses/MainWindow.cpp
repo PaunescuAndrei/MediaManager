@@ -2268,6 +2268,22 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         config->set("video_autoplay", "True");
     else if (dialog->ui.videoAutoplay->checkState() == Qt::CheckState::Unchecked)
         config->set("video_autoplay", "False");
+    if (dialog->ui.previewVolumeSpinBox->value() != dialog->oldPreviewVolume) {
+        config->set("preview_volume", QString::number(dialog->ui.previewVolumeSpinBox->value()));
+        dialog->oldPreviewVolume = dialog->ui.previewVolumeSpinBox->value();
+    }
+    if (dialog->ui.previewRandomStart->isChecked() != dialog->oldPreviewRandomStart) {
+        config->set("preview_random_start", dialog->ui.previewRandomStart->isChecked() ? "True" : "False");
+        dialog->oldPreviewRandomStart = dialog->ui.previewRandomStart->isChecked();
+    }
+    if (dialog->ui.previewAutoplayAllMute->isChecked() != dialog->oldPreviewAutoplayAllMute) {
+        config->set("preview_autoplay_all_mute", dialog->ui.previewAutoplayAllMute->isChecked() ? "True" : "False");
+        dialog->oldPreviewAutoplayAllMute = dialog->ui.previewAutoplayAllMute->isChecked();
+    }
+    if (dialog->ui.previewRememberPosition->isChecked() != dialog->oldPreviewRememberPosition) {
+        config->set("preview_remember_position", dialog->ui.previewRememberPosition->isChecked() ? "True" : "False");
+        dialog->oldPreviewRememberPosition = dialog->ui.previewRememberPosition->isChecked();
+    }
     if (dialog->ui.autoContinue->checkState() == Qt::CheckState::Checked)
         config->set("auto_continue", "True");
     else if (dialog->ui.autoContinue->checkState() == Qt::CheckState::Unchecked)

@@ -87,6 +87,7 @@
     <ClCompile Include="src\QtClasses\Widgets\TreeWidgetItem.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\watchedFrame.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\WheelStrongFocusEventFilter.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\VideoPreviewWidget.cpp" />
     <ClCompile Include="src\stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
@@ -167,6 +168,7 @@
     <QtMoc Include="src\QtClasses\Widgets\customGraphicsView.h" />
     <QtMoc Include="src\QtClasses\Widgets\ProgressBarQLabel.h" />
     <QtMoc Include="src\QtClasses\Widgets\AutoToolTipDelegate.h" />
+    <QtMoc Include="src\QtClasses\Widgets\VideoPreviewWidget.h" />
     <QtMoc Include="src\QtClasses\UI\StatsDialog.h" />
     <QtMoc Include="src\QtClasses\UI\SettingsDialog.h" />
     <QtMoc Include="src\QtClasses\UI\setCounterDialog.h" />
@@ -244,17 +246,17 @@
     <Import Project="$(QtMsBuild)\qt_defaults.props" />
   </ImportGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="QtSettings">
-    <QtModules>core;gui;widgets;concurrent;multimedia;sql;</QtModules>
+    <QtModules>core;gui;widgets;concurrent;multimedia;multimediawidgets;sql;</QtModules>
     <QtBuildConfig>debug</QtBuildConfig>
     <QtDeploy>true</QtDeploy>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="QtSettings">
-    <QtModules>core;gui;widgets;concurrent;multimedia;sql;</QtModules>
+    <QtModules>core;gui;widgets;concurrent;multimedia;multimediawidgets;sql;</QtModules>
     <QtBuildConfig>release</QtBuildConfig>
     <QtDeploy>true</QtDeploy>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'" Label="QtSettings">
-    <QtModules>core;gui;widgets;concurrent;multimedia;sql;</QtModules>
+    <QtModules>core;gui;widgets;concurrent;multimedia;multimediawidgets;sql;</QtModules>
     <QtBuildConfig>release</QtBuildConfig>
     <QtDeploy>true</QtDeploy>
   </PropertyGroup>

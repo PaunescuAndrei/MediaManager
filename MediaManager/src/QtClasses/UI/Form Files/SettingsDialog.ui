@@ -662,6 +662,47 @@
              </widget>
             </item>
             <item>
+             <widget class="QWidget" name="previewSeekWidget" native="true">
+              <layout class="QHBoxLayout" name="horizontalLayout_previewSeek">
+               <property name="leftMargin">
+                <number>0</number>
+               </property>
+               <property name="topMargin">
+                <number>0</number>
+               </property>
+               <property name="rightMargin">
+                <number>0</number>
+               </property>
+               <property name="bottomMargin">
+                <number>0</number>
+               </property>
+               <item>
+                <widget class="QLabel" name="previewSeekLabel">
+                 <property name="text">
+                  <string>Seek distance (seconds):</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QDoubleSpinBox" name="previewSeekSeconds">
+                 <property name="minimum">
+                  <double>0.100000000000000</double>
+                 </property>
+                 <property name="maximum">
+                  <double>120.000000000000000</double>
+                 </property>
+                 <property name="singleStep">
+                  <double>0.500000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>5.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
              <widget class="QCheckBox" name="previewRandomStart">
               <property name="text">
                <string>Random start position</string>

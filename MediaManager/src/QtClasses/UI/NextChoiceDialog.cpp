@@ -437,6 +437,32 @@ bool NextChoiceDialog::eventFilter(QObject* obj, QEvent* event)
         }
         break;
     }
+    case QEvent::Wheel: {
+        QObject* curObj = obj;
+        // Ignore wheel events coming from scrollable labels/areas
+        if (curObj && curObj->inherits("QAbstractScrollArea")) {
+            break;
+        }
+        QMouseEvent* dummyMouse = nullptr;
+        int idx = findChoiceIndex();
+        if (idx >= 0 && idx < this->choices.size()) {
+            QWheelEvent* wheel = static_cast<QWheelEvent*>(event);
+            int delta = wheel->angleDelta().y();
+            if (delta == 0)
+                delta = wheel->angleDelta().x();
+            if (delta == 0)
+                break;
+            double seconds = qMainApp->config->get("preview_seek_seconds").toDouble();
+            if (seconds <= 0.0)
+                break;
+            if (auto* preview = this->previewWidgets.value(idx)) {
+                double dir = delta > 0 ? 1.0 : -1.0;
+                preview->seekBySeconds(dir * seconds);
+                return true;
+            }
+        }
+        break;
+    }
     case QEvent::Enter:
     case QEvent::HoverEnter: {
         int idx = findChoiceIndex();

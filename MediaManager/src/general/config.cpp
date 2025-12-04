@@ -111,12 +111,13 @@ void Config::init_defaults() {
 		{"auto_continue_delay", "5"},
 		{"search_timer_interval", "100"},
 		{"notification_duration_ms", "10000"},
-		{"preview_volume", "20"},
-		{"preview_random_start", "False"},
+		{"preview_volume", "15"},
+		{"preview_random_start", "True"},
 		{"preview_autoplay_all_mute", "False"},
-		{"preview_remember_position", "False"},
+		{"preview_remember_position", "True"},
 		{"preview_random_each_hover", "False"},
-		{"preview_seeded_random", "False"},
+		{"preview_seeded_random", "True"},
+		{"preview_seek_seconds", "10"},
 		{"preview_next_choices_enabled", "True"},
 	});
 }

@@ -142,11 +142,12 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 	else
 		this->ui.previewRandomEachHover->setCheckState(Qt::CheckState::Unchecked);
 	this->oldPreviewRandomEachHover = this->ui.previewRandomEachHover->isChecked();
-    if (mw->App->config->get_bool("preview_autoplay_all_mute"))
-        this->ui.previewAutoplayAllMute->setCheckState(Qt::CheckState::Checked);
+	if (mw->App->config->get_bool("preview_autoplay_all_mute"))
+		this->ui.previewAutoplayAllMute->setCheckState(Qt::CheckState::Checked);
 	else
 		this->ui.previewAutoplayAllMute->setCheckState(Qt::CheckState::Unchecked);
 	this->oldPreviewAutoplayAllMute = this->ui.previewAutoplayAllMute->isChecked();
+	this->ui.previewSeekSeconds->setValue(mw->App->config->get("preview_seek_seconds").toDouble());
 	if (mw->App->config->get_bool("preview_seeded_random"))
 		this->ui.previewSeededRandom->setCheckState(Qt::CheckState::Checked);
 	else

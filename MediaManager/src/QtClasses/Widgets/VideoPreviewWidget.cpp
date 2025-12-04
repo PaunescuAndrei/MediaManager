@@ -115,9 +115,7 @@ qint64 VideoPreviewWidget::pickRandomPosition(qint64 duration, quint64 nonce) co
 {
     if (duration <= 0)
         return 0;
-    qint64 maxStart = std::max<qint64>(0, duration - 1500);
-    if (maxStart <= 0)
-        return 0;
+    qint64 maxStart = duration;
     quint32 seed = 0;
     if (this->seededRandom) {
         seed = qHash(this->seedString + this->sourcePath + QString::number(nonce));
@@ -192,6 +190,40 @@ void VideoPreviewWidget::jumpToRandomPosition()
         this->lastPosition = 0;
     }
     this->player->setPosition(pos);
+    if (!this->isPlaying()) {
+        this->player->play();
+    }
+}
+
+void VideoPreviewWidget::seekBySeconds(double seconds)
+{
+    this->ensurePlayer();
+    if (!this->player)
+        return;
+    qint64 duration = this->player->duration();
+    if (duration <= 0)
+        return;
+    qint64 current = this->player->position();
+    qint64 delta = static_cast<qint64>(seconds * 1000.0);
+    qint64 target = current + delta;
+    if (target < 0) {
+        // wrap from start to end
+        target = duration + target; // target is negative
+        if (target < 0) target = 0;
+    } else if (target > duration) {
+        // wrap from end to start
+        target = target - duration;
+        if (target > duration) target = duration;
+    }
+    this->initialPosition = target;
+    if (this->rememberPosition && !this->randomEachHover) {
+        this->lastPosition = target;
+    }
+    this->player->setPosition(target);
+    if (!this->isPlaying() && this->preloadPause) {
+        // keep paused if we were paused due to preload
+        return;
+    }
     if (!this->isPlaying()) {
         this->player->play();
     }

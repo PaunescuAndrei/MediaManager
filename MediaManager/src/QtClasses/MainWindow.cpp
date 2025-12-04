@@ -2288,6 +2288,7 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         config->set("preview_autoplay_all_mute", dialog->ui.previewAutoplayAllMute->isChecked() ? "True" : "False");
         dialog->oldPreviewAutoplayAllMute = dialog->ui.previewAutoplayAllMute->isChecked();
     }
+    config->set("preview_seek_seconds", QString::number(dialog->ui.previewSeekSeconds->value()));
     bool rememberPos = dialog->ui.previewRememberPosition->isChecked() && !dialog->ui.previewRandomEachHover->isChecked();
     if (rememberPos != dialog->oldPreviewRememberPosition) {
         config->set("preview_remember_position", rememberPos ? "True" : "False");

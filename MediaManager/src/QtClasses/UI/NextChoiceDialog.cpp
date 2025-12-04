@@ -286,9 +286,10 @@ QWidget* NextChoiceDialog::buildCard(const NextVideoChoice& choice, int index)
         preview->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
         int previewVolume = qBound(0, qMainApp->config->get("preview_volume").toInt(), 100);
         preview->setVolume(previewVolume);
+        bool randomHover = qMainApp->config->get_bool("preview_random_each_hover") && !this->previewAutoplayAllMute;
         preview->setRandomStartEnabled(qMainApp->config->get_bool("preview_random_start"));
         preview->setRememberPositionEnabled(qMainApp->config->get_bool("preview_remember_position"));
-        preview->setRandomOnHoverEnabled(qMainApp->config->get_bool("preview_random_each_hover"));
+        preview->setRandomOnHoverEnabled(randomHover);
         preview->setMuted(true);
         preview->prepareInitialFrame(this->previewAutoplayAllMute);
         contentLayout->addWidget(preview, 1);
@@ -318,27 +319,24 @@ void NextChoiceDialog::startPreviewForIndex(int index)
 {
     if (!this->previewWidgets.contains(index))
         return;
-    if (this->previewAutoplayAllMute) {
-        for (auto it = this->previewWidgets.constBegin(); it != this->previewWidgets.constEnd(); ++it) {
-            if (it.value()) {
-                it.value()->setMuted(it.key() != index);
-                if (it.key() == index) {
-                    if (!it.value()->isPlaying()) {
-                        it.value()->startPreview();
-                    }
+    for (auto it = this->previewWidgets.constBegin(); it != this->previewWidgets.constEnd(); ++it) {
+        if (!it.value())
+            continue;
+        if (it.key() == index) {
+            it.value()->setMuted(false);
+            if (this->previewAutoplayAllMute) {
+                if (!it.value()->isPlaying()) {
+                    it.value()->startPreview();
                 }
+            } else {
+                it.value()->startPreview();
             }
-        }
-    }
-    else {
-        for (auto it = this->previewWidgets.constBegin(); it != this->previewWidgets.constEnd(); ++it) {
-            if (it.key() != index && it.value()) {
-                it.value()->stopPreview();
-            }
-        }
-        if (auto* preview = this->previewWidgets.value(index)) {
-            preview->setMuted(false);
-            preview->startPreview();
+        } else if (this->previewAutoplayAllMute) {
+            it.value()->setMuted(true);
+            // keep playing; no restart to preserve position
+        } else {
+            it.value()->setMuted(true);
+            it.value()->stopPreview();
         }
     }
 }
@@ -346,10 +344,8 @@ void NextChoiceDialog::startPreviewForIndex(int index)
 void NextChoiceDialog::stopPreviewForIndex(int index)
 {
     if (auto* preview = this->previewWidgets.value(index)) {
-        if (this->previewAutoplayAllMute) {
-            preview->setMuted(true);
-        } else {
-            preview->setMuted(true);
+        preview->setMuted(true);
+        if (!this->previewAutoplayAllMute) {
             preview->stopPreview();
         }
     }
@@ -359,7 +355,11 @@ void NextChoiceDialog::stopAllPreviews()
 {
     for (auto* preview : this->previewWidgets) {
         if (preview) {
-            preview->stopPreview();
+            if (this->previewAutoplayAllMute) {
+                preview->setMuted(true);
+            } else {
+                preview->stopPreview();
+            }
         }
     }
 }

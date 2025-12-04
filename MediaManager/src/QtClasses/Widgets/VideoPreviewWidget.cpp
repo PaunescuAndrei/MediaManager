@@ -144,9 +144,16 @@ void VideoPreviewWidget::startAtPosition(qint64 target, bool pauseAfterSeek)
     }
 
     this->player->setPosition(target);
-    this->player->play();
-    if (pauseAfterSeek && this->initialPosition > 0) {
-        QMetaObject::invokeMethod(this->player, "pause", Qt::QueuedConnection);
+    if (pauseAfterSeek && this->player->playbackState() == QMediaPlayer::PlayingState) {
+        if (this->rememberPosition) {
+            this->lastPosition = target;
+        }
+        this->player->pause();
+    } else {
+        this->player->play();
+        if (pauseAfterSeek && this->initialPosition > 0) {
+            QMetaObject::invokeMethod(this->player, "pause", Qt::QueuedConnection);
+        }
     }
 }
 

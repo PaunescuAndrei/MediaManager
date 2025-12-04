@@ -16,11 +16,70 @@
 #include <algorithm>
 #include <QWheelEvent>
 #include <QScrollBar>
+#include <QPainter>
 #include "starEditorWidget.h"
 #include "utils.h"
 #include "MainApp.h"
 
 namespace {
+class ChoiceCardWidget : public QWidget {
+public:
+    explicit ChoiceCardWidget(int index, QWidget* parent = nullptr) : QWidget(parent) {
+        this->setAttribute(Qt::WA_Hover, true);
+        this->setMouseTracking(true);
+        this->setProperty("choiceIndex", index);
+        this->setCursor(Qt::PointingHandCursor);
+        this->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+    }
+protected:
+    bool event(QEvent* e) override {
+        switch (e->type()) {
+        case QEvent::Enter:
+        case QEvent::HoverEnter:
+            this->hovered = true;
+            this->update();
+            break;
+        case QEvent::Leave:
+        case QEvent::HoverLeave:
+            this->hovered = false;
+            this->update();
+            break;
+        case QEvent::PaletteChange:
+            this->update();
+            break;
+        default:
+            break;
+        }
+        return QWidget::event(e);
+    }
+
+    void paintEvent(QPaintEvent*) override {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+
+        QColor background = this->palette().color(QPalette::Base);
+        if (background.isValid()) {
+            background = background.darker(115);
+        } else {
+            background = QColor(43, 43, 43);
+        }
+
+        QColor border = this->hovered ? this->palette().color(QPalette::Highlight) : this->palette().color(QPalette::Mid);
+        if (!border.isValid()) {
+            border = this->hovered ? QColor(90, 160, 255) : QColor(85, 85, 85);
+        }
+
+        QRectF rect = this->rect();
+        rect.adjust(0.5, 0.5, -0.5, -0.5);
+
+        painter.setBrush(background);
+        painter.setPen(QPen(border, 1.0));
+        painter.drawRoundedRect(rect, 8.0, 8.0);
+    }
+private:
+    bool hovered = false;
+};
+
 class HorizontalScrollArea : public QScrollArea {
 public:
     explicit HorizontalScrollArea(QWidget* parent = nullptr) : QScrollArea(parent) {
@@ -119,15 +178,8 @@ NextVideoChoice NextChoiceDialog::selectedChoice() const
 
 QWidget* NextChoiceDialog::buildCard(const NextVideoChoice& choice, int index)
 {
-    QWidget* card = new QWidget(this);
+    QWidget* card = new ChoiceCardWidget(index, this);
     card->setObjectName(QStringLiteral("choiceCard_%1").arg(index));
-    card->setStyleSheet(QStringLiteral(
-        "QWidget#choiceCard_%1 {"
-        "  border: 1px solid #555;"
-        "  border-radius: 8px;"
-        "  padding: 6px;"
-        "  background: #2b2b2b;"
-        "}").arg(index));
 
     auto* layout = new QVBoxLayout(card);
     layout->setContentsMargins(8, 6, 8, 6);
@@ -220,8 +272,6 @@ QWidget* NextChoiceDialog::buildCard(const NextVideoChoice& choice, int index)
 
     card->setProperty("choiceIndex", index);
     card->installEventFilter(this);
-    card->setCursor(Qt::PointingHandCursor);
-    card->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
     if (QScreen* screen = QGuiApplication::primaryScreen()) {
         int maxWidth = std::max(220, screen->availableGeometry().width() / 4);
         card->setMaximumWidth(maxWidth);

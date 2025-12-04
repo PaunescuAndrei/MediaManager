@@ -93,7 +93,9 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 
 	QTimer::singleShot(0, [this] {this->initTaskbar(); });
 
-	connect(this->VW, &VideoWatcherQt::updateProgressBarSignal, this, [this](double position,double duration, QSharedPointer<BasePlayer> player,bool running) {this->mainWindow->updateProgressBar(position, duration, player,running); });
+	connect(this->VW, &VideoWatcherQt::updateProgressBarSignal, this, [this](double position,double duration, QSharedPointer<BasePlayer> player,bool running) {
+		this->mainWindow->updateProgressBar(position, duration, player,running); 
+	});
 	connect(this->VW, &VideoWatcherQt::updateTaskbarIconSignal, this, [this](bool watching) {
 		this->mainWindow->setIconWatchingState(watching);
 		this->mainWindow->updateIconByWatchingState();

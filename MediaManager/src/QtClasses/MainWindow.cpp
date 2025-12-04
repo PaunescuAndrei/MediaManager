@@ -2744,7 +2744,7 @@ void MainWindow::updateProgressBar(double position, double duration) {
 
 void MainWindow::updateProgressBar(double position, double duration, QSharedPointer<BasePlayer> player, bool running)
 {
-    if(not player->change_in_progress)
+    if(not player->change_in_progress and player->video_path == this->ui.currentVideo->path)
         this->updateProgressBar(position, duration);
 }
 

@@ -20,6 +20,7 @@ public:
     void setMuted(bool muted);
     void setRememberPositionEnabled(bool enabled);
     void setRandomOnHoverEnabled(bool enabled);
+    void setSeededRandom(bool enabled, const QString& seedValue);
     void prepareInitialFrame(bool keepPlaying);
     bool isPlaying() const;
 private slots:
@@ -36,6 +37,7 @@ private:
     void applyVolume();
     void startAtPosition(qint64 target, bool pauseAfterSeek);
     qint64 computeTargetPosition(qint64 duration) const;
+    qint64 pickRandomPosition(qint64 duration, quint64 nonce = 0) const;
     QString sourcePath;
     QMediaPlayer* player = nullptr;
     QVideoWidget* videoWidget = nullptr;
@@ -47,6 +49,8 @@ private:
     bool muted = false;
     bool rememberPosition = false;
     bool randomEachHover = false;
+    bool seededRandom = false;
+    QString seedString;
     qint64 lastPosition = 0;
     qint64 initialPosition = -1;
     bool awaitingLoad = false;
@@ -54,4 +58,5 @@ private:
     bool preloadPause = false;
     QMetaObject::Connection statusConn;
     QMetaObject::Connection pauseConn;
+    mutable quint64 hoverRandomCounter = 0;
 };

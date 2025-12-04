@@ -116,6 +116,7 @@ void Config::init_defaults() {
 		{"preview_autoplay_all_mute", "False"},
 		{"preview_remember_position", "False"},
 		{"preview_random_each_hover", "False"},
+		{"preview_seeded_random", "False"},
 		{"preview_next_choices_enabled", "True"},
 	});
 }

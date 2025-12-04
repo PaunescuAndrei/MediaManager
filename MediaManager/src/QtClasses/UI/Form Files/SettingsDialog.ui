@@ -402,7 +402,7 @@
                <item>
                 <widget class="QCheckBox" name="seedCheckBox">
                  <property name="text">
-                  <string>Next Video Seed:</string>
+                  <string>Random Seed:</string>
                  </property>
                 </widget>
                </item>
@@ -665,6 +665,13 @@
              <widget class="QCheckBox" name="previewRandomStart">
               <property name="text">
                <string>Random start position</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="previewSeededRandom">
+              <property name="text">
+               <string>Use seeded random</string>
               </property>
              </widget>
             </item>

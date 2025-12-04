@@ -290,6 +290,8 @@ QWidget* NextChoiceDialog::buildCard(const NextVideoChoice& choice, int index)
         preview->setRandomStartEnabled(qMainApp->config->get_bool("preview_random_start"));
         preview->setRememberPositionEnabled(qMainApp->config->get_bool("preview_remember_position"));
         preview->setRandomOnHoverEnabled(randomHover);
+        bool seeded = qMainApp->config->get_bool("preview_seeded_random") && qMainApp->config->get_bool("random_use_seed");
+        preview->setSeededRandom(seeded, qMainApp->config->get("random_seed"));
         preview->setMuted(true);
         preview->prepareInitialFrame(this->previewAutoplayAllMute);
         contentLayout->addWidget(preview, 1);

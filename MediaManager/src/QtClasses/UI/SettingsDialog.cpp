@@ -142,11 +142,16 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 	else
 		this->ui.previewRandomEachHover->setCheckState(Qt::CheckState::Unchecked);
 	this->oldPreviewRandomEachHover = this->ui.previewRandomEachHover->isChecked();
-	if (mw->App->config->get_bool("preview_autoplay_all_mute"))
-		this->ui.previewAutoplayAllMute->setCheckState(Qt::CheckState::Checked);
+    if (mw->App->config->get_bool("preview_autoplay_all_mute"))
+        this->ui.previewAutoplayAllMute->setCheckState(Qt::CheckState::Checked);
 	else
 		this->ui.previewAutoplayAllMute->setCheckState(Qt::CheckState::Unchecked);
 	this->oldPreviewAutoplayAllMute = this->ui.previewAutoplayAllMute->isChecked();
+	if (mw->App->config->get_bool("preview_seeded_random"))
+		this->ui.previewSeededRandom->setCheckState(Qt::CheckState::Checked);
+	else
+		this->ui.previewSeededRandom->setCheckState(Qt::CheckState::Unchecked);
+	this->oldPreviewSeededRandom = this->ui.previewSeededRandom->isChecked();
 	if (mw->App->config->get_bool("preview_remember_position"))
 		this->ui.previewRememberPosition->setCheckState(Qt::CheckState::Checked);
 	else
@@ -270,11 +275,11 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 	this->old_aicon_fps_modifier = this->ui.aicon_fps_modifier_spinBox->value();
 	connect(this->ui.aicon_fps_modifier_spinBox, &QDoubleSpinBox::valueChanged, this, [mw, this] {mw->animatedIcon->fps_modifier = this->ui.aicon_fps_modifier_spinBox->value(); });
 
-	if (mw->App->config->get_bool("random_use_seed"))
-		this->ui.seedCheckBox->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.seedCheckBox->setCheckState(Qt::CheckState::Unchecked);
-	this->ui.seedLineEdit->setText(mw->App->config->get("random_seed"));
+    if (mw->App->config->get_bool("random_use_seed"))
+        this->ui.seedCheckBox->setCheckState(Qt::CheckState::Checked);
+    else
+        this->ui.seedCheckBox->setCheckState(Qt::CheckState::Unchecked);
+    this->ui.seedLineEdit->setText(mw->App->config->get("random_seed"));
     this->ui.searchTimerInterval->setValue(mw->App->config->get("search_timer_interval").toInt());
     this->ui.notificationDurationSpinBox->setValue(mw->App->config->get("notification_duration_ms").toInt());
 

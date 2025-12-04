@@ -75,6 +75,13 @@ void VideoPreviewWidget::setRememberPositionEnabled(bool enabled)
     }
 }
 
+void VideoPreviewWidget::setSeededRandom(bool enabled, const QString& seedValue)
+{
+    this->seededRandom = enabled;
+    this->seedString = seedValue;
+    this->hoverRandomCounter = 0;
+}
+
 bool VideoPreviewWidget::isPlaying() const
 {
     return this->player && this->player->playbackState() == QMediaPlayer::PlayingState;
@@ -94,18 +101,30 @@ qint64 VideoPreviewWidget::computeTargetPosition(qint64 duration) const
     }
     if (this->randomEachHover) {
         if (this->randomStart && duration > 0) {
-            qint64 maxStart = std::max<qint64>(0, duration - 1500);
-            qint64 pos = maxStart > 0 ? QRandomGenerator::global()->bounded(maxStart) : 0;
-            return clampPos(pos, duration);
+            return clampPos(this->pickRandomPosition(duration), duration);
         }
         return 0;
     }
     if (this->randomStart && duration > 0) {
-        qint64 maxStart = std::max<qint64>(0, duration - 1500);
-        qint64 pos = maxStart > 0 ? QRandomGenerator::global()->bounded(maxStart) : 0;
-        return clampPos(pos, duration);
+        return clampPos(this->pickRandomPosition(duration), duration);
     }
     return 0;
+}
+
+qint64 VideoPreviewWidget::pickRandomPosition(qint64 duration, quint64 nonce) const
+{
+    if (duration <= 0)
+        return 0;
+    qint64 maxStart = std::max<qint64>(0, duration - 1500);
+    if (maxStart <= 0)
+        return 0;
+    quint32 seed = 0;
+    if (this->seededRandom) {
+        seed = qHash(this->seedString + this->sourcePath + QString::number(nonce));
+        QRandomGenerator rng(seed);
+        return rng.bounded(maxStart);
+    }
+    return QRandomGenerator::global()->bounded(maxStart);
 }
 
 void VideoPreviewWidget::startAtPosition(qint64 target, bool pauseAfterSeek)
@@ -250,33 +269,21 @@ void VideoPreviewWidget::startPlayback()
         this->ensurePlayer();
     if (!this->player)
         return;
-    auto setRandomPosition = [this]() -> qint64 {
-        qint64 duration = this->player->duration();
-        if (duration > 0) {
-            qint64 maxStart = std::max<qint64>(0, duration - 1500); // leave ~1.5s to avoid immediate loop
-            qint64 pos = maxStart > 0 ? QRandomGenerator::global()->bounded(maxStart) : 0;
-            this->player->setPosition(pos);
-            return pos;
-        }
-        else {
-            this->player->setPosition(0);
-        }
-        return 0;
-    };
-
     if (this->randomEachHover) {
         if (this->player->duration() > 0) {
-            qint64 pos = setRandomPosition();
+            qint64 pos = this->pickRandomPosition(this->player->duration(), ++this->hoverRandomCounter);
             this->initialPosition = pos;
             this->lastPosition = 0;
+            this->player->setPosition(pos);
         } else {
             QObject::disconnect(this->player, &QMediaPlayer::durationChanged, nullptr, nullptr);
-            QObject::connect(this->player, &QMediaPlayer::durationChanged, this, [this, setRandomPosition](qint64) {
+            QObject::connect(this->player, &QMediaPlayer::durationChanged, this, [this](qint64) {
                 if (!this->randomEachHover)
                     return;
                 if (this->player && this->player->duration() > 0) {
-                    qint64 pos = setRandomPosition();
+                    qint64 pos = this->pickRandomPosition(this->player->duration(), ++this->hoverRandomCounter);
                     this->initialPosition = pos;
+                    this->player->setPosition(pos);
                     QObject::disconnect(this->player, &QMediaPlayer::durationChanged, this, nullptr);
                 }
             });
@@ -288,23 +295,25 @@ void VideoPreviewWidget::startPlayback()
         this->player->setPosition(this->initialPosition);
     } else if (this->randomStart) {
         if (this->player->duration() > 0) {
-            qint64 pos = setRandomPosition();
+            qint64 pos = this->pickRandomPosition(this->player->duration());
             this->initialPosition = pos;
             if (this->rememberPosition)
                 this->lastPosition = pos;
+            this->player->setPosition(pos);
         } else {
             QObject::disconnect(this->player, &QMediaPlayer::durationChanged, nullptr, nullptr);
-            QObject::connect(this->player, &QMediaPlayer::durationChanged, this, [this, setRandomPosition](qint64) {
+            QObject::connect(this->player, &QMediaPlayer::durationChanged, this, [this](qint64) {
                 if (!this->randomStart)
                     return;
                 if (this->rememberPosition && this->lastPosition > 0)
                     return;
                 if (this->player && this->player->duration() > 0) {
-                    qint64 pos = setRandomPosition();
+                    qint64 pos = this->pickRandomPosition(this->player->duration());
                     this->initialPosition = pos;
                     if (this->rememberPosition)
                         this->lastPosition = pos;
                     QObject::disconnect(this->player, &QMediaPlayer::durationChanged, this, nullptr);
+                    this->player->setPosition(pos);
                 }
             });
         }

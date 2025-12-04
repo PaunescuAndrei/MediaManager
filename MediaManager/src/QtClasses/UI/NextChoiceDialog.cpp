@@ -130,6 +130,7 @@ void NextChoiceDialog::setChoices(const QList<NextVideoChoice>& newChoices)
 {
     this->choices = newChoices;
     this->previewAutoplayAllMute = qMainApp->config->get_bool("preview_autoplay_all_mute");
+    this->previewEnabled = qMainApp->config->get_bool("preview_next_choices_enabled");
     this->rebuildCards();
     if (!this->choices.isEmpty()) {
         this->applySelection(0);
@@ -278,21 +279,26 @@ QWidget* NextChoiceDialog::buildCard(const NextVideoChoice& choice, int index)
 
     contentLayout->addLayout(infoLayout, 1);
 
-    VideoPreviewWidget* preview = new VideoPreviewWidget(card);
-    preview->setSource(choice.path);
-    preview->setStartDelay(0);
-    preview->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    int previewVolume = qBound(0, qMainApp->config->get("preview_volume").toInt(), 100);
-    preview->setVolume(previewVolume);
-    preview->setRandomStartEnabled(qMainApp->config->get_bool("preview_random_start"));
-    preview->setRememberPositionEnabled(qMainApp->config->get_bool("preview_remember_position"));
-    preview->setRandomOnHoverEnabled(qMainApp->config->get_bool("preview_random_each_hover"));
-    preview->setMuted(true);
-    preview->prepareInitialFrame(this->previewAutoplayAllMute);
-    contentLayout->addWidget(preview, 1);
-    contentLayout->setStretch(0, 1);
-    contentLayout->setStretch(1, 1);
-    this->previewWidgets.insert(index, preview);
+    if (this->previewEnabled) {
+        VideoPreviewWidget* preview = new VideoPreviewWidget(card);
+        preview->setSource(choice.path);
+        preview->setStartDelay(0);
+        preview->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        int previewVolume = qBound(0, qMainApp->config->get("preview_volume").toInt(), 100);
+        preview->setVolume(previewVolume);
+        preview->setRandomStartEnabled(qMainApp->config->get_bool("preview_random_start"));
+        preview->setRememberPositionEnabled(qMainApp->config->get_bool("preview_remember_position"));
+        preview->setRandomOnHoverEnabled(qMainApp->config->get_bool("preview_random_each_hover"));
+        preview->setMuted(true);
+        preview->prepareInitialFrame(this->previewAutoplayAllMute);
+        contentLayout->addWidget(preview, 1);
+        contentLayout->setStretch(0, 1);
+        contentLayout->setStretch(1, 1);
+        this->previewWidgets.insert(index, preview);
+    } else {
+        contentLayout->addStretch(1);
+        contentLayout->setStretch(0, 1);
+    }
 
     layout->addLayout(contentLayout);
 

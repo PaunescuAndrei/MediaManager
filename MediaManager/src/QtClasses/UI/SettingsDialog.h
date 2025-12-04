@@ -16,6 +16,7 @@ public:
     bool oldPreviewAutoplayAllMute = false;
     bool oldPreviewRememberPosition = false;
     bool oldPreviewRandomEachHover = false;
+    bool oldPreviewNextChoicesEnabled = true;
     int oldSVmax = 0;
     double old_mascotsChanceSpinBox = 0;
     double old_aicon_fps_modifier = 1.0;

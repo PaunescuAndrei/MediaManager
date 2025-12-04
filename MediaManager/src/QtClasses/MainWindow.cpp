@@ -2289,6 +2289,10 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         config->set("preview_remember_position", rememberPos ? "True" : "False");
         dialog->oldPreviewRememberPosition = rememberPos;
     }
+    if (dialog->ui.previewEnabled->isChecked() != dialog->oldPreviewNextChoicesEnabled) {
+        config->set("preview_next_choices_enabled", dialog->ui.previewEnabled->isChecked() ? "True" : "False");
+        dialog->oldPreviewNextChoicesEnabled = dialog->ui.previewEnabled->isChecked();
+    }
     if (dialog->ui.autoContinue->checkState() == Qt::CheckState::Checked)
         config->set("auto_continue", "True");
     else if (dialog->ui.autoContinue->checkState() == Qt::CheckState::Unchecked)

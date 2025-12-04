@@ -37,6 +37,7 @@ private:
     QTimer bringToFrontTimer;
     QHash<int, VideoPreviewWidget*> previewWidgets;
     bool previewAutoplayAllMute = false;
+    bool previewEnabled = true;
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
 };

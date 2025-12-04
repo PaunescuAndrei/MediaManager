@@ -2276,13 +2276,18 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         config->set("preview_random_start", dialog->ui.previewRandomStart->isChecked() ? "True" : "False");
         dialog->oldPreviewRandomStart = dialog->ui.previewRandomStart->isChecked();
     }
+    if (dialog->ui.previewRandomEachHover->isChecked() != dialog->oldPreviewRandomEachHover) {
+        config->set("preview_random_each_hover", dialog->ui.previewRandomEachHover->isChecked() ? "True" : "False");
+        dialog->oldPreviewRandomEachHover = dialog->ui.previewRandomEachHover->isChecked();
+    }
     if (dialog->ui.previewAutoplayAllMute->isChecked() != dialog->oldPreviewAutoplayAllMute) {
         config->set("preview_autoplay_all_mute", dialog->ui.previewAutoplayAllMute->isChecked() ? "True" : "False");
         dialog->oldPreviewAutoplayAllMute = dialog->ui.previewAutoplayAllMute->isChecked();
     }
-    if (dialog->ui.previewRememberPosition->isChecked() != dialog->oldPreviewRememberPosition) {
-        config->set("preview_remember_position", dialog->ui.previewRememberPosition->isChecked() ? "True" : "False");
-        dialog->oldPreviewRememberPosition = dialog->ui.previewRememberPosition->isChecked();
+    bool rememberPos = dialog->ui.previewRememberPosition->isChecked() && !dialog->ui.previewRandomEachHover->isChecked();
+    if (rememberPos != dialog->oldPreviewRememberPosition) {
+        config->set("preview_remember_position", rememberPos ? "True" : "False");
+        dialog->oldPreviewRememberPosition = rememberPos;
     }
     if (dialog->ui.autoContinue->checkState() == Qt::CheckState::Checked)
         config->set("auto_continue", "True");

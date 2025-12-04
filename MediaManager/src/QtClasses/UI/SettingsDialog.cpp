@@ -133,6 +133,11 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 	else
 		this->ui.previewRandomStart->setCheckState(Qt::CheckState::Unchecked);
 	this->oldPreviewRandomStart = this->ui.previewRandomStart->isChecked();
+	if (mw->App->config->get_bool("preview_random_each_hover"))
+		this->ui.previewRandomEachHover->setCheckState(Qt::CheckState::Checked);
+	else
+		this->ui.previewRandomEachHover->setCheckState(Qt::CheckState::Unchecked);
+	this->oldPreviewRandomEachHover = this->ui.previewRandomEachHover->isChecked();
 	if (mw->App->config->get_bool("preview_autoplay_all_mute"))
 		this->ui.previewAutoplayAllMute->setCheckState(Qt::CheckState::Checked);
 	else
@@ -143,6 +148,28 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 	else
 		this->ui.previewRememberPosition->setCheckState(Qt::CheckState::Unchecked);
 	this->oldPreviewRememberPosition = this->ui.previewRememberPosition->isChecked();
+	connect(this->ui.previewRandomEachHover, &QCheckBox::toggled, this, [this](bool checked) {
+		if (checked) {
+			this->ui.previewRememberPosition->setChecked(false);
+			this->ui.previewRememberPosition->setEnabled(false);
+		} else {
+			this->ui.previewRememberPosition->setEnabled(true);
+		}
+	});
+	connect(this->ui.previewRememberPosition, &QCheckBox::toggled, this, [this](bool checked) {
+		if (checked) {
+			this->ui.previewRandomEachHover->setChecked(false);
+			this->ui.previewRandomEachHover->setEnabled(false);
+		} else {
+			this->ui.previewRandomEachHover->setEnabled(true);
+		}
+	});
+	this->ui.previewRememberPosition->setEnabled(!this->ui.previewRandomEachHover->isChecked());
+	this->ui.previewRandomEachHover->setEnabled(!this->ui.previewRememberPosition->isChecked());
+	if (this->ui.previewRandomEachHover->isChecked() && this->ui.previewRememberPosition->isChecked()) {
+		this->ui.previewRememberPosition->setChecked(false);
+		this->oldPreviewRememberPosition = false;
+	}
 	if (mw->App->config->get_bool("auto_continue"))
 		this->ui.autoContinue->setCheckState(Qt::CheckState::Checked);
 	else

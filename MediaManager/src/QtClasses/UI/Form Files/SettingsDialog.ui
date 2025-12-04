@@ -598,9 +598,16 @@
                </widget>
               </item>
               <item>
-               <widget class="QCheckBox" name="previewRandomStart">
+              <widget class="QCheckBox" name="previewRandomStart">
+               <property name="text">
+                <string>Random start position</string>
+               </property>
+              </widget>
+             </item>
+              <item>
+               <widget class="QCheckBox" name="previewRandomEachHover">
                 <property name="text">
-                 <string>Random start position</string>
+                 <string>Random position on hover</string>
                 </property>
                </widget>
               </item>
@@ -662,12 +669,12 @@
               </widget>
               </item>
               <item>
-               <widget class="QCheckBox" name="previewRememberPosition">
-                <property name="text">
-                 <string>Remember preview position</string>
-                </property>
-               </widget>
-              </item>
+              <widget class="QCheckBox" name="previewRememberPosition">
+               <property name="text">
+                <string>Remember preview position</string>
+               </property>
+              </widget>
+             </item>
              </layout>
             </widget>
            </item>

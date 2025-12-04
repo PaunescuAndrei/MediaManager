@@ -19,6 +19,7 @@ public:
     void setRandomStartEnabled(bool enabled);
     void setMuted(bool muted);
     void setRememberPositionEnabled(bool enabled);
+    void setRandomOnHoverEnabled(bool enabled);
     void prepareInitialFrame(bool keepPlaying);
     bool isPlaying() const;
 private slots:
@@ -45,6 +46,7 @@ private:
     bool randomStart = false;
     bool muted = false;
     bool rememberPosition = false;
+    bool randomEachHover = false;
     qint64 lastPosition = 0;
     qint64 initialPosition = -1;
     bool awaitingLoad = false;

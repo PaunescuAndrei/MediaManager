@@ -2774,8 +2774,9 @@ void MainWindow::updateProgressBar(double position, double duration) {
 
 void MainWindow::updateProgressBar(double position, double duration, QSharedPointer<BasePlayer> player, bool running)
 {
-    if(not player->change_in_progress and player->video_path == this->ui.currentVideo->path)
+    if (not player->change_in_progress and player->video_path == this->ui.currentVideo->path) {
         this->updateProgressBar(position, duration);
+    }
 }
 
 void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notification) {
@@ -3916,8 +3917,12 @@ void MainWindow::selectItemsDelayed(QStringList items, bool clear_selection) {
 void MainWindow::setCurrentVideo(int id, QString path, QString name, QString author, QString tags, bool reset_progress) {
     this->ui.currentVideo->setValues(id, path, name, author, tags);
     if (this->videosModel) this->videosModel->setHighlightedPath(path);
-    if (reset_progress)
+    if (reset_progress) {
+        if (id >= 0) {
+            this->App->db->updateVideoProgress(id, 0.0);
+        }
         this->updateProgressBar("0", utils::getVideoDuration(this->ui.currentVideo->path));
+    }
     else
         this->updateProgressBar(this->App->db->getVideoProgress(this->ui.currentVideo->id), utils::getVideoDuration(this->ui.currentVideo->path));
     this->App->db->setMainInfoValue("current", this->App->currentDB, path);

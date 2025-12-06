@@ -2,10 +2,10 @@
 #include "VideoPreviewWidget.h"
 #include <QMediaPlayer>
 #include <QAudioOutput>
+#include <QVideoSink>
 #include <QUrl>
 #include <QFileInfo>
 #include <QRandomGenerator>
-#include <QGraphicsVideoItem>
 #include "OverlayGraphicsVideoWidget.h"
 #include "utils.h"
 
@@ -345,8 +345,8 @@ void VideoPreviewWidget::ensurePlayer()
     this->audioOutput = new QAudioOutput(this);
     this->applyVolume();
     this->player->setAudioOutput(this->audioOutput);
-    if (this->videoWidget && this->videoWidget->videoItem()) {
-        this->player->setVideoOutput(this->videoWidget->videoItem());
+    if (this->videoWidget && this->videoWidget->videoSink()) {
+        this->player->setVideoOutput(this->videoWidget->videoSink());
     }
     this->player->setLoops(QMediaPlayer::Infinite);
     this->statusConn = QObject::connect(this->player, &QMediaPlayer::mediaStatusChanged, this, &VideoPreviewWidget::onMediaStatusChanged);

@@ -1,48 +1,101 @@
 #include "stdafx.h"
 #include "OverlayGraphicsVideoWidget.h"
-#include <QGraphicsScene>
-#include <QGraphicsVideoItem>
-#include <QGraphicsRectItem>
-#include <QGraphicsSimpleTextItem>
-#include <QGraphicsView>
+#include <QColor>
+#include <QFontMetrics>
+#include <QPainter>
+#include <QPaintEvent>
 #include <QResizeEvent>
-#include <QVBoxLayout>
+#include <QThread>
+#include <QVideoSink>
+#include <QMetaType>
+
+void FrameWorker::processFrame(const QVideoFrame& frame)
+{
+    QImage image;
+    if (frame.isValid()) {
+        image = frame.toImage();
+    }
+    emit frameReady(image);
+}
+
+PreviewFrameProcessor::PreviewFrameProcessor(QObject* parent) : QObject(parent)
+{
+    qRegisterMetaType<QVideoFrame>("QVideoFrame");
+    this->workerThread = new QThread(this);
+    this->worker = new FrameWorker();
+    this->worker->moveToThread(this->workerThread);
+    QObject::connect(this->worker, &FrameWorker::frameReady, this, &PreviewFrameProcessor::onFrameConverted);
+    this->workerThread->start(QThread::LowestPriority);
+}
+
+PreviewFrameProcessor::~PreviewFrameProcessor()
+{
+    if (this->workerThread) {
+        this->workerThread->quit();
+        this->workerThread->wait();
+    }
+    delete this->worker;
+    this->worker = nullptr;
+}
+
+void PreviewFrameProcessor::setVideoSink(QVideoSink* sink)
+{
+    if (this->sink == sink)
+        return;
+    if (this->sink) {
+        QObject::disconnect(this->sink, nullptr, this, nullptr);
+    }
+    this->sink = sink;
+    this->latestFrame = QVideoFrame();
+    this->hasPendingFrame = false;
+    this->processing = false;
+    if (this->sink) {
+        QObject::connect(this->sink, &QVideoSink::videoFrameChanged, this, &PreviewFrameProcessor::onFrameAvailable);
+    }
+}
+
+void PreviewFrameProcessor::onFrameAvailable(const QVideoFrame& frame)
+{
+    this->latestFrame = frame;
+    this->hasPendingFrame = true;
+    if (this->processing || !this->worker)
+        return;
+    this->dispatchLatest();
+}
+
+void PreviewFrameProcessor::dispatchLatest()
+{
+    if (!this->worker || !this->hasPendingFrame)
+        return;
+    this->processing = true;
+    this->hasPendingFrame = false;
+    QVideoFrame frameCopy(this->latestFrame);
+    QMetaObject::invokeMethod(this->worker, "processFrame", Qt::QueuedConnection, Q_ARG(QVideoFrame, frameCopy));
+}
+
+void PreviewFrameProcessor::onFrameConverted(const QImage& image)
+{
+    this->processing = false;
+    emit this->frameReady(image);
+    if (this->hasPendingFrame) {
+        this->dispatchLatest();
+    }
+}
 
 OverlayGraphicsVideoWidget::OverlayGraphicsVideoWidget(QWidget* parent) : QWidget(parent)
 {
     this->setAttribute(Qt::WA_NoSystemBackground, true);
     this->setAutoFillBackground(false);
 
-    this->scene = new QGraphicsScene(this);
-    this->view = new QGraphicsView(this->scene, this);
-    this->view->setFrameShape(QFrame::NoFrame);
-    this->view->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    this->view->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    this->view->setAlignment(Qt::AlignCenter);
-    this->view->setInteractive(false);
-    this->view->setRenderHint(QPainter::Antialiasing, true);
-    this->view->setRenderHint(QPainter::SmoothPixmapTransform, true);
-
-    this->videoItemPtr = new QGraphicsVideoItem();
-    this->videoItemPtr->setAspectRatioMode(Qt::KeepAspectRatio);
-    this->scene->addItem(this->videoItemPtr);
-
-    this->overlayBg = this->scene->addRect(QRectF(), QPen(Qt::NoPen), QBrush(QColor(0, 0, 0, 140)));
-    this->overlayBg->setVisible(false);
-    this->overlayText = this->scene->addSimpleText(QString());
-    this->overlayText->setBrush(QBrush(Qt::white));
-    this->overlayText->setVisible(false);
-
-    auto* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(0, 0, 0, 0);
-    layout->setSpacing(0);
-    layout->addWidget(this->view);
+    this->sink = new QVideoSink(this);
+    this->processor = new PreviewFrameProcessor(this);
+    this->processor->setVideoSink(this->sink);
+    QObject::connect(this->processor, &PreviewFrameProcessor::frameReady, this, &OverlayGraphicsVideoWidget::onFrameReady);
 }
 
-void OverlayGraphicsVideoWidget::resizeEvent(QResizeEvent* event)
+QVideoSink* OverlayGraphicsVideoWidget::videoSink() const
 {
-    QWidget::resizeEvent(event);
-    this->updateLayout();
+    return this->sink;
 }
 
 void OverlayGraphicsVideoWidget::setOverlayText(const QString& text)
@@ -50,34 +103,53 @@ void OverlayGraphicsVideoWidget::setOverlayText(const QString& text)
     if (this->currentText == text)
         return;
     this->currentText = text;
-    if (!this->overlayText || !this->overlayBg)
-        return;
-    this->overlayText->setText(text);
-    bool visible = !text.isEmpty();
-    this->overlayText->setVisible(visible);
-    this->overlayBg->setVisible(visible);
-    this->updateLayout();
+    this->update();
 }
 
-void OverlayGraphicsVideoWidget::updateLayout()
+void OverlayGraphicsVideoWidget::onFrameReady(const QImage& image)
 {
-    if (!this->view || !this->scene || !this->videoItemPtr)
-        return;
-    const QSizeF viewSize = this->view->viewport()->size();
-    if (viewSize.isEmpty())
-        return;
+    this->currentFrame = image;
+    this->updateTargetRect();
+    this->update();
+}
 
-    this->videoItemPtr->setSize(viewSize);
-    this->scene->setSceneRect(QRectF(QPointF(0, 0), viewSize));
+void OverlayGraphicsVideoWidget::paintEvent(QPaintEvent* event)
+{
+    Q_UNUSED(event);
+    QPainter painter(this);
+    painter.fillRect(this->rect(), Qt::black);
 
-    if (!this->overlayText || !this->overlayBg || !this->overlayText->isVisible())
+    if (!this->currentFrame.isNull() && !this->targetRect.isEmpty()) {
+        painter.drawImage(this->targetRect, this->currentFrame);
+    }
+
+    if (!this->currentText.isEmpty()) {
+        const QFontMetrics fm(this->font());
+        QRect textRect = fm.boundingRect(this->currentText);
+        textRect.adjust(-4, -2, 4, 2);
+        QRect bgRect(textRect);
+        const int margin = 6;
+        bgRect.moveTo(this->width() - bgRect.width() - margin, this->height() - bgRect.height() - margin);
+        painter.fillRect(bgRect, QColor(0, 0, 0, 140));
+        painter.setPen(Qt::white);
+        painter.drawText(bgRect.adjusted(4, 2, -4, -2), this->currentText);
+    }
+}
+
+void OverlayGraphicsVideoWidget::resizeEvent(QResizeEvent* event)
+{
+    QWidget::resizeEvent(event);
+    this->updateTargetRect();
+}
+
+void OverlayGraphicsVideoWidget::updateTargetRect()
+{
+    if (this->currentFrame.isNull() || this->size().isEmpty()) {
+        this->targetRect = QRect();
         return;
+    }
 
-    QRectF textRect = this->overlayText->boundingRect();
-    const qreal margin = 6.0;
-    QRectF bgRect(0, 0, textRect.width() + 8.0, textRect.height() + 4.0);
-    QPointF pos(viewSize.width() - bgRect.width() - margin, viewSize.height() - bgRect.height() - margin);
-    bgRect.moveTopLeft(pos);
-    this->overlayBg->setRect(bgRect);
-    this->overlayText->setPos(bgRect.topLeft() + QPointF(4.0, 2.0));
+    QSize scaled = this->currentFrame.size().scaled(this->size(), Qt::KeepAspectRatio);
+    QPoint topLeft((this->width() - scaled.width()) / 2, (this->height() - scaled.height()) / 2);
+    this->targetRect = QRect(topLeft, scaled);
 }

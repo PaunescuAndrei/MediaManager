@@ -4,10 +4,9 @@
 #include <QString>
 
 class QMediaPlayer;
-class QVideoWidget;
+class OverlayGraphicsVideoWidget;
 class QAudioOutput;
 
-// Lightweight video preview widget that can be reused outside NextChoiceDialog.
 class VideoPreviewWidget : public QWidget
 {
     Q_OBJECT
@@ -27,8 +26,11 @@ public:
     void restoreLastPosition(qint64 positionMs);
     qint64 resumePositionHint() const;
     bool isPlaying() const;
+protected:
+    void resizeEvent(QResizeEvent* event) override;
 private slots:
     void onMediaStatusChanged(QMediaPlayer::MediaStatus status);
+    void onPositionChanged(qint64 positionMs);
 public slots:
     void startPreview();
     void stopPreview(bool forceStop = false);
@@ -39,12 +41,13 @@ private:
     void ensurePlayer();
     void startPlayback();
     void applyVolume();
+    void updateOverlayText(qint64 positionMs, qint64 durationMs);
     void startAtPosition(qint64 target, bool pauseAfterSeek);
     qint64 computeTargetPosition(qint64 duration) const;
     qint64 pickRandomPosition(qint64 duration, quint64 nonce = 0) const;
     QString sourcePath;
     QMediaPlayer* player = nullptr;
-    QVideoWidget* videoWidget = nullptr;
+    OverlayGraphicsVideoWidget* videoWidget = nullptr;
     QAudioOutput* audioOutput = nullptr;
     QTimer startTimer;
     int startDelayMs = 0;
@@ -57,6 +60,9 @@ private:
     QString seedString;
     qint64 lastPosition = 0;
     qint64 initialPosition = -1;
+    qint64 currentDurationMs = 0;
+    qint64 lastPositionMs = 0;
+    QString lastOverlayText;
     bool awaitingLoad = false;
     bool preloadActive = false;
     bool preloadPause = false;

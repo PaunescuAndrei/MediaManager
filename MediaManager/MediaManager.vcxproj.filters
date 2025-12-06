@@ -263,6 +263,9 @@
     <ClCompile Include="src\QtClasses\Widgets\VideoPreviewWidget.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\resource.h">
@@ -275,6 +278,9 @@
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </ClInclude>
     <ClInclude Include="src\QtClasses\Widgets\PreviewTooltipDialog.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </ClInclude>
     <ClInclude Include="src\general\config.h">

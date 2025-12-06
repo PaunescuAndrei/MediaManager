@@ -1,11 +1,12 @@
 #include "stdafx.h"
 #include "VideoPreviewWidget.h"
-#include <QVideoWidget>
 #include <QMediaPlayer>
 #include <QAudioOutput>
+#include <QVideoSink>
 #include <QUrl>
 #include <QFileInfo>
 #include <QRandomGenerator>
+#include "OverlayGraphicsVideoWidget.h"
 #include "utils.h"
 
 VideoPreviewWidget::VideoPreviewWidget(QWidget* parent) : QWidget(parent)
@@ -13,9 +14,8 @@ VideoPreviewWidget::VideoPreviewWidget(QWidget* parent) : QWidget(parent)
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
 
-    this->videoWidget = new QVideoWidget(this);
+    this->videoWidget = new OverlayGraphicsVideoWidget(this);
     this->videoWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    this->videoWidget->setStyleSheet(QStringLiteral("background-color: #111; border: 1px solid #333;"));
     layout->addWidget(this->videoWidget);
 
     this->startTimer.setSingleShot(true);
@@ -268,8 +268,8 @@ void VideoPreviewWidget::prepareInitialFrame(bool keepPlaying)
     qint64 duration = this->player->duration();
     if (duration > 0) {
         qint64 target = this->computeTargetPosition(duration);
-        if (this->rememberPosition && this->lastPosition <= 0 && target > 0)
-            this->lastPosition = target;
+    if (this->rememberPosition && this->lastPosition <= 0 && target > 0)
+        this->lastPosition = target;
         this->startAtPosition(target, this->preloadPause);
         this->awaitingLoad = false;
     } else {
@@ -333,6 +333,7 @@ void VideoPreviewWidget::stopPreview(bool forceStop)
         }
         emit this->previewStopped(this->sourcePath);
     }
+    this->updateOverlayText(0, -1);
 }
 
 void VideoPreviewWidget::ensurePlayer()
@@ -344,9 +345,16 @@ void VideoPreviewWidget::ensurePlayer()
     this->audioOutput = new QAudioOutput(this);
     this->applyVolume();
     this->player->setAudioOutput(this->audioOutput);
-    this->player->setVideoOutput(this->videoWidget);
+    if (this->videoWidget && this->videoWidget->videoSink()) {
+        this->player->setVideoOutput(this->videoWidget->videoSink());
+    }
     this->player->setLoops(QMediaPlayer::Infinite);
     this->statusConn = QObject::connect(this->player, &QMediaPlayer::mediaStatusChanged, this, &VideoPreviewWidget::onMediaStatusChanged);
+    QObject::connect(this->player, &QMediaPlayer::positionChanged, this, &VideoPreviewWidget::onPositionChanged);
+    QObject::connect(this->player, &QMediaPlayer::durationChanged, this, [this](qint64 dur) {
+        this->currentDurationMs = dur;
+        this->updateOverlayText(this->player ? this->player->position() : 0, dur);
+    });
     if (!this->sourcePath.isEmpty()) {
         this->player->setSource(QUrl::fromLocalFile(this->sourcePath));
     }
@@ -421,4 +429,27 @@ void VideoPreviewWidget::applyVolume()
         return;
     this->audioOutput->setMuted(false);
     this->audioOutput->setVolume(utils::volume_convert(this->muted ? 0 : this->volumePercent));
+}
+
+void VideoPreviewWidget::onPositionChanged(qint64 positionMs)
+{
+    this->updateOverlayText(positionMs, this->currentDurationMs);
+}
+
+void VideoPreviewWidget::resizeEvent(QResizeEvent* event)
+{
+    QWidget::resizeEvent(event);
+}
+
+void VideoPreviewWidget::updateOverlayText(qint64 positionMs, qint64 durationMs)
+{
+    if (!this->videoWidget)
+        return;
+    if (durationMs <= 0) {
+        this->videoWidget->setOverlayText(QString());
+        return;
+    }
+    const QString posText = utils::formatSecondsQt(positionMs / 1000.0);
+    const QString durText = utils::formatSecondsQt(durationMs / 1000.0);
+    this->videoWidget->setOverlayText(QStringLiteral("%1 / %2").arg(posText, durText));
 }

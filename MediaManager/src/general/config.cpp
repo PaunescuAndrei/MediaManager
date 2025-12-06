@@ -119,6 +119,10 @@ void Config::init_defaults() {
 		{"preview_seeded_random", "True"},
 		{"preview_seek_seconds", "10"},
 		{"preview_next_choices_enabled", "True"},
+		{"preview_main_history_count", "5"},
+		{"preview_main_enabled", "True"},
+		{"preview_main_width", "800"},
+		{"preview_main_height", "450"},
 	});
 }
 

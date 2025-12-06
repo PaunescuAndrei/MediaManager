@@ -24,6 +24,7 @@
 #include <QCompleter>
 #include <QThreadPool>
 #include <QPersistentModelIndex>
+#include <QHash>
 
 class MainApp;
 class VideosModel;
@@ -68,6 +69,9 @@ public:
     QMediaPlayer* special_effects_player = nullptr;
     QThreadPool* searchThreadPool;
     QTimer randomProbabilitiesUpdateTimer;
+    QPointer<QDialog> previewTooltip;
+    QHash<QString, qint64> previewPositionCache;
+    QList<QString> previewHistoryOrder;
 
     MainWindow(QWidget* parent = nullptr, MainApp* App = nullptr);
     //void resizeEvent(QResizeEvent* event) override;
@@ -237,6 +241,11 @@ public:
     void updateThemeHighlightColorFromMascot(customGraphicsView* mascot, bool weighted = true, bool regen_colors_if_missing = true);
     void setThemeHighlightColor(QColor color);
     void openThumbnails(QString path);
+    void showPreviewTooltip(const QModelIndex& proxyIndex);
+    void closePreviewTooltip(bool storePosition = true);
+    void updatePreviewPositionCache(const QString& path, qint64 positionMs);
+    qint64 cachedPreviewPosition(const QString& path) const;
+    int previewHistoryLimit() const;
     void flipMascots();
     void showMascots();
     void hideMascots();

@@ -584,70 +584,137 @@
            </layout>
           </widget>
          </item>
-           <item>
-             <widget class="QGroupBox" name="previewGroupBox">
-             <property name="title">
-              <string>Video Preview</string>
-             </property>
-             <layout class="QVBoxLayout" name="verticalLayout_preview">
+         <item>
+          <widget class="QGroupBox" name="previewGroupBox">
+           <property name="title">
+            <string>Video Preview</string>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_preview">
             <item>
-             <widget class="QCheckBox" name="previewEnabled">
-              <property name="text">
-               <string>Enable video previews in next choices dialog</string>
+             <widget class="QGroupBox" name="previewGeneralBox">
+              <property name="title">
+               <string>General</string>
               </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QWidget" name="previewVolumeWidget" native="true">
-              <layout class="QHBoxLayout" name="horizontalLayout_previewVolume">
-               <property name="leftMargin">
-                <number>0</number>
-               </property>
-               <property name="topMargin">
-                <number>0</number>
-               </property>
-               <property name="rightMargin">
-                <number>0</number>
-               </property>
-               <property name="bottomMargin">
-                <number>0</number>
-               </property>
+              <layout class="QVBoxLayout" name="verticalLayout_previewGeneral">
                <item>
-                <widget class="QLabel" name="previewVolumeLabel">
-                 <property name="text">
-                  <string>Preview Volume:</string>
-                 </property>
+                <widget class="QWidget" name="previewVolumeWidget" native="true">
+                 <layout class="QHBoxLayout" name="horizontalLayout_previewVolume">
+                  <property name="leftMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>0</number>
+                  </property>
+                  <item>
+                   <widget class="QLabel" name="previewVolumeLabel">
+                    <property name="text">
+                     <string>Preview volume:</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <spacer name="previewVolumeSpacer">
+                    <property name="orientation">
+                     <enum>Qt::Orientation::Horizontal</enum>
+                    </property>
+                    <property name="sizeHint" stdset="0">
+                     <size>
+                      <width>40</width>
+                      <height>20</height>
+                     </size>
+                    </property>
+                   </spacer>
+                  </item>
+                  <item>
+                   <widget class="QSpinBox" name="previewVolumeSpinBox">
+                    <property name="focusPolicy">
+                     <enum>Qt::FocusPolicy::StrongFocus</enum>
+                    </property>
+                    <property name="alignment">
+                     <set>Qt::AlignmentFlag::AlignCenter</set>
+                    </property>
+                    <property name="minimum">
+                     <number>0</number>
+                    </property>
+                    <property name="maximum">
+                     <number>100</number>
+                    </property>
+                    <property name="value">
+                     <number>20</number>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
                 </widget>
                </item>
                <item>
-                <spacer name="previewVolumeSpacer">
-                 <property name="orientation">
-                  <enum>Qt::Orientation::Horizontal</enum>
-                 </property>
-                 <property name="sizeHint" stdset="0">
-                  <size>
-                   <width>40</width>
-                   <height>20</height>
-                  </size>
-                 </property>
-                </spacer>
+                <widget class="QWidget" name="previewSeekWidget" native="true">
+                 <layout class="QHBoxLayout" name="horizontalLayout_previewSeek">
+                  <property name="leftMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>0</number>
+                  </property>
+                  <item>
+                   <widget class="QLabel" name="previewSeekLabel">
+                    <property name="text">
+                     <string>Seek distance (seconds):</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QDoubleSpinBox" name="previewSeekSeconds">
+                    <property name="focusPolicy">
+                     <enum>Qt::FocusPolicy::StrongFocus</enum>
+                    </property>
+                    <property name="minimum">
+                     <double>0.100000000000000</double>
+                    </property>
+                    <property name="maximum">
+                     <double>120.000000000000000</double>
+                    </property>
+                    <property name="singleStep">
+                     <double>0.500000000000000</double>
+                    </property>
+                    <property name="value">
+                     <double>5.000000000000000</double>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </widget>
                </item>
                <item>
-                <widget class="QSpinBox" name="previewVolumeSpinBox">
-                 <property name="focusPolicy">
-                  <enum>Qt::FocusPolicy::StrongFocus</enum>
-                 </property>
-                 <property name="alignment">
-                  <set>Qt::AlignmentFlag::AlignCenter</set>
-                 </property>
-                 <property name="minimum">
-                  <number>0</number>
-                 </property>
-                 <property name="maximum">
-                  <number>100</number>
-                 </property>
-                 <property name="value">
-                  <number>20</number>
+               <widget class="QCheckBox" name="previewRandomStart">
+                <property name="text">
+                 <string>Random start position</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QCheckBox" name="previewSeededRandom">
+                <property name="text">
+                 <string>Use seeded random</string>
+                </property>
+               </widget>
+              </item>
+               <item>
+                <widget class="QCheckBox" name="previewRememberPosition">
+                 <property name="text">
+                  <string>Remember preview position</string>
                  </property>
                 </widget>
                </item>
@@ -655,84 +722,172 @@
              </widget>
             </item>
             <item>
-             <widget class="QCheckBox" name="previewAutoplayAllMute">
-              <property name="text">
-               <string>Autoplay all cards muted (unmute on hover)</string>
+             <widget class="QGroupBox" name="previewMainBox">
+              <property name="title">
+               <string>Main list (Alt+click)</string>
               </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QWidget" name="previewSeekWidget" native="true">
-              <layout class="QHBoxLayout" name="horizontalLayout_previewSeek">
-               <property name="leftMargin">
-                <number>0</number>
-               </property>
-               <property name="topMargin">
-                <number>0</number>
-               </property>
-               <property name="rightMargin">
-                <number>0</number>
-               </property>
-               <property name="bottomMargin">
-                <number>0</number>
-               </property>
+              <layout class="QVBoxLayout" name="verticalLayout_previewMain">
                <item>
-                <widget class="QLabel" name="previewSeekLabel">
+                <widget class="QCheckBox" name="previewMainEnabled">
                  <property name="text">
-                  <string>Seek distance (seconds):</string>
+                  <string>Enable main list previews</string>
                  </property>
                 </widget>
                </item>
                <item>
-                <widget class="QDoubleSpinBox" name="previewSeekSeconds">
-                 <property name="minimum">
-                  <double>0.100000000000000</double>
-                 </property>
-                 <property name="maximum">
-                  <double>120.000000000000000</double>
-                 </property>
-                 <property name="singleStep">
-                  <double>0.500000000000000</double>
-                 </property>
-                 <property name="value">
-                  <double>5.000000000000000</double>
-                 </property>
+                <widget class="QWidget" name="previewPopupSizeWidget" native="true">
+                 <layout class="QHBoxLayout" name="horizontalLayout_previewPopupSize">
+                  <property name="leftMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>0</number>
+                  </property>
+                  <item>
+                   <widget class="QLabel" name="previewPopupSizeLabel">
+                    <property name="text">
+                     <string>Popup size (W x H):</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QSpinBox" name="previewPopupWidth">
+                    <property name="focusPolicy">
+                     <enum>Qt::FocusPolicy::StrongFocus</enum>
+                    </property>
+                    <property name="minimum">
+                     <number>160</number>
+                    </property>
+                    <property name="maximum">
+                     <number>1920</number>
+                    </property>
+                    <property name="value">
+                     <number>420</number>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QLabel" name="previewPopupXLabel">
+                    <property name="text">
+                     <string>X</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QSpinBox" name="previewPopupHeight">
+                    <property name="focusPolicy">
+                     <enum>Qt::FocusPolicy::StrongFocus</enum>
+                    </property>
+                    <property name="minimum">
+                     <number>120</number>
+                    </property>
+                    <property name="maximum">
+                     <number>1080</number>
+                    </property>
+                    <property name="value">
+                     <number>240</number>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </widget>
+               </item>
+               <item>
+                <widget class="QWidget" name="previewHistoryWidget" native="true">
+                 <layout class="QHBoxLayout" name="horizontalLayout_previewHistory">
+                  <property name="leftMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>0</number>
+                  </property>
+                  <item>
+                   <widget class="QLabel" name="previewHistoryLabel">
+                    <property name="text">
+                     <string>Remember last N preview positions:</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <spacer name="previewHistorySpacer">
+                    <property name="orientation">
+                     <enum>Qt::Orientation::Horizontal</enum>
+                    </property>
+                    <property name="sizeHint" stdset="0">
+                     <size>
+                      <width>20</width>
+                      <height>20</height>
+                     </size>
+                    </property>
+                   </spacer>
+                  </item>
+                  <item>
+                   <widget class="QSpinBox" name="previewMainHistoryCount">
+                    <property name="focusPolicy">
+                     <enum>Qt::FocusPolicy::StrongFocus</enum>
+                    </property>
+                    <property name="minimum">
+                     <number>0</number>
+                    </property>
+                    <property name="maximum">
+                     <number>50</number>
+                    </property>
+                    <property name="value">
+                     <number>5</number>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
                 </widget>
                </item>
               </layout>
              </widget>
             </item>
             <item>
-             <widget class="QCheckBox" name="previewRandomStart">
-              <property name="text">
-               <string>Random start position</string>
+             <widget class="QGroupBox" name="previewNextBox">
+              <property name="title">
+               <string>Next choices dialog</string>
               </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QCheckBox" name="previewSeededRandom">
-              <property name="text">
-               <string>Use seeded random</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QCheckBox" name="previewRandomEachHover">
-              <property name="text">
-               <string>Random position on hover</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QCheckBox" name="previewRememberPosition">
-              <property name="text">
-               <string>Remember preview position</string>
-              </property>
+              <layout class="QVBoxLayout" name="verticalLayout_previewNext">
+               <item>
+                <widget class="QCheckBox" name="previewEnabled">
+                 <property name="text">
+                  <string>Enable previews in next choices dialog</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+               <widget class="QCheckBox" name="previewAutoplayAllMute">
+                <property name="text">
+                 <string>Autoplay all cards muted (unmute on hover)</string>
+                </property>
+               </widget>
+              </item>
+               <item>
+                <widget class="QCheckBox" name="previewRandomEachHover">
+                 <property name="text">
+                  <string>Random position on hover</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
              </widget>
             </item>
            </layout>
-         </widget>
-        </item>
+          </widget>
+         </item>
          <item>
           <widget class="QGroupBox" name="iconGroupBox">
            <property name="sizePolicy">

@@ -23,14 +23,17 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 	this->ui.soundEffectsVolume->setStyleSheet(get_stylesheet("spinbox"));
 	this->ui.specialSoundEffectsVolume->setStyleSheet(get_stylesheet("spinbox"));
 	this->ui.soundEffectsChance->setStyleSheet(get_stylesheet("spinbox"));
-	this->ui.soundEffectsChainChance->setStyleSheet(get_stylesheet("spinbox"));
-	this->ui.MinutesSpinBox->setStyleSheet(get_stylesheet("spinbox"));
-	this->ui.SecondsSpinBox->setStyleSheet(get_stylesheet("spinbox"));
-	this->ui.aicon_fps_modifier_spinBox->setStyleSheet(get_stylesheet("doublespinbox"));
+    this->ui.soundEffectsChainChance->setStyleSheet(get_stylesheet("spinbox"));
+    this->ui.MinutesSpinBox->setStyleSheet(get_stylesheet("spinbox"));
+    this->ui.SecondsSpinBox->setStyleSheet(get_stylesheet("spinbox"));
+    this->ui.aicon_fps_modifier_spinBox->setStyleSheet(get_stylesheet("doublespinbox"));
     this->ui.searchTimerInterval->setStyleSheet(get_stylesheet("spinbox"));
     this->ui.notificationDurationSpinBox->setStyleSheet(get_stylesheet("spinbox"));
     this->ui.nextMultiChoiceCount->setStyleSheet(get_stylesheet("spinbox"));
-	this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(false);
+    this->ui.previewMainHistoryCount->setStyleSheet(get_stylesheet("spinbox"));
+    this->ui.previewPopupWidth->setStyleSheet(get_stylesheet("spinbox"));
+    this->ui.previewPopupHeight->setStyleSheet(get_stylesheet("spinbox"));
+    this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(false);
 
 	MainWindow* mw = (MainWindow*)parent;
 	this->ui.plusCatRadioBtn->setText(mw->App->config->get("plus_category_name"));
@@ -136,50 +139,41 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
         this->ui.previewRandomStart->setCheckState(Qt::CheckState::Checked);
     else
         this->ui.previewRandomStart->setCheckState(Qt::CheckState::Unchecked);
-	this->oldPreviewRandomStart = this->ui.previewRandomStart->isChecked();
-	if (mw->App->config->get_bool("preview_random_each_hover"))
-		this->ui.previewRandomEachHover->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.previewRandomEachHover->setCheckState(Qt::CheckState::Unchecked);
-	this->oldPreviewRandomEachHover = this->ui.previewRandomEachHover->isChecked();
-	if (mw->App->config->get_bool("preview_autoplay_all_mute"))
-		this->ui.previewAutoplayAllMute->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.previewAutoplayAllMute->setCheckState(Qt::CheckState::Unchecked);
-	this->oldPreviewAutoplayAllMute = this->ui.previewAutoplayAllMute->isChecked();
-	this->ui.previewSeekSeconds->setValue(mw->App->config->get("preview_seek_seconds").toDouble());
-	if (mw->App->config->get_bool("preview_seeded_random"))
-		this->ui.previewSeededRandom->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.previewSeededRandom->setCheckState(Qt::CheckState::Unchecked);
-	this->oldPreviewSeededRandom = this->ui.previewSeededRandom->isChecked();
-	if (mw->App->config->get_bool("preview_remember_position"))
-		this->ui.previewRememberPosition->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.previewRememberPosition->setCheckState(Qt::CheckState::Unchecked);
-	this->oldPreviewRememberPosition = this->ui.previewRememberPosition->isChecked();
-	connect(this->ui.previewRandomEachHover, &QCheckBox::toggled, this, [this](bool checked) {
-        if (checked) {
-            this->ui.previewRememberPosition->setChecked(false);
-            this->ui.previewRememberPosition->setEnabled(false);
-        } else {
-            this->ui.previewRememberPosition->setEnabled(true);
-        }
-    });
-    connect(this->ui.previewRememberPosition, &QCheckBox::toggled, this, [this](bool checked) {
-        if (checked) {
-            this->ui.previewRandomEachHover->setChecked(false);
-            this->ui.previewRandomEachHover->setEnabled(false);
-        } else {
-            this->ui.previewRandomEachHover->setEnabled(true);
-        }
-    });
-    this->ui.previewRememberPosition->setEnabled(!this->ui.previewRandomEachHover->isChecked());
-    this->ui.previewRandomEachHover->setEnabled(!this->ui.previewRememberPosition->isChecked());
-    if (this->ui.previewRandomEachHover->isChecked() && this->ui.previewRememberPosition->isChecked()) {
-        this->ui.previewRememberPosition->setChecked(false);
-        this->oldPreviewRememberPosition = false;
-    }
+    this->oldPreviewRandomStart = this->ui.previewRandomStart->isChecked();
+    if (mw->App->config->get_bool("preview_random_each_hover"))
+        this->ui.previewRandomEachHover->setCheckState(Qt::CheckState::Checked);
+    else
+        this->ui.previewRandomEachHover->setCheckState(Qt::CheckState::Unchecked);
+    this->oldPreviewRandomEachHover = this->ui.previewRandomEachHover->isChecked();
+    if (mw->App->config->get_bool("preview_autoplay_all_mute"))
+        this->ui.previewAutoplayAllMute->setCheckState(Qt::CheckState::Checked);
+    else
+        this->ui.previewAutoplayAllMute->setCheckState(Qt::CheckState::Unchecked);
+    this->oldPreviewAutoplayAllMute = this->ui.previewAutoplayAllMute->isChecked();
+    this->ui.previewSeekSeconds->setValue(mw->App->config->get("preview_seek_seconds").toDouble());
+    if (mw->App->config->get_bool("preview_seeded_random"))
+        this->ui.previewSeededRandom->setCheckState(Qt::CheckState::Checked);
+    else
+        this->ui.previewSeededRandom->setCheckState(Qt::CheckState::Unchecked);
+    this->oldPreviewSeededRandom = this->ui.previewSeededRandom->isChecked();
+    if (mw->App->config->get_bool("preview_remember_position"))
+        this->ui.previewRememberPosition->setCheckState(Qt::CheckState::Checked);
+    else
+        this->ui.previewRememberPosition->setCheckState(Qt::CheckState::Unchecked);
+    this->oldPreviewRememberPosition = this->ui.previewRememberPosition->isChecked();
+    bool previewMainEnabled = mw->App->config->get_bool("preview_main_enabled");
+    this->ui.previewMainEnabled->setCheckState(previewMainEnabled ? Qt::CheckState::Checked : Qt::CheckState::Unchecked);
+    this->oldPreviewMainEnabled = previewMainEnabled;
+    int previewHistory = qBound(this->ui.previewMainHistoryCount->minimum(), mw->App->config->get("preview_main_history_count").toInt(), this->ui.previewMainHistoryCount->maximum());
+    this->ui.previewMainHistoryCount->setValue(previewHistory);
+    this->oldPreviewMainHistoryCount = previewHistory;
+    int popupW = qBound(this->ui.previewPopupWidth->minimum(), mw->App->config->get("preview_main_width").toInt(), this->ui.previewPopupWidth->maximum());
+    int popupH = qBound(this->ui.previewPopupHeight->minimum(), mw->App->config->get("preview_main_height").toInt(), this->ui.previewPopupHeight->maximum());
+    this->ui.previewPopupWidth->setValue(popupW);
+    this->ui.previewPopupHeight->setValue(popupH);
+    this->oldPreviewPopupWidth = popupW;
+    this->oldPreviewPopupHeight = popupH;
+    // Allow hover-random and remember position to be toggled independently; their interaction is handled in each preview context.
 	if (mw->App->config->get_bool("auto_continue"))
 		this->ui.autoContinue->setCheckState(Qt::CheckState::Checked);
 	else

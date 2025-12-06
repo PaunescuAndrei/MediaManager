@@ -24,6 +24,8 @@ public:
     void jumpToRandomPosition();
     void seekBySeconds(double seconds);
     void prepareInitialFrame(bool keepPlaying);
+    void restoreLastPosition(qint64 positionMs);
+    qint64 resumePositionHint() const;
     bool isPlaying() const;
 private slots:
     void onMediaStatusChanged(QMediaPlayer::MediaStatus status);

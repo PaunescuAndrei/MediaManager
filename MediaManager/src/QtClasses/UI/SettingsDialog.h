@@ -18,6 +18,10 @@ public:
     bool oldPreviewRandomEachHover = false;
     bool oldPreviewNextChoicesEnabled = true;
     bool oldPreviewSeededRandom = false;
+    int oldPreviewMainHistoryCount = 0;
+    bool oldPreviewMainEnabled = true;
+    int oldPreviewPopupWidth = 420;
+    int oldPreviewPopupHeight = 240;
     int oldSVmax = 0;
     double old_mascotsChanceSpinBox = 0;
     double old_aicon_fps_modifier = 1.0;

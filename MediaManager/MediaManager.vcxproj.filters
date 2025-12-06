@@ -257,6 +257,9 @@
     <ClCompile Include="src\QtClasses\Widgets\WheelStrongFocusEventFilter.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\PreviewTooltipDialog.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
     <ClCompile Include="src\QtClasses\Widgets\VideoPreviewWidget.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
@@ -269,6 +272,9 @@
       <Filter>Header Files\QtClasses</Filter>
     </ClInclude>
     <ClInclude Include="src\QtClasses\Widgets\TreeWidgetItem.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\QtClasses\Widgets\PreviewTooltipDialog.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </ClInclude>
     <ClInclude Include="src\general\config.h">

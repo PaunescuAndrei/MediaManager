@@ -13,6 +13,11 @@ VideosTreeView::VideosTreeView(QWidget* parent) : QTreeView(parent) {
 }
 
 void VideosTreeView::mousePressEvent(QMouseEvent* event) {
+    if ((event->button() == Qt::LeftButton || event->button() == Qt::RightButton || event->button() == Qt::MiddleButton) && (event->modifiers() & Qt::AltModifier)) {
+        const QModelIndex idx = indexAt(event->pos());
+        if (idx.isValid()) emit itemAltClicked(idx);
+        return;
+    }
     QTreeView::mousePressEvent(event);
     if (event->button() == Qt::MiddleButton) {
         const QModelIndex idx = indexAt(event->pos());

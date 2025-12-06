@@ -54,7 +54,6 @@ void VideoPreviewWidget::setRandomOnHoverEnabled(bool enabled)
 {
     this->randomEachHover = enabled;
     if (enabled) {
-        this->rememberPosition = false;
         this->lastPosition = 0;
         this->initialPosition = -1;
     }
@@ -96,8 +95,12 @@ qint64 VideoPreviewWidget::computeTargetPosition(qint64 duration) const
         return std::clamp(pos, static_cast<qint64>(0), maxPos);
     };
 
-    if (this->rememberPosition && !this->randomEachHover && this->lastPosition > 0) {
-        return clampPos(this->lastPosition, duration);
+    bool useRemember = this->rememberPosition && !this->randomEachHover;
+    if (useRemember) {
+        if (this->lastPosition > 0)
+            return clampPos(this->lastPosition, duration);
+        if (this->initialPosition >= 0)
+            return clampPos(this->initialPosition, duration);
     }
     if (this->randomEachHover) {
         if (this->randomStart && duration > 0) {
@@ -108,6 +111,8 @@ qint64 VideoPreviewWidget::computeTargetPosition(qint64 duration) const
     if (this->randomStart && duration > 0) {
         return clampPos(this->pickRandomPosition(duration), duration);
     }
+    if (useRemember && this->lastPosition == 0 && this->initialPosition == 0)
+        return 0;
     return 0;
 }
 
@@ -270,6 +275,33 @@ void VideoPreviewWidget::prepareInitialFrame(bool keepPlaying)
     } else {
         this->player->play(); // trigger load so mediaStatusChanged fires
     }
+}
+
+void VideoPreviewWidget::restoreLastPosition(qint64 positionMs)
+{
+    if (!this->rememberPosition || this->randomEachHover)
+        return;
+    qint64 clamped = std::max<qint64>(0, positionMs);
+    this->lastPosition = clamped;
+    this->initialPosition = clamped;
+    if (this->player && this->player->duration() > 0) {
+        qint64 maxPos = std::max<qint64>(0, this->player->duration() - 200);
+        this->player->setPosition(std::clamp(clamped, static_cast<qint64>(0), maxPos));
+    }
+}
+
+qint64 VideoPreviewWidget::resumePositionHint() const
+{
+    if (this->randomEachHover || !this->rememberPosition)
+        return 0;
+    if (this->lastPosition > 0)
+        return this->lastPosition;
+    if (this->player) {
+        qint64 pos = this->player->position();
+        if (pos > 0)
+            return pos;
+    }
+    return 0;
 }
 
 void VideoPreviewWidget::startPreview()

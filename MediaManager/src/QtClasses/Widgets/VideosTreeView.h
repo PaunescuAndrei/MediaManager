@@ -15,6 +15,7 @@ public:
 
 signals:
     void itemMiddleClicked(const QModelIndex& index);
+    void itemAltClicked(const QModelIndex& index);
 
 protected:
     void mousePressEvent(QMouseEvent* event) override;

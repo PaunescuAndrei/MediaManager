@@ -87,6 +87,7 @@
     <ClCompile Include="src\QtClasses\Widgets\TreeWidgetItem.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\watchedFrame.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\WheelStrongFocusEventFilter.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\PreviewTooltipDialog.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\VideoPreviewWidget.cpp" />
     <ClCompile Include="src\stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
@@ -159,6 +160,7 @@
     <QtMoc Include="src\general\generateThumbnailRunnable.h" />
     <ClInclude Include="src\stdafx.h" />
     <ClInclude Include="src\QtClasses\stylesQt.h" />
+    <ClInclude Include="src\QtClasses\Widgets\PreviewTooltipDialog.h" />
     <ClInclude Include="src\QtClasses\Widgets\TreeWidgetItem.h" />
     <QtMoc Include="src\QtClasses\Widgets\watchedFrame.h" />
     <QtMoc Include="src\QtClasses\Widgets\customQLabel.h" />

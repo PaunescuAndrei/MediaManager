@@ -62,6 +62,9 @@
 #include "UpdatePathsDialog.h"
 #include "NextChoiceDialog.h"
 #include "TreeWidgetItem.h"
+#include "VideoPreviewWidget.h"
+#include "PreviewTooltipDialog.h"
+#include <QCursor>
 
 #pragma warning(push ,3)
 #include "rapidfuzz_all.hpp"
@@ -245,6 +248,9 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         if (!modelIdx.isValid()) return;
         const QString path = modelIdx.sibling(modelIdx.row(), ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
         this->openThumbnails(path);
+    });
+    connect(this->ui.videosWidget, &VideosTreeView::itemAltClicked, this, [this](const QModelIndex& proxyIndex) {
+        this->showPreviewTooltip(proxyIndex);
     });
     connect(this, &MainWindow::fileDropped, this, [this](QStringList files, QWidget *widget) {
         if (files.size() == 1) {
@@ -1303,6 +1309,157 @@ void MainWindow::openThumbnails(QString path) {
     }
 }
 
+void MainWindow::showPreviewTooltip(const QModelIndex& proxyIndex)
+{
+    if (!this->App->config->get_bool("preview_main_enabled"))
+        return;
+
+    if (!proxyIndex.isValid())
+        return;
+    const QPersistentModelIndex modelIdx = this->modelIndexFromFilterIndex(proxyIndex);
+    if (!modelIdx.isValid())
+        return;
+    const QString path = modelIdx.sibling(modelIdx.row(), ListColumns["PATH_COLUMN"]).data(Qt::DisplayRole).toString();
+    if (path.isEmpty())
+        return;
+    QFileInfo info(path);
+    if (!info.exists())
+        return;
+
+    this->closePreviewTooltip();
+
+    auto* popup = new PreviewTooltipDialog(this, this);
+    popup->path = path;
+    popup->setProperty("storeOnClose", true);
+    this->previewTooltip = popup;
+
+    auto* preview = new VideoPreviewWidget(popup);
+    preview->setSource(path);
+    preview->setStartDelay(0);
+    int previewVolume = qBound(0, this->App->config->get("preview_volume").toInt(), 100);
+    preview->setVolume(previewVolume);
+    // Main list previews do not use hover-random; keep deterministic position handling here
+    bool randomHover = false;
+    preview->setRandomOnHoverEnabled(randomHover);
+    preview->setRandomStartEnabled(this->App->config->get_bool("preview_random_start"));
+    bool rememberPosition = this->App->config->get_bool("preview_remember_position") && !randomHover;
+    preview->setRememberPositionEnabled(rememberPosition);
+    bool seeded = this->App->config->get_bool("preview_seeded_random") && this->App->config->get_bool("random_use_seed");
+    preview->setSeededRandom(seeded, this->App->config->get("random_seed"));
+    preview->setMuted(false);
+
+    if (rememberPosition) {
+        qint64 cached = this->cachedPreviewPosition(path);
+        if (cached > 0)
+            preview->restoreLastPosition(cached);
+    }
+
+    popup->setPreviewWidget(preview);
+
+    QPoint globalPos = QCursor::pos();
+    QRect screenRect;
+    if (QScreen* screen = QGuiApplication::screenAt(globalPos)) {
+        screenRect = screen->availableGeometry();
+    } else if (QScreen* primary = QGuiApplication::primaryScreen()) {
+        screenRect = primary->availableGeometry();
+    }
+
+    int screenMaxW = screenRect.isValid() ? screenRect.width() : 1920;
+    int screenMaxH = screenRect.isValid() ? screenRect.height() : 1080;
+    int popupW = qBound(160, this->App->config->get("preview_main_width").toInt(), screenMaxW);
+    int popupH = qBound(120, this->App->config->get("preview_main_height").toInt(), screenMaxH);
+    QSize popupSize(popupW, popupH);
+    popup->resize(popupSize);
+
+    auto clampPoint = [&](int x, int y) -> QPoint {
+        if (!screenRect.isValid())
+            return QPoint(x, y);
+        int clampedX = std::max(screenRect.left(), std::min(x, screenRect.right() - popupW));
+        int clampedY = std::max(screenRect.top(), std::min(y, screenRect.bottom() - popupH));
+        return QPoint(clampedX, clampedY);
+    };
+
+    QPoint target = globalPos;
+    int halfW = popupW / 2;
+    // Try above, centered on cursor
+    QPoint above(target.x() - halfW, target.y() - popupH - 12);
+    bool fitsAbove = !screenRect.isValid() || (above.y() >= screenRect.top());
+    if (fitsAbove) {
+        target = above;
+    } else {
+        // Try below, centered on cursor
+        QPoint below(target.x() - halfW, target.y() + 12);
+        bool fitsBelow = !screenRect.isValid() || (below.y() + popupH <= screenRect.bottom());
+        if (fitsBelow) {
+            target = below;
+        } else if (screenRect.isValid()) {
+            // Fallback: clamp inside screen near cursor
+            target = clampPoint(target.x() - halfW, target.y() - popupH / 2);
+        }
+    }
+
+    popup->move(clampPoint(target.x(), target.y()));
+
+    connect(popup, &QDialog::finished, this, [this, popup, rememberPosition](int) {
+        if (!popup->property("storeOnClose").toBool()) {
+            this->previewTooltip = nullptr;
+            return;
+        }
+        qint64 resume = popup->positionForResume();
+        QString pathKey = popup->path;
+        if (rememberPosition && resume > 0 && !pathKey.isEmpty()) {
+            this->updatePreviewPositionCache(pathKey, resume);
+        }
+        this->previewTooltip = nullptr;
+    });
+
+    popup->show();
+    preview->prepareInitialFrame(true);
+}
+
+void MainWindow::closePreviewTooltip(bool storePosition)
+{
+    if (!this->previewTooltip)
+        return;
+    auto* popup = static_cast<PreviewTooltipDialog*>(this->previewTooltip.data());
+    if (popup) {
+        popup->setProperty("storeOnClose", storePosition);
+    }
+    this->previewTooltip->close();
+    this->previewTooltip = nullptr;
+}
+
+void MainWindow::updatePreviewPositionCache(const QString& path, qint64 positionMs)
+{
+    int limit = this->previewHistoryLimit();
+    if (limit <= 0 || positionMs <= 0) {
+        this->previewPositionCache.remove(path);
+        this->previewHistoryOrder.removeAll(path);
+        return;
+    }
+
+    if (this->previewPositionCache.contains(path))
+        this->previewHistoryOrder.removeAll(path);
+    this->previewPositionCache.insert(path, positionMs);
+    this->previewHistoryOrder.prepend(path);
+
+    while (this->previewHistoryOrder.size() > limit) {
+        QString evicted = this->previewHistoryOrder.takeLast();
+        this->previewPositionCache.remove(evicted);
+    }
+}
+
+qint64 MainWindow::cachedPreviewPosition(const QString& path) const
+{
+    return this->previewPositionCache.value(path, 0);
+}
+
+int MainWindow::previewHistoryLimit() const
+{
+    int limit = this->App ? this->App->config->get("preview_main_history_count").toInt() : 0;
+    return std::max(0, limit);
+}
+
 void MainWindow::flipMascots()
 {
     this->ui.leftImg->flipPixmap();
@@ -2289,7 +2446,7 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         dialog->oldPreviewAutoplayAllMute = dialog->ui.previewAutoplayAllMute->isChecked();
     }
     config->set("preview_seek_seconds", QString::number(dialog->ui.previewSeekSeconds->value()));
-    bool rememberPos = dialog->ui.previewRememberPosition->isChecked() && !dialog->ui.previewRandomEachHover->isChecked();
+    bool rememberPos = dialog->ui.previewRememberPosition->isChecked();
     if (rememberPos != dialog->oldPreviewRememberPosition) {
         config->set("preview_remember_position", rememberPos ? "True" : "False");
         dialog->oldPreviewRememberPosition = rememberPos;
@@ -2297,6 +2454,22 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     if (dialog->ui.previewEnabled->isChecked() != dialog->oldPreviewNextChoicesEnabled) {
         config->set("preview_next_choices_enabled", dialog->ui.previewEnabled->isChecked() ? "True" : "False");
         dialog->oldPreviewNextChoicesEnabled = dialog->ui.previewEnabled->isChecked();
+    }
+    if (dialog->ui.previewMainEnabled->isChecked() != dialog->oldPreviewMainEnabled) {
+        config->set("preview_main_enabled", dialog->ui.previewMainEnabled->isChecked() ? "True" : "False");
+        dialog->oldPreviewMainEnabled = dialog->ui.previewMainEnabled->isChecked();
+    }
+    if (dialog->ui.previewMainHistoryCount->value() != dialog->oldPreviewMainHistoryCount) {
+        config->set("preview_main_history_count", QString::number(dialog->ui.previewMainHistoryCount->value()));
+        dialog->oldPreviewMainHistoryCount = dialog->ui.previewMainHistoryCount->value();
+    }
+    if (dialog->ui.previewPopupWidth->value() != dialog->oldPreviewPopupWidth) {
+        config->set("preview_main_width", QString::number(dialog->ui.previewPopupWidth->value()));
+        dialog->oldPreviewPopupWidth = dialog->ui.previewPopupWidth->value();
+    }
+    if (dialog->ui.previewPopupHeight->value() != dialog->oldPreviewPopupHeight) {
+        config->set("preview_main_height", QString::number(dialog->ui.previewPopupHeight->value()));
+        dialog->oldPreviewPopupHeight = dialog->ui.previewPopupHeight->value();
     }
     if (dialog->ui.autoContinue->checkState() == Qt::CheckState::Checked)
         config->set("auto_continue", "True");

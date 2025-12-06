@@ -4,8 +4,8 @@
 #include <QGraphicsVideoItem>
 #include <QGraphicsRectItem>
 #include <QGraphicsSimpleTextItem>
+#include <QGraphicsView>
 #include <QResizeEvent>
-#include <QVideoSink>
 #include <QVBoxLayout>
 
 OverlayGraphicsVideoWidget::OverlayGraphicsVideoWidget(QWidget* parent) : QWidget(parent)
@@ -23,8 +23,9 @@ OverlayGraphicsVideoWidget::OverlayGraphicsVideoWidget(QWidget* parent) : QWidge
     this->view->setRenderHint(QPainter::Antialiasing, true);
     this->view->setRenderHint(QPainter::SmoothPixmapTransform, true);
 
-    this->videoItem = new QGraphicsVideoItem();
-    this->scene->addItem(this->videoItem);
+    this->videoItemPtr = new QGraphicsVideoItem();
+    this->videoItemPtr->setAspectRatioMode(Qt::KeepAspectRatio);
+    this->scene->addItem(this->videoItemPtr);
 
     this->overlayBg = this->scene->addRect(QRectF(), QPen(Qt::NoPen), QBrush(QColor(0, 0, 0, 140)));
     this->overlayBg->setVisible(false);
@@ -60,13 +61,13 @@ void OverlayGraphicsVideoWidget::setOverlayText(const QString& text)
 
 void OverlayGraphicsVideoWidget::updateLayout()
 {
-    if (!this->view || !this->scene || !this->videoItem)
+    if (!this->view || !this->scene || !this->videoItemPtr)
         return;
     const QSizeF viewSize = this->view->viewport()->size();
     if (viewSize.isEmpty())
         return;
 
-    this->videoItem->setSize(viewSize);
+    this->videoItemPtr->setSize(viewSize);
     this->scene->setSceneRect(QRectF(QPointF(0, 0), viewSize));
 
     if (!this->overlayText || !this->overlayBg || !this->overlayText->isVisible())
@@ -79,9 +80,4 @@ void OverlayGraphicsVideoWidget::updateLayout()
     bgRect.moveTopLeft(pos);
     this->overlayBg->setRect(bgRect);
     this->overlayText->setPos(bgRect.topLeft() + QPointF(4.0, 2.0));
-}
-
-QVideoSink* OverlayGraphicsVideoWidget::videoSink() const
-{
-    return this->videoItem ? this->videoItem->videoSink() : nullptr;
 }

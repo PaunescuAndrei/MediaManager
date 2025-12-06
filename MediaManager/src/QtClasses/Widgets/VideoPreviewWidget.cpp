@@ -2,10 +2,10 @@
 #include "VideoPreviewWidget.h"
 #include <QMediaPlayer>
 #include <QAudioOutput>
-#include <QVideoSink>
 #include <QUrl>
 #include <QFileInfo>
 #include <QRandomGenerator>
+#include <QGraphicsVideoItem>
 #include "OverlayGraphicsVideoWidget.h"
 #include "utils.h"
 
@@ -345,15 +345,15 @@ void VideoPreviewWidget::ensurePlayer()
     this->audioOutput = new QAudioOutput(this);
     this->applyVolume();
     this->player->setAudioOutput(this->audioOutput);
-    if (this->videoWidget && this->videoWidget->videoSink()) {
-        this->player->setVideoOutput(this->videoWidget->videoSink());
+    if (this->videoWidget && this->videoWidget->videoItem()) {
+        this->player->setVideoOutput(this->videoWidget->videoItem());
     }
     this->player->setLoops(QMediaPlayer::Infinite);
     this->statusConn = QObject::connect(this->player, &QMediaPlayer::mediaStatusChanged, this, &VideoPreviewWidget::onMediaStatusChanged);
     QObject::connect(this->player, &QMediaPlayer::positionChanged, this, &VideoPreviewWidget::onPositionChanged);
     QObject::connect(this->player, &QMediaPlayer::durationChanged, this, [this](qint64 dur) {
         this->currentDurationMs = dur;
-        this->updateOverlayText(this->player ? this->player->position() : 0, dur);
+        this->updateOverlayText(this->lastPositionMs, dur);
     });
     if (!this->sourcePath.isEmpty()) {
         this->player->setSource(QUrl::fromLocalFile(this->sourcePath));
@@ -433,6 +433,7 @@ void VideoPreviewWidget::applyVolume()
 
 void VideoPreviewWidget::onPositionChanged(qint64 positionMs)
 {
+    this->lastPositionMs = positionMs;
     this->updateOverlayText(positionMs, this->currentDurationMs);
 }
 
@@ -447,9 +448,14 @@ void VideoPreviewWidget::updateOverlayText(qint64 positionMs, qint64 durationMs)
         return;
     if (durationMs <= 0) {
         this->videoWidget->setOverlayText(QString());
+        this->lastOverlayText.clear();
         return;
     }
-    const QString posText = utils::formatSecondsQt(positionMs / 1000.0);
-    const QString durText = utils::formatSecondsQt(durationMs / 1000.0);
-    this->videoWidget->setOverlayText(QStringLiteral("%1 / %2").arg(posText, durText));
+    const QString text = QStringLiteral("%1 / %2")
+        .arg(utils::formatSecondsQt(positionMs / 1000.0),
+            utils::formatSecondsQt(durationMs / 1000.0));
+    if (text == this->lastOverlayText)
+        return;
+    this->lastOverlayText = text;
+    this->videoWidget->setOverlayText(text);
 }

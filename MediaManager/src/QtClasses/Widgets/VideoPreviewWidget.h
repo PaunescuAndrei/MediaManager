@@ -62,6 +62,8 @@ private:
     qint64 lastPosition = 0;
     qint64 initialPosition = -1;
     qint64 currentDurationMs = 0;
+    qint64 lastPositionMs = 0;
+    QString lastOverlayText;
     bool awaitingLoad = false;
     bool preloadActive = false;
     bool preloadPause = false;

@@ -334,17 +334,24 @@ void VideoPreviewWidget::stopPreview(bool forceStop)
 {
     this->startTimer.stop();
     if (this->player) {
+        qint64 pos = this->player->position();
         if (forceStop) {
             this->player->stop();
-        } else if (!this->randomEachHover) {
-            this->lastPosition = this->player->position();
-            this->player->pause();
         } else {
+            if (!this->randomEachHover) {
+                this->lastPosition = pos;
+            }
+            this->lastPositionMs = pos;
             this->player->pause();
+            this->updateOverlayText(this->lastPositionMs, this->currentDurationMs);
         }
         emit this->previewStopped(this->sourcePath);
     }
-    this->updateOverlayText(0, -1);
+    if (forceStop) {
+        this->lastPositionMs = 0;
+        this->lastOverlayText.clear();
+        this->updateOverlayText(0, -1);
+    }
 }
 
 void VideoPreviewWidget::ensurePlayer()

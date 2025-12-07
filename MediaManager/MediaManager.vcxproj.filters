@@ -260,6 +260,9 @@
     <ClCompile Include="src\QtClasses\Widgets\PreviewTooltipDialog.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\PreviewFrameProcessor.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
     <ClCompile Include="src\QtClasses\Widgets\VideoPreviewWidget.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
@@ -278,6 +281,9 @@
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </ClInclude>
     <ClInclude Include="src\QtClasses\Widgets\PreviewTooltipDialog.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </ClInclude>
+    <ClInclude Include="src\QtClasses\Widgets\PreviewFrameProcessor.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </ClInclude>
     <ClInclude Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.h">
@@ -572,6 +578,9 @@
     </QtMoc>
     <QtMoc Include="src\general\BasePlayer.h">
       <Filter>Header Files\general</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\PreviewFrameProcessor.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
     <QtMoc Include="src\QtClasses\Widgets\WheelStrongFocusEventFilter.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>

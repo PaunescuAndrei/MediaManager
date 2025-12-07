@@ -7,7 +7,6 @@ class QMediaPlayer;
 class OverlayGraphicsVideoWidget;
 class QAudioOutput;
 
-// Lightweight video preview widget that can be reused outside NextChoiceDialog.
 class VideoPreviewWidget : public QWidget
 {
     Q_OBJECT

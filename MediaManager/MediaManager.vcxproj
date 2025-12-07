@@ -89,6 +89,7 @@
     <ClCompile Include="src\QtClasses\Widgets\watchedFrame.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\WheelStrongFocusEventFilter.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\PreviewTooltipDialog.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\PreviewFrameProcessor.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\VideoPreviewWidget.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.cpp" />
     <ClCompile Include="src\stdafx.cpp">
@@ -164,6 +165,7 @@
     <ClInclude Include="src\QtClasses\stylesQt.h" />
     <ClInclude Include="src\QtClasses\Widgets\PreviewTooltipDialog.h" />
     <ClInclude Include="src\QtClasses\Widgets\TreeWidgetItem.h" />
+    <QtMoc Include="src\QtClasses\Widgets\PreviewFrameProcessor.h" />
     <ClInclude Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.h" />
     <QtMoc Include="src\QtClasses\Widgets\watchedFrame.h" />
     <QtMoc Include="src\QtClasses\Widgets\customQLabel.h" />

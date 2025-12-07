@@ -5,82 +5,7 @@
 #include <QPainter>
 #include <QPaintEvent>
 #include <QResizeEvent>
-#include <QThread>
 #include <QVideoSink>
-#include <QMetaType>
-
-void FrameWorker::processFrame(const QVideoFrame& frame)
-{
-    QImage image;
-    if (frame.isValid()) {
-        image = frame.toImage();
-    }
-    emit frameReady(image);
-}
-
-PreviewFrameProcessor::PreviewFrameProcessor(QObject* parent) : QObject(parent)
-{
-    qRegisterMetaType<QVideoFrame>("QVideoFrame");
-    this->workerThread = new QThread(this);
-    this->worker = new FrameWorker();
-    this->worker->moveToThread(this->workerThread);
-    QObject::connect(this->worker, &FrameWorker::frameReady, this, &PreviewFrameProcessor::onFrameConverted);
-    this->workerThread->start(QThread::LowestPriority);
-}
-
-PreviewFrameProcessor::~PreviewFrameProcessor()
-{
-    if (this->workerThread) {
-        this->workerThread->quit();
-        this->workerThread->wait();
-    }
-    delete this->worker;
-    this->worker = nullptr;
-}
-
-void PreviewFrameProcessor::setVideoSink(QVideoSink* sink)
-{
-    if (this->sink == sink)
-        return;
-    if (this->sink) {
-        QObject::disconnect(this->sink, nullptr, this, nullptr);
-    }
-    this->sink = sink;
-    this->latestFrame = QVideoFrame();
-    this->hasPendingFrame = false;
-    this->processing = false;
-    if (this->sink) {
-        QObject::connect(this->sink, &QVideoSink::videoFrameChanged, this, &PreviewFrameProcessor::onFrameAvailable);
-    }
-}
-
-void PreviewFrameProcessor::onFrameAvailable(const QVideoFrame& frame)
-{
-    this->latestFrame = frame;
-    this->hasPendingFrame = true;
-    if (this->processing || !this->worker)
-        return;
-    this->dispatchLatest();
-}
-
-void PreviewFrameProcessor::dispatchLatest()
-{
-    if (!this->worker || !this->hasPendingFrame)
-        return;
-    this->processing = true;
-    this->hasPendingFrame = false;
-    QVideoFrame frameCopy(this->latestFrame);
-    QMetaObject::invokeMethod(this->worker, "processFrame", Qt::QueuedConnection, Q_ARG(QVideoFrame, frameCopy));
-}
-
-void PreviewFrameProcessor::onFrameConverted(const QImage& image)
-{
-    this->processing = false;
-    emit this->frameReady(image);
-    if (this->hasPendingFrame) {
-        this->dispatchLatest();
-    }
-}
 
 OverlayGraphicsVideoWidget::OverlayGraphicsVideoWidget(QWidget* parent) : QWidget(parent)
 {
@@ -117,22 +42,34 @@ void OverlayGraphicsVideoWidget::paintEvent(QPaintEvent* event)
 {
     Q_UNUSED(event);
     QPainter painter(this);
-    painter.fillRect(this->rect(), Qt::black);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    painter.fillRect(this->rect(), QColor(17, 17, 17));
 
     if (!this->currentFrame.isNull() && !this->targetRect.isEmpty()) {
         painter.drawImage(this->targetRect, this->currentFrame);
     }
 
     if (!this->currentText.isEmpty()) {
-        const QFontMetrics fm(this->font());
+        QFont f = this->font();
+        f.setPointSize(11);
+        painter.setFont(f);
+        QFontMetrics fm(f);
         QRect textRect = fm.boundingRect(this->currentText);
         textRect.adjust(-4, -2, 4, 2);
-        QRect bgRect(textRect);
         const int margin = 6;
-        bgRect.moveTo(this->width() - bgRect.width() - margin, this->height() - bgRect.height() - margin);
-        painter.fillRect(bgRect, QColor(0, 0, 0, 140));
+        QRect bgRect(this->width() - textRect.width() - margin,
+            this->height() - textRect.height() - margin,
+            textRect.width(), textRect.height());
+
+        painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+        painter.setOpacity(0.45);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(0, 0, 0));
+        painter.drawRoundedRect(bgRect, 4, 4);
+
+        painter.setOpacity(1.0);
         painter.setPen(Qt::white);
-        painter.drawText(bgRect.adjusted(4, 2, -4, -2), this->currentText);
+        painter.drawText(bgRect, Qt::AlignCenter, this->currentText);
     }
 }
 

@@ -12,6 +12,7 @@ public:
     explicit OverlayGraphicsVideoWidget(QWidget* parent = nullptr);
     QVideoSink* videoSink() const;
     void setOverlayText(const QString& text);
+    void setOverlayStyle(double scaleMultiplier, int padX, int padY, int margin);
 protected:
     void paintEvent(QPaintEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
@@ -24,4 +25,8 @@ private:
     QImage currentFrame;
     QRect targetRect;
     QString currentText;
+    double overlayScaleMultiplier = 1.0;
+    int overlayPadX = 4;
+    int overlayPadY = 2;
+    int overlayMargin = 6;
 };

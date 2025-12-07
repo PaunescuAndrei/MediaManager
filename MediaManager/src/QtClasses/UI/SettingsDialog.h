@@ -22,6 +22,10 @@ public:
     bool oldPreviewMainEnabled = true;
     int oldPreviewPopupWidth = 420;
     int oldPreviewPopupHeight = 240;
+    double oldPreviewOverlayScale = 1.0;
+    int oldPreviewOverlayPadX = 4;
+    int oldPreviewOverlayPadY = 2;
+    int oldPreviewOverlayMargin = 6;
     int oldSVmax = 0;
     double old_mascotsChanceSpinBox = 0;
     double old_aicon_fps_modifier = 1.0;

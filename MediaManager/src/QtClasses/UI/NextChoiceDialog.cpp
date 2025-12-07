@@ -306,6 +306,11 @@ QWidget* NextChoiceDialog::buildCard(const NextVideoChoice& choice, int index)
         preview->setRandomOnHoverEnabled(randomHover);
         bool seeded = qMainApp->config->get_bool("preview_seeded_random") && qMainApp->config->get_bool("random_use_seed");
         preview->setSeededRandom(seeded, qMainApp->config->get("random_seed"));
+        double overlayScale = std::max(0.1, qMainApp->config->get("preview_overlay_scale").toDouble());
+        int overlayPadX = std::max(0, qMainApp->config->get("preview_overlay_pad_x").toInt());
+        int overlayPadY = std::max(0, qMainApp->config->get("preview_overlay_pad_y").toInt());
+        int overlayMargin = std::max(0, qMainApp->config->get("preview_overlay_margin").toInt());
+        preview->setOverlayStyle(overlayScale, overlayPadX, overlayPadY, overlayMargin);
         preview->setMuted(true);
         preview->prepareInitialFrame(this->previewAutoplayAllMute);
         contentLayout->addWidget(preview, 1);

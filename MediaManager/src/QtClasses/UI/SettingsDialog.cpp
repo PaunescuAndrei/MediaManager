@@ -33,6 +33,10 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
     this->ui.previewMainHistoryCount->setStyleSheet(get_stylesheet("spinbox"));
     this->ui.previewPopupWidth->setStyleSheet(get_stylesheet("spinbox"));
     this->ui.previewPopupHeight->setStyleSheet(get_stylesheet("spinbox"));
+    this->ui.previewOverlayScale->setStyleSheet(get_stylesheet("doublespinbox"));
+    this->ui.previewOverlayPadX->setStyleSheet(get_stylesheet("spinbox"));
+    this->ui.previewOverlayPadY->setStyleSheet(get_stylesheet("spinbox"));
+    this->ui.previewOverlayMargin->setStyleSheet(get_stylesheet("spinbox"));
     this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(false);
 
 	MainWindow* mw = (MainWindow*)parent;
@@ -151,6 +155,18 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
         this->ui.previewAutoplayAllMute->setCheckState(Qt::CheckState::Unchecked);
     this->oldPreviewAutoplayAllMute = this->ui.previewAutoplayAllMute->isChecked();
     this->ui.previewSeekSeconds->setValue(mw->App->config->get("preview_seek_seconds").toDouble());
+    double overlayScale = qBound(0.1, mw->App->config->get("preview_overlay_scale").toDouble(), 5.0);
+    int overlayPadX = qBound(0, mw->App->config->get("preview_overlay_pad_x").toInt(), this->ui.previewOverlayPadX->maximum());
+    int overlayPadY = qBound(0, mw->App->config->get("preview_overlay_pad_y").toInt(), this->ui.previewOverlayPadY->maximum());
+    int overlayMargin = qBound(0, mw->App->config->get("preview_overlay_margin").toInt(), this->ui.previewOverlayMargin->maximum());
+    this->ui.previewOverlayScale->setValue(overlayScale);
+    this->ui.previewOverlayPadX->setValue(overlayPadX);
+    this->ui.previewOverlayPadY->setValue(overlayPadY);
+    this->ui.previewOverlayMargin->setValue(overlayMargin);
+    this->oldPreviewOverlayScale = overlayScale;
+    this->oldPreviewOverlayPadX = overlayPadX;
+    this->oldPreviewOverlayPadY = overlayPadY;
+    this->oldPreviewOverlayMargin = overlayMargin;
     if (mw->App->config->get_bool("preview_seeded_random"))
         this->ui.previewSeededRandom->setCheckState(Qt::CheckState::Checked);
     else

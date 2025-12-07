@@ -81,6 +81,17 @@ void VideoPreviewWidget::setSeededRandom(bool enabled, const QString& seedValue)
     this->hoverRandomCounter = 0;
 }
 
+void VideoPreviewWidget::setOverlayStyle(double scaleMultiplier, int padX, int padY, int margin)
+{
+    this->overlayScaleMultiplier = scaleMultiplier;
+    this->overlayPadX = padX;
+    this->overlayPadY = padY;
+    this->overlayMargin = margin;
+    if (this->videoWidget) {
+        this->videoWidget->setOverlayStyle(scaleMultiplier, padX, padY, margin);
+    }
+}
+
 bool VideoPreviewWidget::isPlaying() const
 {
     return this->player && this->player->playbackState() == QMediaPlayer::PlayingState;

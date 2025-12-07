@@ -1346,6 +1346,11 @@ void MainWindow::showPreviewTooltip(const QModelIndex& proxyIndex)
     preview->setRememberPositionEnabled(rememberPosition);
     bool seeded = this->App->config->get_bool("preview_seeded_random") && this->App->config->get_bool("random_use_seed");
     preview->setSeededRandom(seeded, this->App->config->get("random_seed"));
+    double overlayScale = std::max(0.1, this->App->config->get("preview_overlay_scale").toDouble());
+    int overlayPadX = std::max(0, this->App->config->get("preview_overlay_pad_x").toInt());
+    int overlayPadY = std::max(0, this->App->config->get("preview_overlay_pad_y").toInt());
+    int overlayMargin = std::max(0, this->App->config->get("preview_overlay_margin").toInt());
+    preview->setOverlayStyle(overlayScale, overlayPadX, overlayPadY, overlayMargin);
     preview->setMuted(false);
 
     if (rememberPosition) {
@@ -2472,6 +2477,23 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         dialog->oldPreviewAutoplayAllMute = dialog->ui.previewAutoplayAllMute->isChecked();
     }
     config->set("preview_seek_seconds", QString::number(dialog->ui.previewSeekSeconds->value()));
+    double overlayScale = dialog->ui.previewOverlayScale->value();
+    if (overlayScale != dialog->oldPreviewOverlayScale) {
+        config->set("preview_overlay_scale", QString::number(overlayScale, 'f', 3));
+        dialog->oldPreviewOverlayScale = overlayScale;
+    }
+    if (dialog->ui.previewOverlayPadX->value() != dialog->oldPreviewOverlayPadX) {
+        config->set("preview_overlay_pad_x", QString::number(dialog->ui.previewOverlayPadX->value()));
+        dialog->oldPreviewOverlayPadX = dialog->ui.previewOverlayPadX->value();
+    }
+    if (dialog->ui.previewOverlayPadY->value() != dialog->oldPreviewOverlayPadY) {
+        config->set("preview_overlay_pad_y", QString::number(dialog->ui.previewOverlayPadY->value()));
+        dialog->oldPreviewOverlayPadY = dialog->ui.previewOverlayPadY->value();
+    }
+    if (dialog->ui.previewOverlayMargin->value() != dialog->oldPreviewOverlayMargin) {
+        config->set("preview_overlay_margin", QString::number(dialog->ui.previewOverlayMargin->value()));
+        dialog->oldPreviewOverlayMargin = dialog->ui.previewOverlayMargin->value();
+    }
     bool rememberPos = dialog->ui.previewRememberPosition->isChecked();
     if (rememberPos != dialog->oldPreviewRememberPosition) {
         config->set("preview_remember_position", rememberPos ? "True" : "False");

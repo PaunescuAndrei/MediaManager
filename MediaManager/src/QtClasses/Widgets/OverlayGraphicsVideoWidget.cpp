@@ -6,6 +6,8 @@
 #include <QPaintEvent>
 #include <QResizeEvent>
 #include <QVideoSink>
+#include <cmath>
+#include <algorithm>
 
 OverlayGraphicsVideoWidget::OverlayGraphicsVideoWidget(QWidget* parent) : QWidget(parent)
 {
@@ -21,6 +23,15 @@ OverlayGraphicsVideoWidget::OverlayGraphicsVideoWidget(QWidget* parent) : QWidge
 QVideoSink* OverlayGraphicsVideoWidget::videoSink() const
 {
     return this->sink;
+}
+
+void OverlayGraphicsVideoWidget::setOverlayStyle(double scaleMultiplier, int padX, int padY, int margin)
+{
+    this->overlayScaleMultiplier = std::clamp(scaleMultiplier, 0.1, 5.0);
+    this->overlayPadX = std::max(0, padX);
+    this->overlayPadY = std::max(0, padY);
+    this->overlayMargin = std::max(0, margin);
+    this->update();
 }
 
 void OverlayGraphicsVideoWidget::setOverlayText(const QString& text)
@@ -50,16 +61,23 @@ void OverlayGraphicsVideoWidget::paintEvent(QPaintEvent* event)
     }
 
     if (!this->currentText.isEmpty()) {
+        const QRect overlayArea = this->targetRect.isEmpty() ? this->rect() : this->targetRect;
+        const double autoScale = overlayArea.height() > 0 ? static_cast<double>(overlayArea.height()) / 200.0 : 1.0;
+        const double scale = std::max(0.1, this->overlayScaleMultiplier) * autoScale;
+        const int fontSize = qBound(6, static_cast<int>(std::round(11.0 * scale)), 48);
+        const int padX = qBound(0, static_cast<int>(std::round(this->overlayPadX * scale)), 96);
+        const int padY = qBound(0, static_cast<int>(std::round(this->overlayPadY * scale)), 96);
+        const int margin = qBound(0, static_cast<int>(std::round(this->overlayMargin * scale)), 128);
+
         QFont f = this->font();
-        f.setPointSize(11);
+        f.setPointSize(fontSize);
         painter.setFont(f);
         QFontMetrics fm(f);
         QRect textRect = fm.boundingRect(this->currentText);
-        textRect.adjust(-4, -2, 4, 2);
-        const int margin = 6;
-        QRect bgRect(this->width() - textRect.width() - margin,
-            this->height() - textRect.height() - margin,
-            textRect.width(), textRect.height());
+        textRect.adjust(-padX, -padY, padX, padY);
+        const int posX = std::max(overlayArea.left(), overlayArea.right() - textRect.width() - margin);
+        const int posY = std::max(overlayArea.top(), overlayArea.bottom() - textRect.height() - margin);
+        QRect bgRect(QPoint(posX, posY), textRect.size());
 
         painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
         painter.setOpacity(0.45);

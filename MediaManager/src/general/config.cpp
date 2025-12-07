@@ -123,6 +123,10 @@ void Config::init_defaults() {
 		{"preview_main_enabled", "True"},
 		{"preview_main_width", "800"},
 		{"preview_main_height", "450"},
+		{"preview_overlay_scale", "1.0"},
+		{"preview_overlay_pad_x", "4"},
+		{"preview_overlay_pad_y", "2"},
+		{"preview_overlay_margin", "6"},
 	});
 }
 

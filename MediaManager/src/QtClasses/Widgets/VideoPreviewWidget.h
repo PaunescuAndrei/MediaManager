@@ -21,6 +21,7 @@ public:
     void setRememberPositionEnabled(bool enabled);
     void setRandomOnHoverEnabled(bool enabled);
     void setSeededRandom(bool enabled, const QString& seedValue);
+    void setOverlayStyle(double scaleMultiplier, int padX, int padY, int margin);
     void jumpToRandomPosition();
     void seekBySeconds(double seconds);
     void prepareInitialFrame(bool keepPlaying);
@@ -56,6 +57,10 @@ private:
     QTimer startTimer;
     int startDelayMs = 0;
     int volumePercent = 20;
+    double overlayScaleMultiplier = 1.0;
+    int overlayPadX = 4;
+    int overlayPadY = 2;
+    int overlayMargin = 6;
     bool randomStart = false;
     bool muted = false;
     bool rememberPosition = false;

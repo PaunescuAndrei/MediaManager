@@ -653,11 +653,11 @@
                  </layout>
                 </widget>
                </item>
-               <item>
-                <widget class="QWidget" name="previewSeekWidget" native="true">
-                 <layout class="QHBoxLayout" name="horizontalLayout_previewSeek">
-                  <property name="leftMargin">
-                   <number>0</number>
+              <item>
+               <widget class="QWidget" name="previewSeekWidget" native="true">
+                <layout class="QHBoxLayout" name="horizontalLayout_previewSeek">
+                 <property name="leftMargin">
+                  <number>0</number>
                   </property>
                   <property name="topMargin">
                    <number>0</number>
@@ -692,16 +692,124 @@
                     <property name="value">
                      <double>5.000000000000000</double>
                     </property>
-                   </widget>
-                  </item>
-                 </layout>
-                </widget>
-               </item>
-               <item>
-               <widget class="QCheckBox" name="previewRandomStart">
-                <property name="text">
-                 <string>Random start position</string>
-                </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+              <item>
+               <widget class="QWidget" name="previewOverlayScaleWidget" native="true">
+                <layout class="QHBoxLayout" name="horizontalLayout_previewOverlayScale">
+                 <property name="leftMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="topMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>0</number>
+                 </property>
+                 <item>
+                  <widget class="QLabel" name="previewOverlayScaleLabel">
+                   <property name="text">
+                    <string>Overlay scale multiplier:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QDoubleSpinBox" name="previewOverlayScale">
+                   <property name="focusPolicy">
+                    <enum>Qt::FocusPolicy::StrongFocus</enum>
+                   </property>
+                   <property name="minimum">
+                    <double>0.100000000000000</double>
+                   </property>
+                   <property name="maximum">
+                    <double>5.000000000000000</double>
+                   </property>
+                   <property name="singleStep">
+                    <double>0.050000000000000</double>
+                   </property>
+                   <property name="value">
+                    <double>1.000000000000000</double>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+              <item>
+               <widget class="QWidget" name="previewOverlayPadWidget" native="true">
+                <layout class="QHBoxLayout" name="horizontalLayout_previewOverlayPad">
+                 <property name="leftMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="topMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="rightMargin">
+                  <number>0</number>
+                 </property>
+                 <property name="bottomMargin">
+                  <number>0</number>
+                 </property>
+                 <item>
+                  <widget class="QLabel" name="previewOverlayPadLabel">
+                   <property name="text">
+                    <string>Overlay padding (X / Y) &amp; margin:</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QSpinBox" name="previewOverlayPadX">
+                   <property name="focusPolicy">
+                    <enum>Qt::FocusPolicy::StrongFocus</enum>
+                   </property>
+                   <property name="maximum">
+                    <number>96</number>
+                   </property>
+                   <property name="value">
+                    <number>4</number>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QSpinBox" name="previewOverlayPadY">
+                   <property name="focusPolicy">
+                    <enum>Qt::FocusPolicy::StrongFocus</enum>
+                   </property>
+                   <property name="maximum">
+                    <number>96</number>
+                   </property>
+                   <property name="value">
+                    <number>2</number>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QSpinBox" name="previewOverlayMargin">
+                   <property name="focusPolicy">
+                    <enum>Qt::FocusPolicy::StrongFocus</enum>
+                   </property>
+                   <property name="maximum">
+                    <number>128</number>
+                   </property>
+                   <property name="value">
+                    <number>6</number>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+              <item>
+              <widget class="QCheckBox" name="previewRandomStart">
+               <property name="text">
+                <string>Random start position</string>
+               </property>
                </widget>
               </item>
               <item>

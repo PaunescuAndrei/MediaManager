@@ -18,6 +18,8 @@
 #include "colorPaletteExtractor.h"
 #include <QStringList>
 #include <definitions.h>
+#include <QSize>
+#include <initializer_list>
 
 class MainApp;
 
@@ -64,6 +66,7 @@ namespace utils {
 	void changeQImageHue(QImage& img, QColor& newcolor, double blend_ratio);
 	std::string getAppId(const char* VERSION);
 	QString formatTimeAgo(qint64 seconds);
+	QSize adjustSizeForAspect(const QSize& baseSize, double contentWidthFraction, int nonContentHeight, std::initializer_list<double> aspectGuesses);
 	bool isSingleInstanceRunning(QString appid);
 	void openFileExplorer(QString path);
 	void numlock_toggle_on();

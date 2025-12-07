@@ -347,6 +347,7 @@ void VideoPreviewWidget::ensurePlayer()
     this->player->setAudioOutput(this->audioOutput);
     if (this->videoWidget && this->videoWidget->videoSink()) {
         this->player->setVideoOutput(this->videoWidget->videoSink());
+        QObject::connect(this->videoWidget->videoSink(), &QVideoSink::videoSizeChanged, this, &VideoPreviewWidget::handleVideoSizeChanged);
     }
     this->player->setLoops(QMediaPlayer::Infinite);
     this->statusConn = QObject::connect(this->player, &QMediaPlayer::mediaStatusChanged, this, &VideoPreviewWidget::onMediaStatusChanged);
@@ -435,6 +436,16 @@ void VideoPreviewWidget::onPositionChanged(qint64 positionMs)
 {
     this->lastPositionMs = positionMs;
     this->updateOverlayText(positionMs, this->currentDurationMs);
+}
+
+void VideoPreviewWidget::handleVideoSizeChanged()
+{
+    if (this->videoWidget && this->videoWidget->videoSink()) {
+        const QSize size = this->videoWidget->videoSink()->videoSize();
+        if (size.isValid()) {
+            emit this->videoSizeKnown(size);
+        }
+    }
 }
 
 void VideoPreviewWidget::resizeEvent(QResizeEvent* event)

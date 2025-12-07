@@ -1398,7 +1398,33 @@ void MainWindow::showPreviewTooltip(const QModelIndex& proxyIndex)
         }
     }
 
-    popup->move(clampPoint(target.x(), target.y()));
+    const QPoint anchorTarget = target;
+    auto clampForSize = [screenRect, anchorTarget](int w, int h) {
+        if (!screenRect.isValid())
+            return QPoint(anchorTarget.x(), anchorTarget.y());
+        int clampedX = std::max(screenRect.left(), std::min(anchorTarget.x(), screenRect.right() - w));
+        int clampedY = std::max(screenRect.top(), std::min(anchorTarget.y(), screenRect.bottom() - h));
+        return QPoint(clampedX, clampedY);
+    };
+
+    popup->move(clampForSize(popupW, popupH));
+
+    auto popupSizeState = std::make_shared<QSize>(popupSize);
+    QObject::connect(preview, &VideoPreviewWidget::videoSizeKnown, popup, [popup, popupSizeState, clampForSize, screenMaxW, screenMaxH](const QSize& videoSize) {
+        if (!videoSize.isValid() || videoSize.height() == 0 || !popup)
+            return;
+        const int nonPreviewHeight = 12; // layout margins top+bottom
+        QSize baseSize = *popupSizeState;
+        double aspect = static_cast<double>(videoSize.width()) / static_cast<double>(videoSize.height());
+        QSize adjusted = utils::adjustSizeForAspect(baseSize, 1.0, nonPreviewHeight, { aspect });
+        int newW = qBound(160, adjusted.width(), screenMaxW);
+        int newH = qBound(120, adjusted.height(), screenMaxH);
+        popupSizeState->setWidth(newW);
+        popupSizeState->setHeight(newH);
+        popup->resize(*popupSizeState);
+        QPoint pos = clampForSize(newW, newH);
+        popup->move(pos);
+    });
 
     connect(popup, &QDialog::finished, this, [this, popup, rememberPosition](int) {
         if (!popup->property("storeOnClose").toBool()) {

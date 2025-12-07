@@ -2,6 +2,7 @@
 #include <QWidget>
 #include <QTimer>
 #include <QString>
+#include <QSize>
 
 class QMediaPlayer;
 class OverlayGraphicsVideoWidget;
@@ -37,6 +38,9 @@ public slots:
 signals:
     void previewStarted(const QString& path);
     void previewStopped(const QString& path);
+    void videoSizeKnown(const QSize& size);
+private:
+    void handleVideoSizeChanged();
 private:
     void ensurePlayer();
     void startPlayback();

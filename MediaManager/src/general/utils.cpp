@@ -6,6 +6,7 @@
 #include <cctype>
 #include <QProcess>
 #include <math.h>
+#include <cmath>
 #include <QDir>
 #include "MainApp.h"
 #include <chrono>
@@ -14,6 +15,7 @@
 #include "tlhelp32.h"
 #include <QLocalSocket>
 #include "realtimeapiset.h"
+#include <limits>
 
 static BOOL CALLBACK utils::enumWindowCallback(HWND hWnd, LPARAM lparam)
 {
@@ -541,6 +543,32 @@ QColor utils::blendColors(const QColor& color1, const QColor& color2, double rat
 	int b = color1.blue() * (1 - ratio) + color2.blue() * ratio;
 
 	return QColor(r, g, b, color1.alpha());
+}
+
+QSize utils::adjustSizeForAspect(const QSize& baseSize, double contentWidthFraction, int nonContentHeight, std::initializer_list<double> aspectGuesses)
+{
+	if (baseSize.width() <= 0 || baseSize.height() <= 0)
+		return baseSize;
+
+	const double fraction = std::clamp(contentWidthFraction, 0.0, 1.0);
+	const int previewWidth = static_cast<int>(std::round(baseSize.width() * (fraction > 0.0 ? fraction : 1.0)));
+	const int nonPreviewHeight = std::max(0, nonContentHeight);
+
+	int bestHeight = baseSize.height();
+	int smallestDelta = std::numeric_limits<int>::max();
+	for (double aspect : aspectGuesses) {
+		if (aspect <= 0.0 || previewWidth <= 0)
+			continue;
+		const int previewHeight = static_cast<int>(std::ceil(previewWidth / aspect));
+		const int candidate = nonPreviewHeight + previewHeight;
+		const int delta = std::max(0, candidate - baseSize.height());
+		if (delta < smallestDelta) {
+			smallestDelta = delta;
+			bestHeight = std::max(baseSize.height(), candidate);
+		}
+	}
+
+	return QSize(baseSize.width(), bestHeight);
 }
 
 void utils::changeQImageHue(QImage& img, QColor &newcolor,double blend_ratio) {

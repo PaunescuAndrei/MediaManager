@@ -17,6 +17,7 @@
 #include <QWheelEvent>
 #include <QScrollBar>
 #include <QPainter>
+#include <QSize>
 #include "starEditorWidget.h"
 #include "utils.h"
 #include "MainApp.h"
@@ -158,7 +159,15 @@ void NextChoiceDialog::setChoices(const QList<NextVideoChoice>& newChoices)
 
     const int cardMaxWidth = screenWidth / 4; // aim for ~1/4 screen per card
     const int cardWidth = cardMaxWidth;
-    const int cardHeight = 190; // closer to real rendered height including tags/stats
+    const int baseCardHeight = 190; // closer to real rendered height including tags/stats
+
+    int cardHeight = baseCardHeight;
+    if (this->previewEnabled) {
+        const double previewWidthFraction = 0.55; // preview roughly half the card width
+        const int nonPreviewHeightEstimate = 80; // title + stats + padding
+        QSize adjusted = utils::adjustSizeForAspect(QSize(cardWidth, baseCardHeight), previewWidthFraction, nonPreviewHeightEstimate, { 16.0 / 9.0, 4.0 / 3.0, 21.0 / 9.0 });
+        cardHeight = adjusted.height();
+    }
 
     int hSpacing = 12;
     int vSpacing = 12;

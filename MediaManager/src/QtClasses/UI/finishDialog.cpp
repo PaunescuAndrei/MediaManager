@@ -221,13 +221,13 @@ void finishDialog::updateWindowTitle() {
 		int sessionSeconds = this->MW->App->VW->mainPlayer->getSessionTime();
 		int watchedSeconds = this->MW->App->VW->mainPlayer->getTotalWatchedTime();
 		if (sessionSeconds > 0) {
-			session_time = " [Session: " % QString::fromStdString(utils::formatSeconds(sessionSeconds)) % "]";
+			session_time = QStringLiteral(" [Session: %1]").arg(utils::formatSecondsCompactQt(sessionSeconds));
 		}
 		if (watchedSeconds > 0) {
-			watched_time = " [Watched: " % QString::fromStdString(utils::formatSeconds(watchedSeconds)) % "]";
+			watched_time = QStringLiteral(" [Watched: %1]").arg(utils::formatSecondsCompactQt(watchedSeconds));
 		}
 	}
-	this->setWindowTitle("Continue?" + session_time + watched_time + " [Time: " + currentTime + "]");
+	this->setWindowTitle(QStringLiteral("Continue?%1%2 [Time: %3]").arg(session_time, watched_time, currentTime));
 }
 
 finishDialog::~finishDialog()

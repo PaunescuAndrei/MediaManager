@@ -33,8 +33,10 @@ namespace utils {
 	QString bool_to_text_qt(bool b);
 	std::string linux_to_windows_path(std::string& path);
 	QString getVideoDuration(QString path);
-	std::string formatSeconds(double total_seconds);
-	QString formatSecondsQt(double total_seconds);
+	std::string formatSeconds(double total_seconds, bool showHours = true);
+	QString formatSecondsQt(double total_seconds, bool showHours = true);
+	std::string formatSecondsCompact(double total_seconds);
+	QString formatSecondsCompactQt(double total_seconds);
 	bool hiddenCheck(QStringList &settings);
 	int randint(int start,int stop, quint32 seed = 0);
 	double randfloat(double start, double stop, quint32 seed = 0);

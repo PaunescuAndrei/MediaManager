@@ -448,16 +448,30 @@ QString utils::getVideoDuration(QString path) {
 	return output.trimmed();
 }
 
-std::string utils::formatSeconds(double total_seconds) {
-	int minutes = total_seconds / 60;
-	int seconds = round(fmod(total_seconds , 60));
+std::string utils::formatSeconds(double total_seconds, bool showHours) {
+	int totalSec = static_cast<int>(std::round(total_seconds));
+	int minutes = totalSec / 60;
+	int seconds = totalSec % 60;
 	int hours = minutes / 60;
 	minutes = minutes % 60;
-	return std::format("{:02d}:{:02d}:{:02d}", hours, minutes, seconds);
+	if (showHours || hours > 0) {
+		return std::format("{:02d}:{:02d}:{:02d}", hours, minutes, seconds);
+	}
+	return std::format("{:02d}:{:02d}", minutes + hours * 60, seconds);
 }
 
-QString utils::formatSecondsQt(double total_seconds) {
-	return QString::fromStdString(formatSeconds(total_seconds));
+QString utils::formatSecondsQt(double total_seconds, bool showHours) {
+	return QString::fromStdString(formatSeconds(total_seconds, showHours));
+}
+
+std::string utils::formatSecondsCompact(double total_seconds)
+{
+	return formatSeconds(total_seconds, false);
+}
+
+QString utils::formatSecondsCompactQt(double total_seconds)
+{
+	return QString::fromStdString(formatSecondsCompact(total_seconds));
 }
 
 bool utils::hiddenCheck(QStringList &settings) {

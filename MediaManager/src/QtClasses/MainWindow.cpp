@@ -479,10 +479,10 @@ void MainWindow::UpdateWindowTitle() {
         int sessionSeconds = this->App->VW->mainPlayer->getSessionTime();
         int watchedSeconds = this->App->VW->mainPlayer->getTotalWatchedTime();
         if (sessionSeconds > 0) {
-            session_time = " [Session: " % QString::fromStdString(utils::formatSeconds(sessionSeconds)) % "]";
+            session_time = QStringLiteral(" [Session: %1]").arg(utils::formatSecondsCompactQt(sessionSeconds));
         }
         if (watchedSeconds > 0) {
-            watched_time = " [Watched: " % QString::fromStdString(utils::formatSeconds(watchedSeconds)) % "]";
+            watched_time = QStringLiteral(" [Watched: %1]").arg(utils::formatSecondsCompactQt(watchedSeconds));
         }
     }
     if (this->thumbnailManager->work_count > 0) {
@@ -2990,7 +2990,8 @@ void MainWindow::updateProgressBar(double position, double duration) {
     if (this->App->taskbar != nullptr) {
         this->App->taskbar->setProgress(this->App->hwnd, static_cast<ULONGLONG>(percent) * 100, 10000);
     }
-    this->ui.progressBar->setFormat(QString::fromStdString(std::format("{} / {}", utils::formatSeconds(this->position), utils::formatSeconds(this->duration))));
+    const bool showHours = this->duration >= 3600 * 1000;
+    this->ui.progressBar->setFormat(QStringLiteral("%1 / %2").arg(utils::formatSecondsQt(this->position,showHours), utils::formatSecondsQt(this->duration,showHours)));
 }
 
 void MainWindow::updateProgressBar(double position, double duration, QSharedPointer<BasePlayer> player, bool running)
@@ -3103,7 +3104,8 @@ void MainWindow::updateProgressBar(QString position, QString duration) {
     if (this->App->taskbar != nullptr) {
         this->App->taskbar->setProgress(this->App->hwnd, static_cast<ULONGLONG>(percent) * 100, 10000);
     }
-    this->ui.progressBar->setFormat(QString::fromStdString(std::format("{} / {}", utils::formatSeconds(this->position), utils::formatSeconds(this->duration))));
+    const bool showHours = this->duration >= 3600 * 1000;
+    this->ui.progressBar->setFormat(QStringLiteral("%1 / %2").arg(utils::formatSecondsQt(this->position, showHours), utils::formatSecondsQt(this->duration, showHours)));
 }
 
  
@@ -3304,7 +3306,7 @@ void MainWindow::watchCurrent() {
             this->showEndOfVideoDialog();
         });
         this->VideoInfoNotification();
-        qMainApp->logger->log(QStringLiteral("Playing Current Video \"%1\" from %2").arg(this->ui.currentVideo->path).arg(utils::formatSecondsQt(seconds)), "Video", this->ui.currentVideo->path);
+        qMainApp->logger->log(QStringLiteral("Playing Current Video \"%1\" from %2").arg(this->ui.currentVideo->path).arg(utils::formatSecondsCompactQt(seconds)), "Video", this->ui.currentVideo->path);
     }
     else {
         utils::bring_hwnd_to_foreground_uiautomation_method(this->App->VW->mainPlayer->player_hwnd, this->App->uiAutomation);
@@ -3317,7 +3319,7 @@ void MainWindow::watchSelected(int video_id, QString path) {
     if (seconds < 0.001)
         seconds = 0.001;
     l->openPlayer(path, seconds);
-    qMainApp->logger->log(QStringLiteral("Playing Video \"%1\" from %2").arg(path).arg(utils::formatSecondsQt(seconds)), "Video", path);
+    qMainApp->logger->log(QStringLiteral("Playing Video \"%1\" from %2").arg(path).arg(utils::formatSecondsCompactQt(seconds)), "Video", path);
 }
 
 void MainWindow::updateSearchCompleter() {
@@ -3460,7 +3462,7 @@ void MainWindow::addWatchedDialogButton() {
 
 void MainWindow::incrementtimeWatchedIncrement(double value) {
     if (value > 0)
-        qMainApp->logger->log(QStringLiteral("Increasing time watched by %1").arg(utils::formatSecondsQt(value)), "Stats");
+        qMainApp->logger->log(QStringLiteral("Increasing time watched by %1").arg(utils::formatSecondsCompactQt(value)), "Stats");
     double time = this->App->db->getMainInfoValue("timeWatchedIncrement", "ALL", "0").toDouble();
     time += value;
     this->App->db->setMainInfoValue("timeWatchedIncrement", "ALL", QString::number(time));

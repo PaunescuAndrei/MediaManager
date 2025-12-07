@@ -480,9 +480,10 @@ void VideoPreviewWidget::updateOverlayText(qint64 positionMs, qint64 durationMs)
         this->lastOverlayText.clear();
         return;
     }
+    const bool showHours = durationMs >= 3600 * 1000;
     const QString text = QStringLiteral("%1 / %2")
-        .arg(utils::formatSecondsQt(positionMs / 1000.0),
-            utils::formatSecondsQt(durationMs / 1000.0));
+        .arg(utils::formatSecondsQt(positionMs / 1000.0, showHours),
+            utils::formatSecondsQt(durationMs / 1000.0, showHours));
     if (text == this->lastOverlayText)
         return;
     this->lastOverlayText = text;

@@ -385,6 +385,14 @@ void VideoPreviewWidget::startPlayback()
         this->ensurePlayer();
     if (!this->player)
         return;
+
+    if (this->randomStartDurationConn)
+        QObject::disconnect(this->randomStartDurationConn);
+    if (this->randomHoverDurationConn)
+        QObject::disconnect(this->randomHoverDurationConn);
+    this->randomStartDurationConn = QMetaObject::Connection();
+    this->randomHoverDurationConn = QMetaObject::Connection();
+
     if (this->randomEachHover) {
         if (this->player->duration() > 0) {
             qint64 pos = this->pickRandomPosition(this->player->duration(), ++this->hoverRandomCounter);
@@ -392,15 +400,15 @@ void VideoPreviewWidget::startPlayback()
             this->lastPosition = 0;
             this->player->setPosition(pos);
         } else {
-            QObject::disconnect(this->player, &QMediaPlayer::durationChanged, nullptr, nullptr);
-            QObject::connect(this->player, &QMediaPlayer::durationChanged, this, [this](qint64) {
+            this->randomHoverDurationConn = QObject::connect(this->player, &QMediaPlayer::durationChanged, this, [this](qint64) {
                 if (!this->randomEachHover)
                     return;
                 if (this->player && this->player->duration() > 0) {
                     qint64 pos = this->pickRandomPosition(this->player->duration(), ++this->hoverRandomCounter);
                     this->initialPosition = pos;
                     this->player->setPosition(pos);
-                    QObject::disconnect(this->player, &QMediaPlayer::durationChanged, this, nullptr);
+                    QObject::disconnect(this->randomHoverDurationConn);
+                    this->randomHoverDurationConn = QMetaObject::Connection();
                 }
             });
         }
@@ -417,8 +425,7 @@ void VideoPreviewWidget::startPlayback()
                 this->lastPosition = pos;
             this->player->setPosition(pos);
         } else {
-            QObject::disconnect(this->player, &QMediaPlayer::durationChanged, nullptr, nullptr);
-            QObject::connect(this->player, &QMediaPlayer::durationChanged, this, [this](qint64) {
+            this->randomStartDurationConn = QObject::connect(this->player, &QMediaPlayer::durationChanged, this, [this](qint64) {
                 if (!this->randomStart)
                     return;
                 if (this->rememberPosition && this->lastPosition > 0)
@@ -428,7 +435,8 @@ void VideoPreviewWidget::startPlayback()
                     this->initialPosition = pos;
                     if (this->rememberPosition)
                         this->lastPosition = pos;
-                    QObject::disconnect(this->player, &QMediaPlayer::durationChanged, this, nullptr);
+                    QObject::disconnect(this->randomStartDurationConn);
+                    this->randomStartDurationConn = QMetaObject::Connection();
                     this->player->setPosition(pos);
                 }
             });
@@ -475,15 +483,23 @@ void VideoPreviewWidget::updateOverlayText(qint64 positionMs, qint64 durationMs)
 {
     if (!this->videoWidget)
         return;
-    if (durationMs <= 0) {
-        this->videoWidget->setOverlayText(QString());
-        this->lastOverlayText.clear();
-        return;
+
+    qint64 effectiveDurationMs = durationMs;
+    if (effectiveDurationMs <= 0 && this->player) {
+        effectiveDurationMs = this->player->duration();
     }
-    const bool showHours = durationMs >= 3600 * 1000;
+    effectiveDurationMs = std::max<qint64>(0, effectiveDurationMs);
+
+    qint64 effectivePositionMs = positionMs;
+    if (effectivePositionMs < 0 && this->player) {
+        effectivePositionMs = this->player->position();
+    }
+    effectivePositionMs = std::max<qint64>(0, effectivePositionMs);
+
+    const bool showHours = effectiveDurationMs >= 3600 * 1000;
     const QString text = QStringLiteral("%1 / %2")
-        .arg(utils::formatSecondsQt(positionMs / 1000.0, showHours),
-            utils::formatSecondsQt(durationMs / 1000.0, showHours));
+        .arg(utils::formatSecondsQt(effectivePositionMs / 1000.0, showHours),
+            utils::formatSecondsQt(effectiveDurationMs / 1000.0, showHours));
     if (text == this->lastOverlayText)
         return;
     this->lastOverlayText = text;

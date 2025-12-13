@@ -77,5 +77,7 @@ private:
     bool preloadPause = false;
     QMetaObject::Connection statusConn;
     QMetaObject::Connection pauseConn;
+    QMetaObject::Connection randomStartDurationConn;
+    QMetaObject::Connection randomHoverDurationConn;
     mutable quint64 hoverRandomCounter = 0;
 };

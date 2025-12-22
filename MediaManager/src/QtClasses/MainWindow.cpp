@@ -2525,6 +2525,14 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         config->set("mascots_color_theme", "False");
         this->resetPalette();
     }
+    if (dialog->ui.mascotsCenterContent->checkState() == Qt::CheckState::Checked)
+        config->set("mascots_center_content", "True");
+    else if (dialog->ui.mascotsCenterContent->checkState() == Qt::CheckState::Unchecked)
+        config->set("mascots_center_content", "False");
+    if (this->ui.leftImg->isVisible()) {
+        this->ui.leftImg->resizeImage();
+        this->ui.rightImg->resizeImage();
+    }
     if (dialog->ui.videoAutoplay->checkState() == Qt::CheckState::Checked)
         config->set("video_autoplay", "True");
     else if (dialog->ui.videoAutoplay->checkState() == Qt::CheckState::Unchecked)

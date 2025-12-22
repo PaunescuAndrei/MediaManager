@@ -3,6 +3,7 @@
 #include <QEvent>
 #include <QGraphicsItem>
 #include <QPixmap>
+#include <QImage>
 #include "mascotsGeneratorThread.h"
 
 class QGraphicsScene_custom;
@@ -37,4 +38,15 @@ public:
     void resizeImage();
     signals:
         void mouseClicked(Qt::MouseButton button, Qt::KeyboardModifiers modifiers);
+private:
+    static bool findAlphaBoundsX(const QImage& image, int alphaThreshold, int* minX, int* maxX);
+    static bool computeWeightedCenterXFromAlpha(const QImage& image, int alphaThreshold, double* centerX);
+    bool scaledCenterForPixmap(const QPixmap& pixmap, double* scaledCenter) const;
+    void updateContentCenterFromOriginal();
+    int horizontalScrollForContent(const QPixmap& pixmap) const;
+    int horizontalScrollForPixmapAlpha(const QPixmap& pixmap) const;
+    bool has_content_center = false;
+    double content_center_x = 0.0;
+    bool has_scaled_center = false;
+    double scaled_center_x = 0.0;
 };

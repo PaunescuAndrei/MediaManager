@@ -1278,6 +1278,13 @@
               </property>
              </widget>
             </item>
+            <item>
+             <widget class="QCheckBox" name="mascotsCenterContent">
+              <property name="text">
+               <string>Center Mascots by Content</string>
+              </property>
+             </widget>
+            </item>
            </layout>
           </widget>
          </item>

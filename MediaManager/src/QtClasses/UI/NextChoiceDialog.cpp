@@ -109,6 +109,9 @@ NextChoiceDialog::NextChoiceDialog(QWidget* parent) : QDialog(parent)
     this->ui.setupUi(this);
     this->setWindowModality(Qt::WindowModal);
     this->setWindowFlag(Qt::WindowStaysOnTopHint, true);
+    connect(this->ui.refreshButton, &QPushButton::clicked, this, [this] {
+        emit this->refreshRequested();
+    });
     if (auto buttonBox = this->findChild<QDialogButtonBox*>()) {
         connect(buttonBox, &QDialogButtonBox::rejected, this, &NextChoiceDialog::reject);
     }
@@ -137,6 +140,7 @@ void NextChoiceDialog::setChoices(const QList<NextVideoChoice>& newChoices)
     this->choices = newChoices;
     this->previewAutoplayAllMute = qMainApp->config->get_bool("preview_autoplay_all_mute");
     this->previewEnabled = qMainApp->config->get_bool("preview_next_choices_enabled");
+    this->updateRefreshButtonText();
     this->rebuildCards();
     if (!this->choices.isEmpty()) {
         this->applySelection(0);
@@ -191,6 +195,25 @@ NextVideoChoice NextChoiceDialog::selectedChoice() const
         return this->choices[this->currentIndex];
     }
     return NextVideoChoice();
+}
+
+void NextChoiceDialog::setCounterLabel(QLabel* label)
+{
+    this->counterLabel = label;
+    this->updateRefreshButtonText();
+}
+
+void NextChoiceDialog::updateRefreshButtonText()
+{
+    int counterVar = 0;
+    if (this->counterLabel) {
+        bool ok = false;
+        int value = this->counterLabel->text().toInt(&ok);
+        if (ok) {
+            counterVar = value;
+        }
+    }
+    this->ui.refreshButton->setText(QStringLiteral("Refresh (%1)").arg(counterVar));
 }
 
 QWidget* NextChoiceDialog::buildCard(const NextVideoChoice& choice, int index)

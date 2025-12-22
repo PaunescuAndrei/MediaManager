@@ -217,6 +217,9 @@ public:
     QList<NextVideoChoice> buildSeriesRandomCandidates(const QPersistentModelIndex& current_source_index, const NextVideoSettings& settings, int maxCount, bool& continuedSeries) const;
     bool applyNextChoice(const std::optional<NextVideoChoice>& choice);
     int nextChoiceCountFromConfig() const;
+    int getNextChoiceRefreshCounter() const;
+    void setNextChoiceRefreshCounter(int value);
+    void incrementNextChoiceRefreshCounter(int delta);
     bool setNextVideo(const QPersistentModelIndex& current_source_index);
     int nextSequentialRow(const QPersistentModelIndex& current_source_index) const;
     bool seriesRandomVideo(const QPersistentModelIndex& current_source_index);

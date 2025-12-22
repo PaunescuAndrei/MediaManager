@@ -6,6 +6,7 @@
 #include <QHash>
 
 class VideoPreviewWidget;
+class QLabel;
 
 class NextChoiceDialog : public QDialog
 {
@@ -16,11 +17,15 @@ public:
     void setChoices(const QList<NextVideoChoice>& newChoices);
     NextVideoChoice selectedChoice() const;
     void setTitle(const QString& text);
+    void setCounterLabel(QLabel* label);
+    void updateRefreshButtonText();
     void setStarIcons(QIcon* activeIcon, QIcon* halfIcon, QIcon* inactiveIcon) {
         this->activeIcon = activeIcon;
         this->halfIcon = halfIcon;
         this->inactiveIcon = inactiveIcon;
     }
+signals:
+    void refreshRequested();
 private:
     void rebuildCards();
     QWidget* buildCard(const NextVideoChoice& choice, int index);
@@ -38,6 +43,7 @@ private:
     QHash<int, VideoPreviewWidget*> previewWidgets;
     bool previewAutoplayAllMute = false;
     bool previewEnabled = true;
+    QLabel* counterLabel = nullptr;
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
     void closeEvent(QCloseEvent* e) override;

@@ -301,7 +301,15 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         if (multichoiceEnabled && candidates.size() > 1) {
             NextChoiceDialog dialog;
             dialog.setStarIcons(this->active, this->halfactive, this->inactive);
+            dialog.setCounterLabel(this->ui.counterLabel);
             dialog.setChoices(candidates);
+            connect(&dialog, &NextChoiceDialog::refreshRequested, this, [this, &dialog, &settings, choiceCount] {
+                this->incrementCounterVar(-1);
+                dialog.updateRefreshButtonText();
+                this->incrementNextChoiceRefreshCounter(1);
+                QList<NextVideoChoice> refreshed = this->buildRandomCandidates(settings, choiceCount, false);
+                dialog.setChoices(refreshed);
+            });
             if (dialog.exec() == QDialog::Accepted) {
                 selectedChoice = dialog.selectedChoice();
             }
@@ -1617,6 +1625,26 @@ int MainWindow::nextChoiceCountFromConfig() const {
     return count;
 }
 
+int MainWindow::getNextChoiceRefreshCounter() const {
+    return this->App->db->getMainInfoValue("next_choice_refresh_counter", this->App->currentDB, "0").toInt();
+}
+
+void MainWindow::setNextChoiceRefreshCounter(int value) {
+    if (value < 0) {
+        value = 0;
+    }
+    this->App->db->setMainInfoValue("next_choice_refresh_counter", this->App->currentDB, QString::number(value));
+}
+
+void MainWindow::incrementNextChoiceRefreshCounter(int delta) {
+    int value = this->getNextChoiceRefreshCounter();
+    value += delta;
+    if (value < 0) {
+        value = 0;
+    }
+    this->setNextChoiceRefreshCounter(value);
+}
+
 std::optional<NextVideoChoice> MainWindow::buildChoiceFromPath(const QString& path, bool reset_progress) const {
     const QPersistentModelIndex src = this->modelIndexByPath(path);
     if (!src.isValid()) return std::nullopt;
@@ -1665,6 +1693,10 @@ QList<NextVideoChoice> MainWindow::buildRandomCandidates(const NextVideoSettings
     QJsonObject json_settings = this->getRandomSettings(settings.random_mode, settings.ignore_filters_and_defaults,
         settings.vid_type_include, settings.vid_type_exclude);
     QString seed = this->App->config->get_bool("random_use_seed") ? this->App->config->get("random_seed") : "";
+    const int refreshCounter = this->getNextChoiceRefreshCounter();
+    if (!seed.isEmpty() && refreshCounter != 0) {
+        seed = seed % QString::number(refreshCounter);
+    }
 
     QList<VideoWeightedData> pool = this->App->db->getVideos(this->App->currentDB, json_settings);
     if (pool.isEmpty()) {
@@ -1721,6 +1753,10 @@ QList<NextVideoChoice> MainWindow::buildSeriesRandomCandidates(const QPersistent
     QJsonObject json_settings = this->getRandomSettings(settings.random_mode, settings.ignore_filters_and_defaults,
         settings.vid_type_include, settings.vid_type_exclude);
     QString seed = this->App->config->get_bool("random_use_seed") ? this->App->config->get("random_seed") : "";
+    const int refreshCounter = this->getNextChoiceRefreshCounter();
+    if (!seed.isEmpty() && refreshCounter != 0) {
+        seed = seed % QString::number(refreshCounter);
+    }
 
     QString current_author;
     QString deterministic_path;
@@ -1810,6 +1846,9 @@ QList<NextVideoChoice> MainWindow::buildSeriesRandomCandidates(const QPersistent
 
 bool MainWindow::applyNextChoice(const std::optional<NextVideoChoice>& choice) {
     if (choice.has_value() && !choice->path.isEmpty()) {
+        if (this->getNextChoiceRefreshCounter() != 0) {
+            this->setNextChoiceRefreshCounter(0);
+        }
         const NextVideoChoice& data = choice.value();
         this->setCurrentVideo(data.id, data.path, data.name, data.author, data.tags, data.resetProgress);
         this->highlightCurrentItem();
@@ -1861,7 +1900,7 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
         case NextVideoModes::Random:
             settings = this->getNextVideoSettings();
             hasSettings = true;
-            candidates = this->buildRandomCandidates(settings, requestedChoices);
+            candidates = this->buildRandomCandidates(settings, requestedChoices, true);
             break;
         case NextVideoModes::SeriesRandom:
             settings = this->getNextVideoSettings();
@@ -1877,7 +1916,21 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
         if (offerChoiceDialog) {
             NextChoiceDialog dialog;
             dialog.setStarIcons(this->active, this->halfactive, this->inactive);
+            dialog.setCounterLabel(this->ui.counterLabel);
             dialog.setChoices(candidates);
+            connect(&dialog, &NextChoiceDialog::refreshRequested, this, [this, &dialog, &settings, mode, requestedChoices, currentSrcIdx] {
+                this->incrementCounterVar(-1);
+                dialog.updateRefreshButtonText();
+                this->incrementNextChoiceRefreshCounter(1);
+                QList<NextVideoChoice> refreshed;
+                if (mode == NextVideoModes::Random) {
+                    refreshed = this->buildRandomCandidates(settings, requestedChoices, true);
+                } else if (mode == NextVideoModes::SeriesRandom) {
+                    bool continuedSeries = false;
+                    refreshed = this->buildSeriesRandomCandidates(currentSrcIdx, settings, requestedChoices, continuedSeries);
+                }
+                dialog.setChoices(refreshed);
+            });
             if (dialog.exec() == QDialog::Accepted) {
                 selectedChoice = dialog.selectedChoice();
             }

@@ -76,6 +76,7 @@ void Config::init_defaults() {
 		{"mascots_frequency", "400"},
 		{"mascots_color_theme","False"},
 		{"mascots_center_content","True"},
+		{"mascots_use_seed","True"},
 		{"sound_effects_on","False"},
 		{"sound_effects_volume","3"},
 		{"sound_effects_special_on","False"},

@@ -35,7 +35,7 @@ void mascotsGeneratorThread::refreshRngFromConfig()
 		return;
 	}
 
-	bool use_seed = this->App->config->get_bool("random_use_seed");
+	bool use_seed = this->App->config->get_bool("random_use_seed") && this->App->config->get_bool("mascots_use_seed");
 	QString seed_string = this->App->config->get("random_seed");
 	if (use_seed) {
 		if (!this->rng_initialized || !this->last_use_seed || seed_string != this->last_seed_string) {
@@ -57,6 +57,15 @@ void mascotsGeneratorThread::refreshRngFromConfig()
 
 	this->last_use_seed = use_seed;
 	this->last_seed_string = seed_string;
+}
+
+void mascotsGeneratorThread::clearCache()
+{
+	if (this->mascots_pixmap)
+		this->mascots_pixmap->clear();
+	this->rng_initialized = false;
+	this->last_seed_string.clear();
+	this->last_use_seed = false;
 }
 
 ImageData mascotsGeneratorThread::getRandomImagePath() {

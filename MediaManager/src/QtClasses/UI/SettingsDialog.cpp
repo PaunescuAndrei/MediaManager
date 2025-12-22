@@ -119,6 +119,10 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 		this->ui.mascotsCenterContent->setCheckState(Qt::CheckState::Checked);
 	else
 		this->ui.mascotsCenterContent->setCheckState(Qt::CheckState::Unchecked);
+	if (mw->App->config->get_bool("mascots_use_seed"))
+		this->ui.mascotsUseSeed->setCheckState(Qt::CheckState::Checked);
+	else
+		this->ui.mascotsUseSeed->setCheckState(Qt::CheckState::Unchecked);
 	if (mw->App->config->get("current_db") == "MINUS")
 		this->ui.minusCatRadioBtn->setChecked(true);
 	else if(mw->App->config->get("current_db") == "PLUS")

@@ -1285,6 +1285,13 @@
               </property>
              </widget>
             </item>
+            <item>
+             <widget class="QCheckBox" name="mascotsUseSeed">
+              <property name="text">
+               <string>Use Random Seed</string>
+              </property>
+             </widget>
+            </item>
            </layout>
           </widget>
          </item>

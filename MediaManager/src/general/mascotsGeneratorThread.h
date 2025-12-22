@@ -37,6 +37,7 @@ public:
     ImageData getImage();
     static QPair<QList<color_area>, QList<color_area>> extractColors(QPixmap& img);
     void loadImage();
+    void clearCache();
     void run() override;
     mascotsGeneratorThread(MainApp* App,QString mascots_path, bool allfiles_random = false, QObject* parent = nullptr);
     ~mascotsGeneratorThread();

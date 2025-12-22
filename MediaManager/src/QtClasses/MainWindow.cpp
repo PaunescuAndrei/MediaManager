@@ -2533,6 +2533,21 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         this->ui.leftImg->resizeImage();
         this->ui.rightImg->resizeImage();
     }
+    const bool oldMascotsUseSeed = config->get_bool("mascots_use_seed");
+    const bool newMascotsUseSeed = dialog->ui.mascotsUseSeed->checkState() == Qt::CheckState::Checked;
+    if (newMascotsUseSeed)
+        config->set("mascots_use_seed", "True");
+    else if (dialog->ui.mascotsUseSeed->checkState() == Qt::CheckState::Unchecked)
+        config->set("mascots_use_seed", "False");
+    if (this->App->MascotsGenerator && oldMascotsUseSeed != newMascotsUseSeed) {
+        this->App->MascotsGenerator->clearCache();
+        if (this->ui.leftImg->isVisible()) {
+            QTimer::singleShot(50, this, [this] {
+                if (this->ui.leftImg->isVisible())
+                    this->updateMascots();
+            });
+        }
+    }
     if (dialog->ui.videoAutoplay->checkState() == Qt::CheckState::Checked)
         config->set("video_autoplay", "True");
     else if (dialog->ui.videoAutoplay->checkState() == Qt::CheckState::Unchecked)

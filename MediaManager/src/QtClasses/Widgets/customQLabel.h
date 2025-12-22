@@ -10,6 +10,7 @@ class customQLabel :public QLabel
 
 public:
     customQLabel(QWidget* parent = nullptr);
+    void setText(const QString& text);
     void mousePressEvent(QMouseEvent* e) override;
     void wheelEvent(QWheelEvent* e) override;
     ~customQLabel();
@@ -19,4 +20,5 @@ signals:
     void middleClicked();
     void scrollUp();
     void scrollDown();
+    void textChanged(const QString& text);
 };

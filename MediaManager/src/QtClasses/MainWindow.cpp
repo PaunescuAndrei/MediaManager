@@ -46,6 +46,7 @@
 #include <QShortcut>
 #include <QRegularExpression>
 #include <QInputDialog>
+#include <QMutexLocker>
 #include "InsertSettingsDialog.h"
 #include "generalEventFilter.h"
 #include "customQButton.h"
@@ -196,6 +197,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
                 return;
             }
             this->scheduleRandomProbabilitiesUpdate();
+            this->updateSaltSeedCache();
         });
     connect(this->videosModel, &QAbstractItemModel::rowsInserted, this,
         [this](const QModelIndex&, int, int) { this->scheduleRandomProbabilitiesUpdate(); });
@@ -204,7 +206,10 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     connect(this->videosModel, &QAbstractItemModel::rowsMoved, this,
         [this](const QModelIndex&, int, int, const QModelIndex&, int) { this->scheduleRandomProbabilitiesUpdate(); });
     connect(this->videosModel, &QAbstractItemModel::modelReset, this,
-        [this]() { this->scheduleRandomProbabilitiesUpdate(); });
+        [this]() {
+            this->scheduleRandomProbabilitiesUpdate();
+            this->updateSaltSeedCache();
+        });
     connect(this->videosModel, &QAbstractItemModel::layoutChanged, this,
         [this](const QList<QPersistentModelIndex>&, QAbstractItemModel::LayoutChangeHint) {
             this->scheduleRandomProbabilitiesUpdate();
@@ -372,6 +377,9 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     connect(this->ui.totalListLabel, &ProgressBarQLabel::clicked, this, [this] {
         this->switchCurrentDB();
     });
+    connect(this->ui.totalListLabel, &ProgressBarQLabel::textChanged, this, [this](const QString&) {
+        this->updateSaltSeedCache();
+    });
     this->ui.counterLabel->highlight_mode = true;
     connect(this->ui.counterLabel, &ProgressBarQLabel::clicked, this, [this] {
         this->setCounterDialogButton();
@@ -383,6 +391,12 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     connect(this->ui.counterLabel, &ProgressBarQLabel::scrollDown, this, [this] {
         this->App->soundPlayer->playSoundEffect();
         this->incrementCounterVar(-1);
+    });
+    connect(this->ui.counterLabel, &ProgressBarQLabel::textChanged, this, [this](const QString&) {
+        this->updateSaltSeedCache();
+    });
+    connect(this->ui.currentVideo, &currentVideoQLabel::textChanged, this, [this](const QString&) {
+        this->updateSaltSeedCache();
     });
 
     this->initListDetails();
@@ -397,11 +411,17 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         QObject::connect(intro_player, &QMediaPlayer::errorOccurred, [this](QMediaPlayer::Error error, const QString& errorString) {qDebug() << errorString; this->intro_played = true; });
     }
     
-    this->initMascotAnimation();
-    if (this->App->config->get_bool("mascots"))
-        this->updateMascots();
-    else
+    QMetaObject::invokeMethod(this, [this] {
+        this->initMascotAnimation();
+    }, Qt::QueuedConnection);
+    if (this->App->config->get_bool("mascots")) {
+        QMetaObject::invokeMethod(this, [this] {
+            if (this->App->MascotsGenerator)
+                this->updateMascots();
+        }, Qt::QueuedConnection);
+    } else {
         this->hideMascots();
+    }
     connect(this->ui.leftImg, &customGraphicsView::mouseClicked, this, [this](Qt::MouseButton button, Qt::KeyboardModifiers modifiers) { this->handleMascotClickEvents(this->ui.leftImg, button, modifiers); });
     connect(this->ui.rightImg, &customGraphicsView::mouseClicked, this, [this](Qt::MouseButton button, Qt::KeyboardModifiers modifiers) { this->handleMascotClickEvents(this->ui.rightImg, button, modifiers); });
 
@@ -1176,7 +1196,7 @@ void MainWindow::quit() {
 
 void MainWindow::initMascotAnimation()
 {
-    if (this->App->config->get_bool("mascots_animated")) {
+    if (this->App->config->get_bool("mascots_animated") and this->App->MascotsAnimation) {
         this->App->MascotsAnimation->start_running();
     }
 }
@@ -2858,16 +2878,23 @@ void MainWindow::settingsDialogButton()
 }
 
 QString MainWindow::saltSeed(QString seed) const {
-    seed = seed % this->ui.currentVideo->path % this->ui.totalListLabel->text() % this->ui.counterLabel->text();
-    // add current row's views/rating if available
+    QMutexLocker locker(&this->saltSeedMutex);
+    if (this->saltSeedParts.isEmpty())
+        return seed;
+    return seed % this->saltSeedParts;
+}
+
+void MainWindow::updateSaltSeedCache() {
+    QString parts = this->ui.currentVideo->path % this->ui.totalListLabel->text() % this->ui.counterLabel->text();
     QPersistentModelIndex srcIdx = this->modelIndexByPath(this->ui.currentVideo->path);
     if (srcIdx.isValid()) {
         const int row = srcIdx.row();
         const QString views = srcIdx.sibling(row, ListColumns["VIEWS_COLUMN"]).data(Qt::DisplayRole).toString();
         const QString rating = srcIdx.sibling(row, ListColumns["RATING_COLUMN"]).data(CustomRoles::rating).toString();
-        seed = seed % views % rating;
+        parts = parts % views % rating;
     }
-    return seed;
+    QMutexLocker locker(&this->saltSeedMutex);
+    this->saltSeedParts = parts;
 }
 
 WeightedBiasSettings MainWindow::getWeightedBiasSettings() const {

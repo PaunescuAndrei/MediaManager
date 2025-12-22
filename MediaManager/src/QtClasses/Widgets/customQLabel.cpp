@@ -9,6 +9,14 @@
 customQLabel::customQLabel(QWidget* parent) : QLabel(parent) {
 
 }
+
+void customQLabel::setText(const QString& text) {
+	const QString old = this->text();
+	QLabel::setText(text);
+	if (old != text) {
+		emit textChanged(text);
+	}
+}
 void customQLabel::mousePressEvent(QMouseEvent* e) {
 	QLabel::mousePressEvent(e);
 	if (e->button() == Qt::LeftButton) {

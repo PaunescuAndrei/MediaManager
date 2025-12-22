@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "mascotsGeneratorThread.h"
 #include "MainApp.h"
+#include "MainWindow.h"
 #include "utils.h"
 #include "BlockingQueue.h"
 #include <QList>
@@ -38,7 +39,10 @@ void mascotsGeneratorThread::refreshRngFromConfig()
 	QString seed_string = this->App->config->get("random_seed");
 	if (use_seed) {
 		if (!this->rng_initialized || !this->last_use_seed || seed_string != this->last_seed_string) {
-			quint32 seed = utils::stringToSeed(seed_string);
+			QString salted = seed_string;
+			if (this->App->mainWindow)
+				salted = this->App->mainWindow->saltSeed(seed_string);
+			quint32 seed = utils::stringToSeed(salted);
 			if (seed == 0)
 				seed = 1;
 			this->rng.seed(seed);

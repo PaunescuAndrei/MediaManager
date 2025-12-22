@@ -25,6 +25,7 @@
 #include <QThreadPool>
 #include <QPersistentModelIndex>
 #include <QHash>
+#include <QMutex>
 
 class MainApp;
 class VideosModel;
@@ -72,6 +73,8 @@ public:
     QPointer<QDialog> previewTooltip;
     QHash<QString, qint64> previewPositionCache;
     QList<QString> previewHistoryOrder;
+    mutable QMutex saltSeedMutex;
+    QString saltSeedParts;
 
     MainWindow(QWidget* parent = nullptr, MainApp* App = nullptr);
     //void resizeEvent(QResizeEvent* event) override;
@@ -203,6 +206,7 @@ public:
     void setDebugMode(bool debug);
     void settingsDialogButton();
     QString saltSeed(QString seed) const;
+    void updateSaltSeedCache();
     WeightedBiasSettings getWeightedBiasSettings() const;
     void quit();
     bool NextButtonClicked(bool increment, bool update_watched_state, bool skipped = false);

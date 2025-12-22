@@ -5,22 +5,21 @@
 #include <QEvent>
 #include "MainApp.h"
 
-currentVideoQLabel::currentVideoQLabel(QWidget* parent) : QLabel(parent) {
+currentVideoQLabel::currentVideoQLabel(QWidget* parent) : customQLabel(parent) {
 
 }
 
-void currentVideoQLabel::setValues(int id, QString path, QString name, QString author, QString tags, bool update) {
+void currentVideoQLabel::setValues(int id, QString path, QString name, QString author, QString tags) {
 	this->id = id;
 	this->path = path;
 	this->name = name;
 	this->author = author;
 	this->tags = tags;
-	if (update)
-		this->updateText();
+	this->updateText();
 }
 
-void currentVideoQLabel::setValues(std::tuple<int, QString, QString, QString, QString> values, bool update) {
-	this->setValues(std::get<0>(values), std::get<1>(values), std::get<2>(values), std::get<3>(values), std::get<4>(values), update);
+void currentVideoQLabel::setValues(std::tuple<int, QString, QString, QString, QString> values) {
+	this->setValues(std::get<0>(values), std::get<1>(values), std::get<2>(values), std::get<3>(values), std::get<4>(values));
 }
 
 void currentVideoQLabel::updateText() {
@@ -31,7 +30,7 @@ void currentVideoQLabel::updateText() {
 }
 
 void currentVideoQLabel::mousePressEvent(QMouseEvent* e) {
-	QLabel::mousePressEvent(e);
+	customQLabel::mousePressEvent(e);
 	if (e->button() == Qt::LeftButton || e->button() == Qt::RightButton) {
 		this->toggled_path = !toggled_path;
 		this->updateText();

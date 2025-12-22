@@ -73,14 +73,15 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 		this->soundPlayer->start();
 
 	this->MascotsExtractColor = this->config->get_bool("mascots_color_theme");
-	this->MascotsGenerator = new mascotsGeneratorThread(this, MASCOTS_PATH, this->config->get_bool("mascots_allfiles_random"));
-	this->MascotsGenerator->start();
-	this->MascotsAnimation = new mascotsAnimationsThread(this,this->config->get_bool("mascots_random_change"),this->config->get("mascots_random_chance").toInt()/100.0);
-	this->MascotsAnimation->start();
 
 	this->VW = new VideoWatcherQt(this);
 
 	this->mainWindow = new MainWindow(nullptr,this);
+
+	this->MascotsGenerator = new mascotsGeneratorThread(this, MASCOTS_PATH, this->config->get_bool("mascots_allfiles_random"));
+	this->MascotsGenerator->start();
+	this->MascotsAnimation = new mascotsAnimationsThread(this,this->config->get_bool("mascots_random_change"),this->config->get("mascots_random_chance").toInt()/100.0);
+	this->MascotsAnimation->start();
 
 	connect(this->MascotsAnimation, &mascotsAnimationsThread::updateMascotsSignal, this, [this] {
 		if(this->mainWindow->ui.leftImg->isVisible() and utils::IsMyWindowVisible(this->mainWindow))

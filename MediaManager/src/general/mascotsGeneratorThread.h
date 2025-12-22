@@ -5,6 +5,7 @@
 #include <QPair>
 #include <QPixmap>
 #include <QColor>
+#include <random>
 #include "colorPaletteExtractor.h"
 
 class MainApp;
@@ -39,5 +40,11 @@ public:
     void run() override;
     mascotsGeneratorThread(MainApp* App,QString mascots_path, bool allfiles_random = false, QObject* parent = nullptr);
     ~mascotsGeneratorThread();
+private:
+    void refreshRngFromConfig();
+    std::mt19937 rng;
+    QString last_seed_string;
+    bool last_use_seed = false;
+    bool rng_initialized = false;
 };
 

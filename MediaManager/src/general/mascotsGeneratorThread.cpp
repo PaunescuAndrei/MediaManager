@@ -23,6 +23,38 @@ void mascotsGeneratorThread::initRun()
 	}
 }
 
+void mascotsGeneratorThread::refreshRngFromConfig()
+{
+	if (!this->App || !this->App->config) {
+		if (!this->rng_initialized) {
+			std::random_device rd;
+			this->rng.seed(rd());
+			this->rng_initialized = true;
+		}
+		return;
+	}
+
+	bool use_seed = this->App->config->get_bool("random_use_seed");
+	QString seed_string = this->App->config->get("random_seed");
+	if (use_seed) {
+		if (!this->rng_initialized || !this->last_use_seed || seed_string != this->last_seed_string) {
+			quint32 seed = utils::stringToSeed(seed_string);
+			if (seed == 0)
+				seed = 1;
+			this->rng.seed(seed);
+			this->rng_initialized = true;
+		}
+	}
+	else if (!this->rng_initialized || this->last_use_seed) {
+		std::random_device rd;
+		this->rng.seed(rd());
+		this->rng_initialized = true;
+	}
+
+	this->last_use_seed = use_seed;
+	this->last_seed_string = seed_string;
+}
+
 ImageData mascotsGeneratorThread::getRandomImagePath() {
 	return this->getRandomImagePath(allfiles_random);
 }
@@ -30,16 +62,17 @@ ImageData mascotsGeneratorThread::getRandomImagePath() {
 ImageData mascotsGeneratorThread::getRandomImagePath(bool allfiles_random) {
 	ImageData data;
 	QString imgpath = QString();
-;	if (allfiles_random) {
+	this->refreshRngFromConfig();
+	if (allfiles_random) {
 		if(!this->mascots_allpaths.isEmpty())
-			imgpath = *utils::select_randomly(this->mascots_allpaths.begin(), this->mascots_allpaths.end());
+			imgpath = *utils::select_randomly(this->mascots_allpaths.begin(), this->mascots_allpaths.end(), this->rng);
 	}
 	else {
 	if (!this->mascots_paths.isEmpty()) {
-			QString dirpath = *utils::select_randomly(this->mascots_paths.begin(), this->mascots_paths.end());
+			QString dirpath = *utils::select_randomly(this->mascots_paths.begin(), this->mascots_paths.end(), this->rng);
 			QStringList imgfiles = utils::getFilesQt(dirpath,true);
 			if(!imgfiles.isEmpty())
-				imgpath = *utils::select_randomly(imgfiles.begin(), imgfiles.end());
+				imgpath = *utils::select_randomly(imgfiles.begin(), imgfiles.end(), this->rng);
 		}
 	}
 	data.path = imgpath;

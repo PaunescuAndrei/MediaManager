@@ -57,6 +57,7 @@ bool TagsDialog::addTag(QString name, int priority) {
     QSqlRecord tag = this->model->record();
     tag.setValue("name", name);
     tag.setValue("display_priority", priority);
+    tag.setValue("weight", 0.0);
     bool ok = this->model->insertRecord(-1, tag);
     if (not ok)
         return false;

@@ -112,6 +112,13 @@ NextChoiceDialog::NextChoiceDialog(QWidget* parent) : QDialog(parent)
     connect(this->ui.refreshButton, &QPushButton::clicked, this, [this] {
         emit this->refreshRequested();
     });
+    connect(this->ui.randomButton, &QPushButton::clicked, this, [this] {
+        if (!this->choices.isEmpty()) {
+            int index = utils::randint(0, this->choices.size() - 1);
+            this->applySelection(index);
+            this->accept();
+        }
+    });
     if (auto buttonBox = this->findChild<QDialogButtonBox*>()) {
         connect(buttonBox, &QDialogButtonBox::rejected, this, &NextChoiceDialog::reject);
     }

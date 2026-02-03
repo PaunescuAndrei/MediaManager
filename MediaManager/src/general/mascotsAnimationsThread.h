@@ -5,6 +5,8 @@
 #include <QProcess>
 #include <QFuture>
 
+#include "beat_this_api.h"
+
 class MainApp;
 
 class mascotsAnimationsThread :
@@ -16,8 +18,7 @@ public:
     bool random_change = true;
     double random_chance = 0.1;
     bool running = false;
-    bool madmom = true;
-    QProcess* process = nullptr;
+    BeatThis::BeatThis* beatAnalyzer = nullptr;
     int frequency = 400;
     QList<double> beats = QList<double>();
     int beats_length = 0;

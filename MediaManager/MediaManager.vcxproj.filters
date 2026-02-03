@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Source Files">
@@ -59,6 +59,18 @@
     </Filter>
     <Filter Include="Source Files\thirdparty\rapidfuzz">
       <UniqueIdentifier>{b5728631-64a9-4aeb-a846-a1cb8e2b755f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\thirdparty\beat_this">
+      <UniqueIdentifier>{47c5d909-5c12-4d43-9878-123456789abc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\thirdparty\beat_this">
+      <UniqueIdentifier>{47c5d909-5c12-4d43-9878-def012345678}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\QtClasses\Models">
+      <UniqueIdentifier>{4b0423af-3ed5-45bb-917c-c59a1b4049c2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\QtClasses\Models">
+      <UniqueIdentifier>{3ac3dc68-38a9-413f-b434-dc1ce7d0fa43}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -269,6 +281,30 @@
     <ClCompile Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
+    <ClCompile Include="src\thirdparty\beat_this\beat_this_api.cpp">
+      <Filter>Source Files\thirdparty\beat_this</Filter>
+    </ClCompile>
+    <ClCompile Include="src\thirdparty\beat_this\InferenceProcessor.cpp">
+      <Filter>Source Files\thirdparty\beat_this</Filter>
+    </ClCompile>
+    <ClCompile Include="src\thirdparty\beat_this\MelSpectrogram.cpp">
+      <Filter>Source Files\thirdparty\beat_this</Filter>
+    </ClCompile>
+    <ClCompile Include="src\thirdparty\beat_this\Postprocessor.cpp">
+      <Filter>Source Files\thirdparty\beat_this</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Models\VideosModel.cpp">
+      <Filter>Source Files\QtClasses\Models</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Models\VideosProxyModel.cpp">
+      <Filter>Source Files\QtClasses\Models</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Models\VideosSortProxyModel.cpp">
+      <Filter>Source Files\QtClasses\Models</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\VideosTreeView.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\resource.h">
@@ -281,9 +317,6 @@
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </ClInclude>
     <ClInclude Include="src\QtClasses\Widgets\PreviewTooltipDialog.h">
-      <Filter>Header Files\QtClasses\Widgets</Filter>
-    </ClInclude>
-    <ClInclude Include="src\QtClasses\Widgets\PreviewFrameProcessor.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </ClInclude>
     <ClInclude Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.h">
@@ -378,6 +411,21 @@
     </ClInclude>
     <ClInclude Include="src\general\NonBlockingQueue.h">
       <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\thirdparty\beat_this\beat_this_api.h">
+      <Filter>Header Files\thirdparty\beat_this</Filter>
+    </ClInclude>
+    <ClInclude Include="src\thirdparty\beat_this\InferenceProcessor.h">
+      <Filter>Header Files\thirdparty\beat_this</Filter>
+    </ClInclude>
+    <ClInclude Include="src\thirdparty\beat_this\MelSpectrogram.h">
+      <Filter>Header Files\thirdparty\beat_this</Filter>
+    </ClInclude>
+    <ClInclude Include="src\thirdparty\beat_this\Postprocessor.h">
+      <Filter>Header Files\thirdparty\beat_this</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\VideoData.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -590,6 +638,21 @@
     </QtMoc>
     <QtMoc Include="src\QtClasses\UI\UpdatePathsDialog.h">
       <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Models\VideosSortProxyModel.h">
+      <Filter>Header Files\QtClasses\Models</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Models\VideosModel.h">
+      <Filter>Header Files\QtClasses\Models</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Models\VideosProxyModel.h">
+      <Filter>Header Files\QtClasses\Models</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\VideosTreeView.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
   </ItemGroup>
   <ItemGroup>

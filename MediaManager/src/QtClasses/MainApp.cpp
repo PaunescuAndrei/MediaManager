@@ -1,4 +1,4 @@
-﻿#include "stdafx.h"
+#include "stdafx.h"
 #include "MainApp.h"
 #include "version.h"
 #include "MainWindow.h"
@@ -148,6 +148,7 @@ void MainApp::createMissingDirs() {
 	QDir workingdir = QDir();
 	workingdir.mkpath(ICONS_PATH);
 	workingdir.mkpath(MASCOTS_PATH);
+	workingdir.mkpath(MODELS_PATH);
 	workingdir.mkpath(SOUND_EFFECTS_PATH);
 	workingdir.mkpath(SOUND_EFFECTS_END_PATH);
 	workingdir.mkpath(SOUND_EFFECTS_INTRO_PATH);

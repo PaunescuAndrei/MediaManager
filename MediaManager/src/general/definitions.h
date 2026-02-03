@@ -120,6 +120,7 @@ constexpr auto THUMBNAILS_PROGRAM_PATH = "res/utils/mtn-win64/bin/mtn.exe";
 
 //Mascots Paths
 constexpr auto MASCOTS_PATH = "res/mascots";
+constexpr auto MODELS_PATH = "res/models";
 
 //Sound Paths
 constexpr auto SOUND_EFFECTS_PATH = "res/sound/effects";

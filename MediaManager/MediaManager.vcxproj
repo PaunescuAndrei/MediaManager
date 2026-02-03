@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64">
@@ -92,6 +92,26 @@
     <ClCompile Include="src\QtClasses\Widgets\PreviewFrameProcessor.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\VideoPreviewWidget.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.cpp" />
+    <ClCompile Include="src\thirdparty\beat_this\beat_this_api.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="src\thirdparty\beat_this\InferenceProcessor.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="src\thirdparty\beat_this\MelSpectrogram.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="src\thirdparty\beat_this\Postprocessor.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="src\stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
@@ -149,6 +169,10 @@
     <QtMoc Include="src\QtClasses\UI\VideosTagsDialog.h" />
     <QtMoc Include="src\QtClasses\UI\UpdatePathsDialog.h" />
     <QtMoc Include="src\QtClasses\Widgets\WheelStrongFocusEventFilter.h" />
+    <ClInclude Include="src\thirdparty\beat_this\beat_this_api.h" />
+    <ClInclude Include="src\thirdparty\beat_this\InferenceProcessor.h" />
+    <ClInclude Include="src\thirdparty\beat_this\MelSpectrogram.h" />
+    <ClInclude Include="src\thirdparty\beat_this\Postprocessor.h" />
     <ClInclude Include="src\thirdparty\MpcApi.h" />
     <ClInclude Include="src\thirdparty\rapidfuzz\distance.hpp" />
     <ClInclude Include="src\thirdparty\rapidfuzz\fuzz.hpp" />
@@ -286,13 +310,13 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'">
-    <IncludePath>$(ProjectDir)src\;$(ProjectDir)src\QtClasses\;$(ProjectDir)src\QtClasses\UI\;$(ProjectDir)src\QtClasses\Widgets\;$(ProjectDir)src\QtClasses\Form Files\;$(ProjectDir)src\thirdparty\;$(ProjectDir)src\thirdparty\sqlite3\;$(ProjectDir)src\general;$(ProjectDir)src\thirdparty\rapidfuzz;$(ProjectDir)src\QtClasses\Models\;$(IncludePath)</IncludePath>
+    <IncludePath>$(ProjectDir)src\;$(ProjectDir)src\QtClasses\;$(ProjectDir)src\QtClasses\UI\;$(ProjectDir)src\QtClasses\Widgets\;$(ProjectDir)src\QtClasses\Form Files\;$(ProjectDir)src\thirdparty\;$(ProjectDir)src\thirdparty\sqlite3\;$(ProjectDir)src\general;$(ProjectDir)src\thirdparty\rapidfuzz;$(ProjectDir)src\QtClasses\Models\;$(ProjectDir)src\thirdparty\beat_this;$(ProjectDir)src\thirdparty\onnxruntime\include;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'">
-    <IncludePath>$(ProjectDir)src\;$(ProjectDir)src\QtClasses\;$(ProjectDir)src\QtClasses\UI\;$(ProjectDir)src\QtClasses\Widgets\;$(ProjectDir)src\QtClasses\Form Files\;$(ProjectDir)src\thirdparty\;$(ProjectDir)src\thirdparty\sqlite3\;$(ProjectDir)src\general;$(ProjectDir)src\thirdparty\rapidfuzz;$(ProjectDir)src\QtClasses\Models\;$(IncludePath)</IncludePath>
+    <IncludePath>$(ProjectDir)src\;$(ProjectDir)src\QtClasses\;$(ProjectDir)src\QtClasses\UI\;$(ProjectDir)src\QtClasses\Widgets\;$(ProjectDir)src\QtClasses\Form Files\;$(ProjectDir)src\thirdparty\;$(ProjectDir)src\thirdparty\sqlite3\;$(ProjectDir)src\general;$(ProjectDir)src\thirdparty\rapidfuzz;$(ProjectDir)src\QtClasses\Models\;$(ProjectDir)src\thirdparty\beat_this;$(ProjectDir)src\thirdparty\onnxruntime\include;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">
-    <IncludePath>$(ProjectDir)src\;$(ProjectDir)src\QtClasses\;$(ProjectDir)src\QtClasses\UI\;$(ProjectDir)src\QtClasses\Widgets\;$(ProjectDir)src\QtClasses\Form Files\;$(ProjectDir)src\thirdparty\;$(ProjectDir)src\thirdparty\sqlite3\;$(ProjectDir)src\general;$(ProjectDir)src\thirdparty\rapidfuzz;$(ProjectDir)src\QtClasses\Models\;$(IncludePath)</IncludePath>
+    <IncludePath>$(ProjectDir)src\;$(ProjectDir)src\QtClasses\;$(ProjectDir)src\QtClasses\UI\;$(ProjectDir)src\QtClasses\Widgets\;$(ProjectDir)src\QtClasses\Form Files\;$(ProjectDir)src\thirdparty\;$(ProjectDir)src\thirdparty\sqlite3\;$(ProjectDir)src\general;$(ProjectDir)src\thirdparty\rapidfuzz;$(ProjectDir)src\QtClasses\Models\;$(ProjectDir)src\thirdparty\beat_this;$(ProjectDir)src\thirdparty\onnxruntime\include;$(IncludePath)</IncludePath>
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Label="QtDeploy" Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">
@@ -312,8 +336,13 @@
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>%(AdditionalDependencies);$(Qt_LIBS_);winmm.lib</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies);$(Qt_LIBS_);winmm.lib;onnxruntime.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)src\thirdparty\onnxruntime\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
+    <PostBuildEvent>
+      <Command>xcopy /Y /D "$(ProjectDir)src\thirdparty\onnxruntime\lib\onnxruntime.dll" "$(OutDir)"
+xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.onnx" "$(OutDir)res\models\"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -332,8 +361,13 @@
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>%(AdditionalDependencies);$(Qt_LIBS_);winmm.lib</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies);$(Qt_LIBS_);winmm.lib;onnxruntime.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)src\thirdparty\onnxruntime\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
+    <PostBuildEvent>
+      <Command>xcopy /Y /D "$(ProjectDir)src\thirdparty\onnxruntime\lib\onnxruntime.dll" "$(OutDir)"
+xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.onnx" "$(OutDir)res\models\"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">
     <ClCompile>
@@ -342,10 +376,15 @@
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>%(AdditionalDependencies);$(Qt_LIBS_);winmm.lib</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies);$(Qt_LIBS_);winmm.lib;onnxruntime.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(ProjectDir)src\thirdparty\onnxruntime\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
     </Link>
+    <PostBuildEvent>
+      <Command>xcopy /Y /D "$(ProjectDir)src\thirdparty\onnxruntime\lib\onnxruntime.dll" "$(OutDir)"
+xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.onnx" "$(OutDir)res\models\"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="Configuration">
     <ClCompile>

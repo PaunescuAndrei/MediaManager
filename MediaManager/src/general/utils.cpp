@@ -17,6 +17,348 @@
 #include "realtimeapiset.h"
 #include <limits>
 
+// Qt Multimedia for audio decoding
+#include <QAudioDecoder>
+#include <QAudioBuffer>
+#include <QEventLoop>
+#include <QUrl>
+#include <QTimer>
+
+// SIMD intrinsics
+#if defined(__AVX2__)
+#include <immintrin.h>
+#define USE_AVX2
+#elif defined(__SSE2__) || defined(_M_X64) || defined(_M_AMD64)
+#include <emmintrin.h>
+#define USE_SSE2
+#endif
+
+// SIMD-optimized conversion functions
+namespace AudioConversion {
+
+#ifdef USE_AVX2
+    // AVX2: Process 8 samples at once
+    inline void convertInt16ToFloat_AVX2(const qint16* src, float* dst, size_t count) {
+        constexpr float scale = 1.0f / 32768.0f;
+        const __m256 vscale = _mm256_set1_ps(scale);
+
+        size_t i = 0;
+        // Process 8 samples at a time
+        for (; i + 8 <= count; i += 8) {
+            // Load 8 int16 values (128 bits)
+            __m128i vi16 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src + i));
+            // Convert to int32 (256 bits)
+            __m256i vi32 = _mm256_cvtepi16_epi32(vi16);
+            // Convert to float
+            __m256 vf = _mm256_cvtepi32_ps(vi32);
+            // Scale
+            vf = _mm256_mul_ps(vf, vscale);
+            // Store
+            _mm256_storeu_ps(dst + i, vf);
+        }
+
+        // Handle remaining samples
+        for (; i < count; ++i) {
+            dst[i] = static_cast<float>(src[i]) * scale;
+        }
+    }
+
+    inline void convertInt32ToFloat_AVX2(const qint32* src, float* dst, size_t count) {
+        constexpr float scale = 1.0f / 2147483648.0f;
+        const __m256 vscale = _mm256_set1_ps(scale);
+
+        size_t i = 0;
+        // Process 8 samples at a time
+        for (; i + 8 <= count; i += 8) {
+            // Load 8 int32 values
+            __m256i vi32 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src + i));
+            // Convert to float
+            __m256 vf = _mm256_cvtepi32_ps(vi32);
+            // Scale
+            vf = _mm256_mul_ps(vf, vscale);
+            // Store
+            _mm256_storeu_ps(dst + i, vf);
+        }
+
+        // Handle remaining samples
+        for (; i < count; ++i) {
+            dst[i] = static_cast<float>(src[i]) * scale;
+        }
+    }
+
+    inline void convertUInt8ToFloat_AVX2(const quint8* src, float* dst, size_t count) {
+        constexpr float scale = 1.0f / 128.0f;
+        const __m256 vscale = _mm256_set1_ps(scale);
+        const __m256 voffset = _mm256_set1_ps(-128.0f);
+
+        size_t i = 0;
+        // Process 8 samples at a time
+        for (; i + 8 <= count; i += 8) {
+            // Load 8 uint8 values
+            __m128i vi8 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src + i));
+            // Convert uint8 to int32
+            __m256i vi32 = _mm256_cvtepu8_epi32(vi8);
+            // Convert to float
+            __m256 vf = _mm256_cvtepi32_ps(vi32);
+            // Add offset and scale
+            vf = _mm256_add_ps(vf, voffset);
+            vf = _mm256_mul_ps(vf, vscale);
+            // Store
+            _mm256_storeu_ps(dst + i, vf);
+        }
+
+        // Handle remaining samples
+        for (; i < count; ++i) {
+            dst[i] = (static_cast<float>(src[i]) - 128.0f) * scale;
+        }
+    }
+
+#elif defined(USE_SSE2)
+    // SSE2: Process 4 samples at once
+    inline void convertInt16ToFloat_SSE2(const qint16* src, float* dst, size_t count) {
+        constexpr float scale = 1.0f / 32768.0f;
+        const __m128 vscale = _mm_set1_ps(scale);
+
+        size_t i = 0;
+        // Process 4 samples at a time
+        for (; i + 4 <= count; i += 4) {
+            // Load 4 int16 values and convert to int32
+            __m128i vi16 = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(src + i));
+            __m128i vi32 = _mm_cvtepi16_epi32(vi16); // SSE4.1, fallback below if needed
+            // Convert to float
+            __m128 vf = _mm_cvtepi32_ps(vi32);
+            // Scale
+            vf = _mm_mul_ps(vf, vscale);
+            // Store
+            _mm_storeu_ps(dst + i, vf);
+        }
+
+        // Handle remaining samples
+        for (; i < count; ++i) {
+            dst[i] = static_cast<float>(src[i]) * scale;
+        }
+    }
+
+    inline void convertInt32ToFloat_SSE2(const qint32* src, float* dst, size_t count) {
+        constexpr float scale = 1.0f / 2147483648.0f;
+        const __m128 vscale = _mm_set1_ps(scale);
+
+        size_t i = 0;
+        for (; i + 4 <= count; i += 4) {
+            __m128i vi32 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src + i));
+            __m128 vf = _mm_cvtepi32_ps(vi32);
+            vf = _mm_mul_ps(vf, vscale);
+            _mm_storeu_ps(dst + i, vf);
+        }
+
+        for (; i < count; ++i) {
+            dst[i] = static_cast<float>(src[i]) * scale;
+        }
+    }
+
+    inline void convertUInt8ToFloat_SSE2(const quint8* src, float* dst, size_t count) {
+        constexpr float scale = 1.0f / 128.0f;
+        const __m128 vscale = _mm_set1_ps(scale);
+        const __m128 voffset = _mm_set1_ps(-128.0f);
+
+        size_t i = 0;
+        for (; i + 4 <= count; i += 4) {
+            // Manual conversion for uint8 to int32
+            __m128i vi8 = _mm_cvtsi32_si128(*reinterpret_cast<const int*>(src + i));
+            __m128i zero = _mm_setzero_si128();
+            __m128i vi16 = _mm_unpacklo_epi8(vi8, zero);
+            __m128i vi32 = _mm_unpacklo_epi16(vi16, zero);
+
+            __m128 vf = _mm_cvtepi32_ps(vi32);
+            vf = _mm_add_ps(vf, voffset);
+            vf = _mm_mul_ps(vf, vscale);
+            _mm_storeu_ps(dst + i, vf);
+        }
+
+        for (; i < count; ++i) {
+            dst[i] = (static_cast<float>(src[i]) - 128.0f) * scale;
+        }
+    }
+#endif
+
+    // Fallback scalar implementations
+    inline void convertInt16ToFloat_Scalar(const qint16* src, float* dst, size_t count) {
+        constexpr float scale = 1.0f / 32768.0f;
+        for (size_t i = 0; i < count; ++i) {
+            dst[i] = static_cast<float>(src[i]) * scale;
+        }
+    }
+
+    inline void convertInt32ToFloat_Scalar(const qint32* src, float* dst, size_t count) {
+        constexpr float scale = 1.0f / 2147483648.0f;
+        for (size_t i = 0; i < count; ++i) {
+            dst[i] = static_cast<float>(src[i]) * scale;
+        }
+    }
+
+    inline void convertUInt8ToFloat_Scalar(const quint8* src, float* dst, size_t count) {
+        constexpr float scale = 1.0f / 128.0f;
+        for (size_t i = 0; i < count; ++i) {
+            dst[i] = (static_cast<float>(src[i]) - 128.0f) * scale;
+        }
+    }
+
+    // Unified interface that selects best implementation
+    inline void convertInt16ToFloat(const qint16* src, float* dst, size_t count) {
+#ifdef USE_AVX2
+        convertInt16ToFloat_AVX2(src, dst, count);
+#elif defined(USE_SSE2)
+        convertInt16ToFloat_SSE2(src, dst, count);
+#else
+        convertInt16ToFloat_Scalar(src, dst, count);
+#endif
+    }
+
+    inline void convertInt32ToFloat(const qint32* src, float* dst, size_t count) {
+#ifdef USE_AVX2
+        convertInt32ToFloat_AVX2(src, dst, count);
+#elif defined(USE_SSE2)
+        convertInt32ToFloat_SSE2(src, dst, count);
+#else
+        convertInt32ToFloat_Scalar(src, dst, count);
+#endif
+    }
+
+    inline void convertUInt8ToFloat(const quint8* src, float* dst, size_t count) {
+#ifdef USE_AVX2
+        convertUInt8ToFloat_AVX2(src, dst, count);
+#elif defined(USE_SSE2)
+        convertUInt8ToFloat_SSE2(src, dst, count);
+#else
+        convertUInt8ToFloat_Scalar(src, dst, count);
+#endif
+    }
+}
+
+// Optimized helper to read audio file using QAudioDecoder with SIMD conversion
+bool utils::readAudioFile(const QString& path, std::vector<float>& audioData, int& sampleRate, int& channels) {
+    QAudioDecoder decoder;
+    decoder.setSource(QUrl::fromLocalFile(path));
+
+    QEventLoop loop;
+    QTimer timer;
+    timer.setSingleShot(true);
+    bool success = true;
+    audioData.clear();
+    sampleRate = 0;
+    channels = 0;
+
+    // Batch buffers for fewer allocations and faster processing
+    std::vector<QAudioBuffer> buffers;
+    buffers.reserve(100);
+
+    // Collect all buffers first
+    QObject::connect(&decoder, &QAudioDecoder::bufferReady, [&]() {
+        timer.start(15000);
+        QAudioBuffer buffer = decoder.read();
+        if (buffer.isValid()) {
+            buffers.push_back(buffer);
+        }
+        });
+
+    QObject::connect(&decoder, &QAudioDecoder::finished, [&]() {
+        timer.stop();
+        if (buffers.empty()) {
+            success = false;
+            loop.quit();
+            return;
+        }
+
+        // Get format from first buffer
+        const auto& firstBuffer = buffers[0];
+        sampleRate = firstBuffer.format().sampleRate();
+        channels = firstBuffer.format().channelCount();
+        QAudioFormat::SampleFormat format = firstBuffer.format().sampleFormat();
+
+        // Calculate total size for single allocation
+        size_t totalSamples = 0;
+        for (const auto& buffer : buffers) {
+            totalSamples += buffer.sampleCount();
+        }
+        audioData.reserve(totalSamples);
+
+        // Process all buffers at once based on format with SIMD optimization
+        if (format == QAudioFormat::Float) {
+            // Fast path - direct copy
+            for (const auto& buffer : buffers) {
+                const float* data = buffer.constData<float>();
+                int count = buffer.sampleCount();
+                audioData.insert(audioData.end(), data, data + count);
+            }
+        }
+        else if (format == QAudioFormat::Int16) {
+            // SIMD-optimized Int16 conversion
+            for (const auto& buffer : buffers) {
+                const qint16* data = buffer.constData<qint16>();
+                int count = buffer.sampleCount();
+                size_t oldSize = audioData.size();
+                audioData.resize(oldSize + count);
+                float* dest = audioData.data() + oldSize;
+
+                AudioConversion::convertInt16ToFloat(data, dest, count);
+            }
+        }
+        else if (format == QAudioFormat::Int32) {
+            // SIMD-optimized Int32 conversion
+            for (const auto& buffer : buffers) {
+                const qint32* data = buffer.constData<qint32>();
+                int count = buffer.sampleCount();
+                size_t oldSize = audioData.size();
+                audioData.resize(oldSize + count);
+                float* dest = audioData.data() + oldSize;
+
+                AudioConversion::convertInt32ToFloat(data, dest, count);
+            }
+        }
+        else if (format == QAudioFormat::UInt8) {
+            // SIMD-optimized UInt8 conversion
+            for (const auto& buffer : buffers) {
+                const quint8* data = buffer.constData<quint8>();
+                int count = buffer.sampleCount();
+                size_t oldSize = audioData.size();
+                audioData.resize(oldSize + count);
+                float* dest = audioData.data() + oldSize;
+
+                AudioConversion::convertUInt8ToFloat(data, dest, count);
+            }
+        }
+        else {
+            qWarning() << "Unsupported sample format:" << format;
+            success = false;
+        }
+
+        loop.quit();
+        });
+
+    QObject::connect(&decoder, qOverload<QAudioDecoder::Error>(&QAudioDecoder::error),
+        [&](QAudioDecoder::Error error) {
+            timer.stop();
+            qWarning() << "Audio decode error:" << decoder.errorString();
+            decoder.stop();
+            success = false;
+            loop.quit();
+        });
+
+    
+    QObject::connect(&timer, &QTimer::timeout, [&]() {
+        qWarning() << "Audio decode timeout for:" << path;
+        success = false;
+        decoder.stop();
+        loop.quit();
+    });
+
+    timer.start(15000); // 15 seconds timeout
+    decoder.start();
+    loop.exec();
+
+    return success && !audioData.empty() && sampleRate > 0 && channels > 0;
+}
+
 static BOOL CALLBACK utils::enumWindowCallback(HWND hWnd, LPARAM lparam)
 {
 	QPair<qint64, QList<HWND>*>* pair = (QPair<qint64, QList<HWND>*>*)lparam;

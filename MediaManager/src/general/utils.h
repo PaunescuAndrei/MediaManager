@@ -20,6 +20,7 @@
 #include <definitions.h>
 #include <QSize>
 #include <initializer_list>
+#include <vector>
 
 class MainApp;
 
@@ -33,6 +34,7 @@ namespace utils {
 	QString bool_to_text_qt(bool b);
 	std::string linux_to_windows_path(std::string& path);
 	QString getVideoDuration(QString path);
+	bool readAudioFile(const QString& path, std::vector<float>& audioData, int& sampleRate, int& channels);
 	std::string formatSeconds(double total_seconds, bool showHours = true);
 	QString formatSecondsQt(double total_seconds, bool showHours = true);
 	std::string formatSecondsCompact(double total_seconds);

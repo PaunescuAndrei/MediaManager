@@ -211,6 +211,7 @@ void IconChanger::setRandomIcon(bool instant, bool updatedb)
 void IconChanger::rebuildIconCache() {
 	QStringList files = utils::getFilesQt(ANIMATED_ICONS_PATH);
 	for (QString iconpath : files) {
+		if (!this->running) break;
 		QMap<QString, QIcon> _icon = QMap<QString, QIcon>();
 		QMap<QString, QString> _frame_dict = QMap<QString, QString>();
 		QList<QPair<QString, int>> _frame_pairlist = QList<QPair<QString, int>>();
@@ -374,4 +375,10 @@ void IconChanger::run()
 
 IconChanger::~IconChanger()
 {
+	if (this->future_rebuildcache.isRunning()) {
+		this->future_rebuildcache.waitForFinished();
+	}
+	if (this->future_seticon.isRunning()) {
+		this->future_seticon.waitForFinished();
+	}
 }

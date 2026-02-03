@@ -10,3 +10,9 @@ MediaManager/MediaManager.vcxproj.user
 qwen.md
 gemini.md
 AGENTS.md
+
+# Large binary files
+*.onnx
+*.pdb
+MediaManager/src/resources/models/
+MediaManager/src/thirdparty/onnxruntime/lib/

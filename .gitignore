@@ -15,4 +15,6 @@ AGENTS.md
 *.onnx
 *.pdb
 MediaManager/src/resources/models/
-MediaManager/src/thirdparty/onnxruntime/lib/
+
+# Third party dependencies (downloaded via script)
+MediaManager/src/thirdparty/onnxruntime/

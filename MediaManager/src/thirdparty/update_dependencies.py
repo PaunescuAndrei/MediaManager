@@ -12,6 +12,11 @@ ONNX_VERSION = "1.18.0"
 ONNX_URL = f"https://github.com/microsoft/onnxruntime/releases/download/v{ONNX_VERSION}/onnxruntime-win-x64-{ONNX_VERSION}.zip"
 ONNX_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "onnxruntime")
 
+MODEL_URL = "https://github.com/mosynthkey/beat_this_cpp/raw/main/onnx/beat_this.onnx"
+# Path to src/resources/models/beat_this.onnx. Script is in src/thirdparty/
+MODEL_DEST_DIR = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "resources", "models"))
+MODEL_DEST = os.path.join(MODEL_DEST_DIR, "beat_this.onnx")
+
 BEAT_THIS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "beat_this")
 BEAT_THIS_FILES = [
     {
@@ -131,11 +136,23 @@ def update_onnxruntime():
     else:
         print("Failed to download ONNX Runtime.")
 
+def update_model():
+    print(f"Updating AI Model (beat_this.onnx)...")
+    if not os.path.exists(MODEL_DEST_DIR):
+        os.makedirs(MODEL_DEST_DIR)
+    
+    if download_file(MODEL_URL, MODEL_DEST):
+        print(f"Model downloaded to {MODEL_DEST}")
+    else:
+        print("Failed to download AI Model.")
+
 def main():
     print("Starting dependency update...")
     update_beat_this()
     print("-" * 30)
     update_onnxruntime()
+    print("-" * 30)
+    update_model()
     print("\nAll tasks completed.")
 
 if __name__ == "__main__":

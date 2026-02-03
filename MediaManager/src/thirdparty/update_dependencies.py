@@ -8,8 +8,8 @@ import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
 
 # Configuration
-ONNX_VERSION = "1.18.0"
-ONNX_URL = f"https://github.com/microsoft/onnxruntime/releases/download/v{ONNX_VERSION}/onnxruntime-win-x64-{ONNX_VERSION}.zip"
+ONNX_VERSION = "1.23.2"
+ONNX_URL = f"https://github.com/microsoft/onnxruntime/releases/download/v{ONNX_VERSION}/onnxruntime-win-x64-gpu-{ONNX_VERSION}.zip"
 ONNX_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "onnxruntime")
 
 MODEL_URL = "https://github.com/mosynthkey/beat_this_cpp/raw/main/onnx/beat_this.onnx"

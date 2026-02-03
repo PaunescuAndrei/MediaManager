@@ -28,7 +28,7 @@ If the script fails or you are on a restricted environment, follow these steps:
 
 ### 2. ONNX Runtime
 *   **Location**: `onnxruntime/`
-*   **Version**: 1.18.0 (Required)
+*   **Version**: 1.23.2 (Required)
 *   **Download**: Get the Windows x64 zip from [ONNX Runtime Releases](https://github.com/microsoft/onnxruntime/releases).
 *   **Install**: Extract the zip and place the `include` and `lib` folders into `MediaManager/src/thirdparty/onnxruntime/`.
 

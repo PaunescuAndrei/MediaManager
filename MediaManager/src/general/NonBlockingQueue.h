@@ -61,12 +61,17 @@ public:
     }
 
     // Remove items matching a predicate
-    void removeIf(std::function<bool(const T&)> predicate) {
+    int removeIf(std::function<bool(const T&)> predicate) {
         std::lock_guard<std::mutex> lock(mutex_);
+        int removedCount = 0;
         for (auto it = queue_.begin(); it != queue_.end(); ) {
-            if (predicate(*it)) it = queue_.erase(it);
+            if (predicate(*it)) {
+                it = queue_.erase(it);
+                removedCount++;
+            }
             else ++it;
         }
+        return removedCount;
     }
 
     void clear() {

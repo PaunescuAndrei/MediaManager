@@ -14,6 +14,7 @@ public:
     ~CalculateBpmManager();
 
     void enqueue_work(BpmWorkItem work);
+    void enqueue_work_front(BpmWorkItem work);
     void clear_work();
     void start();
     void stop();

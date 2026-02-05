@@ -899,7 +899,7 @@ void MainWindow::refreshVisibility(QString search_text)
     this->old_search = search_text;
 }
 
-void MainWindow::queueBpmCalculation() {
+void MainWindow::queueBpmCalculation(const QVector<VideoData>& rows) {
     if (!this->App->BpmManager) return;
     
     QString bpmTypesStr = this->App->config->get("bpm_calculation_types");
@@ -908,17 +908,13 @@ void MainWindow::queueBpmCalculation() {
     QStringList types = bpmTypesStr.split(',', Qt::SkipEmptyParts);
     if (types.isEmpty()) return;
     
-    if (!this->videosModel) return;
-
     int queuedCount = 0;
-    int rowCount = this->videosModel->rowCount();
 
-    for (int i = 0; i < rowCount; ++i) {
-        const VideoData* row = this->videosModel->rowAt(i);
-        if (row && (row->bpm <= 0) && types.contains(row->type)) {
+    for (const auto& row : rows) {
+        if ((row.bpm <= 0) && types.contains(row.type)) {
             // Enqueue only if not already active
-            if (!this->App->BpmManager->is_id_active(row->id)) {
-                this->App->BpmManager->enqueue_work({row->id, row->path});
+            if (!this->App->BpmManager->is_id_active(row.id)) {
+                this->App->BpmManager->enqueue_work({row.id, row.path});
                 queuedCount++;
             }
         }
@@ -929,101 +925,7 @@ void MainWindow::queueBpmCalculation() {
     }
 }
 
-void MainWindow::calculateBpm(const QList<int>& ids) {
 
-    if (ids.isEmpty()) return;
-
-    QList<QPair<int, QString>> workItems;
-    for (int id : ids) {
-        QString path = this->pathById(id);
-        if (!path.isEmpty()) {
-            workItems.append({id, path});
-        }
-    }
-
-    if (workItems.isEmpty()) return;
-
-    QProgressDialog* progress = new QProgressDialog("Calculating BPM...", "Cancel", 0, workItems.size(), this);
-    progress->setWindowModality(Qt::WindowModal);
-    progress->setValue(0);
-    progress->show();
-
-    // Use QtConcurrent to run in background
-    
-    QFuture<void> future = QtConcurrent::run(this->searchThreadPool, [this, workItems, progress]() {
-        QString modelPath = QCoreApplication::applicationDirPath() + "/" + MODELS_PATH + "/beat_this.onnx";
-        
-        try {
-            BeatThis::BeatThis beatThis(modelPath.toStdString());
-            
-            int count = 0;
-            for (const auto& item : workItems) {
-                if (progress->wasCanceled()) break;
-                
-                int id = item.first;
-                QString path = item.second;
-
-                std::vector<float> audioData;
-                int sampleRate = 0;
-                int channels = 0;
-                
-                // This reads audio on the background thread
-                if (utils::readAudioFile(path, audioData, sampleRate, channels)) {
-                    try {
-                        BeatThis::BeatResult result = beatThis.process_audio(audioData, sampleRate, channels);
-                        
-                        // Calculate BPM from beats
-                        // We can take the median or average of beat intervals
-                        std::vector<float>& beats = result.beats;
-                        double bpm = -1.0;
-                        
-                        if (beats.size() > 1) {
-                            std::vector<double> intervals;
-                            for (size_t i = 1; i < beats.size(); ++i) {
-                                intervals.push_back(beats[i] - beats[i-1]);
-                            }
-                            
-                            // Calculate Average Interval
-                            double sum = std::accumulate(intervals.begin(), intervals.end(), 0.0);
-                            double avgInterval = sum / intervals.size();
-                            
-                            if (avgInterval > 0) {
-                                bpm = 60.0 / avgInterval;
-                            }
-                        }
-                        
-                        // Update DB on main thread or safely
-                        QMetaObject::invokeMethod(this, [this, id, bpm]() {
-                            if (bpm > 0) {
-                                this->App->db->updateBpm(id, bpm);
-                                
-                                QString path = this->pathById(id);
-                                if (path.isEmpty()) path = QStringLiteral("ID: %1").arg(id);
-                                this->App->logger->log(QStringLiteral("Calculated BPM: %1 for %2").arg(QString::number(bpm), path), "BPM");
-                                
-                                // Also update the model directly to show change immediately
-                                QPersistentModelIndex modelIdx = this->modelIndexById(id);
-                                if (modelIdx.isValid()) {
-                                    this->videosModel->setBpmAtRow(modelIdx.row(), bpm);
-                                }
-                            }
-                        });
-                        
-                    } catch (const std::exception& e) {
-                        qDebug() << "Error calculating BPM for" << path << ":" << e.what();
-                    }
-                }
-                
-                count++;
-                QMetaObject::invokeMethod(progress, "setValue", Q_ARG(int, count));
-            }
-        } catch (const std::exception& e) {
-             qDebug() << "Failed to initialize BeatThis: " << e.what();
-        }
-        QMetaObject::invokeMethod(progress, "close");
-        QMetaObject::invokeMethod(progress, "deleteLater");  
-    });
-}
 
 // Model-based batch operations (ids)
 void MainWindow::updateAuthors(const QList<int>& ids) {
@@ -3877,6 +3779,7 @@ void MainWindow::updateSortConfig() {
 void MainWindow::populateList(bool selectcurrent) {
     Q_UNUSED(selectcurrent);
     QVector<VideoData> rows = this->App->db->getVideosData(this->App->currentDB);
+    this->queueBpmCalculation(rows);
     this->videosModel->setRows(std::move(rows));
 
     QString settings_str = (this->App->currentDB == "PLUS") ? this->App->config->get("headers_plus_visible") : this->App->config->get("headers_minus_visible");
@@ -3890,7 +3793,6 @@ void MainWindow::populateList(bool selectcurrent) {
     this->videosProxy->setSearchText(search_text);
     this->updateTotalListLabel();
     this->updateVideoListRandomProbabilitiesIfVisible();
-    this->queueBpmCalculation();
 }
 
 void MainWindow::videosWidgetHeaderContextMenu(QPoint point) {
@@ -4151,21 +4053,30 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
     if (!selIds.isEmpty()) {
         QMenu* actionsMenu = new QMenu("Actions", &menu);
         actionsMenu->addAction("Calculate BPM", [this, selIds] {
-            this->calculateBpm(selIds);
+            if (!this->App->BpmManager) return;
+            for (int id : selIds) {
+                QString path = this->pathById(id);
+                if (!path.isEmpty()) {
+                    this->App->BpmManager->enqueue_work_front({ id, path });
+                }
+            }
+            this->App->BpmManager->start();
         });
         actionsMenu->addAction("Calculate BPM (Missing)", [this, selIds] {
-            QList<int> missingIds;
+            if (!this->App->BpmManager) return;
             for (int id : selIds) {
                 QPersistentModelIndex idx = this->modelIndexById(id);
                 if (idx.isValid()) {
                     double bpm = idx.sibling(idx.row(), ListColumns["BPM_COLUMN"]).data(CustomRoles::bpm).toDouble();
-                    if (bpm == -1) {
-                        missingIds.append(id);
+                    if (bpm <= 0) {
+                        QString path = this->pathById(id);
+                        if (!path.isEmpty()) {
+                            this->App->BpmManager->enqueue_work_front({ id, path });
+                        }
                     }
                 }
             }
-            if (!missingIds.isEmpty())
-                this->calculateBpm(missingIds);
+            this->App->BpmManager->start();
         });
         menu.addMenu(actionsMenu);
     }

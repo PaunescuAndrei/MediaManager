@@ -25,6 +25,32 @@ void CalculateBpmManager::enqueue_work(BpmWorkItem work) {
     this->queue.push(work);
 }
 
+void CalculateBpmManager::enqueue_work_front(BpmWorkItem work) {
+    QMutexLocker locker(&activeIdsMutex);
+    if (activeIds.contains(work.id)) {
+        // Already active/queued. Try to move to front if in queue.
+        int removedCount = this->queue.removeIf([work](const BpmWorkItem& item) {
+            return item.id == work.id;
+        });
+
+        if (removedCount > 0) {
+            this->queue.pushFront(work);
+            // We removed 'removedCount' items and added 1.
+            if (removedCount > 1) {
+                this->add_work_count(1 - removedCount);
+            }
+        }
+        // If not removed (count 0), it's processing. We do nothing.
+        return;
+    }
+
+    activeIds.insert(work.id);
+    locker.unlock();
+
+    this->add_work_count(1);
+    this->queue.pushFront(work);
+}
+
 void CalculateBpmManager::clear_work() {
     this->queue.clear();
     this->set_work_count(0);

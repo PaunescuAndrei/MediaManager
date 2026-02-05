@@ -25,6 +25,7 @@
 #include <QThreadPool>
 #include <QPersistentModelIndex>
 #include <QHash>
+#include "VideoData.h"
 #include <QMutex>
 
 class MainApp;
@@ -149,11 +150,10 @@ public:
     void setViews(int value, const QList<int>& ids);
     void incrementViews(int count, const QList<int>& ids);
     void setWatched(QString value, const QList<int>& ids);
-    void calculateBpm(const QList<int>& ids);
     void DeleteDialogButton(const QList<int>& ids);
     void refreshHeadersVisibility();
     void videosWidgetHeaderContextMenu(QPoint point);
-    void queueBpmCalculation();
+    void queueBpmCalculation(const QVector<VideoData>& rows);
     void updateHeaderSettings(QStringList settings);
 
     void videosWidgetContextMenu(QPoint point);

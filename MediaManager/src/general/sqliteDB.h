@@ -62,6 +62,5 @@ public:
     int getUniqueVideosWatched(QString category);
     void incrementTimeWatchedToday(double value);
     void incrementTimeSessionToday(double value);
-    QList<VideoData> getVideosMissingBpm(const QStringList& types, QString category);
 };
 

@@ -193,7 +193,7 @@
     <ClInclude Include="src\QtClasses\Widgets\PreviewTooltipDialog.h" />
     <ClInclude Include="src\QtClasses\Widgets\TreeWidgetItem.h" />
     <QtMoc Include="src\QtClasses\Widgets\PreviewFrameProcessor.h" />
-    <ClInclude Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.h" />
+    <QtMoc Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.h" />
     <QtMoc Include="src\QtClasses\Widgets\watchedFrame.h" />
     <QtMoc Include="src\QtClasses\Widgets\customQLabel.h" />
     <QtMoc Include="src\QtClasses\Widgets\shokoButton.h" />

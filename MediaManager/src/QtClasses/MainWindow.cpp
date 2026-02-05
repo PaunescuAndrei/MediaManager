@@ -3954,6 +3954,12 @@ void MainWindow::videosWidgetHeaderContextMenu(QPoint point) {
         else
             settings_list.append("path");
     }
+    else if (menu_click == bpm) {
+        if (utils::hiddenCheck(settings_list) && !bpm->isChecked())
+            settings_list.removeAll("bpm");
+        else
+            settings_list.append("bpm");
+    }
     else if (menu_click == tags) {
         if (utils::hiddenCheck(settings_list) && !tags->isChecked())
             settings_list.removeAll("tags");
@@ -4417,6 +4423,10 @@ void MainWindow::refreshHeadersVisibility() {
         header->setSectionHidden(ListColumns["PATH_COLUMN"], false);
     else
         header->setSectionHidden(ListColumns["PATH_COLUMN"], true);
+    if (settings_list.contains("bpm"))
+        header->setSectionHidden(ListColumns["BPM_COLUMN"], false);
+    else
+        header->setSectionHidden(ListColumns["BPM_COLUMN"], true);
     if (settings_list.contains("tags"))
         header->setSectionHidden(ListColumns["TAGS_COLUMN"], false);
     else

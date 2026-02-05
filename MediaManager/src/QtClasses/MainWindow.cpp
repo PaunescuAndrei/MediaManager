@@ -3877,6 +3877,11 @@ void MainWindow::videosWidgetHeaderContextMenu(QPoint point) {
     if (settings_list.contains("path"))
         path->setChecked(true);
     menu.addAction(path);
+    QAction* bpm = new QAction("BPM", &menu);
+    bpm->setCheckable(true);
+    if (settings_list.contains("bpm"))
+        bpm->setChecked(true);
+    menu.addAction(bpm);
     QAction* tags = new QAction("Tags", &menu);
     tags->setCheckable(true);
     if (settings_list.contains("tags"))
@@ -4100,6 +4105,20 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
         QMenu* actionsMenu = new QMenu("Actions", &menu);
         actionsMenu->addAction("Calculate BPM", [this, selIds] {
             this->calculateBpm(selIds);
+        });
+        actionsMenu->addAction("Calculate BPM (Missing)", [this, selIds] {
+            QList<int> missingIds;
+            for (int id : selIds) {
+                QPersistentModelIndex idx = this->modelIndexById(id);
+                if (idx.isValid()) {
+                    double bpm = idx.sibling(idx.row(), ListColumns["BPM_COLUMN"]).data(CustomRoles::bpm).toDouble();
+                    if (bpm == -1) {
+                        missingIds.append(id);
+                    }
+                }
+            }
+            if (!missingIds.isEmpty())
+                this->calculateBpm(missingIds);
         });
         menu.addMenu(actionsMenu);
     }

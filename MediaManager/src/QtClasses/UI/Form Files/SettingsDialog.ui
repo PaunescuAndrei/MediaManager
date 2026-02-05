@@ -53,14 +53,14 @@
       <property name="geometry">
        <rect>
         <x>0</x>
-        <y>0</y>
+        <y>-767</y>
         <width>886</width>
-        <height>1110</height>
+        <height>1687</height>
        </rect>
       </property>
       <layout class="QHBoxLayout" name="horizontalLayout_8">
        <item>
-        <layout class="QVBoxLayout" name="LeftLayout" stretch="0,0,0,0,0,0">
+        <layout class="QVBoxLayout" name="LeftLayout" stretch="0,0,0,0,0,0,0">
          <item>
           <widget class="QGroupBox" name="generalGroupBox">
            <property name="title">
@@ -653,11 +653,11 @@
                  </layout>
                 </widget>
                </item>
-              <item>
-               <widget class="QWidget" name="previewSeekWidget" native="true">
-                <layout class="QHBoxLayout" name="horizontalLayout_previewSeek">
-                 <property name="leftMargin">
-                  <number>0</number>
+               <item>
+                <widget class="QWidget" name="previewSeekWidget" native="true">
+                 <layout class="QHBoxLayout" name="horizontalLayout_previewSeek">
+                  <property name="leftMargin">
+                   <number>0</number>
                   </property>
                   <property name="topMargin">
                    <number>0</number>
@@ -692,133 +692,133 @@
                     <property name="value">
                      <double>5.000000000000000</double>
                     </property>
-                  </widget>
-                 </item>
-                </layout>
-               </widget>
-              </item>
-              <item>
-               <widget class="QWidget" name="previewOverlayScaleWidget" native="true">
-                <layout class="QHBoxLayout" name="horizontalLayout_previewOverlayScale">
-                 <property name="leftMargin">
-                  <number>0</number>
+                   </widget>
+                  </item>
+                 </layout>
+                </widget>
+               </item>
+               <item>
+                <widget class="QWidget" name="previewOverlayScaleWidget" native="true">
+                 <layout class="QHBoxLayout" name="horizontalLayout_previewOverlayScale">
+                  <property name="leftMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>0</number>
+                  </property>
+                  <item>
+                   <widget class="QLabel" name="previewOverlayScaleLabel">
+                    <property name="text">
+                     <string>Overlay scale multiplier:</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QDoubleSpinBox" name="previewOverlayScale">
+                    <property name="focusPolicy">
+                     <enum>Qt::FocusPolicy::StrongFocus</enum>
+                    </property>
+                    <property name="minimum">
+                     <double>0.100000000000000</double>
+                    </property>
+                    <property name="maximum">
+                     <double>5.000000000000000</double>
+                    </property>
+                    <property name="singleStep">
+                     <double>0.050000000000000</double>
+                    </property>
+                    <property name="value">
+                     <double>1.000000000000000</double>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </widget>
+               </item>
+               <item>
+                <widget class="QWidget" name="previewOverlayPadWidget" native="true">
+                 <layout class="QHBoxLayout" name="horizontalLayout_previewOverlayPad">
+                  <property name="leftMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="topMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="rightMargin">
+                   <number>0</number>
+                  </property>
+                  <property name="bottomMargin">
+                   <number>0</number>
+                  </property>
+                  <item>
+                   <widget class="QLabel" name="previewOverlayPadLabel">
+                    <property name="text">
+                     <string>Overlay padding (X / Y) &amp; margin:</string>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QSpinBox" name="previewOverlayPadX">
+                    <property name="focusPolicy">
+                     <enum>Qt::FocusPolicy::StrongFocus</enum>
+                    </property>
+                    <property name="maximum">
+                     <number>96</number>
+                    </property>
+                    <property name="value">
+                     <number>4</number>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QSpinBox" name="previewOverlayPadY">
+                    <property name="focusPolicy">
+                     <enum>Qt::FocusPolicy::StrongFocus</enum>
+                    </property>
+                    <property name="maximum">
+                     <number>96</number>
+                    </property>
+                    <property name="value">
+                     <number>2</number>
+                    </property>
+                   </widget>
+                  </item>
+                  <item>
+                   <widget class="QSpinBox" name="previewOverlayMargin">
+                    <property name="focusPolicy">
+                     <enum>Qt::FocusPolicy::StrongFocus</enum>
+                    </property>
+                    <property name="maximum">
+                     <number>128</number>
+                    </property>
+                    <property name="value">
+                     <number>6</number>
+                    </property>
+                   </widget>
+                  </item>
+                 </layout>
+                </widget>
+               </item>
+               <item>
+                <widget class="QCheckBox" name="previewRandomStart">
+                 <property name="text">
+                  <string>Random start position</string>
                  </property>
-                 <property name="topMargin">
-                  <number>0</number>
+                </widget>
+               </item>
+               <item>
+                <widget class="QCheckBox" name="previewSeededRandom">
+                 <property name="text">
+                  <string>Use seeded random</string>
                  </property>
-                 <property name="rightMargin">
-                  <number>0</number>
-                 </property>
-                 <property name="bottomMargin">
-                  <number>0</number>
-                 </property>
-                 <item>
-                  <widget class="QLabel" name="previewOverlayScaleLabel">
-                   <property name="text">
-                    <string>Overlay scale multiplier:</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
-                  <widget class="QDoubleSpinBox" name="previewOverlayScale">
-                   <property name="focusPolicy">
-                    <enum>Qt::FocusPolicy::StrongFocus</enum>
-                   </property>
-                   <property name="minimum">
-                    <double>0.100000000000000</double>
-                   </property>
-                   <property name="maximum">
-                    <double>5.000000000000000</double>
-                   </property>
-                   <property name="singleStep">
-                    <double>0.050000000000000</double>
-                   </property>
-                   <property name="value">
-                    <double>1.000000000000000</double>
-                   </property>
-                  </widget>
-                 </item>
-                </layout>
-               </widget>
-              </item>
-              <item>
-               <widget class="QWidget" name="previewOverlayPadWidget" native="true">
-                <layout class="QHBoxLayout" name="horizontalLayout_previewOverlayPad">
-                 <property name="leftMargin">
-                  <number>0</number>
-                 </property>
-                 <property name="topMargin">
-                  <number>0</number>
-                 </property>
-                 <property name="rightMargin">
-                  <number>0</number>
-                 </property>
-                 <property name="bottomMargin">
-                  <number>0</number>
-                 </property>
-                 <item>
-                  <widget class="QLabel" name="previewOverlayPadLabel">
-                   <property name="text">
-                    <string>Overlay padding (X / Y) &amp; margin:</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
-                  <widget class="QSpinBox" name="previewOverlayPadX">
-                   <property name="focusPolicy">
-                    <enum>Qt::FocusPolicy::StrongFocus</enum>
-                   </property>
-                   <property name="maximum">
-                    <number>96</number>
-                   </property>
-                   <property name="value">
-                    <number>4</number>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
-                  <widget class="QSpinBox" name="previewOverlayPadY">
-                   <property name="focusPolicy">
-                    <enum>Qt::FocusPolicy::StrongFocus</enum>
-                   </property>
-                   <property name="maximum">
-                    <number>96</number>
-                   </property>
-                   <property name="value">
-                    <number>2</number>
-                   </property>
-                  </widget>
-                 </item>
-                 <item>
-                  <widget class="QSpinBox" name="previewOverlayMargin">
-                   <property name="focusPolicy">
-                    <enum>Qt::FocusPolicy::StrongFocus</enum>
-                   </property>
-                   <property name="maximum">
-                    <number>128</number>
-                   </property>
-                   <property name="value">
-                    <number>6</number>
-                   </property>
-                  </widget>
-                 </item>
-                </layout>
-               </widget>
-              </item>
-              <item>
-              <widget class="QCheckBox" name="previewRandomStart">
-               <property name="text">
-                <string>Random start position</string>
-               </property>
-               </widget>
-              </item>
-              <item>
-               <widget class="QCheckBox" name="previewSeededRandom">
-                <property name="text">
-                 <string>Use seeded random</string>
-                </property>
-               </widget>
-              </item>
+                </widget>
+               </item>
                <item>
                 <widget class="QCheckBox" name="previewRememberPosition">
                  <property name="text">
@@ -977,12 +977,12 @@
                 </widget>
                </item>
                <item>
-               <widget class="QCheckBox" name="previewAutoplayAllMute">
-                <property name="text">
-                 <string>Autoplay all cards muted (unmute on hover)</string>
-                </property>
-               </widget>
-              </item>
+                <widget class="QCheckBox" name="previewAutoplayAllMute">
+                 <property name="text">
+                  <string>Autoplay all cards muted (unmute on hover)</string>
+                 </property>
+                </widget>
+               </item>
                <item>
                 <widget class="QCheckBox" name="previewRandomEachHover">
                  <property name="text">
@@ -1665,7 +1665,7 @@
        <item>
         <layout class="QHBoxLayout" name="MainLayout" stretch="0">
          <item>
-          <layout class="QVBoxLayout" name="RightLayout" stretch="0,0,0,0,0">
+          <layout class="QVBoxLayout" name="RightLayout" stretch="0,0,0,0,0,0">
            <item>
             <widget class="QGroupBox" name="DBgroupBox">
              <property name="sizePolicy">
@@ -1830,6 +1830,122 @@
                  <string>Rebuild Thumbnails Cache</string>
                 </property>
                </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QGroupBox" name="bpmGroupBox">
+             <property name="title">
+              <string>BPM Settings</string>
+             </property>
+             <layout class="QVBoxLayout" name="verticalLayout_bpm">
+              <item>
+               <layout class="QHBoxLayout" name="horizontalLayout_bpmThreads">
+                <item>
+                 <widget class="QLabel" name="bpmThreadsLabel">
+                  <property name="text">
+                   <string>Threads:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <spacer name="horizontalSpacer_bpmThreads">
+                  <property name="orientation">
+                   <enum>Qt::Orientation::Horizontal</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>40</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+                <item>
+                 <widget class="QSpinBox" name="bpmThreadsSpinBox">
+                  <property name="focusPolicy">
+                   <enum>Qt::FocusPolicy::StrongFocus</enum>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignmentFlag::AlignCenter</set>
+                  </property>
+                  <property name="minimum">
+                   <number>1</number>
+                  </property>
+                  <property name="maximum">
+                   <number>32</number>
+                  </property>
+                  <property name="value">
+                   <number>2</number>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QHBoxLayout" name="horizontalLayout_bpmTypes">
+                <item>
+                 <widget class="QLabel" name="bpmTypesLabel">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                  <property name="text">
+                   <string>Types:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QScrollArea" name="bpmTypesScrollArea">
+                  <property name="sizePolicy">
+                   <sizepolicy hsizetype="Expanding" vsizetype="Maximum">
+                    <horstretch>0</horstretch>
+                    <verstretch>0</verstretch>
+                   </sizepolicy>
+                  </property>
+                  <property name="widgetResizable">
+                   <bool>true</bool>
+                  </property>
+                  <widget class="QWidget" name="scrollAreaWidgetContents_bpm">
+                   <property name="geometry">
+                    <rect>
+                     <x>0</x>
+                     <y>0</y>
+                     <width>361</width>
+                     <height>68</height>
+                    </rect>
+                   </property>
+                   <layout class="QHBoxLayout" name="horizontalLayout_bpmTypesContainer">
+                    <property name="leftMargin">
+                     <number>0</number>
+                    </property>
+                    <property name="topMargin">
+                     <number>0</number>
+                    </property>
+                    <property name="rightMargin">
+                     <number>0</number>
+                    </property>
+                    <property name="bottomMargin">
+                     <number>0</number>
+                    </property>
+                    <item>
+                     <widget class="QWidget" name="bpmTypesWidget" native="true">
+                      <property name="sizePolicy">
+                       <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
+                        <horstretch>0</horstretch>
+                        <verstretch>0</verstretch>
+                       </sizepolicy>
+                      </property>
+                     </widget>
+                    </item>
+                   </layout>
+                  </widget>
+                 </widget>
+                </item>
+               </layout>
               </item>
              </layout>
             </widget>

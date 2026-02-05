@@ -2600,10 +2600,22 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         config->set("preview_random_each_hover", dialog->ui.previewRandomEachHover->isChecked() ? "True" : "False");
         dialog->oldPreviewRandomEachHover = dialog->ui.previewRandomEachHover->isChecked();
     }
-    if (dialog->ui.previewSeededRandom->isChecked() != dialog->oldPreviewSeededRandom) {
-        config->set("preview_seeded_random", dialog->ui.previewSeededRandom->isChecked() ? "True" : "False");
-        dialog->oldPreviewSeededRandom = dialog->ui.previewSeededRandom->isChecked();
+    
+    config->set("bpm_threads", QString::number(dialog->ui.bpmThreadsSpinBox->value()));
+    
+    QStringList selectedBpmTypes;
+    QList<QCheckBox*> bpmCheckboxes = dialog->ui.bpmTypesWidget->findChildren<QCheckBox*>();
+    for (QCheckBox* checkbox : bpmCheckboxes) {
+        if (checkbox->isChecked()) {
+            selectedBpmTypes.append(checkbox->property("type_name").toString());
+        }
     }
+    config->set("bpm_calculation_types", selectedBpmTypes.join(","));
+    
+    if (this->App->BpmManager) {
+        this->App->BpmManager->setMaxThreadCount(dialog->ui.bpmThreadsSpinBox->value());
+    }
+
     if (dialog->ui.previewAutoplayAllMute->isChecked() != dialog->oldPreviewAutoplayAllMute) {
         config->set("preview_autoplay_all_mute", dialog->ui.previewAutoplayAllMute->isChecked() ? "True" : "False");
         dialog->oldPreviewAutoplayAllMute = dialog->ui.previewAutoplayAllMute->isChecked();

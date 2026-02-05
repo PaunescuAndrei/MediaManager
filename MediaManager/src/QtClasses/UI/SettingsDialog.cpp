@@ -10,7 +10,8 @@
 #include <QMap>
 #include <QSpinBox>
 #include <QSignalBlocker>
-#include "definitions.h"
+#include "flowlayout.h"
+#include <QCheckBox>
 
 SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 {
@@ -37,6 +38,7 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
     this->ui.previewOverlayPadX->setStyleSheet(get_stylesheet("spinbox"));
     this->ui.previewOverlayPadY->setStyleSheet(get_stylesheet("spinbox"));
     this->ui.previewOverlayMargin->setStyleSheet(get_stylesheet("spinbox"));
+    this->ui.bpmThreadsSpinBox->setStyleSheet(get_stylesheet("spinbox"));
     this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(false);
 
 	MainWindow* mw = (MainWindow*)parent;
@@ -301,8 +303,29 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
     this->ui.seedLineEdit->setText(mw->App->config->get("random_seed"));
     this->ui.searchTimerInterval->setValue(mw->App->config->get("search_timer_interval").toInt());
     this->ui.notificationDurationSpinBox->setValue(mw->App->config->get("notification_duration_ms").toInt());
+    this->ui.bpmThreadsSpinBox->setValue(mw->App->config->get("bpm_threads").toInt());
+    
+    // BPM Types FlowLayout
+    FlowLayout* bpmTypesFlowLayout = new FlowLayout;
+    bpmTypesFlowLayout->setContentsMargins(0, 0, 0, 0);
+    QStringList configTypes = mw->App->config->get("bpm_calculation_types").split(',', Qt::SkipEmptyParts);
+    QStringList allVideoTypes = mw->App->config->get("video_types").split(',', Qt::SkipEmptyParts);
+    
+    for (const QString& type : allVideoTypes) {
+        if (type.isEmpty()) continue;
+        QCheckBox* checkbox = new QCheckBox(type, this);
+        checkbox->setProperty("type_name", type);
+        if (configTypes.contains(type)) {
+            checkbox->setChecked(true);
+        }
+        connect(checkbox, &QCheckBox::checkStateChanged, this, [this] {
+            this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(true); 
+        });
+        bpmTypesFlowLayout->addWidget(checkbox);
+    }
+    this->ui.bpmTypesWidget->setLayout(bpmTypesFlowLayout);
 
-	this->ui.weightedRandMinusGroupBox->setTitle(this->ui.weightedRandMinusGroupBox->title().replace("MINUS", mw->App->config->get("minus_category_name"), Qt::CaseSensitive));
+    this->ui.weightedRandMinusGroupBox->setTitle(this->ui.weightedRandMinusGroupBox->title().replace("MINUS", mw->App->config->get("minus_category_name"), Qt::CaseSensitive));
 	this->ui.weightedRandPlusGroupBox->setTitle(this->ui.weightedRandPlusGroupBox->title().replace("PLUS", mw->App->config->get("plus_category_name"), Qt::CaseSensitive));
 	WheelStrongFocusEventFilter* filter = new WheelStrongFocusEventFilter(this);
 

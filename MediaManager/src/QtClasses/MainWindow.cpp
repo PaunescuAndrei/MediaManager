@@ -506,6 +506,7 @@ void MainWindow::UpdateWindowTitle() {
     QString session_time;
     QString watched_time;
     QString thumb_work_count;
+    QString bpm_work_count;
     QString main_title = QStringLiteral("Media Manager %1 %2").arg(this->getCategoryName()).arg(VERSION_TEXT);
     if (this->App->VW and this->App->VW->mainPlayer) {
         int sessionSeconds = this->App->VW->mainPlayer->getSessionTime();
@@ -518,9 +519,12 @@ void MainWindow::UpdateWindowTitle() {
         }
     }
     if (this->thumbnailManager->work_count > 0) {
-        thumb_work_count = " (" % QString::number(this->thumbnailManager->work_count) % ")";
+        thumb_work_count = " [Thumb: " % QString::number(this->thumbnailManager->work_count) % "]";
     }
-    this->setWindowTitle(main_title % thumb_work_count % session_time % watched_time);
+    if (this->App->BpmManager && this->App->BpmManager->get_work_count() > 0) {
+        bpm_work_count = " [BPM: " % QString::number(this->App->BpmManager->get_work_count()) % "]";
+    }
+    this->setWindowTitle(main_title % thumb_work_count % bpm_work_count % session_time % watched_time);
 }
 
 void MainWindow::VideoInfoNotification() {
@@ -992,6 +996,11 @@ void MainWindow::calculateBpm(const QList<int>& ids) {
                         QMetaObject::invokeMethod(this, [this, id, bpm]() {
                             if (bpm > 0) {
                                 this->App->db->updateBpm(id, bpm);
+                                
+                                QString path = this->pathById(id);
+                                if (path.isEmpty()) path = QStringLiteral("ID: %1").arg(id);
+                                this->App->logger->log(QStringLiteral("Calculated BPM: %1 for %2").arg(QString::number(bpm), path), "BPM");
+                                
                                 // Also update the model directly to show change immediately
                                 QPersistentModelIndex modelIdx = this->modelIndexById(id);
                                 if (modelIdx.isValid()) {

@@ -77,15 +77,19 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 
 	this->VW = new VideoWatcherQt(this);
 
-	int bpmThreads = this->config->get("bpm_threads").toInt();
-	if (bpmThreads <= 0) bpmThreads = 2;
-	this->BpmManager = new CalculateBpmManager(bpmThreads, this);
+	this->BpmManager = new CalculateBpmManager(this->config->get("bpm_threads").toInt(), this);
 	connect(this->BpmManager, &CalculateBpmManager::bpmCalculated, this, [this](int id, double bpm) {
 		this->db->updateBpm(id, bpm);
-		if (this->mainWindow && this->mainWindow->videosModel) {
-			QPersistentModelIndex idx = this->mainWindow->modelIndexById(id);
-			if (idx.isValid()) {
-				this->mainWindow->videosModel->setBpmAtRow(idx.row(), bpm);
+		if (this->mainWindow) {
+            QString path = this->mainWindow->pathById(id);
+            if (path.isEmpty()) path = QStringLiteral("ID: %1").arg(id);
+            this->logger->log(QStringLiteral("Calculated BPM: %1 for %2").arg(QString::number(bpm), path), "BPM");
+            
+			if (this->mainWindow->videosModel) {
+				QPersistentModelIndex idx = this->mainWindow->modelIndexById(id);
+				if (idx.isValid()) {
+					this->mainWindow->videosModel->setBpmAtRow(idx.row(), bpm);
+				}
 			}
 		}
 	});

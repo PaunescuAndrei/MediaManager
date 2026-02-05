@@ -19,7 +19,6 @@
     <QtMoc Include="src\QtClasses\Models\VideosProxyModel.h" />
     <QtMoc Include="src\QtClasses\Models\VideosSortProxyModel.h" />
     <QtMoc Include="src\QtClasses\Widgets\VideosTreeView.h" />
-    <QtMoc Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.h" />
     <ClInclude Include="src\general\VideoData.h" />
     <ClCompile Include="src\general\BasePlayer.cpp" />
     <ClCompile Include="src\general\colorPaletteExtractor.cpp" />

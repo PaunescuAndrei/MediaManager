@@ -14,6 +14,7 @@ struct VideoData {
     QString views;
     double rating = 0.0;
     double randomPercent = 0.0;
+    double bpm = -1.0;
     QDateTime dateCreated;
     QDateTime lastWatched;
 };

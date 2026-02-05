@@ -40,7 +40,7 @@ void sqliteDB::enableForeignKeys()
 QList<QTreeWidgetItem*> sqliteDB::getVideos(QString category) {
     QSqlQuery query = QSqlQuery(this->db);
 
-    QString query_string = "SELECT v.id,v.path,GROUP_CONCAT(t.name, ', ' ORDER BY t.display_priority ASC, t.id) AS tags,v.type,v.watched,v.views,v.rating,v.author,v.name, datetime(v.date_created, 'localtime'), datetime(v.last_watched, 'localtime') from videodetails v "
+    QString query_string = "SELECT v.id,v.path,GROUP_CONCAT(t.name, ', ' ORDER BY t.display_priority ASC, t.id) AS tags,v.type,v.watched,v.views,v.rating,v.author,v.name, datetime(v.date_created, 'localtime'), datetime(v.last_watched, 'localtime'), v.bpm from videodetails v "
         "LEFT JOIN tags_relations tr ON v.id = tr.video_id "
         "LEFT JOIN tags t ON tr.tag_id = t.id WHERE v.category = :category "
         "GROUP BY v.id; ";
@@ -69,6 +69,11 @@ QList<QTreeWidgetItem*> sqliteDB::getVideos(QString category) {
         QString name = query.value(8).toString();
         QDateTime date_created = query.value(9).toDateTime();
         QDateTime last_watched = query.value(10).toDateTime();
+        double bpm = -1.0;
+        if (!query.value(11).isNull()) {
+            bpm = query.value(11).toDouble();
+        }
+
         TreeWidgetItem* item = new TreeWidgetItem(nullptr);
         item->setData(ListColumns["AUTHOR_COLUMN"], Qt::DisplayRole, author);
         item->setData(ListColumns["NAME_COLUMN"], Qt::DisplayRole, name);
@@ -81,6 +86,13 @@ QList<QTreeWidgetItem*> sqliteDB::getVideos(QString category) {
         item->setData(ListColumns["LAST_WATCHED_COLUMN"], Qt::DisplayRole, last_watched);
         item->setData(ListColumns["PATH_COLUMN"], CustomRoles::id, id);
         item->setData(ListColumns["RATING_COLUMN"], CustomRoles::rating, rating);
+        if (bpm >= 0) {
+            item->setData(ListColumns["BPM_COLUMN"], Qt::DisplayRole, QString::number(static_cast<int>(std::round(bpm))));
+            item->setData(ListColumns["BPM_COLUMN"], CustomRoles::bpm, bpm);
+        } else {
+            item->setData(ListColumns["BPM_COLUMN"], Qt::DisplayRole, QVariant());
+            item->setData(ListColumns["BPM_COLUMN"], CustomRoles::bpm, -1.0);
+        }
         itemlist.append(item);
     }
     return itemlist;
@@ -89,7 +101,7 @@ QList<QTreeWidgetItem*> sqliteDB::getVideos(QString category) {
 QVector<VideoData> sqliteDB::getVideosData(QString category) {
     QSqlQuery query = QSqlQuery(this->db);
 
-    QString query_string = "SELECT v.id,v.path,GROUP_CONCAT(t.name, ', ' ORDER BY t.display_priority ASC, t.id) AS tags,v.type,v.watched,v.views,v.rating,v.author,v.name, datetime(v.date_created, 'localtime'), datetime(v.last_watched, 'localtime') from videodetails v "
+    QString query_string = "SELECT v.id,v.path,GROUP_CONCAT(t.name, ', ' ORDER BY t.display_priority ASC, t.id) AS tags,v.type,v.watched,v.views,v.rating,v.author,v.name, datetime(v.date_created, 'localtime'), datetime(v.last_watched, 'localtime'), v.bpm from videodetails v "
         "LEFT JOIN tags_relations tr ON v.id = tr.video_id "
         "LEFT JOIN tags t ON tr.tag_id = t.id WHERE v.category = :category "
         "GROUP BY v.id; ";
@@ -122,6 +134,11 @@ QVector<VideoData> sqliteDB::getVideosData(QString category) {
         row.name = query.value(8).toString();
         row.dateCreated = query.value(9).toDateTime();
         row.lastWatched = query.value(10).toDateTime();
+        if (!query.value(11).isNull()) {
+            row.bpm = query.value(11).toDouble();
+        } else {
+            row.bpm = -1.0;
+        }
         result.push_back(std::move(row));
     }
     return result;
@@ -132,7 +149,7 @@ VideoData sqliteDB::getVideoData(QString path, QString category)
     VideoData video = VideoData();
     QSqlQuery query = QSqlQuery(this->db);
 
-    QString query_string = "SELECT v.id,v.path,GROUP_CONCAT(t.name, ', ' ORDER BY t.display_priority ASC, t.id) AS tags,v.type,v.watched,v.views,v.rating,v.author,v.name, datetime(v.date_created, 'localtime'), datetime(v.last_watched, 'localtime') from videodetails v "
+    QString query_string = "SELECT v.id,v.path,GROUP_CONCAT(t.name, ', ' ORDER BY t.display_priority ASC, t.id) AS tags,v.type,v.watched,v.views,v.rating,v.author,v.name, datetime(v.date_created, 'localtime'), datetime(v.last_watched, 'localtime'), v.bpm from videodetails v "
         "LEFT JOIN tags_relations tr ON v.id = tr.video_id "
         "LEFT JOIN tags t ON tr.tag_id = t.id WHERE v.path = :path and v.category = :category"
         "GROUP BY v.id; ";
@@ -163,6 +180,11 @@ VideoData sqliteDB::getVideoData(QString path, QString category)
         video.name = query.value(8).toString();
         video.dateCreated = query.value(9).toDateTime();
         video.lastWatched = query.value(10).toDateTime();
+        if (!query.value(11).isNull()) {
+            video.bpm = query.value(11).toDouble();
+        } else {
+            video.bpm = -1.0;
+        }
     }
     return video;
 }
@@ -578,6 +600,23 @@ void sqliteDB::updateRating(int video_id, double rating) {
         if (qMainApp) {
             qMainApp->logger->log(QStringLiteral("Database Error at updateRating (%1, %2): %3").arg(QString::number(video_id), QString::number(rating), query.lastError().text()), "Database", query.lastError().text());
             qMainApp->showErrorMessage("updateRating " + QString::number(video_id) + QString::number(rating) + " " + query.lastError().text());
+        }
+    }
+}
+
+void sqliteDB::updateBpm(int video_id, double bpm) {
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral("UPDATE videodetails SET bpm=? WHERE id = ?"));
+    if (bpm < 0) {
+        query.addBindValue(QVariant(QVariant::Double));
+    } else {
+        query.addBindValue(QString::number(bpm));
+    }
+    query.addBindValue(video_id);
+    if (!query.exec()) {
+        if (qMainApp) {
+            qMainApp->logger->log(QStringLiteral("Database Error at updateBpm (%1, %2): %3").arg(QString::number(video_id), QString::number(bpm), query.lastError().text()), "Database", query.lastError().text());
+            qMainApp->showErrorMessage("updateBpm " + QString::number(video_id) + QString::number(bpm) + " " + query.lastError().text());
         }
     }
 }

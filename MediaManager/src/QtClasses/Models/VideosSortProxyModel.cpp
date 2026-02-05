@@ -17,6 +17,12 @@ bool VideosSortProxyModel::lessThan(const QModelIndex& left, const QModelIndex& 
         return l < r;
     }
 
+    if (col == ListColumns["BPM_COLUMN"]) {
+        const double l = left.data(CustomRoles::bpm).toDouble();
+        const double r = right.data(CustomRoles::bpm).toDouble();
+        return l < r;
+    }
+
     const QString lKey = left.data(Qt::DisplayRole).toString();
     const QString rKey = right.data(Qt::DisplayRole).toString();
     const int cmp = collator.compare(lKey, rKey);

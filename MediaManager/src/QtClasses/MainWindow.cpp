@@ -1,4 +1,4 @@
-﻿#include "stdafx.h"
+#include "stdafx.h"
 #include "MainWindow.h"
 #include "MainApp.h"
 #include "version.h"
@@ -47,11 +47,11 @@
 #include <QRegularExpression>
 #include <QInputDialog>
 #include <QMutexLocker>
+#include <QProgressDialog>
 #include "InsertSettingsDialog.h"
 #include "generalEventFilter.h"
 #include "customQButton.h"
 #include "scrollAreaEventFilter.h"
-
 #include "ProgressBarQLabel.h"
 #include <QColorDialog>
 #include "FilterDialog.h"
@@ -66,6 +66,10 @@
 #include "VideoPreviewWidget.h"
 #include "PreviewTooltipDialog.h"
 #include <QCursor>
+#include <QFuture>
+#include <QtConcurrent>
+#include <numeric>
+#include "beat_this_api.h"
 
 #pragma warning(push ,3)
 #include "rapidfuzz_all.hpp"
@@ -889,6 +893,96 @@ void MainWindow::refreshVisibility(QString search_text)
         this->videosProxy->setSearchText(search_text);
     }
     this->old_search = search_text;
+}
+
+void MainWindow::calculateBpm(const QList<int>& ids) {
+    if (ids.isEmpty()) return;
+
+    QList<QPair<int, QString>> workItems;
+    for (int id : ids) {
+        QString path = this->pathById(id);
+        if (!path.isEmpty()) {
+            workItems.append({id, path});
+        }
+    }
+
+    if (workItems.isEmpty()) return;
+
+    QProgressDialog* progress = new QProgressDialog("Calculating BPM...", "Cancel", 0, workItems.size(), this);
+    progress->setWindowModality(Qt::WindowModal);
+    progress->setValue(0);
+    progress->show();
+
+    // Use QtConcurrent to run in background
+    
+    QFuture<void> future = QtConcurrent::run(this->searchThreadPool, [this, workItems, progress]() {
+        QString modelPath = QCoreApplication::applicationDirPath() + "/" + MODELS_PATH + "/beat_this.onnx";
+        
+        try {
+            BeatThis::BeatThis beatThis(modelPath.toStdString());
+            
+            int count = 0;
+            for (const auto& item : workItems) {
+                if (progress->wasCanceled()) break;
+                
+                int id = item.first;
+                QString path = item.second;
+
+                std::vector<float> audioData;
+                int sampleRate = 0;
+                int channels = 0;
+                
+                // This reads audio on the background thread
+                if (utils::readAudioFile(path, audioData, sampleRate, channels)) {
+                    try {
+                        BeatThis::BeatResult result = beatThis.process_audio(audioData, sampleRate, channels);
+                        
+                        // Calculate BPM from beats
+                        // We can take the median or average of beat intervals
+                        std::vector<float>& beats = result.beats;
+                        double bpm = -1.0;
+                        
+                        if (beats.size() > 1) {
+                            std::vector<double> intervals;
+                            for (size_t i = 1; i < beats.size(); ++i) {
+                                intervals.push_back(beats[i] - beats[i-1]);
+                            }
+                            
+                            // Calculate Average Interval
+                            double sum = std::accumulate(intervals.begin(), intervals.end(), 0.0);
+                            double avgInterval = sum / intervals.size();
+                            
+                            if (avgInterval > 0) {
+                                bpm = 60.0 / avgInterval;
+                            }
+                        }
+                        
+                        // Update DB on main thread or safely
+                        QMetaObject::invokeMethod(this, [this, id, bpm]() {
+                            if (bpm > 0) {
+                                this->App->db->updateBpm(id, bpm);
+                                // Also update the model directly to show change immediately
+                                QPersistentModelIndex modelIdx = this->modelIndexById(id);
+                                if (modelIdx.isValid()) {
+                                    this->videosModel->setBpmAtRow(modelIdx.row(), bpm);
+                                }
+                            }
+                        });
+                        
+                    } catch (const std::exception& e) {
+                        qDebug() << "Error calculating BPM for" << path << ":" << e.what();
+                    }
+                }
+                
+                count++;
+                QMetaObject::invokeMethod(progress, "setValue", Q_ARG(int, count));
+            }
+        } catch (const std::exception& e) {
+             qDebug() << "Failed to initialize BeatThis: " << e.what();
+        }
+        QMetaObject::invokeMethod(progress, "close");
+        QMetaObject::invokeMethod(progress, "deleteLater");  
+    });
 }
 
 // Model-based batch operations (ids)
@@ -4002,6 +4096,14 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
     menu.addAction(open_location);
     QAction* delete_video = new QAction("Delete", &menu);
     menu.addAction(delete_video);
+    if (!selIds.isEmpty()) {
+        QMenu* actionsMenu = new QMenu("Actions", &menu);
+        actionsMenu->addAction("Calculate BPM", [this, selIds] {
+            this->calculateBpm(selIds);
+        });
+        menu.addMenu(actionsMenu);
+    }
+
     QAction* menu_click = menu.exec(this->ui.videosWidget->viewport()->mapToGlobal(point));
 
     if (!menu_click)

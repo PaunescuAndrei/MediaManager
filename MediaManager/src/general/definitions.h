@@ -87,17 +87,18 @@ Q_DECLARE_METATYPE(Tag);
 uint qHash(const Tag& key);
 
 struct TagRelation {
-	int id;
-	int video_id;
-	int tag_id;
-	auto operator<=>(const TagRelation&) const = default;
+    int id;
+    int video_id;
+    int tag_id;
+    auto operator<=>(const TagRelation&) const = default;
 };
 
 namespace CustomRoles {
-	enum roles {
-		id = Qt::UserRole,
-		rating = Qt::UserRole+1,
-	};
+    enum roles {
+        id = Qt::UserRole,
+        rating = Qt::UserRole+1,
+        bpm = Qt::UserRole+2,
+    };
 }
 
 //Database Paths

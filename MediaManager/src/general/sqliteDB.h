@@ -46,6 +46,7 @@ public:
     void updateAuthor(int video_id, QString author);
     void updateName(int video_id, QString name);
     void updateRating(int video_id, double rating);
+    void updateBpm(int video_id, double bpm);
     void setViews(int video_id, int value);
     void insertVideo(QString path, QString category, QString name, QString author = "", QString type = "");
     void updateVideoProgress(int video_id, double progress);

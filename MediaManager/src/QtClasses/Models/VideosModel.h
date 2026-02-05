@@ -34,6 +34,7 @@ public:
     // Update helpers
     void setRandomPercentForPath(const QString& path, double value);
     void setRandomPercentAtRow(int row, double value);
+    void setBpmAtRow(int row, double bpm);
     void setRandomPercentColumn(const QMap<int, long double>& probabilities);
     void setHighlightedPath(const QString& path);
 

@@ -1,7 +1,7 @@
 #include "stdafx.h"
 #include "VideosModel.h"
-#include <QGuiApplication>
-#include "stylesQt.h"
+#include <QIcon>
+#include <QColor>
 
 VideosModel::VideosModel(QObject* parent)
     : QAbstractTableModel(parent) {
@@ -9,12 +9,12 @@ VideosModel::VideosModel(QObject* parent)
 
 int VideosModel::rowCount(const QModelIndex& parent) const {
     if (parent.isValid()) return 0;
-    return rows.size();
+    return static_cast<int>(rows.size());
 }
 
 int VideosModel::columnCount(const QModelIndex& parent) const {
     if (parent.isValid()) return 0;
-    return 11; // matches ListColumns size
+    return 12; // matches ListColumns size
 }
 
 QVariant VideosModel::data(const QModelIndex& index, int role) const {
@@ -36,6 +36,10 @@ QVariant VideosModel::data(const QModelIndex& index, int role) const {
         }
         if (c == ListColumns["DATE_CREATED_COLUMN"]) return r.dateCreated;
         if (c == ListColumns["LAST_WATCHED_COLUMN"]) return r.lastWatched;
+        if (c == ListColumns["BPM_COLUMN"]) {
+            if (r.bpm < 0) return QVariant();
+            return QString::number(static_cast<int>(std::round(r.bpm)));
+        }
     }
     if (role == CustomRoles::id && c == ListColumns["PATH_COLUMN"]) {
         return r.id;
@@ -43,26 +47,16 @@ QVariant VideosModel::data(const QModelIndex& index, int role) const {
     if (role == CustomRoles::rating && c == ListColumns["RATING_COLUMN"]) {
         return r.rating;
     }
+    if (role == CustomRoles::bpm && c == ListColumns["BPM_COLUMN"]) {
+        return r.bpm;
+    }
     if (role == Qt::TextAlignmentRole) {
         if (c == ListColumns["TAGS_COLUMN"] || c == ListColumns["TYPE_COLUMN"] ||
             c == ListColumns["WATCHED_COLUMN"] || c == ListColumns["VIEWS_COLUMN"] ||
             c == ListColumns["RATING_COLUMN"] || c == ListColumns["DATE_CREATED_COLUMN"] ||
-            c == ListColumns["LAST_WATCHED_COLUMN"] || c == ListColumns["RANDOM%_COLUMN"]) {
+            c == ListColumns["LAST_WATCHED_COLUMN"] || c == ListColumns["RANDOM%_COLUMN"] ||
+            c == ListColumns["BPM_COLUMN"]) {
             return Qt::AlignHCenter;
-        }
-    }
-    if (role == Qt::BackgroundRole) {
-        if (!highlightedPath.isEmpty() && r.path == highlightedPath) {
-            return get_highlight_brush(QGuiApplication::palette());
-        }
-    }
-    if (role == Qt::ForegroundRole) {
-        if (!highlightedPath.isEmpty() && r.path == highlightedPath) {
-            return get_highlighted_text_brush(QGuiApplication::palette());
-        }
-        if (c == ListColumns["WATCHED_COLUMN"]) {
-            if (r.watched == "Yes") return QBrush(QColor("#00e640"));
-            if (r.watched == "No") return QBrush(QColor("#cf000f"));
         }
     }
     return QVariant();
@@ -90,7 +84,7 @@ bool VideosModel::setData(const QModelIndex& index, const QVariant& value, int r
             QDateTime nv = value.toDateTime();
             if (r.lastWatched != nv) { r.lastWatched = nv; changed = true; }
         }
-    }
+        }
     if (changed) {
         emit dataChanged(index, index, { Qt::DisplayRole, Qt::ForegroundRole });
     }
@@ -120,6 +114,7 @@ QVariant VideosModel::headerData(int section, Qt::Orientation orientation, int r
         if (section == ListColumns["RANDOM%_COLUMN"]) return QStringLiteral("Random %");
         if (section == ListColumns["DATE_CREATED_COLUMN"]) return QStringLiteral("Date Created");
         if (section == ListColumns["LAST_WATCHED_COLUMN"]) return QStringLiteral("Last Watched");
+        if (section == ListColumns["BPM_COLUMN"]) return QStringLiteral("BPM");
     }
     if (role == Qt::TextAlignmentRole) {
         if (section == ListColumns["AUTHOR_COLUMN"] || section == ListColumns["NAME_COLUMN"] ||
@@ -129,7 +124,8 @@ QVariant VideosModel::headerData(int section, Qt::Orientation orientation, int r
         if (section == ListColumns["TAGS_COLUMN"] || section == ListColumns["TYPE_COLUMN"] ||
             section == ListColumns["WATCHED_COLUMN"] || section == ListColumns["VIEWS_COLUMN"] ||
             section == ListColumns["RATING_COLUMN"] || section == ListColumns["RANDOM%_COLUMN"] ||
-            section == ListColumns["DATE_CREATED_COLUMN"] || section == ListColumns["LAST_WATCHED_COLUMN"]) {
+            section == ListColumns["DATE_CREATED_COLUMN"] || section == ListColumns["LAST_WATCHED_COLUMN"] ||
+            section == ListColumns["BPM_COLUMN"]) {
             return Qt::AlignHCenter;
         }
     }
@@ -209,6 +205,14 @@ void VideosModel::setRandomPercentAtRow(int row, double value) {
     rows[row].randomPercent = value;
     const int col = ListColumns["RANDOM%_COLUMN"];
     emit dataChanged(index(row, col), index(row, col), { Qt::DisplayRole });
+}
+
+void VideosModel::setBpmAtRow(int row, double bpm) {
+    if (row >= 0 && row < rows.size()) {
+        rows[row].bpm = bpm;
+        QModelIndex idx = index(row, ListColumns["BPM_COLUMN"]);
+        emit dataChanged(idx, idx, {Qt::DisplayRole, CustomRoles::bpm});
+    }
 }
 
 void VideosModel::setRandomPercentColumn(const QMap<int, long double>& probabilities) {

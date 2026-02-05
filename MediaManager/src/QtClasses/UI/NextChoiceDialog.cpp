@@ -170,7 +170,7 @@ void NextChoiceDialog::setChoices(const QList<NextVideoChoice>& newChoices)
 
     const int cardMaxWidth = screenWidth / 4; // aim for ~1/4 screen per card
     const int cardWidth = cardMaxWidth;
-    const int baseCardHeight = 190; // closer to real rendered height including tags/stats
+    const int baseCardHeight = 210; // closer to real rendered height including tags/stats
 
     int cardHeight = baseCardHeight;
     if (this->previewEnabled) {
@@ -281,7 +281,8 @@ QWidget* NextChoiceDialog::buildCard(const NextVideoChoice& choice, int index)
     };
 
     addStat(QStringLiteral("Type"), choice.type, 0);
-    addStat(QStringLiteral("Views"), QString::number(choice.views), 1);
+    addStat(QStringLiteral("BPM"), choice.bpm > 0 ? QString::number(qRound(choice.bpm)) : QStringLiteral("-"), 1);
+    addStat(QStringLiteral("Views"), QString::number(choice.views), 2);
 
     if (choice.rating > 0.0 && this->activeIcon && this->inactiveIcon) {
         QWidget* ratingContainer = new QWidget(card);
@@ -304,13 +305,13 @@ QWidget* NextChoiceDialog::buildCard(const NextVideoChoice& choice, int index)
         ratingLayout->addWidget(ratingLabel, 0, Qt::AlignLeft | Qt::AlignVCenter);
         ratingLayout->addStretch(1);
 
-        grid->addWidget(new QLabel(QStringLiteral("Rating"), card), 2, 0);
-        grid->addWidget(ratingContainer, 2, 1);
+        grid->addWidget(new QLabel(QStringLiteral("Rating"), card), 3, 0);
+        grid->addWidget(ratingContainer, 3, 1);
     } else {
-        addStat(QStringLiteral("Rating"), QStringLiteral("-"), 2);
+        addStat(QStringLiteral("Rating"), QStringLiteral("-"), 3);
     }
 
-    addStat(QStringLiteral("Last W"), choice.lastWatched.isEmpty() ? QStringLiteral("-") : choice.lastWatched, 3);
+    addStat(QStringLiteral("Last W"), choice.lastWatched.isEmpty() ? QStringLiteral("-") : choice.lastWatched, 4);
 
     infoLayout->addLayout(grid);
 

@@ -71,9 +71,14 @@ finishDialog::finishDialog(MainWindow* MW, QWidget* parent) : QDialog(parent)
         // Tags label
         this->ui.tags_label->setText(sourcePathIdx.sibling(sourcePathIdx.row(), ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString());
 		
-		// Set views count
+        // Set views count
         QString viewsText = sourcePathIdx.sibling(sourcePathIdx.row(), ListColumns["VIEWS_COLUMN"]).data(Qt::DisplayRole).toString();
         this->ui.viewsValueLabel->setText(viewsText);
+
+        // Set BPM
+        double bpmVal = sourcePathIdx.sibling(sourcePathIdx.row(), ListColumns["BPM_COLUMN"]).data(CustomRoles::bpm).toDouble();
+        this->ui.bpmValueLabel->setText(bpmVal > 0 ? QString::number(qRound(bpmVal)) : "-");
+
 		
 		// Set last watched date in human-readable format
         QString lastWatchedText = sourcePathIdx.sibling(sourcePathIdx.row(), ListColumns["LAST_WATCHED_COLUMN"]).data(Qt::DisplayRole).toString();

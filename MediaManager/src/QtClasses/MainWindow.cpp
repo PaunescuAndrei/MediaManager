@@ -562,6 +562,16 @@ void MainWindow::VideoInfoNotification() {
             this->notification_dialog->ui.starsLabel->setText(QStringLiteral(" %1 ").arg(stars));
             this->notification_dialog->ui.viewsLabel->setText(QStringLiteral(" %1 Views ").arg(viewsIdx.data(Qt::DisplayRole).toString()));
 
+            const QPersistentModelIndex bpmIdx = srcIdx.sibling(srcIdx.row(), ListColumns["BPM_COLUMN"]);
+            double bpm = bpmIdx.data(CustomRoles::bpm).toDouble();
+            if (bpm > 0) {
+                 this->notification_dialog->ui.bpmContainer->show();
+                 this->notification_dialog->ui.bpmLabel->setText(QStringLiteral("%1 BPM ").arg(qRound(bpm)));
+            } else {
+                 this->notification_dialog->ui.bpmContainer->hide();
+            }
+
+
             QString lastWatchedDisplay = "Never";
             QString lastWatchedTooltip;
             if (lastWatchedIdx.isValid()) {
@@ -1726,6 +1736,7 @@ std::optional<NextVideoChoice> MainWindow::buildChoiceFromPath(const QString& pa
     }
     choice.views = src.sibling(row, ListColumns["VIEWS_COLUMN"]).data(Qt::DisplayRole).toInt();
     choice.rating = src.sibling(row, ListColumns["RATING_COLUMN"]).data(CustomRoles::rating).toDouble();
+    choice.bpm = src.sibling(row, ListColumns["BPM_COLUMN"]).data(CustomRoles::bpm).toDouble();
     choice.resetProgress = reset_progress;
     return choice;
 }

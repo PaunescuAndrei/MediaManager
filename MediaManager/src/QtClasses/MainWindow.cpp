@@ -1765,7 +1765,7 @@ QList<NextVideoChoice> MainWindow::buildRandomCandidates(const NextVideoSettings
         weighted_settings.bias_general = 0;
     }
     probabilities = utils::calculateProbabilities(pool, weighted_settings.bias_views, weighted_settings.bias_rating,
-        weighted_settings.bias_tags, weighted_settings.bias_general, weighted_settings.no_views_weight, weighted_settings.no_rating_weight,
+        weighted_settings.bias_tags, weighted_settings.bias_bpm, weighted_settings.bias_general, weighted_settings.no_views_weight, weighted_settings.no_rating_weight,
         weighted_settings.no_tags_weight);
 
     QRandomGenerator generator;
@@ -1780,7 +1780,7 @@ QList<NextVideoChoice> MainWindow::buildRandomCandidates(const NextVideoSettings
     QList<VideoWeightedData> remaining = pool;
     for (int i = 0; i < picks && !remaining.isEmpty(); ++i) {
         const QString selected_path = utils::weightedRandomChoice(remaining, generator, weighted_settings.bias_views, weighted_settings.bias_rating,
-            weighted_settings.bias_tags, weighted_settings.bias_general, weighted_settings.no_views_weight, weighted_settings.no_rating_weight, weighted_settings.no_tags_weight);
+            weighted_settings.bias_tags, weighted_settings.bias_bpm, weighted_settings.bias_general, weighted_settings.no_views_weight, weighted_settings.no_rating_weight, weighted_settings.no_tags_weight);
         if (selected_path.isEmpty()) break;
 
         auto choice = this->buildChoiceFromPath(selected_path, reset_progress);
@@ -1864,7 +1864,7 @@ QList<NextVideoChoice> MainWindow::buildSeriesRandomCandidates(const QPersistent
     WeightedBiasSettings weighted_settings = this->getWeightedBiasSettings();
     if (!weighted_settings.weighted_random_enabled) weighted_settings.bias_general = 0;
     QMap<int, long double> probabilities = utils::calculateProbabilities(author_weighted_data, weighted_settings.bias_views, weighted_settings.bias_rating,
-        weighted_settings.bias_tags, weighted_settings.bias_general,
+        weighted_settings.bias_tags, weighted_settings.bias_bpm, weighted_settings.bias_general,
         weighted_settings.no_views_weight, weighted_settings.no_rating_weight,
         weighted_settings.no_tags_weight);
 
@@ -1876,7 +1876,7 @@ QList<NextVideoChoice> MainWindow::buildSeriesRandomCandidates(const QPersistent
     QList<VideoWeightedData> remaining = author_weighted_data;
     for (int i = 0; i < picks && !remaining.isEmpty(); ++i) {
         QString selected_path = utils::weightedRandomChoice(remaining, generator,
-            weighted_settings.bias_views, weighted_settings.bias_rating, weighted_settings.bias_tags,
+            weighted_settings.bias_views, weighted_settings.bias_rating, weighted_settings.bias_tags, weighted_settings.bias_bpm,
             weighted_settings.bias_general, weighted_settings.no_views_weight, weighted_settings.no_rating_weight,
             weighted_settings.no_tags_weight);
 
@@ -2813,6 +2813,7 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     config->set("random_views_bias_minus", QString::number(dialog->ui.viewsBiasMinusSpinBox->value()));
     config->set("random_rating_bias_minus", QString::number(dialog->ui.ratingBiasMinusSpinBox->value()));
     config->set("random_tags_bias_minus", QString::number(dialog->ui.tagsBiasMinusSpinBox->value()));
+    config->set("random_bpm_bias_minus", QString::number(dialog->ui.bpmBiasMinusSpinBox->value()));
     config->set("random_no_views_weight_minus", QString::number(dialog->ui.noViewsMinusSpinBox->value()));
     config->set("random_no_ratings_weight_minus", QString::number(dialog->ui.noRatingMinusSpinBox->value()));
     config->set("random_no_tags_weight_minus", QString::number(dialog->ui.noTagsMinusSpinBox->value()));
@@ -2828,6 +2829,7 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     config->set("random_views_bias_plus", QString::number(dialog->ui.viewsBiasPlusSpinBox->value()));
     config->set("random_rating_bias_plus", QString::number(dialog->ui.ratingBiasPlusSpinBox->value()));
     config->set("random_tags_bias_plus", QString::number(dialog->ui.tagsBiasPlusSpinBox->value()));
+    config->set("random_bpm_bias_plus", QString::number(dialog->ui.bpmBiasPlusSpinBox->value()));
     config->set("random_no_views_weight_plus", QString::number(dialog->ui.noViewsPlusSpinBox->value()));
     config->set("random_no_ratings_weight_plus", QString::number(dialog->ui.noRatingPlusSpinBox->value()));
     config->set("random_no_tags_weight_plus", QString::number(dialog->ui.noTagsPlusSpinBox->value()));
@@ -2976,6 +2978,7 @@ WeightedBiasSettings MainWindow::getWeightedBiasSettings() const {
         settings.bias_views = this->App->config->get("random_views_bias_plus").toDouble();
         settings.bias_rating = this->App->config->get("random_rating_bias_plus").toDouble();
         settings.bias_tags = this->App->config->get("random_tags_bias_plus").toDouble();
+        settings.bias_bpm = this->App->config->get("random_bpm_bias_plus").toDouble();
         settings.no_views_weight = this->App->config->get("random_no_views_weight_plus").toDouble();
         settings.no_rating_weight = this->App->config->get("random_no_ratings_weight_plus").toDouble();
         settings.no_tags_weight = this->App->config->get("random_no_tags_weight_plus").toDouble();
@@ -2986,6 +2989,7 @@ WeightedBiasSettings MainWindow::getWeightedBiasSettings() const {
         settings.bias_views = this->App->config->get("random_views_bias_minus").toDouble();
         settings.bias_rating = this->App->config->get("random_rating_bias_minus").toDouble();
         settings.bias_tags = this->App->config->get("random_tags_bias_minus").toDouble();
+        settings.bias_bpm = this->App->config->get("random_bpm_bias_minus").toDouble();
         settings.no_views_weight = this->App->config->get("random_no_views_weight_minus").toDouble();
         settings.no_rating_weight = this->App->config->get("random_no_ratings_weight_minus").toDouble();
         settings.no_tags_weight = this->App->config->get("random_no_tags_weight_minus").toDouble();
@@ -3006,7 +3010,7 @@ QString MainWindow::getRandomVideoPath(QString seed, WeightedBiasSettings weight
         if (not weighted_settings.weighted_random_enabled) {
             weighted_settings.bias_general = 0;
         }
-        return utils::weightedRandomChoice(videos, generator, weighted_settings.bias_views, weighted_settings.bias_rating, weighted_settings.bias_tags, weighted_settings.bias_general, weighted_settings.no_views_weight, weighted_settings.no_rating_weight, weighted_settings.no_tags_weight);
+        return utils::weightedRandomChoice(videos, generator, weighted_settings.bias_views, weighted_settings.bias_rating, weighted_settings.bias_tags, weighted_settings.bias_bpm, weighted_settings.bias_general, weighted_settings.no_views_weight, weighted_settings.no_rating_weight, weighted_settings.no_tags_weight);
     }
     return "";
 }
@@ -4527,7 +4531,7 @@ void MainWindow::updateVideoListRandomProbabilities() {
                             bias_settings.bias_general = 0;
                         }
                         probabilities = utils::calculateProbabilities(author_weighted_data, bias_settings.bias_views, bias_settings.bias_rating,
-                            bias_settings.bias_tags, bias_settings.bias_general,
+                            bias_settings.bias_tags, bias_settings.bias_bpm, bias_settings.bias_general,
                             bias_settings.no_views_weight, bias_settings.no_rating_weight,
                             bias_settings.no_tags_weight);
                     }
@@ -4543,7 +4547,7 @@ void MainWindow::updateVideoListRandomProbabilities() {
                     bias_settings.bias_general = 0;
                 }
                 probabilities = utils::calculateProbabilities(items, bias_settings.bias_views, bias_settings.bias_rating,
-                    bias_settings.bias_tags, bias_settings.bias_general,
+                    bias_settings.bias_tags, bias_settings.bias_bpm, bias_settings.bias_general,
                     bias_settings.no_views_weight, bias_settings.no_rating_weight,
                     bias_settings.no_tags_weight);
             }
@@ -4662,13 +4666,14 @@ QList<VideoWeightedData> MainWindow::calculateAuthorWeights(const QMap<QString, 
         if (!idx.isValid() || idx.model() != this->videosModel) continue;
 
         // Aggregate stats in single pass
-        double total_views = 0, total_rating = 0, total_tags = 0;
+        double total_views = 0, total_rating = 0, total_tags = 0, total_bpm = 0;
         const int count = data.videos.size();
 
         for (const VideoWeightedData& v : data.videos) {
             total_views += v.views;
             total_rating += v.rating;
             total_tags += v.tagsWeight;
+            total_bpm += v.bpm;
         }
 
         // Build result with cached pathIdx
@@ -4680,6 +4685,7 @@ QList<VideoWeightedData> MainWindow::calculateAuthorWeights(const QMap<QString, 
         author_data.views = count ? total_views / count : 0.0;
         author_data.rating = count ? total_rating / count : 0.0;
         author_data.tagsWeight = count ? total_tags / count : 0.0;
+        author_data.bpm = count ? total_bpm / count : 0.0;
 
         author_weighted_data.append(author_data);
     }

@@ -1097,7 +1097,7 @@ long double utils::normalize(long double x, long double maxVal)
 	return (maxVal > 0) ? x / maxVal : 0.0;
 }
 
-QList<long double> utils::calculateWeights(const QList<VideoWeightedData>& items, double biasViews, double biasRating, double biasTags, double biasGeneral, long double maxViews, long double maxRating, long double maxTagsWeight, long double no_views_weight, long double no_rating_weight, long double no_tags_weight)
+QList<long double> utils::calculateWeights(const QList<VideoWeightedData>& items, double biasViews, double biasRating, double biasTags, double biasBpm, double biasGeneral, long double maxViews, long double maxRating, long double maxTagsWeight, long double maxBpm, long double no_views_weight, long double no_rating_weight, long double no_tags_weight)
 {
 	const int size = items.size();
 	QList<long double> weights;
@@ -1107,6 +1107,7 @@ QList<long double> utils::calculateWeights(const QList<VideoWeightedData>& items
 	const long double scaledBiasViews = (maxViews > 0 && biasViews != 0.0) ? (biasViews / maxViews) : 0.0L;
 	const long double scaledBiasRating = (maxRating > 0 && biasRating != 0.0) ? (biasRating / maxRating) : 0.0L;
 	const long double scaledBiasTags = (maxTagsWeight > 0 && biasTags != 0.0) ? (biasTags / maxTagsWeight) : 0.0L;
+	const long double scaledBiasBpm = (maxBpm > 0 && biasBpm != 0.0) ? (biasBpm / maxBpm) : 0.0L;
 
 	// Pre-calculate fallback values scaled by bias
 	const long double viewFallback = biasViews * no_views_weight;
@@ -1120,6 +1121,8 @@ QList<long double> utils::calculateWeights(const QList<VideoWeightedData>& items
 		weight += (item.views == 0) ? viewFallback : (item.views * scaledBiasViews);
 		weight += (item.rating == 0) ? ratingFallback : (item.rating * scaledBiasRating);
 		weight += (item.tagsWeight == 0) ? tagsFallback : (item.tagsWeight * scaledBiasTags);
+		if (item.bpm > 0)
+			weight += (item.bpm * scaledBiasBpm);
 
 		// Apply general bias
 		// biasGeneral Value:
@@ -1135,7 +1138,7 @@ QList<long double> utils::calculateWeights(const QList<VideoWeightedData>& items
 	return weights;
 }
 
-QString utils::weightedRandomChoice(const QList<VideoWeightedData>& items, QRandomGenerator& generator, double biasViews, double biasRating, double biasTags, double biasGeneral, long double no_views_weight, long double no_rating_weight, long double no_tags_weight) {
+QString utils::weightedRandomChoice(const QList<VideoWeightedData>& items, QRandomGenerator& generator, double biasViews, double biasRating, double biasTags, double biasBpm, double biasGeneral, long double no_views_weight, long double no_rating_weight, long double no_tags_weight) {
 	if (items.empty()) return "";
 
 	// Fast path for uniform random (no bias)
@@ -1146,16 +1149,17 @@ QString utils::weightedRandomChoice(const QList<VideoWeightedData>& items, QRand
 	const int size = items.size();
 
 	// Find max values in a single pass
-	long double maxViews = 0, maxRating = 0, maxTagWeight = 0;
+	long double maxViews = 0, maxRating = 0, maxTagWeight = 0, maxBpm = 0;
 	for (const VideoWeightedData& item : items) {
 		if (item.views > maxViews) maxViews = item.views;
 		if (item.rating > maxRating) maxRating = item.rating;
 		if (item.tagsWeight > maxTagWeight) maxTagWeight = item.tagsWeight;
+		if (item.bpm > maxBpm) maxBpm = item.bpm;
 	}
 
 	// Calculate weights
-	QList<long double> weights = utils::calculateWeights(items, biasViews, biasRating, biasTags, biasGeneral,
-		maxViews, maxRating, maxTagWeight,
+	QList<long double> weights = utils::calculateWeights(items, biasViews, biasRating, biasTags, biasBpm, biasGeneral,
+		maxViews, maxRating, maxTagWeight, maxBpm,
 		no_views_weight, no_rating_weight, no_tags_weight);
 
 	// Build prefix sum array for binary search
@@ -1183,20 +1187,21 @@ QString utils::weightedRandomChoice(const QList<VideoWeightedData>& items, QRand
 	return items[index].path;
 }
 
-QMap<int, long double> utils::calculateProbabilities(const QList<VideoWeightedData>& items, double biasViews, double biasRating, double biasTags, double biasGeneral, long double no_views_weight, long double no_rating_weight, long double no_tags_weight) {
+QMap<int, long double> utils::calculateProbabilities(const QList<VideoWeightedData>& items, double biasViews, double biasRating, double biasTags, double biasBpm, double biasGeneral, long double no_views_weight, long double no_rating_weight, long double no_tags_weight) {
 	QMap<int, long double> probabilities;
 	if (items.empty()) {
 		return probabilities;
 	}
 
-	long double maxViews = 0, maxRating = 0, maxTagsWeight = 0;
+	long double maxViews = 0, maxRating = 0, maxTagsWeight = 0, maxBpm = 0;
 	for (const auto& item : items) {
 		maxViews = std::max(maxViews, (long double)item.views);
 		maxRating = std::max(maxRating, (long double)item.rating);
 		maxTagsWeight = std::max(maxTagsWeight, (long double)item.tagsWeight);
+		maxBpm = std::max(maxBpm, (long double)item.bpm);
 	}
 
-	QList<long double> weights = utils::calculateWeights(items, biasViews, biasRating, biasTags, biasGeneral, maxViews, maxRating, maxTagsWeight, no_views_weight, no_rating_weight, no_tags_weight);
+	QList<long double> weights = utils::calculateWeights(items, biasViews, biasRating, biasTags, biasBpm, biasGeneral, maxViews, maxRating, maxTagsWeight, maxBpm, no_views_weight, no_rating_weight, no_tags_weight);
 	long double totalWeight = std::accumulate(weights.begin(), weights.end(), 0.0L);
 
 	if (totalWeight == 0) {

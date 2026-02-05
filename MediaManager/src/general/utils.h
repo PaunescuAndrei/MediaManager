@@ -81,9 +81,9 @@ namespace utils {
 	QColor get_vibrant_color_exponential(const QColor& color, float saturation_strength = 0.1, float lightning_strength = 0.1);
 	color_area& get_weighted_random_color(QList<color_area>& colors);
 	inline long double normalize(long double x, long double maxVal);
-	QList<long double> calculateWeights(const QList<VideoWeightedData>& items, double biasViews, double biasRating, double biasTags, double biasGeneral, long double maxViews, long double maxRating, long double maxTagsWeight, long double no_views_weight = 0, long double no_rating_weight = 0, long double no_tags_weight = 0);
-	QString weightedRandomChoice(const QList<VideoWeightedData>& items, QRandomGenerator& generator, double biasViews, double biasRating, double biasTags, double biasGeneral, long double no_views_weight = 0, long double no_rating_weight = 0, long double no_tags_weight = 0);
-	QMap<int, long double> calculateProbabilities(const QList<VideoWeightedData>& items, double biasViews, double biasRating, double biasTags, double biasGeneral, long double no_views_weight, long double no_rating_weight, long double no_tags_weight);
+	QList<long double> calculateWeights(const QList<VideoWeightedData>& items, double biasViews, double biasRating, double biasTags, double biasBpm, double biasGeneral, long double maxViews, long double maxRating, long double maxTagsWeight, long double maxBpm, long double no_views_weight = 0, long double no_rating_weight = 0, long double no_tags_weight = 0);
+	QString weightedRandomChoice(const QList<VideoWeightedData>& items, QRandomGenerator& generator, double biasViews, double biasRating, double biasTags, double biasBpm, double biasGeneral, long double no_views_weight = 0, long double no_rating_weight = 0, long double no_tags_weight = 0);
+	QMap<int, long double> calculateProbabilities(const QList<VideoWeightedData>& items, double biasViews, double biasRating, double biasTags, double biasBpm, double biasGeneral, long double no_views_weight, long double no_rating_weight, long double no_tags_weight);
 	quint32 stringToSeed(const QString& textSeed);
 
 	template <typename Func, typename... Args>

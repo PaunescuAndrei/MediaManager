@@ -383,6 +383,19 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 	});
 	this->ui.tagsBiasMinusSpinBox->setValue(mw->App->config->get("random_tags_bias_minus").toDouble());
 
+	this->ui.bpmBiasMinusSlider->installEventFilter(filter);
+	connect(this->ui.bpmBiasMinusSlider, &QSlider::valueChanged, this, [this](int value) {
+		this->ui.bpmBiasMinusSpinBox->blockSignals(true);
+		this->ui.bpmBiasMinusSpinBox->setValue(value / 100.0);
+		this->ui.bpmBiasMinusSpinBox->blockSignals(false);
+	});
+	connect(this->ui.bpmBiasMinusSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+		this->ui.bpmBiasMinusSlider->blockSignals(true);
+		this->ui.bpmBiasMinusSlider->setValue(value * 100);
+		this->ui.bpmBiasMinusSlider->blockSignals(false);
+	});
+	this->ui.bpmBiasMinusSpinBox->setValue(mw->App->config->get("random_bpm_bias_minus").toDouble());
+
 	this->ui.noViewsMinusSlider->installEventFilter(filter);
 	connect(this->ui.noViewsMinusSlider, &QSlider::valueChanged, this, [this](int value) {
 		this->ui.noViewsMinusSpinBox->blockSignals(true);
@@ -475,6 +488,19 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 		this->ui.tagsBiasPlusSlider->blockSignals(false);
 	});
 	this->ui.tagsBiasPlusSpinBox->setValue(mw->App->config->get("random_tags_bias_plus").toDouble());
+
+	this->ui.bpmBiasPlusSlider->installEventFilter(filter);
+	connect(this->ui.bpmBiasPlusSlider, &QSlider::valueChanged, this, [this](int value) {
+		this->ui.bpmBiasPlusSpinBox->blockSignals(true);
+		this->ui.bpmBiasPlusSpinBox->setValue(value / 100.0);
+		this->ui.bpmBiasPlusSpinBox->blockSignals(false);
+	});
+	connect(this->ui.bpmBiasPlusSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
+		this->ui.bpmBiasPlusSlider->blockSignals(true);
+		this->ui.bpmBiasPlusSlider->setValue(value * 100);
+		this->ui.bpmBiasPlusSlider->blockSignals(false);
+	});
+	this->ui.bpmBiasPlusSpinBox->setValue(mw->App->config->get("random_bpm_bias_plus").toDouble());
 
 	this->ui.noViewsPlusSlider->installEventFilter(filter);
 	connect(this->ui.noViewsPlusSlider, &QSlider::valueChanged, this, [this](int value) {

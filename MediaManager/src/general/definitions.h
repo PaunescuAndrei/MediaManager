@@ -18,6 +18,7 @@ struct VideoWeightedData {
 	double views;
 	double rating;
 	double tagsWeight;
+	double bpm;
 };
 
 struct NextVideoChoice {
@@ -46,6 +47,7 @@ struct WeightedBiasSettings {
 	double bias_views = 0;
 	double bias_rating = 0;
 	double bias_tags = 0;
+	double bias_bpm = 0;
 	double no_views_weight = 0;
 	double no_rating_weight = 0;
 	double no_tags_weight = 0;

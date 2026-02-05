@@ -2,6 +2,7 @@
 #include "MainApp.h"
 #include "version.h"
 #include "MainWindow.h"
+#include "Models/VideosModel.h"
 #include "stylesQt.h"
 #include "utils.h"
 #include "shobjidl_core.h"
@@ -75,6 +76,19 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 	this->MascotsExtractColor = this->config->get_bool("mascots_color_theme");
 
 	this->VW = new VideoWatcherQt(this);
+
+	int bpmThreads = this->config->get("bpm_threads").toInt();
+	if (bpmThreads <= 0) bpmThreads = 2;
+	this->BpmManager = new CalculateBpmManager(bpmThreads, this);
+	connect(this->BpmManager, &CalculateBpmManager::bpmCalculated, this, [this](int id, double bpm) {
+		this->db->updateBpm(id, bpm);
+		if (this->mainWindow && this->mainWindow->videosModel) {
+			QPersistentModelIndex idx = this->mainWindow->modelIndexById(id);
+			if (idx.isValid()) {
+				this->mainWindow->videosModel->setBpmAtRow(idx.row(), bpm);
+			}
+		}
+	});
 
 	this->mainWindow = new MainWindow(nullptr,this);
 
@@ -218,6 +232,9 @@ void MainApp::stop_handle()
 	this->VW->quit();
 	this->MascotsGenerator->quit();
 	this->MascotsAnimation->quit();
+	if (this->BpmManager) {
+		this->BpmManager->stop();
+	}
 	if (this->musicPlayer) {
 		this->musicPlayer->stop();
 	}
@@ -274,6 +291,8 @@ MainApp::~MainApp()
 	this->VW->deleteLater();
 	this->MascotsAnimation->deleteLater();
 	this->MascotsGenerator->deleteLater();
+	if (this->BpmManager)
+		this->BpmManager->deleteLater();
 	this->logger->log("MainApp cleanup finished.", "INFO");
 	this->logger->deleteLater();
 	this->ErrorDialog->deleteLater();

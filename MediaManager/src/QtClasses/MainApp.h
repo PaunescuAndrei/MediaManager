@@ -13,6 +13,7 @@
 #include <QLocalServer>
 #include "logger.h"
 #include <UIAutomationClient.h>
+#include "CalculateBpmManager.h"
 
 #define qMainApp (static_cast<MainApp *>(QCoreApplication::instance()))
 
@@ -50,6 +51,7 @@ public:
     QString currentDB;
     Logger *logger;
     QErrorMessage* ErrorDialog = nullptr;
+    CalculateBpmManager* BpmManager = nullptr;
     MainApp(int& argc, char** argv);
     void createMissingDirs();
     void toggleLogWindow();

@@ -895,7 +895,38 @@ void MainWindow::refreshVisibility(QString search_text)
     this->old_search = search_text;
 }
 
+void MainWindow::queueBpmCalculation() {
+    if (!this->App->BpmManager) return;
+    
+    QString bpmTypesStr = this->App->config->get("bpm_calculation_types");
+    if (bpmTypesStr.isEmpty()) return;
+    
+    QStringList types = bpmTypesStr.split(',', Qt::SkipEmptyParts);
+    if (types.isEmpty()) return;
+    
+    if (!this->videosModel) return;
+
+    int queuedCount = 0;
+    int rowCount = this->videosModel->rowCount();
+
+    for (int i = 0; i < rowCount; ++i) {
+        const VideoData* row = this->videosModel->rowAt(i);
+        if (row && (row->bpm <= 0) && types.contains(row->type)) {
+            // Enqueue only if not already active
+            if (!this->App->BpmManager->is_id_active(row->id)) {
+                this->App->BpmManager->enqueue_work({row->id, row->path});
+                queuedCount++;
+            }
+        }
+    }
+    
+    if (queuedCount > 0) {
+        this->App->BpmManager->start();
+    }
+}
+
 void MainWindow::calculateBpm(const QList<int>& ids) {
+
     if (ids.isEmpty()) return;
 
     QList<QPair<int, QString>> workItems;
@@ -3850,6 +3881,7 @@ void MainWindow::populateList(bool selectcurrent) {
     this->videosProxy->setSearchText(search_text);
     this->updateTotalListLabel();
     this->updateVideoListRandomProbabilitiesIfVisible();
+    this->queueBpmCalculation();
 }
 
 void MainWindow::videosWidgetHeaderContextMenu(QPoint point) {

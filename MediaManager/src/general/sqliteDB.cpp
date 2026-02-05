@@ -1075,7 +1075,40 @@ void sqliteDB::incrementTimeSessionToday(double value) {
     this->setMainInfoValue("timeSessionToday", "ALL", QString::number(time));
 }
 
+QList<VideoData> sqliteDB::getVideosMissingBpm(const QStringList& types, QString category) {
+    QList<VideoData> result;
+    if (types.isEmpty()) return result;
+
+    QSqlQuery query = QSqlQuery(this->db);
+    
+    QStringList escapedTypes;
+    for (const QString& t : types) {
+        escapedTypes << QStringLiteral("'%1'").arg(t);
+    }
+    
+    QString query_string = QStringLiteral("SELECT id, path FROM videodetails WHERE category = :category AND (bpm IS NULL OR bpm <= 0) AND type IN (%1)").arg(escapedTypes.join(","));
+    
+    query.prepare(query_string);
+    query.bindValue(":category", category);
+    
+    if (!query.exec()) {
+        if (qMainApp) {
+            qMainApp->logger->log(QStringLiteral("Database Error at getVideosMissingBpm: %1").arg(query.lastError().text()), "Database", query.lastError().text());
+        }
+        return result;
+    }
+    
+    while (query.next()) {
+        VideoData row;
+        row.id = query.value(0).toInt();
+        row.path = query.value(1).toString();
+        result.append(row);
+    }
+    return result;
+}
+
 void sqliteDB::createTables() {
+
     QString videodetails = " CREATE TABLE \"videodetails\" ("
         "\"id\"	INTEGER NOT NULL,"
         "\"path\"	TEXT NOT NULL,"

@@ -30,6 +30,8 @@
     <ClCompile Include="src\general\generateThumbnailManager.cpp" />
     <ClCompile Include="src\general\MpcPlayer.cpp" />
     <ClCompile Include="src\general\utils.cpp" />
+    <ClCompile Include="src\general\CalculateBpmManager.cpp" />
+    <ClCompile Include="src\general\CalculateBpmRunnable.cpp" />
     <ClCompile Include="src\general\generateThumbnailRunnable.cpp" />
     <ClCompile Include="src\general\IconChanger.cpp" />
     <ClCompile Include="src\general\mascotsAnimationsThread.cpp" />
@@ -135,6 +137,8 @@
     <ClInclude Include="src\general\definitions.h" />
     <ClInclude Include="src\general\EventLock.h" />
     <ClInclude Include="src\general\FilterSettings.h" />
+    <QtMoc Include="src\general\CalculateBpmManager.h" />
+    <QtMoc Include="src\general\CalculateBpmRunnable.h" />
     <QtMoc Include="src\general\generateThumbnailManager.h" />
     <QtMoc Include="src\general\MpcPlayer.h" />
     <ClInclude Include="src\general\PlayerCommands.h" />

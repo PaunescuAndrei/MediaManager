@@ -153,7 +153,9 @@ public:
     void DeleteDialogButton(const QList<int>& ids);
     void refreshHeadersVisibility();
     void videosWidgetHeaderContextMenu(QPoint point);
+    void queueBpmCalculation();
     void updateHeaderSettings(QStringList settings);
+
     void videosWidgetContextMenu(QPoint point);
     VideosTagsDialog* editTags(const QList<int>& ids, QWidget* parent = nullptr);
 

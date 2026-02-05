@@ -129,6 +129,8 @@ void Config::init_defaults() {
 		{"preview_overlay_pad_x", "4"},
 		{"preview_overlay_pad_y", "2"},
 		{"preview_overlay_margin", "6"},
+		{"bpm_threads", "2"},
+		{"bpm_calculation_types", ""},
 	});
 }
 

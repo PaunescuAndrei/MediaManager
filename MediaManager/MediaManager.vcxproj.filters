@@ -149,6 +149,12 @@
     <ClCompile Include="src\general\utils.cpp">
       <Filter>Source Files\general</Filter>
     </ClCompile>
+    <ClCompile Include="src\general\CalculateBpmManager.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\CalculateBpmRunnable.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
     <ClCompile Include="src\general\generateThumbnailRunnable.cpp">
       <Filter>Source Files\general</Filter>
     </ClCompile>
@@ -554,6 +560,12 @@
     </QtMoc>
     <QtMoc Include="src\QtClasses\Widgets\VideoPreviewWidget.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="src\general\CalculateBpmManager.h">
+      <Filter>Header Files\general</Filter>
+    </QtMoc>
+    <QtMoc Include="src\general\CalculateBpmRunnable.h">
+      <Filter>Header Files\general</Filter>
     </QtMoc>
     <QtMoc Include="src\general\generateThumbnailRunnable.h">
       <Filter>Header Files\general</Filter>

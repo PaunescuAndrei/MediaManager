@@ -3,6 +3,7 @@
 #include <QThreadPool>
 #include <QSet>
 #include <QMutex>
+#include <QList>
 #include "NonBlockingQueue.h"
 #include "CalculateBpmRunnable.h"
 #include <atomic>
@@ -29,6 +30,9 @@ public:
 
     void setMaxThreadCount(int count);
 
+    void requestCancellation();
+    void clearCancellation();
+
 signals:
     void bpmCalculated(int id, double bpm);
 
@@ -37,7 +41,10 @@ private:
     NonBlockingQueue<BpmWorkItem> queue;
     std::atomic<int> work_count{0};
     std::atomic<bool> is_running{false};
+    std::atomic<bool> cancellation_requested{false};
     
     QSet<int> activeIds;
     QMutex activeIdsMutex;
+    QList<CalculateBpmRunnable*> runnables;
+    QMutex runnablesMutex;
 };

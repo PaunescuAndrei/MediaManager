@@ -4,6 +4,7 @@
 CalculateBpmManager::CalculateBpmManager(int threads_number, QObject* parent)
     : QObject(parent) {
     this->is_running = false;
+    this->cancellation_requested = false;
     this->threadPool = new QThreadPool(this);
     this->threadPool->setMaxThreadCount(threads_number);
 }
@@ -60,6 +61,7 @@ void CalculateBpmManager::clear_work() {
 
 void CalculateBpmManager::start() {
     this->is_running = true;
+    this->cancellation_requested = false;
     if (this->queue.isEmpty()) {
         return;
     }
@@ -73,6 +75,13 @@ void CalculateBpmManager::start() {
         if (this->queue.isEmpty()) break; 
         
         CalculateBpmRunnable* task = new CalculateBpmRunnable(&this->queue, this);
+        task->setCancelFlag(&this->cancellation_requested);
+        
+        {
+            QMutexLocker locker(&runnablesMutex);
+            runnables.append(task);
+        }
+        
         connect(task, &CalculateBpmRunnable::bpmCalculated, this, &CalculateBpmManager::bpmCalculated);
         
         // QThreadPool takes ownership if autoDelete is true (default)
@@ -84,14 +93,21 @@ void CalculateBpmManager::start() {
 
 void CalculateBpmManager::stop() {
     this->is_running = false;
+    this->cancellation_requested = true;
     this->clear_work();
     if (this->threadPool) {
         this->threadPool->waitForDone();
     }
+    
+    // Clear runnables list
+    {
+        QMutexLocker locker(&runnablesMutex);
+        runnables.clear();
+    }
 }
 
 bool CalculateBpmManager::isRunning() const {
-    return this->is_running;
+    return this->is_running.load();
 }
 
 void CalculateBpmManager::add_work_count(int value) {
@@ -103,7 +119,7 @@ void CalculateBpmManager::set_work_count(int value) {
 }
 
 int CalculateBpmManager::get_work_count() {
-    return this->work_count;
+    return this->work_count.load();
 }
 
 bool CalculateBpmManager::is_id_active(int id) {
@@ -118,4 +134,12 @@ void CalculateBpmManager::remove_active_id(int id) {
 
 void CalculateBpmManager::setMaxThreadCount(int count) {
     this->threadPool->setMaxThreadCount(count);
+}
+
+void CalculateBpmManager::requestCancellation() {
+    this->cancellation_requested = true;
+}
+
+void CalculateBpmManager::clearCancellation() {
+    this->cancellation_requested = false;
 }

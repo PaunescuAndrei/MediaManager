@@ -9,10 +9,18 @@
 #include <numeric>
 
 CalculateBpmRunnable::CalculateBpmRunnable(NonBlockingQueue<BpmWorkItem>* queue, CalculateBpmManager* manager, QObject* parent)
-    : QObject(parent), QRunnable(), queue(queue), manager(manager) {
+    : QObject(parent), QRunnable(), queue(queue), manager(manager), cancelFlag(nullptr) {
 }
 
 CalculateBpmRunnable::~CalculateBpmRunnable() {
+}
+
+void CalculateBpmRunnable::setCancelFlag(std::atomic<bool>* flag) {
+    this->cancelFlag = flag;
+}
+
+void CalculateBpmRunnable::clearCancelFlag() {
+    this->cancelFlag = nullptr;
 }
 
 void CalculateBpmRunnable::run() {
@@ -24,7 +32,7 @@ void CalculateBpmRunnable::run() {
     }
     catch (const std::exception& e) {
         qDebug() << "Failed to initialize BeatThis in Runnable: " << e.what();
-        return; 
+        return;
     }
 
     while (!this->queue->isEmpty() && this->manager->isRunning()) {
@@ -36,15 +44,29 @@ void CalculateBpmRunnable::run() {
                 break;
             }
 
-            // Double check if we still need to process this (manager might have cleared work, though queue pop handles concurrency)
-            
+            // Check cancellation before processing
+            if (this->cancelFlag && this->cancelFlag->load()) {
+                break;
+            }
+
             std::vector<float> audioData;
             int sampleRate = 0;
             int channels = 0;
 
-            if (utils::readAudioFile(item.path, audioData, sampleRate, channels)) {
+            // Read audio file with cancellation support
+            if (utils::readAudioFile(item.path, audioData, sampleRate, channels, this->cancelFlag)) {
+                // Check cancellation after audio read
+                if (this->cancelFlag && this->cancelFlag->load()) {
+                    break;
+                }
+
                 try {
                     BeatThis::BeatResult result = beatAnalyzer->process_audio(audioData, sampleRate, channels);
+                    
+                    // Check cancellation after BeatThis processing
+                    if (this->cancelFlag && this->cancelFlag->load()) {
+                        break;
+                    }
                     
                     std::vector<float>& beats = result.beats;
                     double bpm = -1.0;

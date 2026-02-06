@@ -23,6 +23,7 @@
 #include <QEventLoop>
 #include <QUrl>
 #include <QTimer>
+#include <atomic>
 
 // SIMD intrinsics
 #if defined(__AVX2__)
@@ -236,7 +237,7 @@ namespace AudioConversion {
 }
 
 // Optimized helper to read audio file using QAudioDecoder with SIMD conversion
-bool utils::readAudioFile(const QString& path, std::vector<float>& audioData, int& sampleRate, int& channels) {
+bool utils::readAudioFile(const QString& path, std::vector<float>& audioData, int& sampleRate, int& channels, const std::atomic<bool>* cancelFlag) {
     QAudioDecoder decoder;
     decoder.setSource(QUrl::fromLocalFile(path));
 
@@ -244,6 +245,7 @@ bool utils::readAudioFile(const QString& path, std::vector<float>& audioData, in
     QTimer timer;
     timer.setSingleShot(true);
     bool success = true;
+    bool cancelled = false;
     audioData.clear();
     sampleRate = 0;
     channels = 0;
@@ -252,8 +254,20 @@ bool utils::readAudioFile(const QString& path, std::vector<float>& audioData, in
     std::vector<QAudioBuffer> buffers;
     buffers.reserve(100);
 
+    // Check cancellation before starting
+    if (cancelFlag && cancelFlag->load()) {
+        return false;
+    }
+
     // Collect all buffers first
     QObject::connect(&decoder, &QAudioDecoder::bufferReady, [&]() {
+        if (cancelFlag && cancelFlag->load()) {
+            decoder.stop();
+            cancelled = true;
+            timer.stop();
+            loop.quit();
+            return;
+        }
         timer.start(15000);
         QAudioBuffer buffer = decoder.read();
         if (buffer.isValid()) {
@@ -263,7 +277,7 @@ bool utils::readAudioFile(const QString& path, std::vector<float>& audioData, in
 
     QObject::connect(&decoder, &QAudioDecoder::finished, [&]() {
         timer.stop();
-        if (buffers.empty()) {
+        if (cancelled || buffers.empty()) {
             success = false;
             loop.quit();
             return;

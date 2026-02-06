@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QString>
 #include "NonBlockingQueue.h"
+#include <atomic>
 
 struct BpmWorkItem {
     int id;
@@ -18,10 +19,14 @@ public:
     ~CalculateBpmRunnable();
     void run() override;
 
+    void setCancelFlag(std::atomic<bool>* flag);
+    void clearCancelFlag();
+
 signals:
     void bpmCalculated(int id, double bpm);
 
 private:
     NonBlockingQueue<BpmWorkItem>* queue;
     CalculateBpmManager* manager;
+    std::atomic<bool>* cancelFlag;
 };

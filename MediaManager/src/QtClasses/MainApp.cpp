@@ -225,6 +225,13 @@ void MainApp::showErrorMessage(QString message) {
 void MainApp::stop_handle()
 {
 	this->closeAllWindows();
+	
+	// Stop BPM manager first - this will cancel ongoing audio processing
+	// and wait for thread pool to finish
+	if (this->BpmManager) {
+		this->BpmManager->stop();
+	}
+	
 	this->VW->running = false;
 	this->mainWindow->animatedIcon->running = false;
 	this->MascotsGenerator->running = false;
@@ -236,9 +243,7 @@ void MainApp::stop_handle()
 	this->VW->quit();
 	this->MascotsGenerator->quit();
 	this->MascotsAnimation->quit();
-	if (this->BpmManager) {
-		this->BpmManager->stop();
-	}
+	
 	if (this->musicPlayer) {
 		this->musicPlayer->stop();
 	}

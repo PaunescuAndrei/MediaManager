@@ -148,6 +148,7 @@ public:
     void updateNames(QString value, const QList<int>& ids);
     void setType(QString type, const QList<int>& ids);
     void setViews(int value, const QList<int>& ids);
+    void setBpm(double value, const QList<int>& ids);
     void incrementViews(int count, const QList<int>& ids);
     void setWatched(QString value, const QList<int>& ids);
     void DeleteDialogButton(const QList<int>& ids);

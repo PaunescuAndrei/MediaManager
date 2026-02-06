@@ -1008,6 +1008,14 @@ void MainWindow::setViews(int value, const QList<int>& ids) {
     this->refreshVideosWidget(true, true);
 }
 
+void MainWindow::setBpm(double value, const QList<int>& ids) {
+    if (ids.isEmpty()) return;
+    this->App->db->db.transaction();
+    for (int id : ids) this->App->db->updateBpm(id, value);
+    this->App->db->db.commit();
+    this->refreshVideosWidget(true, true);
+}
+
 void MainWindow::incrementViews(int count, const QList<int>& ids) {
     if (ids.isEmpty()) return;
     this->App->db->db.transaction();
@@ -4072,6 +4080,10 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
     QAction* views_minus = new QAction("Decrease by 1", views_menu);
     views_menu->addActions({views_edit, views_plus, views_minus });
     set_menu->addMenu(views_menu);
+    QMenu* bpm_menu = new QMenu("BPM", &menu);
+    QAction* bpm_edit = new QAction("Edit", bpm_menu);
+    bpm_menu->addAction(bpm_edit);
+    set_menu->addMenu(bpm_menu);
     menu.addMenu(set_menu);
     QAction* open_location = new QAction("Open file location", &menu);
     menu.addAction(open_location);
@@ -4149,6 +4161,19 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
         this->incrementViews(1, selIds);
     else if (menu_click == views_minus)
         this->incrementViews(-1, selIds);
+    else if (menu_click == bpm_edit) {
+        bool ok;
+        double old_value = -1.0;
+        QPersistentModelIndex bpmIdx = sourceIndex.sibling(row, ListColumns["BPM_COLUMN"]);
+        if (bpmIdx.isValid()) {
+             old_value = bpmIdx.data(CustomRoles::bpm).toDouble();
+        }
+        if (old_value < 0) old_value = 0;
+        double i = QInputDialog::getDouble(this, "Edit BPM",
+            "BPM", old_value, 0, 10000, 2, &ok);
+        if (ok)
+            this->setBpm(i, selIds);
+    }
     else if (menu_click == generate_author) {
         this->updateAuthors(selIds);
     }

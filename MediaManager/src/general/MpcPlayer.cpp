@@ -145,17 +145,19 @@ LRESULT MpcPlayer::send_osd_message(QString message, int duration)
     if (this->player_hwnd) {
         COPYDATASTRUCT MyCDS = COPYDATASTRUCT();
         MyCDS.dwData = CMD_OSDSHOWMESSAGE;
+        MPC_OSDDATA datastruct;
+        std::wstring s;
         if (!message.isEmpty()) {
-            std::wstring s = message.toStdWString();
+            s = message.toStdWString();
             const wchar_t* str = s.c_str();
-            MPC_OSDDATA datastruct = { 1,duration };
+            datastruct = { 1,duration };
             wcsncpy(datastruct.strMsg, str, 256);
             MyCDS.lpData = (LPVOID)&datastruct;
             MyCDS.cbData = sizeof(datastruct);
         }
         else {
             MyCDS.lpData = NULL;
-            MyCDS.cbData = NULL;
+            MyCDS.cbData = 0;
         }
         return SendMessageTimeout(this->player_hwnd, WM_COPYDATA, (WPARAM)this->player_hwnd, (LPARAM)(LPVOID)&MyCDS, 0, 500, NULL);
     }
@@ -167,18 +169,24 @@ LRESULT MpcPlayer::send_message(MPCAPI_COMMAND command, QString data, bool block
     if (this->player_hwnd) {
         COPYDATASTRUCT MyCDS = COPYDATASTRUCT();
         MyCDS.dwData = command;
+        std::wstring s;
         if (!data.isEmpty()) {
-            std::wstring s = data.toStdWString();
+            s = data.toStdWString();
             LPCWSTR str = s.c_str();
             MyCDS.lpData = (LPVOID)str;
             MyCDS.cbData = sizeof(WCHAR) * (wcslen(str) + 1);
         }
         else {
             MyCDS.lpData = NULL;
-            MyCDS.cbData = NULL;
+            MyCDS.cbData = 0;
         }
-        if (blocking)
-            return SendMessageW(this->player_hwnd, WM_COPYDATA, (WPARAM)this->player_hwnd, (LPARAM)(LPVOID)&MyCDS);
+        if (blocking) {
+            DWORD_PTR dwResult;
+            if (SendMessageTimeoutW(this->player_hwnd, WM_COPYDATA, (WPARAM)this->player_hwnd, (LPARAM)(LPVOID)&MyCDS, SMTO_NORMAL | SMTO_ABORTIFHUNG, 3000, &dwResult)) {
+                return dwResult;
+            }
+            return -1;
+        }
         return SendMessageTimeout(this->player_hwnd, WM_COPYDATA, (WPARAM)this->player_hwnd, (LPARAM)(LPVOID)&MyCDS, 0, 500, NULL);
     }
     return -1;

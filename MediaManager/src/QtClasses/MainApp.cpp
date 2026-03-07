@@ -33,6 +33,7 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 	qMainApp->logger->log("Application Starting.", "INFO");
 	this->ErrorDialog = new QErrorMessage();
 	this->config = new Config("config.ini");
+	this->beatModelManager = new SharedModelManager();
 
 	if (this->config->get_bool("single_instance")) {
 		this->startSingleInstanceServer(QString::fromStdString(utils::getAppId(VERSION_TEXT)));
@@ -305,4 +306,5 @@ MainApp::~MainApp()
 	this->logger->log("MainApp cleanup finished.", "INFO");
 	this->logger->deleteLater();
 	this->ErrorDialog->deleteLater();
+	delete this->beatModelManager;
 }

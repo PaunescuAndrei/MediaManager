@@ -14,6 +14,7 @@
 #include "logger.h"
 #include <UIAutomationClient.h>
 #include "CalculateBpmManager.h"
+#include "SharedModelManager.h"
 
 #define qMainApp (static_cast<MainApp *>(QCoreApplication::instance()))
 
@@ -52,6 +53,7 @@ public:
     Logger *logger;
     QErrorMessage* ErrorDialog = nullptr;
     CalculateBpmManager* BpmManager = nullptr;
+    SharedModelManager* beatModelManager = nullptr;
     MainApp(int& argc, char** argv);
     void createMissingDirs();
     void toggleLogWindow();

@@ -343,7 +343,8 @@
       <AdditionalLibraryDirectories>$(ProjectDir)src\thirdparty\libtorch\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /Y /D "$(ProjectDir)src\thirdparty\libtorch\lib\*.dll" "$(OutDir)"</Command>
+      <Command>xcopy /Y /D "$(ProjectDir)src\thirdparty\libtorch\lib\*.dll" "$(OutDir)"
+xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.ckpt" "$(OutDir)res\models\"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -367,7 +368,8 @@
       <AdditionalLibraryDirectories>$(ProjectDir)src\thirdparty\libtorch\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /Y /D "$(ProjectDir)src\thirdparty\libtorch\lib\*.dll" "$(OutDir)"</Command>
+      <Command>xcopy /Y /D "$(ProjectDir)src\thirdparty\libtorch\lib\*.dll" "$(OutDir)"
+xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.ckpt" "$(OutDir)res\models\"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">
@@ -383,7 +385,8 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /Y /D "$(ProjectDir)src\thirdparty\libtorch\lib\*.dll" "$(OutDir)"</Command>
+      <Command>xcopy /Y /D "$(ProjectDir)src\thirdparty\libtorch\lib\*.dll" "$(OutDir)"
+xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.ckpt" "$(OutDir)res\models\"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="Configuration">

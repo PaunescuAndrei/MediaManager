@@ -339,12 +339,11 @@
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>%(AdditionalDependencies);$(Qt_LIBS_);winmm.lib;torch.lib;torch_cpu.lib;c10.lib;torch_cuda.lib;c10_cuda.lib;fbgemm.lib;kineto.lib</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies);$(Qt_LIBS_);winmm.lib;torch.lib;torch_cpu.lib;c10.lib;torch_cuda.lib;c10_cuda.lib;kineto.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(ProjectDir)src\thirdparty\libtorch\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /Y /D "$(ProjectDir)src\thirdparty\libtorch\lib\*.dll" "$(OutDir)"
-xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.onnx" "$(OutDir)res\models\"</Command>
+      <Command>xcopy /Y /D "$(ProjectDir)src\thirdparty\libtorch\lib\*.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -364,12 +363,11 @@ xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.onnx" "$(OutDir)res\
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>%(AdditionalDependencies);$(Qt_LIBS_);winmm.lib;torch.lib;torch_cpu.lib;c10.lib;torch_cuda.lib;c10_cuda.lib;fbgemm.lib;kineto.lib</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies);$(Qt_LIBS_);winmm.lib;torch.lib;torch_cpu.lib;c10.lib;torch_cuda.lib;c10_cuda.lib;kineto.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(ProjectDir)src\thirdparty\libtorch\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /Y /D "$(ProjectDir)src\thirdparty\libtorch\lib\*.dll" "$(OutDir)"
-xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.onnx" "$(OutDir)res\models\"</Command>
+      <Command>xcopy /Y /D "$(ProjectDir)src\thirdparty\libtorch\lib\*.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">
@@ -379,14 +377,13 @@ xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.onnx" "$(OutDir)res\
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>%(AdditionalDependencies);$(Qt_LIBS_);winmm.lib;torch.lib;torch_cpu.lib;c10.lib;torch_cuda.lib;c10_cuda.lib;fbgemm.lib;kineto.lib</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies);$(Qt_LIBS_);winmm.lib;torch.lib;torch_cpu.lib;c10.lib;torch_cuda.lib;c10_cuda.lib;kineto.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(ProjectDir)src\thirdparty\libtorch\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <OptimizeReferences>true</OptimizeReferences>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy /Y /D "$(ProjectDir)src\thirdparty\libtorch\lib\*.dll" "$(OutDir)"
-xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.onnx" "$(OutDir)res\models\"</Command>
+      <Command>xcopy /Y /D "$(ProjectDir)src\thirdparty\libtorch\lib\*.dll" "$(OutDir)"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="Configuration">

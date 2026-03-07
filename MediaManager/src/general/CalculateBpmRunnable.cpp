@@ -24,7 +24,7 @@ void CalculateBpmRunnable::clearCancelFlag() {
 }
 
 void CalculateBpmRunnable::run() {
-    QString modelPath = QCoreApplication::applicationDirPath() + "/" + MODELS_PATH + "/beat_this.onnx";
+    QString modelPath = QCoreApplication::applicationDirPath() + "/" + MODELS_PATH + "/beat_this.pt";
     std::unique_ptr<BeatThis::BeatThis> beatAnalyzer;
 
     try {

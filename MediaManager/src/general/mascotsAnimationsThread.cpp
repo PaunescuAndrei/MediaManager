@@ -18,7 +18,7 @@ mascotsAnimationsThread::mascotsAnimationsThread(MainApp* App, bool random_chang
     this->frequency = this->App->config->get("mascots_frequency").toInt();
 
     try {
-        QString modelPath = QCoreApplication::applicationDirPath() + "/" + MODELS_PATH + "/beat_this.onnx";
+        QString modelPath = QCoreApplication::applicationDirPath() + "/" + MODELS_PATH + "/beat_this.pt";
         this->beatAnalyzer = new BeatThis::BeatThis(modelPath.toStdString());
     }
     catch (const std::exception& e) {

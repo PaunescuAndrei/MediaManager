@@ -344,7 +344,7 @@
     </Link>
     <PostBuildEvent>
       <Command>xcopy /Y /D "$(ProjectDir)src\thirdparty\libtorch\lib\*.dll" "$(OutDir)"
-xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.ckpt" "$(OutDir)res\models\"</Command>
+xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.pt" "$(OutDir)res\models\"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -369,7 +369,7 @@ xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.ckpt" "$(OutDir)res\
     </Link>
     <PostBuildEvent>
       <Command>xcopy /Y /D "$(ProjectDir)src\thirdparty\libtorch\lib\*.dll" "$(OutDir)"
-xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.ckpt" "$(OutDir)res\models\"</Command>
+xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.pt" "$(OutDir)res\models\"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">
@@ -386,7 +386,7 @@ xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.ckpt" "$(OutDir)res\
     </Link>
     <PostBuildEvent>
       <Command>xcopy /Y /D "$(ProjectDir)src\thirdparty\libtorch\lib\*.dll" "$(OutDir)"
-xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.ckpt" "$(OutDir)res\models\"</Command>
+xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.pt" "$(OutDir)res\models\"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="Configuration">

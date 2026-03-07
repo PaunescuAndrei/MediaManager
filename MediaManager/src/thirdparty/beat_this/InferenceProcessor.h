@@ -3,19 +3,19 @@
 
 #include <vector>
 #include <string>
-#include "onnxruntime_cxx_api.h"
+#include <torch/script.h>
 
 /**
  * @class InferenceProcessor
  * @brief Handles neural network inference for beat detection
  * 
- * This class processes Mel spectrograms through a trained ONNX model to detect
+ * This class processes Mel spectrograms through a trained TorchScript model to detect
  * beats and downbeats. It handles chunking of long audio sequences and
  * aggregates predictions from overlapping chunks.
  */
 class InferenceProcessor {
 public:
-    InferenceProcessor(Ort::Session& session, Ort::Env& env);
+    InferenceProcessor(torch::jit::script::Module& module);
 
     /**
      * @brief Process a full spectrogram and return beat/downbeat logits
@@ -27,8 +27,7 @@ public:
     );
 
 private:
-    Ort::Session& session_;
-    Ort::Env& env_;
+    torch::jit::script::Module& module_;
 
     // Chunking parameters (must match Python implementation)
     const int chunk_size = 1500;      // Size of each chunk in frames
@@ -50,8 +49,8 @@ private:
         int border_size
     );
 
-    // Helper to run ONNX inference on a single chunk
-    std::pair<std::vector<float>, std::vector<float>> run_onnx_inference(
+    // Helper to run LibTorch inference on a single chunk
+    std::pair<std::vector<float>, std::vector<float>> run_libtorch_inference(
         const std::vector<std::vector<float>>& chunk_spect
     );
 };

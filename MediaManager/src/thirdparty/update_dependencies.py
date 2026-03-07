@@ -8,9 +8,8 @@ import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
 
 # Configuration
-ONNX_VERSION = "1.23.2"
-ONNX_URL = f"https://github.com/microsoft/onnxruntime/releases/download/v{ONNX_VERSION}/onnxruntime-win-x64-gpu-{ONNX_VERSION}.zip"
-ONNX_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "onnxruntime")
+LIBTORCH_URL = "https://download.pytorch.org/libtorch/cu130/libtorch-win-shared-with-deps-2.1.0%2Bcu130.zip"
+LIBTORCH_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "libtorch")
 
 MODEL_URL = "https://github.com/mosynthkey/beat_this_cpp/raw/main/onnx/beat_this.onnx"
 # Path to src/resources/models/beat_this.onnx. Script is in src/thirdparty/
@@ -86,55 +85,31 @@ def update_beat_this():
             
     print(f"BeatThis update complete. {success_count}/{len(BEAT_THIS_FILES)} files processed.")
 
-def update_onnxruntime():
-    print(f"Updating ONNX Runtime {ONNX_VERSION}...")
-    zip_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "onnxruntime.zip")
+def update_libtorch():
+    print("Updating LibTorch...")
+    zip_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "libtorch.zip")
     
-    # Download
-    if download_file(ONNX_URL, zip_path):
-        print("Extracting ONNX Runtime...")
+    if download_file(LIBTORCH_URL, zip_path):
+        print("Extracting LibTorch...")
         try:
-            # Clear existing directory if it exists, but keep the directory itself
-            if os.path.exists(ONNX_DIR):
-                shutil.rmtree(ONNX_DIR)
-            os.makedirs(ONNX_DIR)
-
+            if os.path.exists(LIBTORCH_DIR):
+                shutil.rmtree(LIBTORCH_DIR)
+                
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                # The zip usually has a root folder like "onnxruntime-win-x64-1.18.0"
-                # We want to strip that and put contents directly into ONNX_DIR
-                root_folder = zip_ref.namelist()[0].split('/')[0]
+                # Extract directly. The zip creates a "libtorch" folder.
+                # We extract it to the parent directory of LIBTORCH_DIR
+                # because the zip already contains a "libtorch" root folder.
+                extract_dir = os.path.dirname(LIBTORCH_DIR)
+                zip_ref.extractall(extract_dir)
                 
-                for member in zip_ref.namelist():
-                    if member.startswith(root_folder + "/include/") or member.startswith(root_folder + "/lib/"):
-                        # Extract and strip root folder
-                        target_path = os.path.join(ONNX_DIR, member[len(root_folder)+1:])
-                        
-                        # Skip directories
-                        if member.endswith('/'):
-                            if not os.path.exists(target_path) and target_path.strip():
-                                os.makedirs(target_path)
-                            continue
-                            
-                        # Ensure dir exists
-                        os.makedirs(os.path.dirname(target_path), exist_ok=True)
-                        
-                        # Read and write file
-                        with zip_ref.open(member) as source, open(target_path, "wb") as target:
-                            shutil.copyfileobj(source, target)
-                            
-            print(f"ONNX Runtime extracted to {ONNX_DIR}")
-            
-            # Create a version file
-            with open(os.path.join(ONNX_DIR, "VERSION_NUMBER"), "w") as f:
-                f.write(ONNX_VERSION)
-                
+            print(f"LibTorch extracted to {LIBTORCH_DIR}")
         except Exception as e:
-            print(f"Error extracting ONNX Runtime: {e}")
+            print(f"Error extracting LibTorch: {e}")
         finally:
             if os.path.exists(zip_path):
                 os.remove(zip_path)
     else:
-        print("Failed to download ONNX Runtime.")
+        print("Failed to download LibTorch.")
 
 def update_model():
     print(f"Updating AI Model (beat_this.onnx)...")
@@ -150,7 +125,7 @@ def main():
     print("Starting dependency update...")
     update_beat_this()
     print("-" * 30)
-    update_onnxruntime()
+    update_libtorch()
     print("-" * 30)
     update_model()
     print("\nAll tasks completed.")

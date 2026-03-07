@@ -1,6 +1,8 @@
 #include "stdafx.h"
 #include "VideosModel.h"
 #include <QIcon>
+#include <QGuiApplication>
+#include "stylesQt.h"
 #include <QColor>
 
 VideosModel::VideosModel(QObject* parent)
@@ -57,6 +59,20 @@ QVariant VideosModel::data(const QModelIndex& index, int role) const {
             c == ListColumns["LAST_WATCHED_COLUMN"] || c == ListColumns["RANDOM%_COLUMN"] ||
             c == ListColumns["BPM_COLUMN"]) {
             return Qt::AlignHCenter;
+        }
+    }
+    if (role == Qt::BackgroundRole) {
+        if (!highlightedPath.isEmpty() && r.path == highlightedPath) {
+            return get_highlight_brush(QGuiApplication::palette());
+        }
+    }
+    if (role == Qt::ForegroundRole) {
+        if (!highlightedPath.isEmpty() && r.path == highlightedPath) {
+            return get_highlighted_text_brush(QGuiApplication::palette());
+        }
+        if (c == ListColumns["WATCHED_COLUMN"]) {
+            if (r.watched == "Yes") return QBrush(QColor("#00e640"));
+            if (r.watched == "No") return QBrush(QColor("#cf000f"));
         }
     }
     return QVariant();

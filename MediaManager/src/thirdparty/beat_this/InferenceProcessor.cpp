@@ -2,41 +2,48 @@
 #include <algorithm>
 #include <numeric>
 
+InferenceProcessor::InferenceProcessor(torch::jit::script::Module& module)
+    : module_(module) {}
 
-InferenceProcessor::InferenceProcessor(Ort::Session& session, Ort::Env& env)
-    : session_(session), env_(env) {}
-
-// Helper to run ONNX inference on a single chunk
-std::pair<std::vector<float>, std::vector<float>> InferenceProcessor::run_onnx_inference(
+// Helper to run LibTorch inference on a single chunk
+std::pair<std::vector<float>, std::vector<float>> InferenceProcessor::run_libtorch_inference(
     const std::vector<std::vector<float>>& chunk_spect
 ) {
-    // Prepare ONNX Input Tensor
-    size_t input_tensor_size = chunk_spect.size() * chunk_spect[0].size();
+    int64_t batch_size = 1;
+    int64_t seq_len = chunk_spect.size();
+    int64_t input_size = chunk_spect[0].size();
+    
+    // Flatten the spectrogram for tensor creation
+    size_t input_tensor_size = seq_len * input_size;
     std::vector<float> input_tensor_values(input_tensor_size);
-    // Flatten the spectrogram
-    for(size_t i=0; i < chunk_spect.size(); ++i) {
-        memcpy(input_tensor_values.data() + i * chunk_spect[0].size(), chunk_spect[i].data(), chunk_spect[0].size() * sizeof(float));
+    for(size_t i=0; i < seq_len; ++i) {
+        memcpy(input_tensor_values.data() + i * input_size, chunk_spect[i].data(), input_size * sizeof(float));
     }
     
-    std::vector<int64_t> input_shape = {1, (int64_t)chunk_spect.size(), (int64_t)chunk_spect[0].size()};
-
-    Ort::MemoryInfo memory_info = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-    Ort::Value input_tensor = Ort::Value::CreateTensor<float>(memory_info, input_tensor_values.data(), input_tensor_size, input_shape.data(), input_shape.size());
-
-    const char* input_names[] = {"input_spectrogram"};
-    const char* output_names[] = {"beat", "downbeat"};
+    // Create CPU tensor
+    auto options = torch::TensorOptions().dtype(torch::kFloat32);
+    torch::Tensor input_tensor = torch::from_blob(input_tensor_values.data(), {batch_size, seq_len, input_size}, options).clone();
     
-    auto output_tensors = session_.Run(Ort::RunOptions{nullptr}, input_names, &input_tensor, 1, output_names, 2);
-
-    float* beat_output_data = output_tensors[0].GetTensorMutableData<float>();
-    float* downbeat_output_data = output_tensors[1].GetTensorMutableData<float>();
-
-    auto beat_shape = output_tensors[0].GetTensorTypeAndShapeInfo().GetShape();
-    size_t beat_output_size = beat_shape[0] * beat_shape[1]; // Assuming batch_size=1
-
-    std::vector<float> beat_logits(beat_output_data, beat_output_data + beat_output_size);
-    std::vector<float> downbeat_logits(downbeat_output_data, downbeat_output_data + beat_output_size);
-
+    // Move to CUDA if available
+    if (torch::cuda::is_available()) {
+        input_tensor = input_tensor.to(torch::kCUDA);
+    }
+    
+    std::vector<torch::jit::IValue> inputs;
+    inputs.push_back(input_tensor);
+    
+    // Run inference
+    auto output = module_.forward(inputs).toTuple();
+    
+    // Extract outputs (beat, downbeat)
+    torch::Tensor beat_tensor = output->elements()[0].toTensor().cpu();
+    torch::Tensor downbeat_tensor = output->elements()[1].toTensor().cpu();
+    
+    // Assuming shape is [1, seq_len] or [seq_len]
+    size_t beat_output_size = beat_tensor.numel();
+    
+    std::vector<float> beat_logits(beat_tensor.data_ptr<float>(), beat_tensor.data_ptr<float>() + beat_output_size);
+    std::vector<float> downbeat_logits(downbeat_tensor.data_ptr<float>(), downbeat_tensor.data_ptr<float>() + beat_output_size);
 
     return {beat_logits, downbeat_logits};
 }
@@ -167,7 +174,7 @@ std::pair<std::vector<float>, std::vector<float>> InferenceProcessor::process_sp
     }
 
     for (const auto& chunk : chunks) {
-        pred_chunks.push_back(run_onnx_inference(chunk));
+        pred_chunks.push_back(run_libtorch_inference(chunk));
     }
 
     return aggregate_prediction(pred_chunks, starts, spectrogram.size(), chunk_size, border_size);

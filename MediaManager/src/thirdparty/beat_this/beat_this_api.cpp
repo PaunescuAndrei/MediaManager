@@ -19,41 +19,27 @@ namespace BeatThis {
 // Pimpl implementation
 class BeatThis::Impl {
 public:
-    Ort::Env env;
-    std::unique_ptr<Ort::Session> session;
+    torch::jit::script::Module module;
 
-    explicit Impl(const std::string& onnx_model_path) 
-        : env(ORT_LOGGING_LEVEL_WARNING, "beat_this_cpp_api") {
+    explicit Impl(const std::string& model_path) {
         // Check if file exists
-        std::ifstream file_check(onnx_model_path);
+        std::ifstream file_check(model_path);
         if (!file_check.good()) {
-            throw std::runtime_error("ONNX model file not found: " + onnx_model_path);
+            throw std::runtime_error("TorchScript model file not found: " + model_path);
         }
         file_check.close();
         
-        Ort::SessionOptions session_options;
-
-#ifdef _WIN32
-#include <codecvt>
-#include <locale>
-#endif
-        
-        #ifdef _WIN32
-        // On Windows, ONNX Runtime expects a wide string path
-        std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
-        std::wstring w_model_path = converter.from_bytes(onnx_model_path);
-        const ORTCHAR_T* model_path_ort = w_model_path.c_str();
-#else
-        // On non-Windows, ONNX Runtime expects a narrow string path
-        const ORTCHAR_T* model_path_ort = onnx_model_path.c_str();
-#endif
-        
         try {
-            session = std::make_unique<Ort::Session>(env, model_path_ort, session_options);
-        } catch (const Ort::Exception& e) {
-            std::cerr << "ONNX Runtime error during session creation: " << e.what() << std::endl;
-            std::cerr << "Error code: " << e.GetOrtErrorCode() << std::endl;
-            throw std::runtime_error("ONNX Runtime error: " + std::string(e.what()));
+            // Load the model
+            module = torch::jit::load(model_path);
+            
+            // Move to CUDA if available
+            if (torch::cuda::is_available()) {
+                module.to(torch::kCUDA);
+            }
+        } catch (const c10::Error& e) {
+            std::cerr << "LibTorch error loading the model: " << e.what() << std::endl;
+            throw std::runtime_error("LibTorch error: " + std::string(e.what()));
         }
     }
 };
@@ -206,7 +192,7 @@ BeatResult BeatThis::process_audio(const std::vector<float>& audio_data,
         auto spectrogram = spect_computer.compute(resampled_buffer);
 
         // Run Inference
-        InferenceProcessor processor(*(pImpl->session), pImpl->env);
+        InferenceProcessor processor(pImpl->module);
         auto beat_downbeat_logits = processor.process_spectrogram(spectrogram);
 
         // Post-process to get beat and downbeat times
@@ -224,10 +210,9 @@ BeatResult BeatThis::process_audio(const std::vector<float>& audio_data,
             std::move(beat_counts)
         };
 
-    } catch (const Ort::Exception& e) {
-        std::cerr << "ONNX Runtime error: " << e.what() << std::endl;
-        std::cerr << "Error code: " << e.GetOrtErrorCode() << std::endl;
-        throw std::runtime_error("ONNX Runtime error: " + std::string(e.what()));
+    } catch (const c10::Error& e) {
+        std::cerr << "LibTorch error: " << e.what() << std::endl;
+        throw std::runtime_error("LibTorch error: " + std::string(e.what()));
     } catch (const std::exception& e) {
         std::cerr << "Processing error: " << e.what() << std::endl;
         throw std::runtime_error("Processing error: " + std::string(e.what()));

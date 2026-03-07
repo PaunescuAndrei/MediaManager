@@ -1,3 +1,4 @@
+#include <torch/torch.h>
 #define MINIAUDIO_IMPLEMENTATION
 #include "beat_this_api.h"
 #include "MelSpectrogram.h"

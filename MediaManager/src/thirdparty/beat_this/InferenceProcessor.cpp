@@ -1,6 +1,7 @@
 #include "InferenceProcessor.h"
 #include <algorithm>
 #include <numeric>
+#include <torch/torch.h>
 
 InferenceProcessor::InferenceProcessor(torch::jit::script::Module& module)
     : module_(module) {}

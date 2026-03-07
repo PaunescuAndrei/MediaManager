@@ -243,9 +243,4 @@ mascotsAnimationsThread::~mascotsAnimationsThread()
 {
     if (this->future_rebuildcache.isRunning())
         this->future_rebuildcache.waitForFinished();
-
-    if (this->beatAnalyzer) {
-        delete this->beatAnalyzer;
-        this->beatAnalyzer = nullptr;
-    }
 }

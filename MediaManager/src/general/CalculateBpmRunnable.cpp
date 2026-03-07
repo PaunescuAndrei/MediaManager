@@ -7,6 +7,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <numeric>
+#include "MainApp.h"
 
 CalculateBpmRunnable::CalculateBpmRunnable(NonBlockingQueue<BpmWorkItem>* queue, CalculateBpmManager* manager, QObject* parent)
     : QObject(parent), QRunnable(), queue(queue), manager(manager), cancelFlag(nullptr) {
@@ -24,15 +25,9 @@ void CalculateBpmRunnable::clearCancelFlag() {
 }
 
 void CalculateBpmRunnable::run() {
-    QString modelPath = QCoreApplication::applicationDirPath() + "/" + MODELS_PATH + "/beat_this.pt";
-    std::unique_ptr<BeatThis::BeatThis> beatAnalyzer;
-
-    try {
-        beatAnalyzer = std::make_unique<BeatThis::BeatThis>(modelPath.toStdString());
-    }
-    catch (const std::exception& e) {
-        qDebug() << "Failed to initialize BeatThis in Runnable: " << e.what();
-        return;
+    auto beatAnalyzer = qMainApp->beatModelManager->getModel();
+    if (!beatAnalyzer) {
+        return; // Failed to load model
     }
 
     while (!this->queue->isEmpty() && this->manager->isRunning()) {

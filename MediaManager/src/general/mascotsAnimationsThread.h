@@ -18,7 +18,6 @@ public:
     bool random_change = true;
     double random_chance = 0.1;
     bool running = false;
-    BeatThis::BeatThis* beatAnalyzer = nullptr;
     int frequency = 400;
     QList<double> beats = QList<double>();
     int beats_length = 0;

@@ -16,15 +16,6 @@ mascotsAnimationsThread::mascotsAnimationsThread(MainApp* App, bool random_chang
     this->random_chance = random_chance;
     this->running = true;
     this->frequency = this->App->config->get("mascots_frequency").toInt();
-
-    try {
-        QString modelPath = QCoreApplication::applicationDirPath() + "/" + MODELS_PATH + "/beat_this.pt";
-        this->beatAnalyzer = new BeatThis::BeatThis(modelPath.toStdString());
-    }
-    catch (const std::exception& e) {
-        qDebug() << "Failed to initialize BeatThis: " << e.what();
-        this->App->logger->log("Failed to initialize BeatThis: " + QString(e.what()), "Error");
-    }
 }
 
 void mascotsAnimationsThread::init() {
@@ -66,7 +57,8 @@ void mascotsAnimationsThread::update_beats(QString track_path, bool cache_check)
         return;
     }
     else {
-        if (!this->beatAnalyzer) {
+        auto analyzer = this->App->beatModelManager->getModel();
+        if (!analyzer) {
             return;
         }
 
@@ -76,7 +68,7 @@ void mascotsAnimationsThread::update_beats(QString track_path, bool cache_check)
 
         if (utils::readAudioFile(track_path, audioData, sampleRate, channels)) {
             try {
-                auto result = this->beatAnalyzer->process_audio(audioData, sampleRate, channels);
+                auto result = analyzer->process_audio(audioData, sampleRate, channels);
 
                 for (float beat : result.beats) {
                     this->beats.append(static_cast<double>(beat));
@@ -84,7 +76,7 @@ void mascotsAnimationsThread::update_beats(QString track_path, bool cache_check)
 
                 if (!this->beats.isEmpty()) {
                     QString cachepath = QFileInfo(this->current_track).baseName();
-                    QDir().mkpath(BEATS_CACHE_PATH);
+                    // QDir().mkpath(BEATS_CACHE_PATH); // moved to MainApp::createMissingDirs
                     cachepath = QString(BEATS_CACHE_PATH) + "/" + cachepath + ".beatscache_c";
 
                     QFile file(cachepath);
@@ -111,46 +103,58 @@ void mascotsAnimationsThread::rebuildBeatsCacheNonBlocking()
 
 void mascotsAnimationsThread::rebuildBeatsCache() {
     QStringList files = utils::getFilesQt(this->App->musicPlayer->trackPlaylistFolder, true);
-    if (!this->beatAnalyzer) return;
+    
+    // Fetch a shared pointer so the model stays loaded while tasks are created/running
+    auto sharedAnalyzer = this->App->beatModelManager->getModel();
+    if (!sharedAnalyzer) return;
 
+    QList<QFuture<void>> futures;
     QMimeDatabase db;
-    for (QString trackpath : files) {
-        QMimeType mime = db.mimeTypeForFile(trackpath, QMimeDatabase::MatchExtension);
-        if (!mime.name().startsWith("audio/")) {
-            continue;
-        }
 
-        if (!this->running) break;
-        QList<double> newbeats = QList<double>();
+    for (const QString& trackpath : files) {
+        futures.append(QtConcurrent::run([this, trackpath, sharedAnalyzer]() {
+            if (!this->running) return;
 
-        std::vector<float> audioData;
-        int sampleRate;
-        int channels;
+            QMimeDatabase db_local;
+            QMimeType mime = db_local.mimeTypeForFile(trackpath, QMimeDatabase::MatchExtension);
+            if (!mime.name().startsWith("audio/")) {
+                return;
+            }
 
-        if (utils::readAudioFile(trackpath, audioData, sampleRate, channels)) {
-            try {
-                auto result = this->beatAnalyzer->process_audio(audioData, sampleRate, channels);
-                for (float beat : result.beats) {
-                    newbeats.append(static_cast<double>(beat));
-                }
+            QList<double> newbeats = QList<double>();
+            std::vector<float> audioData;
+            int sampleRate;
+            int channels;
 
-                if (!newbeats.isEmpty()) {
-                    QString cachepath = QFileInfo(trackpath).baseName();
-                    QDir().mkpath(BEATS_CACHE_PATH);
-                    cachepath = QString(BEATS_CACHE_PATH) + "/" + cachepath + ".beatscache_c";
+            if (utils::readAudioFile(trackpath, audioData, sampleRate, channels)) {
+                try {
+                    auto result = sharedAnalyzer->process_audio(audioData, sampleRate, channels);
+                    for (float beat : result.beats) {
+                        newbeats.append(static_cast<double>(beat));
+                    }
 
-                    QFile file(cachepath);
-                    if (file.open(QIODevice::WriteOnly)) {
-                        QDataStream out(&file);
-                        out << newbeats;
-                        file.close();
+                    if (!newbeats.isEmpty()) {
+                        QString cachepath = QFileInfo(trackpath).baseName();
+                        cachepath = QString(BEATS_CACHE_PATH) + "/" + cachepath + ".beatscache_c";
+
+                        QFile file(cachepath);
+                        if (file.open(QIODevice::WriteOnly)) {
+                            QDataStream out(&file);
+                            out << newbeats;
+                            file.close();
+                        }
                     }
                 }
+                catch (...) {
+                    // Ignore errors during cache rebuild
+                }
             }
-            catch (...) {
-                // Ignore errors during cache rebuild
-            }
-        }
+        }));
+    }
+
+    // Wait for futures to finish
+    for (auto& future : futures) {
+        future.waitForFinished();
     }
 }
 

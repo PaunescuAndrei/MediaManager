@@ -112,23 +112,23 @@ def update_libtorch():
     else:
         print("Failed to download LibTorch.")
 
-def update_model():
-    print(f"Updating AI Model (beat_this.onnx)...")
-    if not os.path.exists(MODEL_DEST_DIR):
-        os.makedirs(MODEL_DEST_DIR)
+# def update_model():
+#     print(f"Updating AI Model (beat_this.onnx)...")
+#     if not os.path.exists(MODEL_DEST_DIR):
+#         os.makedirs(MODEL_DEST_DIR)
     
-    if download_file(MODEL_URL, MODEL_DEST):
-        print(f"Model downloaded to {MODEL_DEST}")
-    else:
-        print("Failed to download AI Model.")
+#     if download_file(MODEL_URL, MODEL_DEST):
+#         print(f"Model downloaded to {MODEL_DEST}")
+#     else:
+#         print("Failed to download AI Model.")
 
 def main():
     print("Starting dependency update...")
-    update_beat_this()
+    # update_beat_this()
     print("-" * 30)
     update_libtorch()
     print("-" * 30)
-    update_model()
+    # update_model()
     print("\nAll tasks completed.")
 
 if __name__ == "__main__":

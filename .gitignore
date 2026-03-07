@@ -12,11 +12,9 @@ gemini.md
 AGENTS.md
 
 # Large binary files
-*.onnx
 *.pdb
 MediaManager/src/resources/models/
 
 # Third party dependencies (downloaded via script)
-MediaManager/src/thirdparty/onnxruntime/
 MediaManager/src/thirdparty/libtorch/
 .worktrees/

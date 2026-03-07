@@ -339,6 +339,7 @@
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
     </ClCompile>
     <Link>
+      <AdditionalOptions>/INCLUDE:"?warp_size@cuda@at@@YAHXZ" %(AdditionalOptions)</AdditionalOptions>
       <AdditionalDependencies>%(AdditionalDependencies);$(Qt_LIBS_);winmm.lib;torch.lib;torch_cpu.lib;c10.lib;torch_cuda.lib;c10_cuda.lib;kineto.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(ProjectDir)src\thirdparty\libtorch\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
@@ -364,6 +365,7 @@ xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.pt" "$(OutDir)res\mo
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
     </ClCompile>
     <Link>
+      <AdditionalOptions>/INCLUDE:"?warp_size@cuda@at@@YAHXZ" %(AdditionalOptions)</AdditionalOptions>
       <AdditionalDependencies>%(AdditionalDependencies);$(Qt_LIBS_);winmm.lib;torch.lib;torch_cpu.lib;c10.lib;torch_cuda.lib;c10_cuda.lib;kineto.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(ProjectDir)src\thirdparty\libtorch\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
@@ -379,6 +381,7 @@ xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.pt" "$(OutDir)res\mo
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
     </ClCompile>
     <Link>
+      <AdditionalOptions>/INCLUDE:"?warp_size@cuda@at@@YAHXZ" %(AdditionalOptions)</AdditionalOptions>
       <AdditionalDependencies>%(AdditionalDependencies);$(Qt_LIBS_);winmm.lib;torch.lib;torch_cpu.lib;c10.lib;torch_cuda.lib;c10_cuda.lib;kineto.lib</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(ProjectDir)src\thirdparty\libtorch\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <OptimizeReferences>true</OptimizeReferences>
@@ -397,6 +400,7 @@ xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.pt" "$(OutDir)res\mo
       <Optimization>Disabled</Optimization>
     </ClCompile>
     <Link>
+      <AdditionalOptions>/INCLUDE:"?warp_size@cuda@at@@YAHXZ" %(AdditionalOptions)</AdditionalOptions>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
@@ -409,6 +413,7 @@ xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.pt" "$(OutDir)res\mo
       <Optimization>MaxSpeed</Optimization>
     </ClCompile>
     <Link>
+      <AdditionalOptions>/INCLUDE:"?warp_size@cuda@at@@YAHXZ" %(AdditionalOptions)</AdditionalOptions>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>false</GenerateDebugInformation>
     </Link>
@@ -421,6 +426,7 @@ xcopy /Y /D /I "$(ProjectDir)src\resources\models\beat_this.pt" "$(OutDir)res\mo
       <Optimization>MaxSpeed</Optimization>
     </ClCompile>
     <Link>
+      <AdditionalOptions>/INCLUDE:"?warp_size@cuda@at@@YAHXZ" %(AdditionalOptions)</AdditionalOptions>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>

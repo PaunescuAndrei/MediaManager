@@ -18,3 +18,4 @@ MediaManager/src/resources/models/
 # Third party dependencies (downloaded via script)
 MediaManager/src/thirdparty/libtorch/
 .worktrees/
+MediaManager/src/thirdparty/libtorch/

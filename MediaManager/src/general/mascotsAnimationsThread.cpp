@@ -102,6 +102,7 @@ void mascotsAnimationsThread::rebuildBeatsCacheNonBlocking()
 }
 
 void mascotsAnimationsThread::rebuildBeatsCache() {
+    if (!this->App->musicPlayer) return;
     QStringList files = utils::getFilesQt(this->App->musicPlayer->trackPlaylistFolder, true);
     
     // Fetch a shared pointer so the model stays loaded while tasks are created/running

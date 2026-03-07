@@ -10,6 +10,8 @@ InferenceProcessor::InferenceProcessor(torch::jit::script::Module& module)
 std::pair<std::vector<float>, std::vector<float>> InferenceProcessor::run_libtorch_inference(
     const std::vector<std::vector<float>>& chunk_spect
 ) {
+    torch::InferenceMode guard;
+    
     int64_t batch_size = 1;
     int64_t seq_len = chunk_spect.size();
     int64_t input_size = chunk_spect[0].size();

@@ -1,4 +1,6 @@
 #include <torch/torch.h>
+#include <c10/cuda/CUDACachingAllocator.h>
+#include <cuda_runtime.h>
 #define MINIAUDIO_IMPLEMENTATION
 #include "beat_this_api.h"
 #include "MelSpectrogram.h"
@@ -15,6 +17,8 @@
 #include <codecvt>
 #include <locale>
 #include "miniaudio.h"
+#include <c10/cuda/CUDACachingAllocator.h>
+
 namespace BeatThis {
 
 // Pimpl implementation
@@ -49,7 +53,16 @@ BeatThis::BeatThis(const std::string& onnx_model_path)
     : pImpl(std::make_unique<Impl>(onnx_model_path)) {
 }
 
-BeatThis::~BeatThis() = default;
+BeatThis::~BeatThis() {
+    // Explicitly destroy the implementation (and the model) first
+    pImpl.reset();
+    
+    // Then clear the CUDA cache to release memory to the OS
+    if (torch::cuda::is_available()) {
+        cudaDeviceSynchronize();
+        c10::cuda::CUDACachingAllocator::emptyCache();
+    }
+}
 
 namespace {
     // Helper function to calculate beat counts
@@ -204,6 +217,11 @@ BeatResult BeatThis::process_audio(const std::vector<float>& audio_data,
         // Calculate beat counts
         std::vector<int> beat_counts = calculate_beat_counts(
             beat_downbeat_times.first, beat_downbeat_times.second);
+
+        // Explicitly clear CUDA cache after processing
+        if (torch::cuda::is_available()) {
+            c10::cuda::CUDACachingAllocator::emptyCache();
+        }
 
         return BeatResult{
             std::move(beat_downbeat_times.first),

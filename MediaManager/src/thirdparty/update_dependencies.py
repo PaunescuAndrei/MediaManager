@@ -63,7 +63,8 @@ BEAT_THIS_FILES = [
 def download_file(url, path):
     print(f"Downloading {os.path.basename(path)}...")
     try:
-        with urllib.request.urlopen(url) as response:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as response:
             content = response.read()
             with open(path, 'wb') as f:
                 f.write(content)

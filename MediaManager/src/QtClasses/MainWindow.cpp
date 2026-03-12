@@ -1004,6 +1004,26 @@ void MainWindow::setType(QString type, const QList<int>& ids) {
     for (int id : ids) this->App->db->updateType(id, type);
     this->App->db->db.commit();
     this->refreshVideosWidget(true, true);
+    
+    if (this->App->BpmManager) {
+        QString bpmTypesStr = this->App->config->get("bpm_calculation_types");
+        if (!bpmTypesStr.isEmpty()) {
+            QStringList types = bpmTypesStr.split(',', Qt::SkipEmptyParts);
+            if (types.contains(type)) {
+                bool queued = false;
+                for (int id : ids) {
+                    QString p = pathById(id);
+                    if (!p.isEmpty() && !this->App->BpmManager->is_id_active(id)) {
+                        this->App->BpmManager->enqueue_work({ id, p });
+                        queued = true;
+                    }
+                }
+                if (queued) {
+                    this->App->BpmManager->start();
+                }
+            }
+        }
+    }
 }
 
 void MainWindow::setViews(int value, const QList<int>& ids) {
@@ -3420,13 +3440,37 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
             count = 0;
         }
         files_inserted.append((*it)->text(0));
-        this->thumbnailManager->enqueue_work({ (*it)->text(0), false, false});
+        
+        if (this->thumbnailManager) {
+            this->thumbnailManager->enqueue_work({ (*it)->text(0), false, false});
+        }
+        
+        if (this->App->BpmManager) {
+            QString type = (*it)->text(3);
+            QString bpmTypesStr = this->App->config->get("bpm_calculation_types");
+            if (!bpmTypesStr.isEmpty()) {
+                QStringList types = bpmTypesStr.split(',', Qt::SkipEmptyParts);
+                if (types.contains(type)) {
+                    int new_id = this->App->db->getVideoId((*it)->text(0), target_db);
+                    if (new_id != -1 && !this->App->BpmManager->is_id_active(new_id)) {
+                        this->App->BpmManager->enqueue_work({ new_id, (*it)->text(0) });
+                    }
+                }
+            }
+        }
+        
         ++it;
     }
 
     if (count > 0) {
         this->App->db->db.commit();
+    }
+    
+    if (this->thumbnailManager) {
         this->thumbnailManager->start();
+    }
+    if (this->App->BpmManager) {
+        this->App->BpmManager->start();
     }
     if (!files_inserted.isEmpty()) {
         if (insertingIntoCurrentDb) {

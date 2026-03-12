@@ -800,8 +800,10 @@ void MainWindow::updatePath(int video_id, QString new_path) {
         if (video_id == this->ui.currentVideo->id) {
             this->setCurrentVideo(video_id, new_path, name, author, this->ui.currentVideo->tags, false);
         }
-        this->thumbnailManager->enqueue_work({ new_path, false, false });
-        this->thumbnailManager->start();
+        if (this->thumbnailManager) {
+            this->thumbnailManager->enqueue_work({ new_path, false, false });
+            this->thumbnailManager->start();
+        }
         if (this->App->BpmManager) {
             this->App->BpmManager->enqueue_work({ video_id, new_path });
             this->App->BpmManager->start();

@@ -4142,7 +4142,8 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
     set_menu->addMenu(views_menu);
     QMenu* bpm_menu = new QMenu("BPM", &menu);
     QAction* bpm_edit = new QAction("Edit", bpm_menu);
-    bpm_menu->addAction(bpm_edit);
+    QAction* bpm_reset = new QAction("Reset", bpm_menu);
+    bpm_menu->addActions({ bpm_edit, bpm_reset });
     set_menu->addMenu(bpm_menu);
     menu.addMenu(set_menu);
     QAction* open_location = new QAction("Open file location", &menu);
@@ -4233,6 +4234,9 @@ void MainWindow::videosWidgetContextMenu(QPoint point) {
             "BPM", old_value, 0, 10000, 2, &ok);
         if (ok)
             this->setBpm(i, selIds);
+    }
+    else if (menu_click == bpm_reset) {
+        this->setBpm(-1.0, selIds);
     }
     else if (menu_click == generate_author) {
         this->updateAuthors(selIds);

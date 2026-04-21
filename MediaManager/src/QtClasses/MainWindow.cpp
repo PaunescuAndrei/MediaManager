@@ -805,8 +805,18 @@ void MainWindow::updatePath(int video_id, QString new_path) {
             this->thumbnailManager->start();
         }
         if (this->App->BpmManager) {
-            this->App->BpmManager->enqueue_work({ video_id, new_path });
-            this->App->BpmManager->start();
+            QString bpmTypesStr = this->App->config->get("bpm_calculation_types");
+            if (!bpmTypesStr.isEmpty()) {
+                QStringList types = bpmTypesStr.split(',', Qt::SkipEmptyParts);
+                QPersistentModelIndex srcIdx = modelIndexById(video_id);
+                if (srcIdx.isValid()) {
+                    QString type = srcIdx.sibling(srcIdx.row(), ListColumns["TYPE_COLUMN"]).data(Qt::DisplayRole).toString();
+                    if (types.contains(type)) {
+                        this->App->BpmManager->enqueue_work({ video_id, new_path });
+                        this->App->BpmManager->start();
+                    }
+                }
+            }
         }
         this->refreshVideosWidget(false, false);
         this->ui.videosWidget->findAndScrollToDelayed(new_path, true);

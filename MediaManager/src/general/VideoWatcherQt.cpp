@@ -103,9 +103,9 @@ void VideoWatcherQt::toggle_window()
 			player->setPaused(false,true);
 			QTime currentTime = QTime::currentTime();
 			player->displayOsdMessage(QStringLiteral("%1 / %2 | %3").arg(
-				utils::formatSecondsCompactQt(player->position), 
+				utils::formatSecondsCompactQt(player->position),
 				utils::formatSecondsCompactQt(player->duration),
-				currentTime.toString("hh:mm")), 3000, true);
+				currentTime.toString("hh:mm")), 3000, false); // this should have worked with direct = true, but this commit https://github.com/clsid2/mpc-hc/commit/3d06f2798479397acb1a0734a41a246fbfd926ef introduced a bug in mpc-hc that causes the OSD to get replaced by the previous play/pause command and it works with false because of the small delay, so I guess it's better to keep it like this until it's fixed in mpc-hc and then we can change it back to direct = true
 		}
 	}
 }

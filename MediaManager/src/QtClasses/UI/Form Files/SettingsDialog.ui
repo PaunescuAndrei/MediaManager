@@ -1707,6 +1707,13 @@
                </widget>
               </item>
               <item>
+               <widget class="QPushButton" name="cleanMissingBtn">
+                <property name="text">
+                 <string>Clean Missing Files</string>
+                </property>
+               </widget>
+              </item>
+              <item>
                <widget class="QGroupBox" name="StartingDBGroupBox">
                 <property name="sizePolicy">
                  <sizepolicy hsizetype="Minimum" vsizetype="Preferred">

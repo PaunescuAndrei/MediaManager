@@ -205,6 +205,7 @@ public:
     bool backupDB(QString path, QWidget* parent = nullptr);
     bool backupDB(QWidget* parent = nullptr);
     void resetWatchedDB(QWidget* parent = nullptr);
+    void cleanMissingFilesDialog(QWidget* parent = nullptr);
     void handleMascotClickEvents(customGraphicsView* mascot, Qt::MouseButton button, Qt::KeyboardModifiers modifiers);
     void applySettings(SettingsDialog* dialog);
     void setDebugMode(bool debug);

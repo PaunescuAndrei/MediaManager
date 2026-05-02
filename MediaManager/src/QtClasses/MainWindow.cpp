@@ -65,6 +65,7 @@
 #include "TreeWidgetItem.h"
 #include "VideoPreviewWidget.h"
 #include "PreviewTooltipDialog.h"
+#include "MissingFilesDialog.h"
 #include <QCursor>
 #include <QFuture>
 #include <QtConcurrent>
@@ -2454,6 +2455,18 @@ void MainWindow::resetWatchedDB(QWidget* parent) {
         this->refreshVideosWidget(false,true);
         this->App->db->setMainInfoValue("sv_target_count", "ALL", QString::number(this->calculate_sv_target()));
         this->initListDetails();
+    }
+}
+
+void MainWindow::cleanMissingFilesDialog(QWidget* parent) {
+    auto allVideos = this->App->db->getVideosData(this->App->currentDB);
+    MissingFilesDialog dialog(allVideos, parent ? parent : this);
+    if (dialog.exec() == QDialog::Accepted) {
+        if (dialog.hasChanged()) {
+            this->refreshVideosWidget(false, true);
+            this->App->db->setMainInfoValue("sv_target_count", "ALL", QString::number(this->calculate_sv_target()));
+            this->initListDetails();
+        }
     }
 }
 

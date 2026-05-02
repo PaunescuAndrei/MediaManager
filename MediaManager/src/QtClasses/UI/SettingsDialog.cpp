@@ -66,6 +66,7 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 		this->oldSVmax = this->ui.SVspinBox->value();
 		blocker.unblock();
 	});
+	connect(this->ui.cleanMissingBtn, &QPushButton::clicked, this, [mw, this] { mw->cleanMissingFilesDialog(this); });
 	connect(this->ui.cacheIconButton, &QPushButton::clicked, this, [mw, this] {mw->animatedIcon->rebuildIconCacheNonBlocking(); });
 	connect(this->ui.cacheBeatsButton, &QPushButton::clicked, this, [mw, this] {mw->App->MascotsAnimation->rebuildBeatsCacheNonBlocking(); });
 	connect(this->ui.cacheThumbsButton, &QPushButton::clicked, this, [mw, this] {mw->thumbnailManager->rebuildThumbnailCache(mw->App->db->db,true); });

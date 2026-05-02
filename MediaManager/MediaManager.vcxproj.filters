@@ -104,6 +104,9 @@
     <ClCompile Include="src\QtClasses\UI\ResetDBDialog.cpp">
       <Filter>Source Files\QtClasses\UI</Filter>
     </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\MissingFilesDialog.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
     <ClCompile Include="src\QtClasses\UI\setCounterDialog.cpp">
       <Filter>Source Files\QtClasses\UI</Filter>
     </ClCompile>
@@ -466,6 +469,9 @@
     <QtUic Include="src\QtClasses\UI\Form Files\ResetDBDialog.ui">
       <Filter>Form Files</Filter>
     </QtUic>
+    <QtUic Include="src\QtClasses\UI\Form Files\MissingFilesDialog.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
     <QtUic Include="src\QtClasses\UI\Form Files\setCounterDialog.ui">
       <Filter>Form Files</Filter>
     </QtUic>
@@ -517,6 +523,9 @@
       <Filter>Header Files\QtClasses\UI</Filter>
     </QtMoc>
     <QtMoc Include="src\QtClasses\UI\ResetDBDialog.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\MissingFilesDialog.h">
       <Filter>Header Files\QtClasses\UI</Filter>
     </QtMoc>
     <QtMoc Include="src\QtClasses\UI\InsertDialog.h">

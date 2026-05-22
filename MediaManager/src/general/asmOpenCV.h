@@ -15,97 +15,49 @@
 #include <QtGlobal>
 
 #include "opencv2/imgproc/imgproc.hpp"
-#include "opencv2/imgproc/types_c.h"
 
 /*
    Endianness
    ---
-
-   Although not totally clear from the docs, some of QImage's formats we use here are
-   endian-dependent. For example:
-
-      Little Endian
-         QImage::Format_ARGB32 the bytes are ordered:    B G R A
-         QImage::Format_RGB32 the bytes are ordered:     B G R (255)
-         QImage::Format_RGB888 the bytes are ordered:    R G B
-
-      Big Endian
-         QImage::Format_ARGB32 the bytes are ordered:    A R G B
-         QImage::Format_RGB32 the bytes are ordered:     (255) R G B
-         QImage::Format_RGB888 the bytes are ordered:    R G B
-
-   Notice that Format_RGB888 is the same regardless of endianness. Since OpenCV
-   expects (B G R) we need to swap the channels for this format.
-
-   This is why some conversions here swap red and blue and others do not.
-
-   This code assumes little endian. It would be possible to add conversions for
-   big endian machines though. If you are using such a machine, please feel free
-   to submit a pull request on the GitHub page.
+   We assume Little Endian.
 */
 #if Q_BYTE_ORDER == Q_BIG_ENDIAN
-#error Some of QImage's formats are endian-dependant. This file assumes little endian. See comment at top of header.
+#error Some of QImage's formats are endian-dependent. This file assumes little endian.
 #endif
 
 namespace ASM {
-    // NOTE: This does not cover all cases - it should be easy to add new ones as required.
-    inline QImage  cvMatToQImage(const cv::Mat& inMat)
+    [[nodiscard]] inline QImage cvMatToQImage(const cv::Mat& inMat)
     {
         switch (inMat.type())
         {
-            // 8-bit, 4 channel
+        // 8-bit, 4 channel (BGRA layout typically in OpenCV)
         case CV_8UC4:
         {
-            QImage image(inMat.data,
-                inMat.cols, inMat.rows,
-                static_cast<int>(inMat.step),
-                QImage::Format_ARGB32);
-
-            return image;
+            // Format_ARGB32 matches CV_8UC4 (BGRA) layout on little-endian platforms.
+            return QImage(inMat.data,
+                          inMat.cols, inMat.rows,
+                          static_cast<int>(inMat.step),
+                          QImage::Format_ARGB32);
         }
 
-        // 8-bit, 3 channel
+        // 8-bit, 3 channel (BGR layout in OpenCV)
         case CV_8UC3:
         {
-            QImage image(inMat.data,
-                inMat.cols, inMat.rows,
-                static_cast<int>(inMat.step),
-                QImage::Format_RGB888);
-
-            return image.rgbSwapped();
+            // Format_BGR888 matches CV_8UC3 exactly.
+            // This is a direct, zero-copy, and zero-swapping representation of the cv::Mat!
+            return QImage(inMat.data,
+                          inMat.cols, inMat.rows,
+                          static_cast<int>(inMat.step),
+                          QImage::Format_BGR888);
         }
 
-        // 8-bit, 1 channel
+        // 8-bit, 1 channel (Grayscale in OpenCV)
         case CV_8UC1:
         {
-#if QT_VERSION >= QT_VERSION_CHECK(5, 5, 0)
-            QImage image(inMat.data,
-                inMat.cols, inMat.rows,
-                static_cast<int>(inMat.step),
-                QImage::Format_Grayscale8);
-#else
-            static QVector<QRgb>  sColorTable;
-
-            // only create our color table the first time
-            if (sColorTable.isEmpty())
-            {
-                sColorTable.resize(256);
-
-                for (int i = 0; i < 256; ++i)
-                {
-                    sColorTable[i] = qRgb(i, i, i);
-                }
-            }
-
-            QImage image(inMat.data,
-                inMat.cols, inMat.rows,
-                static_cast<int>(inMat.step),
-                QImage::Format_Indexed8);
-
-            image.setColorTable(sColorTable);
-#endif
-
-            return image;
+            return QImage(inMat.data,
+                          inMat.cols, inMat.rows,
+                          static_cast<int>(inMat.step),
+                          QImage::Format_Grayscale8);
         }
 
         default:
@@ -116,78 +68,92 @@ namespace ASM {
         return QImage();
     }
 
-    inline QPixmap cvMatToQPixmap(const cv::Mat& inMat)
+    [[nodiscard]] inline QPixmap cvMatToQPixmap(const cv::Mat& inMat)
     {
-        QImage img = cvMatToQImage(inMat);
-        return QPixmap::fromImage(img);
+        return QPixmap::fromImage(cvMatToQImage(inMat).copy());
     }
 
     // If inImage exists for the lifetime of the resulting cv::Mat, pass false to inCloneImageData to share inImage's
-    // data with the cv::Mat directly
-    //    NOTE: Format_RGB888 is an exception since we need to use a local QImage and thus must clone the data regardless
-    //    NOTE: This does not cover all cases - it should be easy to add new ones as required.
-    inline cv::Mat QImageToCvMat(const QImage& inImage, bool inCloneImageData = true)
+    // data with the cv::Mat directly.
+    [[nodiscard]] inline cv::Mat QImageToCvMat(const QImage& inImage, bool inCloneImageData = true)
     {
         switch (inImage.format())
         {
-            // 8-bit, 4 channel
+        // 8-bit, 4 channel
         case QImage::Format_ARGB32:
         case QImage::Format_ARGB32_Premultiplied:
         {
-            cv::Mat  mat(inImage.height(), inImage.width(),
-                CV_8UC4,
-                const_cast<uchar*>(inImage.bits()),
-                static_cast<size_t>(inImage.bytesPerLine())
+            cv::Mat mat(inImage.height(), inImage.width(),
+                        CV_8UC4,
+                        const_cast<uchar*>(inImage.bits()),
+                        static_cast<size_t>(inImage.bytesPerLine())
             );
 
             return (inCloneImageData ? mat.clone() : mat);
         }
 
-        // 8-bit, 3 channel
-        case QImage::Format_RGB32:
+        // 8-bit, 3 channel (BGR)
+        case QImage::Format_BGR888:
         {
-            if (!inCloneImageData)
-            {
-                qWarning() << "ASM::QImageToCvMat() - Conversion requires cloning so we don't modify the original QImage data";
-            }
-
-            cv::Mat  mat(inImage.height(), inImage.width(),
-                CV_8UC4,
-                const_cast<uchar*>(inImage.bits()),
-                static_cast<size_t>(inImage.bytesPerLine())
+            cv::Mat mat(inImage.height(), inImage.width(),
+                        CV_8UC3,
+                        const_cast<uchar*>(inImage.bits()),
+                        static_cast<size_t>(inImage.bytesPerLine())
             );
 
-            cv::Mat  matNoAlpha;
+            return (inCloneImageData ? mat.clone() : mat);
+        }
 
-            cv::cvtColor(mat, matNoAlpha, cv::COLOR_BGRA2BGR);   // drop the all-white alpha channel
+        // 8-bit, 4 channel (RGBA)
+        case QImage::Format_RGBA8888:
+        {
+            cv::Mat mat(inImage.height(), inImage.width(),
+                        CV_8UC4,
+                        const_cast<uchar*>(inImage.bits()),
+                        static_cast<size_t>(inImage.bytesPerLine())
+            );
 
+            cv::Mat matBGRA;
+            cv::cvtColor(mat, matBGRA, cv::COLOR_RGBA2BGRA);
+            return matBGRA;
+        }
+
+        // 8-bit, 3 channel (RGBX) -> drop alpha and swap to BGR
+        case QImage::Format_RGB32:
+        {
+            cv::Mat mat(inImage.height(), inImage.width(),
+                        CV_8UC4,
+                        const_cast<uchar*>(inImage.bits()),
+                        static_cast<size_t>(inImage.bytesPerLine())
+            );
+
+            cv::Mat matNoAlpha;
+            cv::cvtColor(mat, matNoAlpha, cv::COLOR_BGRA2BGR); // drop the alpha and convert BGRA to BGR
             return matNoAlpha;
         }
 
-        // 8-bit, 3 channel
+        // 8-bit, 3 channel (RGB) -> convert to BGR via highly optimized OpenCV SIMD cvtColor
         case QImage::Format_RGB888:
         {
-            if (!inCloneImageData)
-            {
-                qWarning() << "ASM::QImageToCvMat() - Conversion requires cloning so we don't modify the original QImage data";
-            }
+            cv::Mat mat(inImage.height(), inImage.width(),
+                        CV_8UC3,
+                        const_cast<uchar*>(inImage.bits()),
+                        static_cast<size_t>(inImage.bytesPerLine())
+            );
 
-            QImage   swapped = inImage.rgbSwapped();
-
-            return cv::Mat(swapped.height(), swapped.width(),
-                CV_8UC3,
-                const_cast<uchar*>(swapped.bits()),
-                static_cast<size_t>(swapped.bytesPerLine())
-            ).clone();
+            cv::Mat matBGR;
+            cv::cvtColor(mat, matBGR, cv::COLOR_RGB2BGR);
+            return matBGR;
         }
 
         // 8-bit, 1 channel
         case QImage::Format_Indexed8:
+        case QImage::Format_Grayscale8:
         {
-            cv::Mat  mat(inImage.height(), inImage.width(),
-                CV_8UC1,
-                const_cast<uchar*>(inImage.bits()),
-                static_cast<size_t>(inImage.bytesPerLine())
+            cv::Mat mat(inImage.height(), inImage.width(),
+                        CV_8UC1,
+                        const_cast<uchar*>(inImage.bits()),
+                        static_cast<size_t>(inImage.bytesPerLine())
             );
 
             return (inCloneImageData ? mat.clone() : mat);
@@ -201,10 +167,7 @@ namespace ASM {
         return cv::Mat();
     }
 
-    // If inPixmap exists for the lifetime of the resulting cv::Mat, pass false to inCloneImageData to share inPixmap's data
-    // with the cv::Mat directly
-    //    NOTE: Format_RGB888 is an exception since we need to use a local QImage and thus must clone the data regardless
-    inline cv::Mat QPixmapToCvMat(const QPixmap& inPixmap, bool inCloneImageData = true)
+    [[nodiscard]] inline cv::Mat QPixmapToCvMat(const QPixmap& inPixmap, bool inCloneImageData = true)
     {
         return QImageToCvMat(inPixmap.toImage(), inCloneImageData);
     }

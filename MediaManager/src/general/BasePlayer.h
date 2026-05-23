@@ -23,7 +23,9 @@ public:
     MainApp* App = nullptr;  
     qint64 pid = -1;  
     double position = -1;  
-    double duration = -1;  
+    double startProgress = 0.0;
+    QString category;
+    double duration = -1;
     bool change_in_progress = false;  
     bool paused = false;  
     bool end_of_video = false;  
@@ -32,7 +34,9 @@ public:
     std::shared_ptr<std::chrono::microseconds> sessionTimeStart = nullptr;  
     std::shared_ptr<std::chrono::microseconds> watchedTimeStart = nullptr;  
     double totalWatchedTimeSeconds = 0.0;
-    bool wasPlayingLastCheck = false;  
+    bool wasPlayingLastCheck = false;
+    double m_videoWatchedBaseline = 0.0;
+    double m_videoSessionBaseline = 0.0;
     BasePlayer(QString video_path, int video_id, int* CLASS_COUNT, QObject* parent = nullptr, MainApp* App = nullptr);  
     virtual ~BasePlayer();  
     bool isProcessAlive();  
@@ -52,6 +56,9 @@ public:
     double getTotalWatchedTime();  
     void updateWatchedTiming();
     void start();
+    void resetVideoTiming();
+    double videoWatchedTime();
+    double videoSessionTime();
 signals:  
     void endOfVideoSignal();  
     void pausedChangedSignal(bool paused);  

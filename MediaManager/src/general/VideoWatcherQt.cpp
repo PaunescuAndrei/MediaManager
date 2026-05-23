@@ -12,16 +12,17 @@ VideoWatcherQt::VideoWatcherQt(MainApp* App, QObject* parent) : QThread(parent)
 {
 	this->App = App;
 	this->db = new sqliteDB(this->App->db->location, "videowatcher_con");
-	this->lastSessionDateCached = this->db->getMainInfoValue("lastSessionDate", "ALL", "");
 }
 
 QSharedPointer<BasePlayer> VideoWatcherQt::newPlayer(QString path, int video_id)
 {
 	QMutexLocker lock(&this->data_lock);
 	QSharedPointer<BasePlayer> newVideo = QSharedPointer<MpcPlayer>::create(path, video_id,&this->CLASS_COUNT,this->App,this->App);
-	this->Players.append(newVideo);
-	this->CLASS_COUNT++;
-	newVideo->start();
+    this->Players.append(newVideo);
+    this->CLASS_COUNT++;
+    newVideo->category = this->App->currentDB;
+    newVideo->startProgress = this->db->getVideoProgress(video_id, "0").toDouble();
+    newVideo->start();
 	return newVideo;
 }
 
@@ -110,36 +111,9 @@ void VideoWatcherQt::toggle_window()
 	}
 }
 
-void VideoWatcherQt::incrementTimeWatchedTotal(double value) {
-	double time = this->db->getMainInfoValue("timeWatchedTotal", "ALL", "0.0").toDouble();
-	time += value;
-	this->App->db->setMainInfoValue("timeWatchedTotal", "ALL", QString::number(time));
-	this->App->db->incrementTimeWatchedToday(value);
-}
-
-void VideoWatcherQt::incrementTimeSessionTotal(double value) {
-	double time = this->db->getMainInfoValue("timeSessionTotal", "ALL", "0.0").toDouble();
-	time += value;
-	this->App->db->setMainInfoValue("timeSessionTotal", "ALL", QString::number(time));
-	this->App->db->incrementTimeSessionToday(value);
-}
-
-void VideoWatcherQt::resetDailyStats() {
-	QString today = QDate::currentDate().toString("yyyy-MM-dd");
-	if (this->lastSessionDateCached != today) {
-		this->App->db->setMainInfoValue("videosWatchedToday", "PLUS", "0");
-		this->App->db->setMainInfoValue("videosWatchedToday", "MINUS", "0");
-		this->App->db->setMainInfoValue("timeWatchedToday", "ALL", "0");
-		this->App->db->setMainInfoValue("timeSessionToday", "ALL", "0");
-		this->App->db->setMainInfoValue("lastSessionDate", "ALL", today);
-		this->lastSessionDateCached = today;
-	}
-}
-
 void VideoWatcherQt::run()
 {
 	while (this->running) {
-		this->resetDailyStats();
 		for (QSharedPointer<BasePlayer> player : this->Players) {
 			if (player->video_path == this->App->mainWindow->ui.currentVideo->path) {
 				emit updateProgressBarSignal(player->position,player->duration, player, true);
@@ -149,11 +123,18 @@ void VideoWatcherQt::run()
 				if (player->position != -1) {
 					this->db->updateVideoProgress(player->video_id, player->position);
 				}
-				// Track watched time from this player before removing it
-				double watchedTime = player->getTotalWatchedTime();
-				if (watchedTime > 0) {
-					this->incrementTimeWatchedTotal(watchedTime);
-				}
+                double watchedTime = player->videoWatchedTime();
+                double sessionTime = player->videoSessionTime();
+                if ((watchedTime > 0 || sessionTime > 0) && player->video_id >= 0) {
+                    QDateTime now = QDateTime::currentDateTime();
+                    QString sessionEnd = now.toString("yyyy-MM-dd HH:mm:ss");
+                    qint64 sessionSecs = static_cast<qint64>(sessionTime);
+                    QString sessionStart = now.addSecs(-sessionSecs).toString("yyyy-MM-dd HH:mm:ss");
+                    this->db->insertWatchHistory(player->video_id, player->category,
+                        player->startProgress, player->position,
+                        watchedTime, sessionStart, sessionEnd, sessionTime,
+                        false);
+                }
 				if (player == this->mainPlayer) {
 					this->clearAfterMainVideoEnd();
 				}
@@ -163,28 +144,14 @@ void VideoWatcherQt::run()
 			}
 		}
 		if (!this->Players.isEmpty()) {
+			this->watching = true;
 			if (this->App->musicPlayer && this->App->musicPlayer->player->playbackState() == QMediaPlayer::PlayingState)
 				emit updateMusicPlayerSignal(false);
-			if (this->watching == false) {
-				this->watching = true;
-				if (this->videoWatcherSessionTimeStart != nullptr) {
-					this->videoWatcherSessionTimeStart.reset();
-				}
-				this->videoWatcherSessionTimeStart = std::make_shared<std::chrono::microseconds>(utils::QueryUnbiasedInterruptTimeChrono());
-			}
 		}
 		else {
+			this->watching = false;
 			if (this->App->musicPlayer && (this->App->musicPlayer->player->playbackState() == QMediaPlayer::StoppedState || this->App->musicPlayer->player->playbackState() == QMediaPlayer::PausedState))
 				emit updateMusicPlayerSignal(true);
-			if (this->watching == true) {
-				this->watching = false;
-				double sessionElapsed = std::chrono::duration_cast<std::chrono::duration<double>>(utils::QueryUnbiasedInterruptTimeChrono() - *this->videoWatcherSessionTimeStart).count();
-				this->incrementTimeSessionTotal(sessionElapsed);
-				if (this->videoWatcherSessionTimeStart != nullptr) {
-					this->videoWatcherSessionTimeStart.reset();
-				}
-			}
-
 		}
 		if(this->watching){
 			if (this->App->debug_mode == false && this->App->mainWindow->iconWatchingState == false) {
@@ -205,16 +172,6 @@ void VideoWatcherQt::run()
 	for (QSharedPointer<BasePlayer> player : this->Players) {
 		player->process->terminate();
 		this->db->updateVideoProgress(player->video_id, player->position);
-		// Track watched time from remaining players
-		double watchedTime = player->getTotalWatchedTime();
-		if (watchedTime > 0) {
-			this->incrementTimeWatchedTotal(watchedTime);
-		}
-	}
-	if (this->videoWatcherSessionTimeStart != nullptr) {
-		double sessionElapsed = std::chrono::duration_cast<std::chrono::duration<double>>(utils::QueryUnbiasedInterruptTimeChrono() - *this->videoWatcherSessionTimeStart).count();
-		this->incrementTimeSessionTotal(sessionElapsed);
-		this->videoWatcherSessionTimeStart.reset();
 	}
 	this->clearAfterMainVideoEnd();
 }
@@ -223,19 +180,7 @@ VideoWatcherQt::~VideoWatcherQt()
 {
 	for (QSharedPointer<BasePlayer> item : this->Players) {
 		item->process->terminate();
-		// Track watched time before cleanup
-		double watchedTime = item->getTotalWatchedTime();
-		if (watchedTime > 0) {
-			this->incrementTimeWatchedTotal(watchedTime);
-		}
 		item.reset();
 	}
-
-	if (this->videoWatcherSessionTimeStart != nullptr) {
-		double sessionElapsed = std::chrono::duration_cast<std::chrono::duration<double>>(utils::QueryUnbiasedInterruptTimeChrono() - *this->videoWatcherSessionTimeStart).count();
-		this->incrementTimeSessionTotal(sessionElapsed);
-		this->videoWatcherSessionTimeStart.reset();
-	}
-
 	delete this->db;
 }

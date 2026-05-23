@@ -1117,6 +1117,7 @@ void MainWindow::openStats() {
     dialog->setupTimeStats(this->App);
     dialog->setupVideoStats(this->App);
     dialog->setupRatingStats(this->App);
+    dialog->setupChartsTab(this->App);
     
     // Play sound effects
     this->App->soundPlayer->playSoundEffectChain(1.1);
@@ -1685,6 +1686,22 @@ bool MainWindow::NextButtonClicked(bool increment, bool update_watched_state, bo
 
 bool MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state, bool skipped) {
     NextVideoModes::Mode mode = this->getNextVideoMode();
+
+    int oldVideoId = -1;
+    double oldWatchedTime = 0.0, oldSessionTime = 0.0, oldPos = -1, oldStartProgress = 0;
+    QString oldCategory;
+    if (increment && player) {
+        oldVideoId = player->video_id;
+        oldCategory = player->category;
+        oldStartProgress = player->startProgress;
+        oldPos = player->position;
+        oldWatchedTime = player->videoWatchedTime();
+        oldSessionTime = player->videoSessionTime();
+    } else if (increment) {
+        oldVideoId = this->ui.currentVideo->id;
+        oldCategory = this->App->currentDB;
+    }
+
     bool video_changed = this->NextVideo(mode, increment, update_watched_state, skipped);
     if (player) {
         if (video_changed) {
@@ -1693,6 +1710,16 @@ bool MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool incre
         else {
             player->change_in_progress = false;
         }
+    }
+
+    if (increment && video_changed && oldVideoId >= 0) {
+        QDateTime now = QDateTime::currentDateTime();
+        this->App->db->insertWatchHistory(oldVideoId, oldCategory,
+            oldStartProgress, oldPos,
+            oldWatchedTime,
+            now.addSecs(-static_cast<qint64>(oldSessionTime)).toString("yyyy-MM-dd HH:mm:ss"),
+            now.toString("yyyy-MM-dd HH:mm:ss"),
+            oldSessionTime, true);
     }
     if (video_changed) {
         if (this->animatedIconFlag)
@@ -2095,9 +2122,6 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
         this->refreshVisibility(this->old_search);
 
         this->App->db->db.transaction();
-        if (increment) {
-            this->App->db->incrementVideosWatchedToday(this->App->currentDB);
-        }
         const QString curType = currentSrcIdx.sibling(currentSrcIdx.row(), typeCol).data(Qt::DisplayRole).toString();
         bool playedSpecialType = this->applyPostWatchAdjustments(curType, currentId, increment, 0.0, false, skipped);
         this->updateSvCountersAfterPlayback(playedSpecialType, skipped);
@@ -3270,7 +3294,21 @@ void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notifi
                         this->videosModel->setData(lastWatchedIdx, QDateTime::currentDateTime(), Qt::DisplayRole);
                     }
                     this->App->db->incrementVideoViews(this->App->VW->mainPlayer->video_id, 1, true);
-                    this->App->db->incrementVideosWatchedToday(this->App->currentDB);
+
+                    auto player = this->App->VW->mainPlayer;
+                    double rwatched = player->videoWatchedTime();
+                    double rsession = player->videoSessionTime();
+                    if (rwatched > 0 || rsession > 0) {
+                        QDateTime now = QDateTime::currentDateTime();
+                        this->App->db->insertWatchHistory(player->video_id, player->category,
+                            player->startProgress, player->position,
+                            rwatched,
+                            now.addSecs(-static_cast<qint64>(rsession)).toString("yyyy-MM-dd HH:mm:ss"),
+                            now.toString("yyyy-MM-dd HH:mm:ss"),
+                            rsession, true);
+                    }
+                    player->resetVideoTiming();
+                    player->startProgress = 0;
                     this->App->db->db.commit();
                     this->App->VW->mainPlayer->queue.push(std::make_shared<MpcDirectCommand>(CMD_SETPOSITION, "0"));
                     this->position = 0;
@@ -4572,6 +4610,7 @@ void MainWindow::updateTotalListLabel(bool force_update) {
 
 void MainWindow::changePlayerVideo(QSharedPointer<BasePlayer> player, QString path, int video_id, double position) {
     player->changeVideo(path, video_id, position);
+    player->resetVideoTiming();
     if (this->finish_dialog) {
         this->finish_dialog->close();
         this->finish_dialog = nullptr;

@@ -28,6 +28,7 @@ bool BasePlayer::isProcessAlive()
 
 void BasePlayer::start() {
     this->startSessionTiming();
+    this->resetVideoTiming();
     QThread::start();
 }
 
@@ -94,4 +95,20 @@ void BasePlayer::onPausedChanged(bool paused) {
     } else if (!isCurrentlyPlaying && this->watchedTimeStart != nullptr) {
         this->stopWatchedTiming();
     }
+}
+
+void BasePlayer::resetVideoTiming()
+{
+    m_videoWatchedBaseline = getTotalWatchedTime();
+    m_videoSessionBaseline = getSessionTime();
+}
+
+double BasePlayer::videoWatchedTime()
+{
+    return getTotalWatchedTime() - m_videoWatchedBaseline;
+}
+
+double BasePlayer::videoSessionTime()
+{
+    return getSessionTime() - m_videoSessionBaseline;
 }

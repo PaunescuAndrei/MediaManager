@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>800</width>
-    <height>810</height>
+    <height>1071</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -30,146 +30,372 @@
     <number>0</number>
    </property>
    <item>
-    <widget class="QScrollArea" name="scrollArea">
-     <property name="widgetResizable">
-      <bool>true</bool>
+    <widget class="QTabWidget" name="statsTabWidget">
+     <property name="currentIndex">
+      <number>0</number>
      </property>
-     <widget class="QWidget" name="scrollAreaWidgetContents">
-      <property name="geometry">
-       <rect>
-        <x>0</x>
-        <y>0</y>
-        <width>798</width>
-        <height>808</height>
-       </rect>
-      </property>
-      <layout class="QVBoxLayout" name="verticalLayout_2">
+     <widget class="QWidget" name="overviewTab">
+      <attribute name="title">
+       <string>Overview</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="overviewTabLayout">
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
        <item>
-        <widget class="QLabel" name="title_label">
-         <property name="font">
-          <font>
-           <pointsize>18</pointsize>
-           <bold>true</bold>
-          </font>
+        <widget class="QScrollArea" name="scrollArea">
+         <property name="widgetResizable">
+          <bool>true</bool>
          </property>
-         <property name="text">
-          <string>Statistics Overview</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignmentFlag::AlignCenter</set>
-         </property>
+         <widget class="QWidget" name="scrollAreaWidgetContents">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>794</width>
+            <height>1039</height>
+           </rect>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_2">
+           <item>
+            <widget class="QLabel" name="title_label">
+             <property name="font">
+              <font>
+               <pointsize>18</pointsize>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>Statistics Overview</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignmentFlag::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="Line" name="line">
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="time_stats_container" native="true">
+             <layout class="QVBoxLayout" name="time_stats_layout">
+              <item>
+               <widget class="QLabel" name="time_stats_title">
+                <property name="font">
+                 <font>
+                  <pointsize>14</pointsize>
+                  <bold>true</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>Time Statistics</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QWidget" name="time_grid_container" native="true">
+                <layout class="QGridLayout" name="time_grid_layout"/>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="Line" name="line_2">
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="video_stats_container" native="true">
+             <layout class="QVBoxLayout" name="video_stats_layout">
+              <item>
+               <widget class="QLabel" name="video_stats_title">
+                <property name="font">
+                 <font>
+                  <pointsize>14</pointsize>
+                  <bold>true</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>Video Statistics</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QWidget" name="video_grid_container" native="true">
+                <layout class="QGridLayout" name="video_grid_layout"/>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="Line" name="line_3">
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="rating_stats_container" native="true">
+             <layout class="QVBoxLayout" name="rating_stats_layout">
+              <item>
+               <widget class="QLabel" name="rating_stats_title">
+                <property name="font">
+                 <font>
+                  <pointsize>14</pointsize>
+                  <bold>true</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>Rating Statistics</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QWidget" name="rating_grid_container" native="true">
+                <layout class="QGridLayout" name="rating_grid_layout"/>
+               </widget>
+              </item>
+              <item>
+               <widget class="QWidget" name="rating_distribution_container" native="true">
+                <layout class="QGridLayout" name="rating_distribution_layout"/>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <spacer name="verticalSpacer">
+             <property name="orientation">
+              <enum>Qt::Orientation::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
         </widget>
        </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="chartsTab">
+      <attribute name="title">
+       <string>Charts</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="chartsTabLayout">
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
        <item>
-        <widget class="Line" name="line">
-         <property name="orientation">
-          <enum>Qt::Orientation::Horizontal</enum>
+        <widget class="QScrollArea" name="chartsScrollArea">
+         <property name="widgetResizable">
+          <bool>true</bool>
          </property>
+         <widget class="QWidget" name="chartsScrollContent">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>794</width>
+            <height>1039</height>
+           </rect>
+          </property>
+          <layout class="QVBoxLayout" name="chartsLayout">
+           <item>
+            <widget class="QLabel" name="chartsTitleLabel">
+             <property name="font">
+              <font>
+               <pointsize>18</pointsize>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>Watch Activity Charts</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignmentFlag::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="chartsFilterRow" native="true">
+             <layout class="QHBoxLayout" name="chartsFilterLayout">
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="topMargin">
+               <number>0</number>
+              </property>
+              <property name="rightMargin">
+               <number>0</number>
+              </property>
+              <property name="bottomMargin">
+               <number>0</number>
+              </property>
+              <item>
+               <spacer name="filterLeftSpacer">
+                <property name="orientation">
+                 <enum>Qt::Orientation::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item>
+               <widget class="QLabel" name="filterLabel">
+                <property name="text">
+                 <string>Date Range:</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QComboBox" name="dateRangeCombo">
+                <item>
+                 <property name="text">
+                  <string>Last 7 days</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Last 30 days</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Last 90 days</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Last 6 months</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Last year</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>All time</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="metricLabel">
+                <property name="text">
+                 <string>Metric:</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QComboBox" name="metricCombo">
+                <item>
+                 <property name="text">
+                  <string>Watched Time</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>Video Count</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="refreshChartsButton">
+                <property name="text">
+                 <string>Refresh</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="filterRightSpacer">
+                <property name="orientation">
+                 <enum>Qt::Orientation::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="heatmapContainer" native="true">
+             <layout class="QVBoxLayout" name="heatmapLayout"/>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="dailyBarsContainer" native="true">
+             <layout class="QVBoxLayout" name="dailyBarsLayout"/>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="hourlyContainer" native="true">
+             <layout class="QVBoxLayout" name="hourlyLayout"/>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="dayOfWeekContainer" native="true">
+             <layout class="QVBoxLayout" name="dayOfWeekLayout"/>
+            </widget>
+           </item>
+           <item>
+            <spacer name="chartsSpacer">
+             <property name="orientation">
+              <enum>Qt::Orientation::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
         </widget>
-       </item>
-       <item>
-        <widget class="QWidget" name="time_stats_container" native="true">
-         <layout class="QVBoxLayout" name="time_stats_layout">
-          <item>
-           <widget class="QLabel" name="time_stats_title">
-            <property name="font">
-             <font>
-              <pointsize>14</pointsize>
-              <bold>true</bold>
-             </font>
-            </property>
-            <property name="text">
-             <string>Time Statistics</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QWidget" name="time_grid_container" native="true">
-            <layout class="QGridLayout" name="time_grid_layout"/>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <item>
-        <widget class="Line" name="line_2">
-         <property name="orientation">
-          <enum>Qt::Orientation::Horizontal</enum>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QWidget" name="video_stats_container" native="true">
-         <layout class="QVBoxLayout" name="video_stats_layout">
-          <item>
-           <widget class="QLabel" name="video_stats_title">
-            <property name="font">
-             <font>
-              <pointsize>14</pointsize>
-              <bold>true</bold>
-             </font>
-            </property>
-            <property name="text">
-             <string>Video Statistics</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QWidget" name="video_grid_container" native="true">
-            <layout class="QGridLayout" name="video_grid_layout"/>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <item>
-        <widget class="Line" name="line_3">
-         <property name="orientation">
-          <enum>Qt::Orientation::Horizontal</enum>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QWidget" name="rating_stats_container" native="true">
-         <layout class="QVBoxLayout" name="rating_stats_layout">
-          <item>
-           <widget class="QLabel" name="rating_stats_title">
-            <property name="font">
-             <font>
-              <pointsize>14</pointsize>
-              <bold>true</bold>
-             </font>
-            </property>
-            <property name="text">
-             <string>Rating Statistics</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QWidget" name="rating_grid_container" native="true">
-            <layout class="QGridLayout" name="rating_grid_layout"/>
-           </widget>
-          </item>
-          <item>
-           <widget class="QWidget" name="rating_distribution_container" native="true">
-            <layout class="QGridLayout" name="rating_distribution_layout"/>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <item>
-        <spacer name="verticalSpacer">
-         <property name="orientation">
-          <enum>Qt::Orientation::Vertical</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>20</width>
-           <height>40</height>
-          </size>
-         </property>
-        </spacer>
        </item>
       </layout>
      </widget>

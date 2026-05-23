@@ -94,6 +94,7 @@
     <ClCompile Include="src\QtClasses\Widgets\PreviewFrameProcessor.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\VideoPreviewWidget.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\ContributionHeatmapWidget.cpp" />
     <ClCompile Include="src\thirdparty\beat_this\beat_this_api.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
@@ -195,6 +196,7 @@
     <ClInclude Include="src\QtClasses\Widgets\TreeWidgetItem.h" />
     <QtMoc Include="src\QtClasses\Widgets\PreviewFrameProcessor.h" />
     <QtMoc Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.h" />
+    <QtMoc Include="src\QtClasses\Widgets\ContributionHeatmapWidget.h" />
     <QtMoc Include="src\QtClasses\Widgets\watchedFrame.h" />
     <QtMoc Include="src\QtClasses\Widgets\customQLabel.h" />
     <QtMoc Include="src\QtClasses\Widgets\shokoButton.h" />
@@ -283,17 +285,17 @@
     <Import Project="$(QtMsBuild)\qt_defaults.props" />
   </ImportGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="QtSettings">
-    <QtModules>core;gui;widgets;concurrent;multimedia;multimediawidgets;sql;</QtModules>
+    <QtModules>core;gui;widgets;concurrent;multimedia;multimediawidgets;sql;charts</QtModules>
     <QtBuildConfig>debug</QtBuildConfig>
     <QtDeploy>true</QtDeploy>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="QtSettings">
-    <QtModules>core;gui;widgets;concurrent;multimedia;multimediawidgets;sql;</QtModules>
+    <QtModules>core;gui;widgets;concurrent;multimedia;multimediawidgets;sql;charts</QtModules>
     <QtBuildConfig>release</QtBuildConfig>
     <QtDeploy>true</QtDeploy>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'" Label="QtSettings">
-    <QtModules>core;gui;widgets;concurrent;multimedia;multimediawidgets;sql;</QtModules>
+    <QtModules>core;gui;widgets;concurrent;multimedia;multimediawidgets;sql;charts</QtModules>
     <QtBuildConfig>release</QtBuildConfig>
     <QtDeploy>true</QtDeploy>
   </PropertyGroup>

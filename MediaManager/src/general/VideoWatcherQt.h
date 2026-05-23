@@ -22,9 +22,7 @@ public:
     sqliteDB* db = nullptr;
     HWND old_foreground_window = nullptr;
     QSharedPointer<BasePlayer> mainPlayer = nullptr;
-    std::shared_ptr <std::chrono::microseconds> videoWatcherSessionTimeStart = nullptr;
     QList<QSharedPointer<BasePlayer>> Players = QList<QSharedPointer<BasePlayer>>();
-    QString lastSessionDateCached = "";
     VideoWatcherQt(MainApp* App, QObject* parent = nullptr);
     QSharedPointer<BasePlayer> newPlayer(QString path, int video_id);
     void clearData(bool include_mainplayer);
@@ -32,9 +30,6 @@ public:
     void clearMainPlayer();
     void clearAfterMainVideoEnd();
     void toggle_window();
-    void incrementTimeWatchedTotal(double value);
-    void incrementTimeSessionTotal(double value);
-    void resetDailyStats();
     void run() override;
     ~VideoWatcherQt();
 signals:

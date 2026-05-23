@@ -55,12 +55,24 @@ public:
     void resetDB(QString category = "ALL");
     void resetWatched(QString category, double progress = 0, QString watched = "No");
     void resetWatched(QString category, QJsonObject settings, double progress = 0, QString watched = "No");
-    void incrementVideosWatchedToday(QString category);
     int getVideoCount(QString category);
     QMap<double, int> getRatingDistribution();
     int getUnratedVideoCount();
     int getUniqueVideosWatched(QString category);
-    void incrementTimeWatchedToday(double value);
-    void incrementTimeSessionToday(double value);
+    int insertWatchHistory(int video_id, const QString& category,
+        double watched_start, double watched_end, double watched_time,
+        const QString& session_start, const QString& session_end, double session_time,
+        bool completed = false);
+    double getTotalWatchedTime();
+    double getTotalWatchedTimeToday();
+    double getTotalSessionTime();
+    double getTotalSessionTimeToday();
+    int getVideosWatchedToday(const QString& category);
+    QVector<QPair<QDate, double>> getDailyWatchedHistory(int days);
+    QVector<QPair<int, double>> getHourlyWatchedDistribution(int days = -1);
+    QVector<QPair<QDate, int>> getDailyWatchedCount(int days);
+    QVector<QPair<int, int>> getHourlyWatchedCount(int days = -1);
+    QVector<QPair<int, double>> getDayOfWeekDistribution(int days = -1);
+    QVector<QPair<int, int>> getDayOfWeekCount(int days = -1);
 };
 

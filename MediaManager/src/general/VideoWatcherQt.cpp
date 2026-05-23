@@ -130,8 +130,11 @@ void VideoWatcherQt::run()
                     QString sessionEnd = now.toString("yyyy-MM-dd HH:mm:ss");
                     qint64 sessionSecs = static_cast<qint64>(sessionTime);
                     QString sessionStart = now.addSecs(-sessionSecs).toString("yyyy-MM-dd HH:mm:ss");
+                    double watched_end = player->position;
+                    if (watched_end < 0)
+                        watched_end = (player->duration > 0) ? player->duration : player->startProgress;
                     this->db->insertWatchHistory(player->video_id, player->category,
-                        player->startProgress, player->position,
+                        player->startProgress, watched_end,
                         watchedTime, sessionStart, sessionEnd, sessionTime,
                         false);
                 }

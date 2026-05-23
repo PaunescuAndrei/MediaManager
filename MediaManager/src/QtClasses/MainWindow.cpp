@@ -1714,8 +1714,11 @@ bool MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool incre
 
     if (increment && video_changed && oldVideoId >= 0) {
         QDateTime now = QDateTime::currentDateTime();
+        double watched_end = oldPos;
+        if (watched_end < 0)
+            watched_end = (player && player->duration > 0) ? player->duration : oldStartProgress;
         this->App->db->insertWatchHistory(oldVideoId, oldCategory,
-            oldStartProgress, oldPos,
+            oldStartProgress, watched_end,
             oldWatchedTime,
             now.addSecs(-static_cast<qint64>(oldSessionTime)).toString("yyyy-MM-dd HH:mm:ss"),
             now.toString("yyyy-MM-dd HH:mm:ss"),
@@ -3300,8 +3303,11 @@ void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notifi
                     double rsession = player->videoSessionTime();
                     if (rwatched > 0 || rsession > 0) {
                         QDateTime now = QDateTime::currentDateTime();
+                        double watched_end = player->position;
+                        if (watched_end < 0)
+                            watched_end = (player->duration > 0) ? player->duration : player->startProgress;
                         this->App->db->insertWatchHistory(player->video_id, player->category,
-                            player->startProgress, player->position,
+                            player->startProgress, watched_end,
                             rwatched,
                             now.addSecs(-static_cast<qint64>(rsession)).toString("yyyy-MM-dd HH:mm:ss"),
                             now.toString("yyyy-MM-dd HH:mm:ss"),

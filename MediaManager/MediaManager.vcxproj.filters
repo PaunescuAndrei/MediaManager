@@ -314,6 +314,9 @@
     <ClCompile Include="src\QtClasses\Widgets\VideosTreeView.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\ContributionHeatmapWidget.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\resource.h">
@@ -326,9 +329,6 @@
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </ClInclude>
     <ClInclude Include="src\QtClasses\Widgets\PreviewTooltipDialog.h">
-      <Filter>Header Files\QtClasses\Widgets</Filter>
-    </ClInclude>
-    <ClInclude Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </ClInclude>
     <ClInclude Include="src\general\config.h">
@@ -660,9 +660,6 @@
     <QtMoc Include="src\QtClasses\UI\UpdatePathsDialog.h">
       <Filter>Header Files\QtClasses\UI</Filter>
     </QtMoc>
-    <QtMoc Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.h">
-      <Filter>Header Files</Filter>
-    </QtMoc>
     <QtMoc Include="src\QtClasses\Models\VideosSortProxyModel.h">
       <Filter>Header Files\QtClasses\Models</Filter>
     </QtMoc>
@@ -673,6 +670,12 @@
       <Filter>Header Files\QtClasses\Models</Filter>
     </QtMoc>
     <QtMoc Include="src\QtClasses\Widgets\VideosTreeView.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\ContributionHeatmapWidget.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
   </ItemGroup>

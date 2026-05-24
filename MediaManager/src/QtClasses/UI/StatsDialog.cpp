@@ -168,7 +168,7 @@ StatsDialog::~StatsDialog()
 void StatsDialog::changeEvent(QEvent* event)
 {
     if (event->type() == QEvent::PaletteChange) {
-        refreshCharts();
+        applyChartsTheme();
     }
     QDialog::changeEvent(event);
 }
@@ -177,11 +177,11 @@ void StatsDialog::setupChartsTab(MainApp* app)
 {
     m_app = app;
     setupContributionHeatmap(ui.heatmapLayout);
+    ui.dateRangeCombo->setCurrentIndex(1);
     createDailyBars(ui.dailyBarsLayout);
     createHourlyHistogram(ui.hourlyLayout);
     createDayOfWeek(ui.dayOfWeekLayout);
 
-    ui.dateRangeCombo->setCurrentIndex(1);
     connect(ui.dateRangeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &StatsDialog::refreshCharts);
     connect(ui.metricCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -189,7 +189,7 @@ void StatsDialog::setupChartsTab(MainApp* app)
     connect(ui.refreshChartsButton, &QPushButton::clicked,
             this, &StatsDialog::refreshCharts);
     connect(qApp, &QApplication::paletteChanged,
-            this, &StatsDialog::refreshCharts);
+            this, &StatsDialog::applyChartsTheme);
 }
 
 bool StatsDialog::showCounts() const
@@ -352,7 +352,6 @@ void StatsDialog::updateDailyBars()
     m_dailyAxisX->setLabelsAngle(days > 30 ? -90 : 0);
 
     m_dailyAxisY->setRange(0, maxVal * 1.15);
-    m_dailyAxisY->applyNiceNumbers();
 }
 
 void StatsDialog::updateHourlyHistogram()
@@ -413,7 +412,6 @@ void StatsDialog::updateHourlyHistogram()
     m_hourlyBarSet = set;
 
     m_hourlyAxisY->setRange(0, maxVal * 1.15);
-    m_hourlyAxisY->applyNiceNumbers();
 }
 
 void StatsDialog::createDayOfWeek(QLayout* layout)
@@ -508,7 +506,6 @@ void StatsDialog::updateDayOfWeek()
     m_dowBarSet = set;
 
     m_dowAxisY->setRange(0, maxVal * 1.15);
-    m_dowAxisY->applyNiceNumbers();
 }
 
 void StatsDialog::applyChartsTheme()
@@ -559,5 +556,18 @@ void StatsDialog::applyChartsTheme()
     if (m_dowAxisY) {
         m_dowAxisY->setLabelsColor(textColor);
         m_dowAxisY->setTitleBrush(QBrush(textColor));
+    }
+
+    QColor barColor = palette().color(QPalette::Highlight);
+    if (m_dailyBarSet) {
+        m_dailyBarSet->setColor(barColor);
+    }
+    QColor barColorAlpha = barColor;
+    barColorAlpha.setAlpha(180);
+    if (m_hourlyBarSet) {
+        m_hourlyBarSet->setColor(barColorAlpha);
+    }
+    if (m_dowBarSet) {
+        m_dowBarSet->setColor(barColorAlpha);
     }
 }

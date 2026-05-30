@@ -12,8 +12,33 @@
 #include "shokoAPI.h"
 #include <importPlaylistDialog.h>
 
-shokoButton::shokoButton(QWidget* parent) : QToolButton(parent) {
+shokoButton::shokoButton(QWidget* parent) : customQToolButton(parent) {
     connect(this, &QToolButton::clicked, this, &shokoButton::button_clicked);
+    connect(this, &customQToolButton::rightClicked, this, [this] {
+        importPlaylistDialog* qDialog = new importPlaylistDialog(this->MW);
+        qDialog->setAttribute(Qt::WA_DeleteOnClose);
+        QJsonArray playlists_json = qMainApp->shoko_API->get_playlists();
+        for (auto item : playlists_json) {
+            qDialog->ui.comboBox_playlist->addItem(item.toObject().value("PlaylistName").toString());
+        }
+        qDialog->ui.comboBox_playlist->setCurrentIndex(qDialog->ui.comboBox_playlist->findText(qMainApp->config->get("shoko_import_playlist")));
+        qDialog->ui.checkBox_random->setChecked(qMainApp->config->get_bool("shoko_import_random_item"));
+        QObject::connect(qDialog, &QDialog::accepted, this, [this, qDialog]() {
+            qMainApp->config->set("shoko_import_playlist", qDialog->ui.comboBox_playlist->currentText());
+            qMainApp->config->set("shoko_import_random_item", utils::bool_to_text_qt(qDialog->ui.checkBox_random->isChecked()));
+            qMainApp->config->save_config();
+            this->update_new_watching(qDialog->ui.comboBox_playlist->currentText(), qDialog->ui.checkBox_random->isChecked());
+        });
+        QObject::connect(qDialog, &QDialog::finished, qDialog, &QDialog::deleteLater);
+        qDialog->open();
+    });
+    connect(this, &customQToolButton::middleClicked, this, [this] {
+        int i = qMainApp->shoko_API->clean_playlists();
+        QMessageBox msg = QMessageBox(this->MW);
+        msg.setWindowTitle("Shoko DB Clean Playlist");
+        msg.setText(QStringLiteral("Cleaned %1 entries.").arg(i));
+        msg.exec();
+    });
 }
 
 void shokoButton::setMainWindow(MainWindow* window) {
@@ -62,54 +87,43 @@ void shokoButton::update_new_watching(QString ptw_playlist, bool random) {
 
 void shokoButton::enterEvent(QEnterEvent* event)
 {
-    this->setIcon(QIcon(":/shoko/resources/shoko_icon_hover.png"));
-    QToolButton::enterEvent(event);
+    if (!this->isDown()) {
+        this->setIcon(QIcon(":/shoko/resources/shoko_icon_hover.png"));
+    }
+    customQToolButton::enterEvent(event);
 }
 
 void shokoButton::leaveEvent(QEvent* event)
 {
     this->setIcon(QIcon(":/shoko/resources/shoko_icon.png"));
-    QToolButton::leaveEvent(event);
+    customQToolButton::leaveEvent(event);
 }
 
 void shokoButton::mousePressEvent(QMouseEvent* e)
 {
     this->setIcon(QIcon(":/shoko/resources/shoko_icon_pressed.png"));
-    QToolButton::mousePressEvent(e);
+    customQToolButton::mousePressEvent(e);
+}
+
+void shokoButton::mouseMoveEvent(QMouseEvent* e)
+{
+    customQToolButton::mouseMoveEvent(e);
+    const bool inside = this->rect().contains(e->position().toPoint());
+    this->setIcon(inside && this->isDown()
+        ? QIcon(":/shoko/resources/shoko_icon_pressed.png")
+        : QIcon(":/shoko/resources/shoko_icon.png"));
 }
 
 void shokoButton::mouseReleaseEvent(QMouseEvent* e)
 {
-    this->setIcon(QIcon(":/shoko/resources/shoko_icon_hover.png"));
-    if (e->button() == Qt::RightButton) {
-        importPlaylistDialog* qDialog = new importPlaylistDialog(this->MW);
-        qDialog->setAttribute(Qt::WA_DeleteOnClose);
-        QJsonArray playlists_json = qMainApp->shoko_API->get_playlists();
-        for (auto item : playlists_json) {
-            qDialog->ui.comboBox_playlist->addItem(item.toObject().value("PlaylistName").toString());
-        }
-        qDialog->ui.comboBox_playlist->setCurrentIndex(qDialog->ui.comboBox_playlist->findText(qMainApp->config->get("shoko_import_playlist")));
-        qDialog->ui.checkBox_random->setChecked(qMainApp->config->get_bool("shoko_import_random_item"));
-        QObject::connect(qDialog, &QDialog::accepted, this, [this, qDialog]() {
-            qMainApp->config->set("shoko_import_playlist", qDialog->ui.comboBox_playlist->currentText());
-            qMainApp->config->set("shoko_import_random_item", utils::bool_to_text_qt(qDialog->ui.checkBox_random->isChecked()));
-            qMainApp->config->save_config();
-            this->update_new_watching(qDialog->ui.comboBox_playlist->currentText(), qDialog->ui.checkBox_random->isChecked());
-        });
-        QObject::connect(qDialog, &QDialog::finished, qDialog, &QDialog::deleteLater);
-        qDialog->open();
-        e->accept();
-        return;
-    } else if (e->button() == Qt::MiddleButton) {
-        int i = qMainApp->shoko_API->clean_playlists();
-        QMessageBox msg = QMessageBox(this->MW);
-        msg.setWindowTitle("Shoko DB Clean Playlist");
-        msg.setText(QStringLiteral("Cleaned %1 entries.").arg(i));
-        msg.exec();
-        e->accept();
-        return;
+    const bool wasDown = this->isDown();
+    customQToolButton::mouseReleaseEvent(e);
+    if (wasDown && this->rect().contains(e->position().toPoint())) {
+        this->setIcon(QIcon(":/shoko/resources/shoko_icon_hover.png"));
     }
-    QToolButton::mouseReleaseEvent(e);
+    else {
+        this->setIcon(QIcon(":/shoko/resources/shoko_icon.png"));
+    }
 }
 
 void shokoButton::button_clicked() {

@@ -82,7 +82,8 @@
     <ClCompile Include="src\QtClasses\Widgets\customGraphicsView.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\generalEventFilter.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\videosTreeWidget.cpp" />
-    <ClCompile Include="src\QtClasses\Widgets\customQButton.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\customQPushButton.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\customQToolButton.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\quitEaterEventFilter.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\scrollAreaEventFilter.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\shokoButton.cpp" />
@@ -200,7 +201,8 @@
     <QtMoc Include="src\QtClasses\Widgets\watchedFrame.h" />
     <QtMoc Include="src\QtClasses\Widgets\customQLabel.h" />
     <QtMoc Include="src\QtClasses\Widgets\shokoButton.h" />
-    <QtMoc Include="src\QtClasses\Widgets\customQButton.h" />
+    <QtMoc Include="src\QtClasses\Widgets\customQPushButton.h" />
+    <QtMoc Include="src\QtClasses\Widgets\customQToolButton.h" />
     <QtMoc Include="src\QtClasses\Widgets\videosTreeWidget.h" />
     <QtMoc Include="src\QtClasses\Widgets\customGraphicsView.h" />
     <QtMoc Include="src\QtClasses\Widgets\ProgressBarQLabel.h" />

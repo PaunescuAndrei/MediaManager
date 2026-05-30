@@ -97,10 +97,10 @@ public:
     QMenu* trayIconContextMenu(QWidget* parent = nullptr);
     void openStats();
     void populateList(bool selectcurrent = true);
-    void switchNextButtonMode(customQButton* nextbutton);
+    void switchNextButtonMode(customQPushButton* nextbutton);
     QString getRandomButtonConfigKey();
-    void initRandomButtonMode(customQButton* randombutton);
-    void switchRandomButtonMode(customQButton* randombutton);
+    void initRandomButtonMode(customQPushButton* randombutton);
+    void switchRandomButtonMode(customQPushButton* randombutton);
     void updateSortConfig();
     void addWatchedDialogButton();
     void switchCurrentDB(QString db = "");
@@ -175,7 +175,7 @@ public:
     bool applyPostWatchAdjustments(const QString& videoType, int videoId, bool increment, double watchedProgressOverride = 0.0, bool useOverrideProgress = false, bool suppressMinusCounter = false);
     void updateSvCountersAfterPlayback(bool playedSpecialType, bool suppressMinusIncrement);
     int getCounterVar();
-    void initNextButtonMode(customQButton* nextbutton);
+    void initNextButtonMode(customQPushButton* nextbutton);
     bool isNextButtonRandom();
     QString getNextButtonConfigKey();
     void setCounterVar(int value);

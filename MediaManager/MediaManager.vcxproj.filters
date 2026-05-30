@@ -17,10 +17,6 @@
       <UniqueIdentifier>{99349809-55BA-4b9d-BF79-8FDBB0286EB3}</UniqueIdentifier>
       <Extensions>ui</Extensions>
     </Filter>
-    <Filter Include="Translation Files">
-      <UniqueIdentifier>{639EADAA-A684-42e4-A9AD-28FC9BCB8F7C}</UniqueIdentifier>
-      <Extensions>ts</Extensions>
-    </Filter>
     <Filter Include="Source Files\general">
       <UniqueIdentifier>{af5c0874-cb71-4cb0-af42-5150143d5ae4}</UniqueIdentifier>
     </Filter>
@@ -128,7 +124,10 @@
     <ClCompile Include="src\QtClasses\Widgets\videosTreeWidget.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
-    <ClCompile Include="src\QtClasses\Widgets\customQButton.cpp">
+    <ClCompile Include="src\QtClasses\Widgets\customQPushButton.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\customQToolButton.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
     <ClCompile Include="src\QtClasses\Widgets\shokoButton.cpp">
@@ -555,7 +554,10 @@
     <QtMoc Include="src\QtClasses\Widgets\videosTreeWidget.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
-    <QtMoc Include="src\QtClasses\Widgets\customQButton.h">
+    <QtMoc Include="src\QtClasses\Widgets\customQPushButton.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\customQToolButton.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
     <QtMoc Include="src\QtClasses\Widgets\shokoButton.h">

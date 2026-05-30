@@ -50,7 +50,7 @@
 #include <QProgressDialog>
 #include "InsertSettingsDialog.h"
 #include "generalEventFilter.h"
-#include "customQButton.h"
+#include "customQPushButton.h"
 #include "scrollAreaEventFilter.h"
 #include "ProgressBarQLabel.h"
 #include <QColorDialog>
@@ -336,7 +336,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
             this->changePlayerVideo(this->App->VW->mainPlayer, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
         }
     });
-    connect(this->ui.random_button, &customQButton::middleClicked, this, [this] {
+    connect(this->ui.random_button, &customQPushButton::middleClicked, this, [this] {
         FilterDialog dialog = FilterDialog(this,this->filterSettings.json,this);
         int value = dialog.exec();
         if (value == QDialog::Accepted) {
@@ -346,14 +346,14 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
             this->updateVideoListRandomProbabilitiesIfVisible();
         }
     });
-    connect(this->ui.random_button, &customQButton::rightClicked, this, [this] {
-        customQButton* buttonSender = qobject_cast<customQButton*>(sender());
+    connect(this->ui.random_button, &customQPushButton::rightClicked, this, [this] {
+        customQPushButton* buttonSender = qobject_cast<customQPushButton*>(sender());
         this->switchRandomButtonMode(buttonSender);
      });
     connect(this->ui.watch_button, &QPushButton::clicked, this, [this] { 
         this->watchCurrent(); 
     });
-    connect(this->ui.watch_button, &customQButton::rightClicked, this, [this] {
+    connect(this->ui.watch_button, &customQPushButton::rightClicked, this, [this] {
         this->openEmptyVideoPlayer();
     });
     connect(this->ui.insert_button, &QPushButton::clicked, this, [this] { 
@@ -365,17 +365,17 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     connect(this->ui.next_button, &QPushButton::clicked, this, [this] {
         this->NextButtonClicked(true, this->getCheckedUpdateWatchedToggleButton());
     });
-    connect(this->ui.next_button, &customQButton::middleClicked, this, [this] {
+    connect(this->ui.next_button, &customQPushButton::middleClicked, this, [this] {
         this->SkipVideo();
     });
-    connect(this->ui.next_button, &customQButton::rightClicked, this, [this] {
-        customQButton* buttonSender = qobject_cast<customQButton*>(sender());
+    connect(this->ui.next_button, &customQPushButton::rightClicked, this, [this] {
+        customQPushButton* buttonSender = qobject_cast<customQPushButton*>(sender());
         this->switchNextButtonMode(buttonSender);
      });
     connect(this->ui.settings_button, &QPushButton::clicked, this, [this] {
         this->settingsDialogButton(); 
     });
-    connect(this->ui.settings_button, &customQButton::rightClicked, this, [this] { 
+    connect(this->ui.settings_button, &customQPushButton::rightClicked, this, [this] { 
         this->openStats();
     });
 
@@ -2971,19 +2971,19 @@ void MainWindow::setDebugMode(bool debug) {
         }
         QPushButton* btn2 = this->ui.MenuButtons->findChild<QPushButton*>("changeThemeBtn");
         if (!btn2) {
-            customQButton* btn2 = new customQButton(this->ui.centralwidget);
+            customQPushButton* btn2 = new customQPushButton(this->ui.centralwidget);
             btn2->setObjectName("changeThemeBtn");
             btn2->setText("Theme");
-            connect(btn2, &customQButton::clicked, this, [this] {
+            connect(btn2, &customQPushButton::clicked, this, [this] {
                 QPalette p = this->App->palette();
                 p.setColor(QPalette::Highlight, QColor(utils::randint(0, 255), utils::randint(0, 255), utils::randint(0, 255)));
                 this->changePalette(p);
             });
-            connect(btn2, &customQButton::rightClicked, this, [this] {
+            connect(btn2, &customQPushButton::rightClicked, this, [this] {
                 QPalette p = this->App->style()->standardPalette();
                 this->changePalette(p);
             });
-            connect(btn2, &customQButton::middleClicked, this, [this] {
+            connect(btn2, &customQPushButton::middleClicked, this, [this] {
                 QColorDialog d = QColorDialog();
                 connect(&d, &QColorDialog::currentColorChanged, this, [this](const QColor& color) {
                     if (color.isValid()) {
@@ -3786,7 +3786,7 @@ int MainWindow::getCounterVar() {
     return this->App->db->getMainInfoValue("counterVar", "ALL", "0").toInt();
 }
 
-void MainWindow::initNextButtonMode(customQButton* nextbutton) {
+void MainWindow::initNextButtonMode(customQPushButton* nextbutton) {
     NextVideoModes::Mode mode = this->getNextVideoMode();
     switch (mode) {
         case NextVideoModes::Sequential:
@@ -3847,7 +3847,7 @@ QString MainWindow::getNextButtonConfigKey() {
     return "";
 }
 
-void MainWindow::switchNextButtonMode(customQButton* nextbutton) {
+void MainWindow::switchNextButtonMode(customQPushButton* nextbutton) {
     QString config_key = this->getNextButtonConfigKey();
     NextVideoModes::Mode current_mode = this->getNextVideoMode();
     
@@ -3890,7 +3890,7 @@ QString MainWindow::getRandomButtonConfigKey() {
     return "";
 }
 
-void MainWindow::initRandomButtonMode(customQButton* randombutton) {
+void MainWindow::initRandomButtonMode(customQPushButton* randombutton) {
     QString config_key = this->getRandomButtonConfigKey();
     if (this->App->config->get(config_key).toInt() == RandomModes::All) {
         randombutton->setText("Get Random (All)");
@@ -3903,7 +3903,7 @@ void MainWindow::initRandomButtonMode(customQButton* randombutton) {
     }
 }
 
-void MainWindow::switchRandomButtonMode(customQButton* randombutton) {
+void MainWindow::switchRandomButtonMode(customQPushButton* randombutton) {
     QString config_key = this->getRandomButtonConfigKey();
     int mode = this->App->config->get(config_key).toInt();
     if (mode == RandomModes::Normal)

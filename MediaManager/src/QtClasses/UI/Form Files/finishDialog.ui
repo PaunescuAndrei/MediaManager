@@ -558,7 +558,7 @@
           </spacer>
          </item>
          <item>
-          <widget class="customQButton" name="NextButton">
+          <widget class="customQPushButton" name="NextButton">
            <property name="sizePolicy">
             <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
              <horstretch>0</horstretch>
@@ -640,9 +640,9 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>customQButton</class>
+   <class>customQPushButton</class>
    <extends>QPushButton</extends>
-   <header>customqbutton.h</header>
+   <header>customQPushButton.h</header>
   </customwidget>
   <customwidget>
    <class>ProgressBarQLabel</class>

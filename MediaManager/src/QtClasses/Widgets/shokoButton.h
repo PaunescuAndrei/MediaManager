@@ -1,11 +1,11 @@
 #pragma once
-#include <QToolButton>
+#include "customQToolButton.h"
 
 class MainWindow;
 
-class shokoButton : public QToolButton
+class shokoButton : public customQToolButton
 {
-    Q_OBJECT //don't forget this macro, or your signals/slots won't work
+    Q_OBJECT
 
 public:
     MainWindow* MW = nullptr;
@@ -15,6 +15,7 @@ public:
     void enterEvent(QEnterEvent* event);
     void leaveEvent(QEvent* event);
     void mousePressEvent(QMouseEvent* e) override;
+    void mouseMoveEvent(QMouseEvent* e) override;
     void mouseReleaseEvent(QMouseEvent* e) override;
     void button_clicked();
     ~shokoButton();

@@ -5,7 +5,8 @@
 #include "NonBlockingQueue.h"  
 #include "MpcApi.h"  
 #include "PlayerCommands.h"  
-#include <chrono>  
+#include <chrono>
+#include <QDateTime>  
 
 class MainApp;  
 
@@ -37,6 +38,11 @@ public:
     bool wasPlayingLastCheck = false;
     double m_videoWatchedBaseline = 0.0;
     double m_videoSessionBaseline = 0.0;
+    int activeWatchHistoryRowId = -1;
+    QDateTime videoStartWallClock;
+    QDateTime lastCheckpointTime;
+    QString lastKnownVideoPath;
+    bool trackExternalVideo = false;
     BasePlayer(QString video_path, int video_id, int* CLASS_COUNT, QObject* parent = nullptr, MainApp* App = nullptr);  
     virtual ~BasePlayer();  
     bool isProcessAlive();  
@@ -59,6 +65,8 @@ public:
     void resetVideoTiming();
     double videoWatchedTime();
     double videoSessionTime();
+    bool shouldCheckpoint(const QDateTime& now, int intervalSeconds);
+    void recordVideoStart();
 signals:  
     void endOfVideoSignal();  
     void pausedChangedSignal(bool paused);  

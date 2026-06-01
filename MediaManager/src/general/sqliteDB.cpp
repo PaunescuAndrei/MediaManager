@@ -28,6 +28,39 @@ sqliteDB::sqliteDB(QString location, std::string conname) {
     //QSqlQuery query = QSqlQuery("PRAGMA journal_mode = WAL;", this->db);
     //query.exec();
     this->createTables();
+    this->migrateWatchHistoryNullableVideoId();
+}
+
+void sqliteDB::migrateWatchHistoryNullableVideoId()
+{
+    QSqlQuery check(this->db);
+    check.prepare("SELECT \"notnull\" FROM pragma_table_info('watch_history') WHERE name = 'video_id'");
+    if (check.exec() && check.next() && check.value(0).toInt() == 1) {
+        qMainApp->logger->log("Migrating watch_history video_id to nullable...", "Database");
+        QSqlQuery migrate(this->db);
+        migrate.exec("BEGIN TRANSACTION");
+        migrate.exec("CREATE TABLE watch_history_mig ("
+            "\"id\" INTEGER NOT NULL,"
+            "\"video_id\" INTEGER,"
+            "\"category\" TEXT NOT NULL,"
+            "\"watched_start\" REAL NOT NULL DEFAULT 0,"
+            "\"watched_end\" REAL NOT NULL DEFAULT 0,"
+            "\"watched_time\" REAL NOT NULL DEFAULT 0,"
+            "\"session_start\" TEXT NOT NULL,"
+            "\"session_end\" TEXT NOT NULL,"
+            "\"session_time\" REAL NOT NULL DEFAULT 0,"
+            "\"completed\" BOOLEAN NOT NULL DEFAULT 0,"
+            "PRIMARY KEY(\"id\" AUTOINCREMENT))");
+        migrate.exec("INSERT INTO watch_history_mig SELECT * FROM watch_history");
+        migrate.exec("DROP TABLE watch_history");
+        migrate.exec("ALTER TABLE watch_history_mig RENAME TO watch_history");
+        migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_video ON watch_history(video_id)");
+        migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_category ON watch_history(category)");
+        migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_date ON watch_history(session_start)");
+        migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_cat_date ON watch_history(category, session_start)");
+        migrate.exec("COMMIT");
+        qMainApp->logger->log("watch_history migration complete", "Database");
+    }
 }
 
 void sqliteDB::enableForeignKeys()
@@ -1079,6 +1112,65 @@ int sqliteDB::insertWatchHistory(int video_id, const QString& category,
     return query.lastInsertId().toInt();
 }
 
+int sqliteDB::upsertWatchHistory(int& ioRowId, int video_id, const QString& category,
+    double watched_start, double watched_end, double watched_time,
+    const QString& session_start, const QString& session_end, double session_time,
+    bool completed)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    if (ioRowId > 0) {
+        query.prepare(QStringLiteral(
+            "UPDATE watch_history SET video_id = ?, category = ?, watched_start = ?, watched_end = ?, "
+            "watched_time = ?, session_start = ?, session_end = ?, session_time = ?, completed = ? "
+            "WHERE id = ?"));
+        if (video_id >= 0)
+            query.addBindValue(video_id);
+        else
+            query.addBindValue(QVariant(QVariant::Int));
+        query.addBindValue(category);
+        query.addBindValue(watched_start);
+        query.addBindValue(watched_end);
+        query.addBindValue(watched_time);
+        query.addBindValue(session_start);
+        query.addBindValue(session_end);
+        query.addBindValue(session_time);
+        query.addBindValue(completed ? 1 : 0);
+        query.addBindValue(ioRowId);
+        if (!query.exec()) {
+            if (qMainApp) {
+                qMainApp->logger->log(QStringLiteral("Database Error at upsertWatchHistory (UPDATE): %1").arg(query.lastError().text()), "Database", query.lastError().text());
+            }
+            return 0;
+        }
+        return ioRowId;
+    }
+
+    query.prepare(QStringLiteral(
+        "INSERT INTO watch_history (video_id, category, watched_start, watched_end, watched_time, session_start, session_end, session_time, completed) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"));
+    if (video_id >= 0)
+        query.addBindValue(video_id);
+    else
+        query.addBindValue(QVariant(QVariant::Int));
+    query.addBindValue(category);
+    query.addBindValue(watched_start);
+    query.addBindValue(watched_end);
+    query.addBindValue(watched_time);
+    query.addBindValue(session_start);
+    query.addBindValue(session_end);
+    query.addBindValue(session_time);
+    query.addBindValue(completed ? 1 : 0);
+
+    if (!query.exec()) {
+        if (qMainApp) {
+            qMainApp->logger->log(QStringLiteral("Database Error at upsertWatchHistory (INSERT): %1").arg(query.lastError().text()), "Database", query.lastError().text());
+        }
+        return 0;
+    }
+    ioRowId = query.lastInsertId().toInt();
+    return ioRowId;
+}
+
 double sqliteDB::getTotalWatchedTime()
 {
     QSqlQuery query = QSqlQuery(this->db);
@@ -1303,7 +1395,7 @@ void sqliteDB::createTables() {
     QString watch_history =
         "CREATE TABLE IF NOT EXISTS watch_history ("
         "\"id\"              INTEGER NOT NULL,"
-        "\"video_id\"        INTEGER NOT NULL,"
+        "\"video_id\"        INTEGER,"
         "\"category\"        TEXT NOT NULL,"
         "\"watched_start\"   REAL NOT NULL DEFAULT 0,"
         "\"watched_end\"     REAL NOT NULL DEFAULT 0,"
@@ -1312,7 +1404,6 @@ void sqliteDB::createTables() {
         "\"session_end\"     TEXT NOT NULL,"
         "\"session_time\"    REAL NOT NULL DEFAULT 0,"
         "\"completed\"       BOOLEAN NOT NULL DEFAULT 0,"
-        "FOREIGN KEY(\"video_id\") REFERENCES \"videodetails\"(\"id\") ON DELETE CASCADE,"
         "PRIMARY KEY(\"id\" AUTOINCREMENT));";
     QString wh_migration_completed =
         "ALTER TABLE watch_history ADD COLUMN completed BOOLEAN NOT NULL DEFAULT 0;";

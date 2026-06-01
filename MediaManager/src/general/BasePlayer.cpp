@@ -101,6 +101,7 @@ void BasePlayer::resetVideoTiming()
 {
     m_videoWatchedBaseline = getTotalWatchedTime();
     m_videoSessionBaseline = getSessionTime();
+    recordVideoStart();
 }
 
 double BasePlayer::videoWatchedTime()
@@ -111,4 +112,15 @@ double BasePlayer::videoWatchedTime()
 double BasePlayer::videoSessionTime()
 {
     return getSessionTime() - m_videoSessionBaseline;
+}
+
+void BasePlayer::recordVideoStart() {
+    videoStartWallClock = QDateTime::currentDateTime();
+    lastCheckpointTime = videoStartWallClock;
+}
+
+bool BasePlayer::shouldCheckpoint(const QDateTime& now, int intervalSeconds) {
+    return intervalSeconds > 0
+        && lastCheckpointTime.isValid()
+        && lastCheckpointTime.secsTo(now) >= intervalSeconds;
 }

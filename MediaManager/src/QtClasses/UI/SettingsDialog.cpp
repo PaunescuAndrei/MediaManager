@@ -305,7 +305,13 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
     this->ui.searchTimerInterval->setValue(mw->App->config->get("search_timer_interval").toInt());
     this->ui.notificationDurationSpinBox->setValue(mw->App->config->get("notification_duration_ms").toInt());
     this->ui.bpmThreadsSpinBox->setValue(mw->App->config->get("bpm_threads").toInt());
-    
+    int sessionSaveInterval = qBound(0, mw->App->config->get("session_save_interval_seconds").toInt(), this->ui.sessionSaveIntervalSpinBox->maximum());
+    this->ui.sessionSaveIntervalSpinBox->setValue(sessionSaveInterval);
+    if (mw->App->config->get_bool("empty_player_tracking"))
+        this->ui.emptyPlayerTracking->setCheckState(Qt::CheckState::Checked);
+    else
+        this->ui.emptyPlayerTracking->setCheckState(Qt::CheckState::Unchecked);
+
     // BPM Types FlowLayout
     FlowLayout* bpmTypesFlowLayout = new FlowLayout;
     bpmTypesFlowLayout->setContentsMargins(0, 0, 0, 0);

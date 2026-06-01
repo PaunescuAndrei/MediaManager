@@ -132,7 +132,9 @@ void Config::init_defaults() {
 		{"preview_overlay_pad_y", "2"},
 		{"preview_overlay_margin", "6"},
 		{"bpm_threads", "2"},
-		{"bpm_calculation_types", ""},
+        {"bpm_calculation_types", ""},
+        {"session_save_interval_seconds", "10"},
+        {"empty_player_tracking", "True"},
 	});
 }
 

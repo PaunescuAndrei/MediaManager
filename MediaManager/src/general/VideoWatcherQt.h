@@ -30,6 +30,8 @@ public:
     void clearMainPlayer();
     void clearAfterMainVideoEnd();
     void toggle_window();
+    void checkpointPlayer(QSharedPointer<BasePlayer> player, int intervalSeconds);
+    void handleExternalVideoChange(QSharedPointer<BasePlayer> player);
     void run() override;
     ~VideoWatcherQt();
 signals:

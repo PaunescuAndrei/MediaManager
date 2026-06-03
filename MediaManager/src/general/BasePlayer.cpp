@@ -101,6 +101,7 @@ void BasePlayer::resetVideoTiming()
 {
     m_videoWatchedBaseline = getTotalWatchedTime();
     m_videoSessionBaseline = getSessionTime();
+    lastCheckpointWatchedTime = 0.0;
     recordVideoStart();
 }
 

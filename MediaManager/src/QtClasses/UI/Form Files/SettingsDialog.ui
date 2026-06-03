@@ -561,6 +561,16 @@
              </widget>
             </item>
             <item>
+             <widget class="QCheckBox" name="counterUseActualWatchTime">
+              <property name="toolTip">
+               <string>When enabled, the counter increment uses actual wall-clock watch time instead of video playback position.</string>
+              </property>
+              <property name="text">
+               <string>Use Actual Watch Time for Counter</string>
+              </property>
+             </widget>
+            </item>
+            <item>
              <widget class="QCheckBox" name="singleInstance">
               <property name="text">
                <string>Single Instance</string>

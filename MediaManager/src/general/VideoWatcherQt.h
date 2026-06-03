@@ -38,6 +38,7 @@ signals:
     void updateProgressBarSignal(double position,double duration, QSharedPointer<BasePlayer> player, bool running);
     void updateTaskbarIconSignal(bool watching);
     void updateMusicPlayerSignal(bool flag);
+    void timeWatchedIncrementSignal(double delta);
 };
 
 //#include <iostream>

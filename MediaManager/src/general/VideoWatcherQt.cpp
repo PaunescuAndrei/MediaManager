@@ -152,6 +152,13 @@ void VideoWatcherQt::checkpointPlayer(QSharedPointer<BasePlayer> player, int int
     if (pos >= 0 && player->video_id >= 0) {
         this->db->updateVideoProgress(player->video_id, pos);
     }
+    if (this->App->config->get_bool("counter_use_actual_watch_time")) {
+        double delta = player->videoWatchedTime() - player->lastCheckpointWatchedTime;
+        if (delta > 0.0) {
+            player->lastCheckpointWatchedTime = player->videoWatchedTime();
+            emit timeWatchedIncrementSignal(delta);
+        }
+    }
 }
 
 void VideoWatcherQt::handleExternalVideoChange(QSharedPointer<BasePlayer> player)

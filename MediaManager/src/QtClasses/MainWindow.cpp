@@ -150,6 +150,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     
     this->animatedIconFlag = this->App->config->get_bool("animated_icon_flag");
     this->time_watched_limit = this->App->config->get("time_watched_limit").toInt();
+    this->counter_use_actual_watch_time = this->App->config->get_bool("counter_use_actual_watch_time");
     this->ui.watchedTimePB->setMaximum(this->time_watched_limit);
     this->filterSettings = FilterSettings(this->App->db->getFilterSettings(this->App->currentDB));
 
@@ -1720,7 +1721,13 @@ bool MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool incre
 
     int oldWatchHistoryRowId = player ? player->activeWatchHistoryRowId : -1;
 
-    bool video_changed = this->NextVideo(mode, increment, update_watched_state, skipped);
+    double actualDelta = 0.0;
+    if (this->counter_use_actual_watch_time && increment && player) {
+        actualDelta = oldWatchedTime - player->lastCheckpointWatchedTime;
+        player->lastCheckpointWatchedTime = oldWatchedTime;
+    }
+
+    bool video_changed = this->NextVideo(mode, increment, update_watched_state, skipped, actualDelta);
 
     if (increment && video_changed && oldVideoId >= 0) {
         QDateTime now = QDateTime::currentDateTime();
@@ -2021,13 +2028,12 @@ bool MainWindow::applyNextChoice(const std::optional<NextVideoChoice>& choice) {
     return false;
 }
 
-bool MainWindow::NextVideo(bool random, bool increment, bool update_watched_state, bool skipped) {
-    // Legacy function - convert boolean to enum and call new function
-    NextVideoModes::Mode mode = random ? NextVideoModes::Random : NextVideoModes::Sequential;
-    return this->NextVideo(mode, increment, update_watched_state, skipped);
+bool MainWindow::NextVideo(bool random, bool increment, bool update_watched_state, bool skipped, double actualWatchTimeDelta) {
+    NextVideoModes::Mode mode = random ? NextVideoModes::Random : getNextVideoMode();
+    return this->NextVideo(mode, increment, update_watched_state, skipped, actualWatchTimeDelta);
 }
 
-bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool update_watched_state, bool skipped) {
+bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool update_watched_state, bool skipped, double actualWatchTimeDelta) {
     bool video_changed = false;
     const QString currentPath = this->ui.currentVideo->path;
     QPersistentModelIndex currentSrcIdx = this->modelIndexByPath(currentPath);
@@ -2146,7 +2152,7 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
 
         this->App->db->db.transaction();
         const QString curType = currentSrcIdx.sibling(currentSrcIdx.row(), typeCol).data(Qt::DisplayRole).toString();
-        bool playedSpecialType = this->applyPostWatchAdjustments(curType, currentId, increment, 0.0, false, skipped);
+        bool playedSpecialType = this->applyPostWatchAdjustments(curType, currentId, increment, 0.0, false, skipped, actualWatchTimeDelta);
         this->updateSvCountersAfterPlayback(playedSpecialType, skipped);
 
         this->updateTotalListLabel();
@@ -2157,7 +2163,7 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
     return video_changed;
 }
 
-bool MainWindow::applyPostWatchAdjustments(const QString& videoType, int videoId, bool increment, double watchedProgressOverride, bool useOverrideProgress, bool skipped) {
+bool MainWindow::applyPostWatchAdjustments(const QString& videoType, int videoId, bool increment, double watchedProgressOverride, bool useOverrideProgress, bool skipped, double actualWatchTimeDelta) {
     const bool isSpecialType = svTypes.contains(videoType);
     const bool treatSpecialAsPlus = this->App->config->get("sv_mode").compare(QStringLiteral("PLUS"), Qt::CaseInsensitive) == 0;
 
@@ -2165,6 +2171,9 @@ bool MainWindow::applyPostWatchAdjustments(const QString& videoType, int videoId
     if (!useOverrideProgress) {
         watchedProgress = this->App->db->getVideoProgress(videoId, "0").toDouble();
     }
+
+    const double effectiveTimeDelta = this->counter_use_actual_watch_time
+        ? actualWatchTimeDelta : watchedProgress;
 
     int counterDelta = 0;
     double timeWatchedDelta = 0.0;
@@ -2174,12 +2183,12 @@ bool MainWindow::applyPostWatchAdjustments(const QString& videoType, int videoId
             counterDelta = -1;
         }
         else if (this->App->currentDB == "PLUS" && increment) {
-            timeWatchedDelta += watchedProgress;
+            timeWatchedDelta += effectiveTimeDelta;
         }
         if (isSpecialType && treatSpecialAsPlus && this->App->currentDB == "MINUS") {
             counterDelta = 0; // negate the base decrement
             if (increment) {
-                timeWatchedDelta += watchedProgress;
+                timeWatchedDelta += effectiveTimeDelta;
             }
         }
 	} else if (skipped && this->App->config->get_bool("skip_progress_enabled") == true) {
@@ -2991,6 +3000,11 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         config->set("skip_progress_enabled", "True");
     else
         config->set("skip_progress_enabled", "False");
+    if (dialog->ui.counterUseActualWatchTime->checkState() == Qt::CheckState::Checked)
+        config->set("counter_use_actual_watch_time", "True");
+    else
+        config->set("counter_use_actual_watch_time", "False");
+    this->counter_use_actual_watch_time = config->get_bool("counter_use_actual_watch_time");
     config->set("session_save_interval_seconds", QString::number(dialog->ui.sessionSaveIntervalSpinBox->value()));
     if (dialog->ui.emptyPlayerTracking->checkState() == Qt::CheckState::Checked)
         config->set("empty_player_tracking", "True");
@@ -3325,7 +3339,10 @@ void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notifi
                         currentType = srcIdx.sibling(srcIdx.row(), ListColumns["TYPE_COLUMN"]).data(Qt::DisplayRole).toString();
                     }
                     double replayProgress = std::max(0.0, this->App->VW->mainPlayer->position);
-                    bool playedSpecialType = this->applyPostWatchAdjustments(currentType, this->App->VW->mainPlayer->video_id, true, replayProgress, true, false);
+                    auto replayPlayer = this->App->VW->mainPlayer;
+                    double replayActualDelta = replayPlayer->videoWatchedTime() - replayPlayer->lastCheckpointWatchedTime;
+                    replayPlayer->lastCheckpointWatchedTime = replayPlayer->videoWatchedTime();
+                    bool playedSpecialType = this->applyPostWatchAdjustments(currentType, replayPlayer->video_id, true, replayProgress, true, false, this->counter_use_actual_watch_time ? replayActualDelta : 0.0);
                     this->updateSvCountersAfterPlayback(playedSpecialType, false);
                     this->checktimeWatchedIncrement();
                     this->updateWatchedProgressBar();

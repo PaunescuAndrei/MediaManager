@@ -54,6 +54,7 @@ public:
     int sv_count = 0;
     int sv_target_count = 0;
     int time_watched_limit = -1;
+    bool counter_use_actual_watch_time = false;
     bool iconWatchingState = false;
     bool animatedIconFlag = false;
     bool toggleDatesFlag = false;
@@ -172,7 +173,7 @@ public:
     void incrementtimeWatchedIncrement(double value);
     void checktimeWatchedIncrement();
     void incrementCounterVar(int value = 1);
-    bool applyPostWatchAdjustments(const QString& videoType, int videoId, bool increment, double watchedProgressOverride = 0.0, bool useOverrideProgress = false, bool suppressMinusCounter = false);
+    bool applyPostWatchAdjustments(const QString& videoType, int videoId, bool increment, double watchedProgressOverride = 0.0, bool useOverrideProgress = false, bool suppressMinusCounter = false, double actualWatchTimeDelta = 0.0);
     void updateSvCountersAfterPlayback(bool playedSpecialType, bool suppressMinusIncrement);
     int getCounterVar();
     void initNextButtonMode(customQPushButton* nextbutton);
@@ -218,8 +219,8 @@ public:
     bool NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state, bool skipped = false);
     NextVideoSettings getNextVideoSettings();
     NextVideoModes::Mode getNextVideoMode();
-    bool NextVideo(NextVideoModes::Mode mode, bool increment, bool update_watched_state, bool skipped);
-    bool NextVideo(bool random, bool increment, bool update_watched_state, bool skipped);
+    bool NextVideo(NextVideoModes::Mode mode, bool increment, bool update_watched_state, bool skipped, double actualWatchTimeDelta = 0.0);
+    bool NextVideo(bool random, bool increment, bool update_watched_state, bool skipped, double actualWatchTimeDelta = 0.0);
     std::optional<NextVideoChoice> buildChoiceFromPath(const QString& path, bool reset_progress = true) const;
     std::optional<NextVideoChoice> buildSequentialCandidate(const QPersistentModelIndex& current_source_index) const;
     QList<NextVideoChoice> buildRandomCandidates(const NextVideoSettings& settings, int maxCount, bool reset_progress = true) const;

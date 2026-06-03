@@ -285,6 +285,10 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 		this->ui.skipAllowedProgress->setCheckState(Qt::CheckState::Checked);
 	else
 		this->ui.skipAllowedProgress->setCheckState(Qt::CheckState::Unchecked);
+	if (mw->App->config->get_bool("counter_use_actual_watch_time"))
+		this->ui.counterUseActualWatchTime->setCheckState(Qt::CheckState::Checked);
+	else
+		this->ui.counterUseActualWatchTime->setCheckState(Qt::CheckState::Unchecked);
 
 	int time_watched_limit = mw->App->config->get("time_watched_limit").toInt();
 	int minutes_limit = time_watched_limit / 60;

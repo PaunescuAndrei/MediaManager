@@ -37,6 +37,7 @@ public:
     double totalWatchedTimeSeconds = 0.0;
     bool wasPlayingLastCheck = false;
     double m_videoWatchedBaseline = 0.0;
+    double lastCheckpointWatchedTime = 0.0;
     double m_videoSessionBaseline = 0.0;
     int activeWatchHistoryRowId = -1;
     QDateTime videoStartWallClock;

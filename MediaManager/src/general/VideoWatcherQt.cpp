@@ -53,6 +53,13 @@ void VideoWatcherQt::clearData(bool include_mainplayer) {
                     now.toString("yyyy-MM-dd HH:mm:ss"), sessionTime,
                     false);
             }
+            if (this->App->config->get_bool("counter_use_actual_watch_time")) {
+                double delta = watchedTime - (*it)->lastCheckpointWatchedTime;
+                if (delta > 0.0) {
+                    (*it)->lastCheckpointWatchedTime = watchedTime;
+                    emit timeWatchedIncrementSignal(delta);
+                }
+            }
         }
         (*it)->drop();
         (*it).reset();
@@ -238,6 +245,13 @@ void VideoWatcherQt::run()
                         player->startProgress, watched_end, watchedTime,
                         sessionStart, sessionEnd, sessionTime,
                         false);
+                }
+                if (this->App->config->get_bool("counter_use_actual_watch_time")) {
+                    double delta = watchedTime - player->lastCheckpointWatchedTime;
+                    if (delta > 0.0) {
+                        player->lastCheckpointWatchedTime = watchedTime;
+                        emit timeWatchedIncrementSignal(delta);
+                    }
                 }
                 if (player == this->mainPlayer) {
                     this->clearAfterMainVideoEnd();

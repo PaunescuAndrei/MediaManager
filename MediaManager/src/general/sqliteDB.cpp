@@ -39,7 +39,7 @@ void sqliteDB::migrateWatchHistoryNullableVideoId()
         qMainApp->logger->log("Migrating watch_history video_id to nullable...", "Database");
         QSqlQuery migrate(this->db);
         migrate.exec("DROP TABLE IF EXISTS watch_history_mig");
-        bool ok = migrate.exec("BEGIN TRANSACTION");
+        bool ok = this->db.transaction();
         if (ok) ok = migrate.exec("CREATE TABLE watch_history_mig ("
             "\"id\" INTEGER NOT NULL,"
             "\"video_id\" INTEGER,"
@@ -60,13 +60,13 @@ void sqliteDB::migrateWatchHistoryNullableVideoId()
         if (ok) ok = migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_date ON watch_history(session_start)");
         if (ok) ok = migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_cat_date ON watch_history(category, session_start)");
         if (ok)
-            migrate.exec("COMMIT");
-        else
-            migrate.exec("ROLLBACK");
+            this->db.commit();
+        else {
+            this->db.rollback();
+            qMainApp->logger->log(QStringLiteral("watch_history migration FAILED: %1").arg(migrate.lastError().text()), "Database");
+        }
         if (ok)
             qMainApp->logger->log("watch_history migration complete", "Database");
-        else
-            qMainApp->logger->log("watch_history migration FAILED — rolled back", "Database");
     }
 }
 

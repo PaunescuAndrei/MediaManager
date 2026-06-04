@@ -47,7 +47,7 @@ void VideoWatcherQt::clearData(bool include_mainplayer) {
                 double endPos = (*it)->position;
                 if (endPos < 0) endPos = ((*it)->duration > 0) ? (*it)->duration : (*it)->startProgress;
                 this->db->upsertWatchHistory((*it)->activeWatchHistoryRowId,
-                    (*it)->video_id, (*it)->category,
+                    (*it)->video_id, (*it)->category, (*it)->video_path,
                     (*it)->startProgress, endPos, watchedTime,
                     now.addSecs(-static_cast<qint64>(sessionTime)).toString("yyyy-MM-dd HH:mm:ss"),
                     now.toString("yyyy-MM-dd HH:mm:ss"), sessionTime,
@@ -150,7 +150,7 @@ void VideoWatcherQt::checkpointPlayer(QSharedPointer<BasePlayer> player, int int
     double pos = player->position;
     if (pos < 0) pos = player->startProgress;
     this->db->upsertWatchHistory(player->activeWatchHistoryRowId,
-        player->video_id, player->category,
+        player->video_id, player->category, player->video_path,
         player->startProgress, pos, watched,
         now.addSecs(-static_cast<qint64>(session)).toString("yyyy-MM-dd HH:mm:ss"),
         now.toString("yyyy-MM-dd HH:mm:ss"), session,
@@ -177,7 +177,7 @@ void VideoWatcherQt::handleExternalVideoChange(QSharedPointer<BasePlayer> player
         double endPos = player->position;
         if (endPos < 0) endPos = (player->duration > 0) ? player->duration : player->startProgress;
         this->db->upsertWatchHistory(player->activeWatchHistoryRowId,
-            player->video_id, player->category,
+            player->video_id, player->category, player->video_path,
             player->startProgress, endPos, watchedTime,
             now.addSecs(-static_cast<qint64>(sessionTime)).toString("yyyy-MM-dd HH:mm:ss"),
             now.toString("yyyy-MM-dd HH:mm:ss"), sessionTime,
@@ -206,7 +206,7 @@ void VideoWatcherQt::handleExternalVideoChange(QSharedPointer<BasePlayer> player
     QDateTime now = QDateTime::currentDateTime();
     player->activeWatchHistoryRowId = this->db->upsertWatchHistory(
         player->activeWatchHistoryRowId,
-        newVideoId, player->category,
+        newVideoId, player->category, player->video_path,
         0, 0, 0,
         now.toString("yyyy-MM-dd HH:mm:ss"),
         now.toString("yyyy-MM-dd HH:mm:ss"),
@@ -241,7 +241,7 @@ void VideoWatcherQt::run()
                     if (watched_end < 0)
                         watched_end = (player->duration > 0) ? player->duration : player->startProgress;
                     this->db->upsertWatchHistory(player->activeWatchHistoryRowId,
-                        player->video_id, player->category,
+                        player->video_id, player->category, player->video_path,
                         player->startProgress, watched_end, watchedTime,
                         sessionStart, sessionEnd, sessionTime,
                         false);
@@ -298,7 +298,7 @@ void VideoWatcherQt::run()
             double endPos = player->position;
             if (endPos < 0) endPos = (player->duration > 0) ? player->duration : player->startProgress;
             this->db->upsertWatchHistory(player->activeWatchHistoryRowId,
-                player->video_id, player->category,
+                player->video_id, player->category, player->video_path,
                 player->startProgress, endPos, watchedTime,
                 now.addSecs(-static_cast<qint64>(sessionTime)).toString("yyyy-MM-dd HH:mm:ss"),
                 now.toString("yyyy-MM-dd HH:mm:ss"), sessionTime,
@@ -322,7 +322,7 @@ VideoWatcherQt::~VideoWatcherQt()
             double endPos = item->position;
             if (endPos < 0) endPos = (item->duration > 0) ? item->duration : item->startProgress;
             this->db->upsertWatchHistory(item->activeWatchHistoryRowId,
-                item->video_id, item->category,
+                item->video_id, item->category, item->video_path,
                 item->startProgress, endPos, w,
                 now.addSecs(-static_cast<qint64>(s)).toString("yyyy-MM-dd HH:mm:ss"),
                 now.toString("yyyy-MM-dd HH:mm:ss"), s,

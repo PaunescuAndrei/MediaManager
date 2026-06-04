@@ -16,6 +16,7 @@ public:
     ~sqliteDB();
     void createTables();
     void migrateWatchHistoryNullableVideoId();
+    void migrateWatchHistoryV2();
     QList<QTreeWidgetItem*> getVideos(QString category);
     QVector<VideoData> getVideosData(QString category);
     VideoData getVideoData(QString path, QString category);
@@ -60,11 +61,11 @@ public:
     QMap<double, int> getRatingDistribution();
     int getUnratedVideoCount();
     int getUniqueVideosWatched(QString category);
-    int insertWatchHistory(int video_id, const QString& category,
+    int insertWatchHistory(int video_id, const QString& category, const QString& video_path,
         double watched_start, double watched_end, double watched_time,
         const QString& session_start, const QString& session_end, double session_time,
         bool completed = false);
-    int upsertWatchHistory(int& ioRowId, int video_id, const QString& category,
+    int upsertWatchHistory(int& ioRowId, int video_id, const QString& category, const QString& video_path,
         double watched_start, double watched_end, double watched_time,
         const QString& session_start, const QString& session_end, double session_time,
         bool completed = false);

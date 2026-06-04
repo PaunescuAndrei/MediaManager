@@ -1083,7 +1083,7 @@ void MainWindow::DeleteDialogButton(const QList<int>& ids) {
                     double endPos = this->App->VW->mainPlayer->position;
                     if (endPos < 0) endPos = this->App->VW->mainPlayer->startProgress;
                     this->App->db->upsertWatchHistory(this->App->VW->mainPlayer->activeWatchHistoryRowId,
-                        this->App->VW->mainPlayer->video_id, this->App->VW->mainPlayer->category,
+                        this->App->VW->mainPlayer->video_id, this->App->VW->mainPlayer->category, this->App->VW->mainPlayer->video_path,
                         this->App->VW->mainPlayer->startProgress, endPos, watched,
                         now.addSecs(-static_cast<qint64>(session)).toString("yyyy-MM-dd HH:mm:ss"),
                         now.toString("yyyy-MM-dd HH:mm:ss"), session,
@@ -1706,10 +1706,11 @@ bool MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool incre
 
     int oldVideoId = -1;
     double oldWatchedTime = 0.0, oldSessionTime = 0.0, oldPos = -1, oldStartProgress = 0;
-    QString oldCategory;
+    QString oldCategory, oldVideoPath;
     if (increment && player) {
         oldVideoId = player->video_id;
         oldCategory = player->category;
+        oldVideoPath = player->video_path;
         oldStartProgress = player->startProgress;
         oldPos = player->position;
         oldWatchedTime = player->videoWatchedTime();
@@ -1717,6 +1718,7 @@ bool MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool incre
     } else if (increment) {
         oldVideoId = this->ui.currentVideo->id;
         oldCategory = this->App->currentDB;
+        oldVideoPath = this->ui.currentVideo->path;
     }
 
     int oldWatchHistoryRowId = player ? player->activeWatchHistoryRowId : -1;
@@ -1734,7 +1736,7 @@ bool MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool incre
         double watched_end = oldPos;
         if (watched_end < 0)
             watched_end = (player && player->duration > 0) ? player->duration : oldStartProgress;
-        this->App->db->upsertWatchHistory(oldWatchHistoryRowId, oldVideoId, oldCategory,
+        this->App->db->upsertWatchHistory(oldWatchHistoryRowId, oldVideoId, oldCategory, oldVideoPath,
             oldStartProgress, watched_end,
             oldWatchedTime,
             now.addSecs(-static_cast<qint64>(oldSessionTime)).toString("yyyy-MM-dd HH:mm:ss"),
@@ -2400,7 +2402,7 @@ bool MainWindow::loadDB(QString path, QWidget* parent) {
                     double endPos = this->App->VW->mainPlayer->position;
                     if (endPos < 0) endPos = this->App->VW->mainPlayer->startProgress;
                     this->App->db->upsertWatchHistory(this->App->VW->mainPlayer->activeWatchHistoryRowId,
-                        this->App->VW->mainPlayer->video_id, this->App->VW->mainPlayer->category,
+                        this->App->VW->mainPlayer->video_id, this->App->VW->mainPlayer->category, this->App->VW->mainPlayer->video_path,
                         this->App->VW->mainPlayer->startProgress, endPos, watched,
                         now.addSecs(-static_cast<qint64>(session)).toString("yyyy-MM-dd HH:mm:ss"),
                         now.toString("yyyy-MM-dd HH:mm:ss"), session,
@@ -3365,7 +3367,7 @@ void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notifi
                         double watched_end = player->position;
                         if (watched_end < 0)
                             watched_end = (player->duration > 0) ? player->duration : player->startProgress;
-                        this->App->db->upsertWatchHistory(player->activeWatchHistoryRowId, player->video_id, player->category,
+                        this->App->db->upsertWatchHistory(player->activeWatchHistoryRowId, player->video_id, player->category, player->video_path,
                             player->startProgress, watched_end,
                             rwatched,
                             now.addSecs(-static_cast<qint64>(rsession)).toString("yyyy-MM-dd HH:mm:ss"),
@@ -3404,7 +3406,7 @@ void MainWindow::SkipVideo() {
             double endPos = this->App->VW->mainPlayer->position;
             if (endPos < 0) endPos = this->App->VW->mainPlayer->startProgress;
             this->App->db->upsertWatchHistory(this->App->VW->mainPlayer->activeWatchHistoryRowId,
-                this->App->VW->mainPlayer->video_id, this->App->VW->mainPlayer->category,
+                this->App->VW->mainPlayer->video_id, this->App->VW->mainPlayer->category, this->App->VW->mainPlayer->video_path,
                 this->App->VW->mainPlayer->startProgress, endPos, watched,
                 now.addSecs(-static_cast<qint64>(session)).toString("yyyy-MM-dd HH:mm:ss"),
                 now.toString("yyyy-MM-dd HH:mm:ss"), session,
@@ -3674,7 +3676,7 @@ void MainWindow::watchCurrent() {
         l->lastCheckpointTime = l->videoStartWallClock;
         l->activeWatchHistoryRowId = this->App->db->upsertWatchHistory(
             l->activeWatchHistoryRowId,
-            l->video_id, l->category,
+            l->video_id, l->category, l->video_path,
             seconds, seconds, 0.0,
             l->videoStartWallClock.toString("yyyy-MM-dd HH:mm:ss"),
             l->videoStartWallClock.toString("yyyy-MM-dd HH:mm:ss"),
@@ -3702,7 +3704,7 @@ void MainWindow::watchSelected(int video_id, QString path) {
     l->lastCheckpointTime = l->videoStartWallClock;
     l->activeWatchHistoryRowId = this->App->db->upsertWatchHistory(
         l->activeWatchHistoryRowId,
-        video_id, l->category,
+        video_id, l->category, path,
         seconds, seconds, 0.0,
         l->videoStartWallClock.toString("yyyy-MM-dd HH:mm:ss"),
         l->videoStartWallClock.toString("yyyy-MM-dd HH:mm:ss"),
@@ -4720,7 +4722,7 @@ void MainWindow::changePlayerVideo(QSharedPointer<BasePlayer> player, QString pa
             double endPos = player->position;
             if (endPos < 0) endPos = (player->duration > 0) ? player->duration : player->startProgress;
             this->App->db->upsertWatchHistory(player->activeWatchHistoryRowId,
-                player->video_id, player->category,
+                player->video_id, player->category, player->video_path,
                 player->startProgress, endPos, watched,
                 now.addSecs(-static_cast<qint64>(session)).toString("yyyy-MM-dd HH:mm:ss"),
                 now.toString("yyyy-MM-dd HH:mm:ss"), session,

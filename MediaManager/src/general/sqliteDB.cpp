@@ -33,9 +33,13 @@ sqliteDB::sqliteDB(QString location, std::string conname) {
 
 void sqliteDB::migrateWatchHistoryNullableVideoId()
 {
-    QSqlQuery check(this->db);
-    check.prepare("SELECT \"notnull\" FROM pragma_table_info('watch_history') WHERE name = 'video_id'");
-    if (check.exec() && check.next() && check.value(0).toInt() == 1) {
+    bool needsMigration = false;
+    {
+        QSqlQuery check(this->db);
+        check.prepare("SELECT \"notnull\" FROM pragma_table_info('watch_history') WHERE name = 'video_id'");
+        needsMigration = check.exec() && check.next() && check.value(0).toInt() == 1;
+    }
+    if (needsMigration) {
         qMainApp->logger->log("Migrating watch_history video_id to nullable...", "Database");
         QSqlQuery migrate(this->db);
         migrate.exec("DROP TABLE IF EXISTS watch_history_mig");

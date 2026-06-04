@@ -38,8 +38,9 @@ void sqliteDB::migrateWatchHistoryNullableVideoId()
     if (check.exec() && check.next() && check.value(0).toInt() == 1) {
         qMainApp->logger->log("Migrating watch_history video_id to nullable...", "Database");
         QSqlQuery migrate(this->db);
-        migrate.exec("BEGIN TRANSACTION");
-        migrate.exec("CREATE TABLE watch_history_mig ("
+        migrate.exec("DROP TABLE IF EXISTS watch_history_mig");
+        bool ok = migrate.exec("BEGIN TRANSACTION");
+        if (ok) ok = migrate.exec("CREATE TABLE watch_history_mig ("
             "\"id\" INTEGER NOT NULL,"
             "\"video_id\" INTEGER,"
             "\"category\" TEXT NOT NULL,"
@@ -51,15 +52,21 @@ void sqliteDB::migrateWatchHistoryNullableVideoId()
             "\"session_time\" REAL NOT NULL DEFAULT 0,"
             "\"completed\" BOOLEAN NOT NULL DEFAULT 0,"
             "PRIMARY KEY(\"id\" AUTOINCREMENT))");
-        migrate.exec("INSERT INTO watch_history_mig SELECT * FROM watch_history");
-        migrate.exec("DROP TABLE watch_history");
-        migrate.exec("ALTER TABLE watch_history_mig RENAME TO watch_history");
-        migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_video ON watch_history(video_id)");
-        migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_category ON watch_history(category)");
-        migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_date ON watch_history(session_start)");
-        migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_cat_date ON watch_history(category, session_start)");
-        migrate.exec("COMMIT");
-        qMainApp->logger->log("watch_history migration complete", "Database");
+        if (ok) ok = migrate.exec("INSERT INTO watch_history_mig SELECT * FROM watch_history");
+        if (ok) ok = migrate.exec("DROP TABLE watch_history");
+        if (ok) ok = migrate.exec("ALTER TABLE watch_history_mig RENAME TO watch_history");
+        if (ok) ok = migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_video ON watch_history(video_id)");
+        if (ok) ok = migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_category ON watch_history(category)");
+        if (ok) ok = migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_date ON watch_history(session_start)");
+        if (ok) ok = migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_cat_date ON watch_history(category, session_start)");
+        if (ok)
+            migrate.exec("COMMIT");
+        else
+            migrate.exec("ROLLBACK");
+        if (ok)
+            qMainApp->logger->log("watch_history migration complete", "Database");
+        else
+            qMainApp->logger->log("watch_history migration FAILED — rolled back", "Database");
     }
 }
 

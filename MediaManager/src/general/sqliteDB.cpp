@@ -83,8 +83,14 @@ void sqliteDB::migrateWatchHistoryV2()
         check.prepare("SELECT COUNT(*) FROM pragma_table_info('watch_history') WHERE name = 'video_path'");
         needsMigration = check.exec() && check.next() && check.value(0).toInt() == 0;
     }
-    if (!needsMigration)
+    if (!needsMigration) {
+        QSqlQuery backfill(this->db);
+        backfill.prepare("UPDATE watch_history SET video_path = (SELECT path FROM videodetails WHERE videodetails.id = watch_history.video_id) "
+            "WHERE video_id >= 0 AND video_path IS NULL");
+        if (backfill.exec() && backfill.numRowsAffected() > 0)
+            qMainApp->logger->log(QStringLiteral("Backfilled %1 watch_history video_path rows").arg(backfill.numRowsAffected()), "Database");
         return;
+    }
 
     qMainApp->logger->log("Migrating watch_history v2 (video_path + FK)...", "Database");
     QSqlQuery migrate(this->db);
@@ -110,6 +116,8 @@ void sqliteDB::migrateWatchHistoryV2()
         "FROM watch_history");
     if (ok) ok = migrate.exec("DROP TABLE watch_history");
     if (ok) ok = migrate.exec("ALTER TABLE watch_history_mig RENAME TO watch_history");
+    if (ok) ok = migrate.exec("UPDATE watch_history SET video_path = (SELECT path FROM videodetails WHERE videodetails.id = watch_history.video_id) "
+        "WHERE video_id >= 0 AND video_path IS NULL");
     if (ok) ok = migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_video ON watch_history(video_id)");
     if (ok) ok = migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_category ON watch_history(category)");
     if (ok) ok = migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_date ON watch_history(session_start)");

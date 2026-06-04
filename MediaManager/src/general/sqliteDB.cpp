@@ -28,108 +28,6 @@ sqliteDB::sqliteDB(QString location, std::string conname) {
     //QSqlQuery query = QSqlQuery("PRAGMA journal_mode = WAL;", this->db);
     //query.exec();
     this->createTables();
-    this->migrateWatchHistoryNullableVideoId();
-    this->migrateWatchHistoryV2();
-}
-
-void sqliteDB::migrateWatchHistoryNullableVideoId()
-{
-    bool needsMigration = false;
-    {
-        QSqlQuery check(this->db);
-        check.prepare("SELECT \"notnull\" FROM pragma_table_info('watch_history') WHERE name = 'video_id'");
-        needsMigration = check.exec() && check.next() && check.value(0).toInt() == 1;
-    }
-    if (needsMigration) {
-        qMainApp->logger->log("Migrating watch_history video_id to nullable...", "Database");
-        QSqlQuery migrate(this->db);
-        migrate.exec("DROP TABLE IF EXISTS watch_history_mig");
-        bool ok = this->db.transaction();
-        if (ok) ok = migrate.exec("CREATE TABLE watch_history_mig ("
-            "\"id\" INTEGER NOT NULL,"
-            "\"video_id\" INTEGER,"
-            "\"category\" TEXT NOT NULL,"
-            "\"watched_start\" REAL NOT NULL DEFAULT 0,"
-            "\"watched_end\" REAL NOT NULL DEFAULT 0,"
-            "\"watched_time\" REAL NOT NULL DEFAULT 0,"
-            "\"session_start\" TEXT NOT NULL,"
-            "\"session_end\" TEXT NOT NULL,"
-            "\"session_time\" REAL NOT NULL DEFAULT 0,"
-            "\"completed\" BOOLEAN NOT NULL DEFAULT 0,"
-            "PRIMARY KEY(\"id\" AUTOINCREMENT))");
-        if (ok) ok = migrate.exec("INSERT INTO watch_history_mig SELECT * FROM watch_history");
-        if (ok) ok = migrate.exec("DROP TABLE watch_history");
-        if (ok) ok = migrate.exec("ALTER TABLE watch_history_mig RENAME TO watch_history");
-        if (ok) ok = migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_video ON watch_history(video_id)");
-        if (ok) ok = migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_category ON watch_history(category)");
-        if (ok) ok = migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_date ON watch_history(session_start)");
-        if (ok) ok = migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_cat_date ON watch_history(category, session_start)");
-        if (ok)
-            this->db.commit();
-        else {
-            this->db.rollback();
-            qMainApp->logger->log(QStringLiteral("watch_history migration FAILED: %1").arg(migrate.lastError().text()), "Database");
-        }
-        if (ok)
-            qMainApp->logger->log("watch_history migration complete", "Database");
-    }
-}
-
-void sqliteDB::migrateWatchHistoryV2()
-{
-    bool needsMigration = false;
-    {
-        QSqlQuery check(this->db);
-        check.prepare("SELECT COUNT(*) FROM pragma_table_info('watch_history') WHERE name = 'video_path'");
-        needsMigration = check.exec() && check.next() && check.value(0).toInt() == 0;
-    }
-    if (!needsMigration) {
-        QSqlQuery backfill(this->db);
-        backfill.prepare("UPDATE watch_history SET video_path = (SELECT path FROM videodetails WHERE videodetails.id = watch_history.video_id) "
-            "WHERE video_id >= 0 AND video_path IS NULL");
-        if (backfill.exec() && backfill.numRowsAffected() > 0)
-            qMainApp->logger->log(QStringLiteral("Backfilled %1 watch_history video_path rows").arg(backfill.numRowsAffected()), "Database");
-        return;
-    }
-
-    qMainApp->logger->log("Migrating watch_history v2 (video_path + FK)...", "Database");
-    QSqlQuery migrate(this->db);
-    migrate.exec("DROP TABLE IF EXISTS watch_history_mig");
-    bool ok = this->db.transaction();
-    if (ok) ok = migrate.exec("CREATE TABLE watch_history_mig ("
-        "\"id\" INTEGER NOT NULL,"
-        "\"video_id\" INTEGER,"
-        "\"category\" TEXT NOT NULL,"
-        "\"video_path\" TEXT,"
-        "\"watched_start\" REAL NOT NULL DEFAULT 0,"
-        "\"watched_end\" REAL NOT NULL DEFAULT 0,"
-        "\"watched_time\" REAL NOT NULL DEFAULT 0,"
-        "\"session_start\" TEXT NOT NULL,"
-        "\"session_end\" TEXT NOT NULL,"
-        "\"session_time\" REAL NOT NULL DEFAULT 0,"
-        "\"completed\" BOOLEAN NOT NULL DEFAULT 0,"
-        "FOREIGN KEY(\"video_id\") REFERENCES videodetails(\"id\") ON DELETE SET NULL,"
-        "PRIMARY KEY(\"id\" AUTOINCREMENT))");
-    if (ok) ok = migrate.exec("INSERT INTO watch_history_mig "
-        "(id, video_id, category, watched_start, watched_end, watched_time, session_start, session_end, session_time, completed) "
-        "SELECT id, video_id, category, watched_start, watched_end, watched_time, session_start, session_end, session_time, completed "
-        "FROM watch_history");
-    if (ok) ok = migrate.exec("DROP TABLE watch_history");
-    if (ok) ok = migrate.exec("ALTER TABLE watch_history_mig RENAME TO watch_history");
-    if (ok) ok = migrate.exec("UPDATE watch_history SET video_path = (SELECT path FROM videodetails WHERE videodetails.id = watch_history.video_id) "
-        "WHERE video_id >= 0 AND video_path IS NULL");
-    if (ok) ok = migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_video ON watch_history(video_id)");
-    if (ok) ok = migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_category ON watch_history(category)");
-    if (ok) ok = migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_date ON watch_history(session_start)");
-    if (ok) ok = migrate.exec("CREATE INDEX IF NOT EXISTS idx_watch_history_cat_date ON watch_history(category, session_start)");
-    if (ok)
-        this->db.commit();
-    else {
-        this->db.rollback();
-        qMainApp->logger->log(QStringLiteral("watch_history v2 migration FAILED: %1").arg(migrate.lastError().text()), "Database");
-    }
-    if (ok)
-        qMainApp->logger->log("watch_history v2 migration complete", "Database");
 }
 
 void sqliteDB::enableForeignKeys()
@@ -1479,8 +1377,6 @@ void sqliteDB::createTables() {
         "\"completed\"       BOOLEAN NOT NULL DEFAULT 0,"
         "FOREIGN KEY(\"video_id\") REFERENCES videodetails(\"id\") ON DELETE SET NULL,"
         "PRIMARY KEY(\"id\" AUTOINCREMENT));";
-    QString wh_migration_completed =
-        "ALTER TABLE watch_history ADD COLUMN completed BOOLEAN NOT NULL DEFAULT 0;";
     QString idx_wh_video    = "CREATE INDEX IF NOT EXISTS idx_watch_history_video ON watch_history(video_id);";
     QString idx_wh_category = "CREATE INDEX IF NOT EXISTS idx_watch_history_category ON watch_history(category);";
     QString idx_wh_date     = "CREATE INDEX IF NOT EXISTS idx_watch_history_date ON watch_history(session_start);";
@@ -1500,7 +1396,6 @@ void sqliteDB::createTables() {
     query.exec(idx_wh_category);
     query.exec(idx_wh_date);
     query.exec(idx_wh_cat_date);
-    query.exec(wh_migration_completed);
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('current', 'MINUS', '')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('current', 'PLUS', '')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('currentIconPath', 'MINUS', '')");

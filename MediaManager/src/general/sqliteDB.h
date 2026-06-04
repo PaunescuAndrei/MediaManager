@@ -15,8 +15,6 @@ public:
     void enableForeignKeys();
     ~sqliteDB();
     void createTables();
-    void migrateWatchHistoryNullableVideoId();
-    void migrateWatchHistoryV2();
     QList<QTreeWidgetItem*> getVideos(QString category);
     QVector<VideoData> getVideosData(QString category);
     VideoData getVideoData(QString path, QString category);

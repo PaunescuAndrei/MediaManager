@@ -2114,7 +2114,7 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
 
     this->App->db->db.transaction();
     if (mode == NextVideoModes::Random && hasSettings) {
-        const bool specialWillBePicked = settings.next_video_is_sv && settings.sv_is_available && this->App->currentDB == "MINUS";
+        const bool specialWillBePicked = settings.next_video_is_sv && settings.sv_is_available && (this->App->currentDB == "MINUS" || (this->App->currentDB == "PLUS" && this->App->config->get_bool("sv_track_in_plus")));
         if (specialWillBePicked && selectedChoice.has_value()) {
             this->sv_count = 0;
             this->ui.counterLabel->setProgress(this->sv_count);

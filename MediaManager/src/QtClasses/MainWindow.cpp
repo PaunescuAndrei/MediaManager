@@ -2216,6 +2216,9 @@ bool MainWindow::applyPostWatchAdjustments(const QString& videoType, int videoId
 }
 
 void MainWindow::updateSvCountersAfterPlayback(bool playedSpecialType, bool skipped) {
+    if (this->App->currentDB == "PLUS" && !this->App->config->get_bool("sv_track_in_plus")) {
+        return;
+    }
     if (playedSpecialType) {
         this->sv_count = 0;
     }

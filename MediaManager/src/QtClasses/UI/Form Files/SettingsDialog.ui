@@ -176,8 +176,18 @@
              </widget>
             </item>
             <item>
-             <widget class="QWidget" name="widget" native="true">
-              <layout class="QHBoxLayout" name="horizontalLayout_10">
+             <widget class="QCheckBox" name="svTrackInPlus">
+              <property name="toolTip">
+               <string>When enabled, watching videos in the PLUS category also updates the special video rotation counter. The counter is normally only tracked in the MINUS category.</string>
+              </property>
+              <property name="text">
+               <string>Track special video count in PLUS category</string>
+              </property>
+             </widget>
+            </item>
+             <item>
+              <widget class="QWidget" name="widget" native="true">
+               <layout class="QHBoxLayout" name="horizontalLayout_10">
                <property name="leftMargin">
                 <number>0</number>
                </property>

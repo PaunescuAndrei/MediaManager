@@ -51,6 +51,7 @@ void Config::init_defaults() {
 		{"current_db", "MINUS"},
 		{"video_types",	""},
 		{"sv_types",""},
+		{"sv_track_in_plus","False"},
 		{"skip_progress_enabled", "False"},
 		{"sv_mode", "MINUS"},
 		{"animated_icon_flag", "False"},

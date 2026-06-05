@@ -233,6 +233,10 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 	if (specialModeIndex < 0)
 		specialModeIndex = 0;
 	this->ui.specialSvModeCombo->setCurrentIndex(specialModeIndex);
+	if (mw->App->config->get_bool("sv_track_in_plus"))
+		this->ui.svTrackInPlus->setCheckState(Qt::CheckState::Checked);
+	else
+		this->ui.svTrackInPlus->setCheckState(Qt::CheckState::Unchecked);
 	if (mw->App->config->get_bool("mascots_random_change"))
 		this->ui.mascotsRandomChange->setCheckState(Qt::CheckState::Checked);
 	else

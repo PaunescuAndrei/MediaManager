@@ -2853,8 +2853,12 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     QString specialModeSelection = dialog->ui.specialSvModeCombo->currentText().toUpper();
     if (specialModeSelection != "PLUS")
         specialModeSelection = "MINUS";
-    config->set("sv_mode", specialModeSelection);
-    if (dialog->ui.mascotsChanceSpinBox->value() != dialog->old_mascotsChanceSpinBox) {
+	config->set("sv_mode", specialModeSelection);
+	if (dialog->ui.svTrackInPlus->checkState() == Qt::CheckState::Checked)
+		config->set("sv_track_in_plus", "True");
+	else
+		config->set("sv_track_in_plus", "False");
+	if (dialog->ui.mascotsChanceSpinBox->value() != dialog->old_mascotsChanceSpinBox) {
         config->set("mascots_random_chance", QString::number(dialog->ui.mascotsChanceSpinBox->value()));
         this->App->MascotsAnimation->set_random_chance(dialog->ui.mascotsChanceSpinBox->value() / 100.0);
         dialog->old_mascotsChanceSpinBox = dialog->ui.mascotsChanceSpinBox->value();

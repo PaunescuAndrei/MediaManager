@@ -31,6 +31,7 @@ public:
     QString getMainInfoValue(QString name, QString category, QString fallback = "");
     std::tuple<int, QString, QString, QString, QString> getCurrentVideo(QString category, std::tuple<int, QString, QString, QString, QString> fallback = { -1,"","","","" });
     QString getVideoProgress(int video_id, QString fallback = "");
+    QString getVideoType(int video_id, QString fallback = "");
     int getVideoId(QString path, QString category);
     bool checkIfVideoInDB(QString path, QString category);
     int getVideosWatched(QString category, int fallback);

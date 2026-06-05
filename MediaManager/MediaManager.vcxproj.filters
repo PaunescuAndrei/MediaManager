@@ -433,7 +433,7 @@
       <Filter>Header Files\thirdparty\beat_this</Filter>
     </ClInclude>
     <ClInclude Include="src\general\VideoData.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\general</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

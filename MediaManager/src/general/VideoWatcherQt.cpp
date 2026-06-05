@@ -23,6 +23,7 @@ QSharedPointer<BasePlayer> VideoWatcherQt::newPlayer(QString path, int video_id)
     this->Players.append(newVideo);
     this->CLASS_COUNT++;
     newVideo->category = this->App->currentDB;
+    newVideo->video_type = this->db->getVideoType(video_id);
     newVideo->startProgress = this->db->getVideoProgress(video_id, "0").toDouble();
     newVideo->lastKnownVideoPath = path;
     newVideo->start();
@@ -53,7 +54,7 @@ void VideoWatcherQt::clearData(bool include_mainplayer) {
                     now.toString("yyyy-MM-dd HH:mm:ss"), sessionTime,
                     false);
             }
-            if (this->App->config->get_bool("counter_use_actual_watch_time")) {
+            if (this->App->config->get_bool("counter_use_actual_watch_time") && shouldCountWatchTime(*it)) {
                 double delta = watchedTime - (*it)->lastCheckpointWatchedTime;
                 if (delta > 0.0) {
                     (*it)->lastCheckpointWatchedTime = watchedTime;
@@ -159,7 +160,7 @@ void VideoWatcherQt::checkpointPlayer(QSharedPointer<BasePlayer> player, int int
     if (pos >= 0 && player->video_id >= 0) {
         this->db->updateVideoProgress(player->video_id, pos);
     }
-    if (this->App->config->get_bool("counter_use_actual_watch_time")) {
+    if (this->App->config->get_bool("counter_use_actual_watch_time") && shouldCountWatchTime(player)) {
         double delta = player->videoWatchedTime() - player->lastCheckpointWatchedTime;
         if (delta > 0.0) {
             player->lastCheckpointWatchedTime = player->videoWatchedTime();
@@ -185,6 +186,7 @@ void VideoWatcherQt::handleExternalVideoChange(QSharedPointer<BasePlayer> player
     }
     if (!player->trackExternalVideo) {
         player->video_id = -1;
+        player->video_type = QString();
         player->lastKnownVideoPath = player->video_path;
         player->activeWatchHistoryRowId = -1;
         player->startProgress = 0;
@@ -199,6 +201,7 @@ void VideoWatcherQt::handleExternalVideoChange(QSharedPointer<BasePlayer> player
         newVideoId = query.value(0).toInt();
     }
     player->video_id = newVideoId;
+    player->video_type = newVideoId >= 0 ? this->db->getVideoType(newVideoId) : QString();
     player->lastKnownVideoPath = player->video_path;
     player->activeWatchHistoryRowId = -1;
     player->startProgress = 0;
@@ -211,6 +214,16 @@ void VideoWatcherQt::handleExternalVideoChange(QSharedPointer<BasePlayer> player
         now.toString("yyyy-MM-dd HH:mm:ss"),
         now.toString("yyyy-MM-dd HH:mm:ss"),
         0, false);
+}
+
+bool VideoWatcherQt::shouldCountWatchTime(QSharedPointer<BasePlayer> player)
+{
+    if (player->trackExternalVideo)
+        return true;
+    if (this->App->currentDB != "MINUS")
+        return true;
+    const bool isMinusPlus = this->App->config->get("sv_mode").compare("PLUS", Qt::CaseInsensitive) == 0;
+    return isMinusPlus && svTypes.contains(player->video_type, Qt::CaseInsensitive);
 }
 
 void VideoWatcherQt::run()
@@ -246,7 +259,7 @@ void VideoWatcherQt::run()
                         sessionStart, sessionEnd, sessionTime,
                         false);
                 }
-                if (this->App->config->get_bool("counter_use_actual_watch_time")) {
+                if (this->App->config->get_bool("counter_use_actual_watch_time") && shouldCountWatchTime(player)) {
                     double delta = watchedTime - player->lastCheckpointWatchedTime;
                     if (delta > 0.0) {
                         player->lastCheckpointWatchedTime = watchedTime;

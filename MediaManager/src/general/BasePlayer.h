@@ -26,6 +26,7 @@ public:
     double position = -1;  
     double startProgress = 0.0;
     QString category;
+    QString video_type;
     double duration = -1;
     bool change_in_progress = false;  
     bool paused = false;  

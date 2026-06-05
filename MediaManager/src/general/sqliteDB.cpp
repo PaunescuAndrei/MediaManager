@@ -385,6 +385,22 @@ QString sqliteDB::getVideoProgress(int video_id, QString fallback) {
         return fallback;
 }
 
+QString sqliteDB::getVideoType(int video_id, QString fallback) {
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral("SELECT type from videodetails WHERE id = ?"));
+    query.addBindValue(video_id);
+    if (!query.exec()) {
+        if (qMainApp) {
+            qMainApp->logger->log(QStringLiteral("Database Error at getVideoType (%1): %2").arg(QString::number(video_id), query.lastError().text()), "Database", query.lastError().text());
+            qMainApp->showErrorMessage("getVideoType " + QString::number(video_id) + " " + query.lastError().text());
+        }
+    }
+    if (query.first())
+        return query.value(0).toString();
+    else
+        return fallback;
+}
+
 int sqliteDB::getVideoId(QString path, QString category) {
     QSqlQuery query = QSqlQuery(this->db);
     query.prepare(QStringLiteral("SELECT id from videodetails WHERE path = ? and category = ?"));

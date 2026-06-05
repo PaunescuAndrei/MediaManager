@@ -4731,6 +4731,7 @@ void MainWindow::changePlayerVideo(QSharedPointer<BasePlayer> player, QString pa
     }
     player->video_id = video_id;
     player->category = this->App->currentDB;
+    player->video_type = this->App->db->getVideoType(video_id);
     player->lastKnownVideoPath = path;
     player->activeWatchHistoryRowId = -1;
     player->startProgress = this->App->db->getVideoProgress(video_id, "0").toDouble();

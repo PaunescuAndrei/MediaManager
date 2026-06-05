@@ -32,6 +32,7 @@ public:
     void toggle_window();
     void checkpointPlayer(QSharedPointer<BasePlayer> player, int intervalSeconds);
     void handleExternalVideoChange(QSharedPointer<BasePlayer> player);
+    bool shouldCountWatchTime(QSharedPointer<BasePlayer> player);
     void run() override;
     ~VideoWatcherQt();
 signals:

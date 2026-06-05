@@ -2200,10 +2200,12 @@ bool MainWindow::applyPostWatchAdjustments(const QString& videoType, int videoId
 	}
 
     if (isSpecialType) {
-        int val = this->calculate_sv_target();
-        this->App->db->setMainInfoValue("sv_target_count", "ALL", QString::number(val));
-        this->sv_target_count = val;
-        this->ui.counterLabel->setMinMax(0, val);
+        if (this->App->currentDB != "PLUS" || this->App->config->get_bool("sv_track_in_plus")) {
+            int val = this->calculate_sv_target();
+            this->App->db->setMainInfoValue("sv_target_count", "ALL", QString::number(val));
+            this->sv_target_count = val;
+            this->ui.counterLabel->setMinMax(0, val);
+        }
     }
 
     if (counterDelta != 0) {

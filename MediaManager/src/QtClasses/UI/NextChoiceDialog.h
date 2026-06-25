@@ -49,6 +49,7 @@ private:
     void rebuildForCurrentMode();
     void removeExcessCards(int keepCount);
     void resizeToFit();
+    QColor rarityColor(int tier) const;
     QList<NextVideoChoice> choices;
     Ui::NextChoiceDialog ui;
     int currentIndex = -1;
@@ -62,6 +63,10 @@ private:
     QLabel* counterLabel = nullptr;
     bool appendMode = false;
     bool togglingEnabled = true;
+    bool rarityEnabled = false;
+    QColor ssrColor;
+    QColor srColor;
+    QColor rColor;
 
     CandidateBuilder candidateBuilder;
     int requestedChoicesCount = 1;

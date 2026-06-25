@@ -26,60 +26,88 @@
 namespace {
 class ChoiceCardWidget : public QWidget {
 public:
-    explicit ChoiceCardWidget(int index, QWidget* parent = nullptr) : QWidget(parent) {
-        this->setAttribute(Qt::WA_Hover, true);
-        this->setMouseTracking(true);
-        this->setProperty("choiceIndex", index);
-        this->setCursor(Qt::PointingHandCursor);
-        this->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
-    }
+	explicit ChoiceCardWidget(int index, int rarity, const QColor& color, QWidget* parent = nullptr)
+		: QWidget(parent), rarity(rarity), rarityColor(color) {
+		this->setAttribute(Qt::WA_Hover, true);
+		this->setMouseTracking(true);
+		this->setProperty("choiceIndex", index);
+		this->setCursor(Qt::PointingHandCursor);
+		this->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+	}
 protected:
-    bool event(QEvent* e) override {
-        switch (e->type()) {
-        case QEvent::Enter:
-        case QEvent::HoverEnter:
-            this->hovered = true;
-            this->update();
-            break;
-        case QEvent::Leave:
-        case QEvent::HoverLeave:
-            this->hovered = false;
-            this->update();
-            break;
-        case QEvent::PaletteChange:
-            this->update();
-            break;
-        default:
-            break;
-        }
-        return QWidget::event(e);
-    }
+	bool event(QEvent* e) override {
+		switch (e->type()) {
+		case QEvent::Enter:
+		case QEvent::HoverEnter:
+			this->hovered = true;
+			this->update();
+			break;
+		case QEvent::Leave:
+		case QEvent::HoverLeave:
+			this->hovered = false;
+			this->update();
+			break;
+		case QEvent::PaletteChange:
+			this->update();
+			break;
+		default:
+			break;
+		}
+		return QWidget::event(e);
+	}
 
-    void paintEvent(QPaintEvent*) override {
-        QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing, true);
+	void paintEvent(QPaintEvent*) override {
+		QPainter painter(this);
+		painter.setRenderHint(QPainter::Antialiasing, true);
 
-        QColor background = this->palette().color(QPalette::Base);
-        if (background.isValid()) {
-            background = background.darker(115);
-        } else {
-            background = QColor(43, 43, 43);
-        }
+		QColor background = this->palette().color(QPalette::Base);
+		if (background.isValid()) {
+			background = background.darker(115);
+		} else {
+			background = QColor(43, 43, 43);
+		}
+		if (this->rarityColor.isValid() && this->rarity >= 1) {
+			const double tint = 0.05;
+			const int r = static_cast<int>(background.red() * (1.0 - tint) + this->rarityColor.red() * tint);
+			const int g = static_cast<int>(background.green() * (1.0 - tint) + this->rarityColor.green() * tint);
+			const int b = static_cast<int>(background.blue() * (1.0 - tint) + this->rarityColor.blue() * tint);
+			background = QColor(r, g, b);
+		}
 
-        QColor border = this->hovered ? this->palette().color(QPalette::Highlight) : this->palette().color(QPalette::Mid);
-        if (!border.isValid()) {
-            border = this->hovered ? QColor(90, 160, 255) : QColor(85, 85, 85);
-        }
+		QColor border;
+		if (this->hovered) {
+			border = this->palette().color(QPalette::Highlight);
+			if (!border.isValid()) border = QColor(90, 160, 255);
+		} else if (this->rarityColor.isValid() && this->rarity >= 1) {
+			border = this->rarityColor;
+		} else {
+			border = this->palette().color(QPalette::Mid);
+			if (!border.isValid()) border = QColor(85, 85, 85);
+		}
 
-        QRectF rect = this->rect();
-        rect.adjust(0.5, 0.5, -0.5, -0.5);
+		QRectF rect = this->rect();
+		rect.adjust(0.5, 0.5, -0.5, -0.5);
 
-        painter.setBrush(background);
-        painter.setPen(QPen(border, 1.0));
-        painter.drawRoundedRect(rect, 8.0, 8.0);
-    }
+		if (this->rarityColor.isValid() && this->rarity >= 1 && !this->hovered) {
+			const double glowAlpha = (this->rarity == 3) ? 0.35 : (this->rarity == 2) ? 0.25 : 0.15;
+			QColor glowColor = this->rarityColor;
+			glowColor.setAlphaF(glowAlpha);
+			QPen glowPen(glowColor, (this->rarity == 3) ? 6.0 : 4.0);
+			painter.setPen(glowPen);
+			painter.setBrush(Qt::NoBrush);
+			QRectF glowRect = rect.adjusted(-2, -2, 2, 2);
+			painter.drawRoundedRect(glowRect, 10.0, 10.0);
+		}
+
+		painter.setBrush(background);
+		const double borderWidth = (this->rarity >= 2) ? 2.0 : (this->rarity == 1) ? 1.5 : 1.0;
+		painter.setPen(QPen(border, borderWidth));
+		painter.drawRoundedRect(rect, 8.0, 8.0);
+	}
 private:
-    bool hovered = false;
+	bool hovered = false;
+	int rarity = -1;
+	QColor rarityColor;
 };
 
 class HorizontalScrollArea : public QScrollArea {
@@ -157,6 +185,12 @@ NextChoiceDialog::NextChoiceDialog(QWidget* parent) : QDialog(parent)
         this->activateWindow();
         });
     this->bringToFrontTimer.start();
+
+    this->rarityEnabled = qMainApp->config->get_bool("rarity_enabled");
+    this->ssrColor = QColor(qMainApp->config->get("rarity_ssr_color"));
+    this->srColor = QColor(qMainApp->config->get("rarity_sr_color"));
+    this->rColor = QColor(qMainApp->config->get("rarity_r_color"));
+
     connect(this, &QDialog::finished, this, [this](int) {
         this->bringToFrontTimer.stop();
         });
@@ -373,7 +407,9 @@ void NextChoiceDialog::updateRefreshButtonText()
 
 QWidget* NextChoiceDialog::buildCard(const NextVideoChoice& choice, int index)
 {
-    QWidget* card = new ChoiceCardWidget(index, this);
+    const int rarity = this->rarityEnabled ? choice.rarity : -1;
+    const QColor color = this->rarityEnabled ? this->rarityColor(choice.rarity) : QColor();
+    QWidget* card = new ChoiceCardWidget(index, rarity, color, this);
     card->setObjectName(QStringLiteral("choiceCard_%1").arg(index));
 
     auto* layout = new QVBoxLayout(card);
@@ -698,4 +734,13 @@ void NextChoiceDialog::closeEvent(QCloseEvent* e)
 {
     this->stopAllPreviews();
     QDialog::closeEvent(e);
+}
+
+QColor NextChoiceDialog::rarityColor(int tier) const {
+    switch (tier) {
+        case 3: return this->ssrColor;
+        case 2: return this->srColor;
+        case 1: return this->rColor;
+        default: return QColor();
+    }
 }

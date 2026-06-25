@@ -326,6 +326,8 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
                 [this] { this->incrementCounterVar(-1); },
                 [this] { return this->getNextChoiceRefreshCounter(); },
                 [this](int v) { this->setNextChoiceRefreshCounter(v); },
+                [this] { return this->getNextChoiceRollCounter(); },
+                [this](int v) { this->setNextChoiceRollCounter(v); },
                 candidates
             );
 
@@ -1821,6 +1823,26 @@ void MainWindow::incrementNextChoiceRefreshCounter(int delta) {
     this->setNextChoiceRefreshCounter(value);
 }
 
+int MainWindow::getNextChoiceRollCounter() const {
+    return this->App->db->getMainInfoValue("next_choice_roll_counter", this->App->currentDB, "0").toInt();
+}
+
+void MainWindow::setNextChoiceRollCounter(int value) {
+    if (value < 0) {
+        value = 0;
+    }
+    this->App->db->setMainInfoValue("next_choice_roll_counter", this->App->currentDB, QString::number(value));
+}
+
+void MainWindow::incrementNextChoiceRollCounter(int delta) {
+    int value = this->getNextChoiceRollCounter();
+    value += delta;
+    if (value < 0) {
+        value = 0;
+    }
+    this->setNextChoiceRollCounter(value);
+}
+
 bool MainWindow::appendOnRefreshEnabled() const
 {
     return this->App->config->get_bool("next_multichoice_append_on_refresh");
@@ -2028,9 +2050,12 @@ QList<NextVideoChoice> MainWindow::buildSeriesRandomCandidates(const QPersistent
 
 bool MainWindow::applyNextChoice(const std::optional<NextVideoChoice>& choice) {
     if (choice.has_value() && !choice->path.isEmpty()) {
-        if (this->getNextChoiceRefreshCounter() != 0) {
-            this->setNextChoiceRefreshCounter(0);
-        }
+    if (this->getNextChoiceRefreshCounter() != 0) {
+        this->setNextChoiceRefreshCounter(0);
+    }
+    if (this->getNextChoiceRollCounter() != 0) {
+        this->setNextChoiceRollCounter(0);
+    }
         const NextVideoChoice& data = choice.value();
         this->setCurrentVideo(data.id, data.path, data.name, data.author, data.tags, data.resetProgress);
         this->highlightCurrentItem();
@@ -2118,6 +2143,8 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
                 [this] { this->incrementCounterVar(-1); },
                 [this] { return this->getNextChoiceRefreshCounter(); },
                 [this](int v) { this->setNextChoiceRefreshCounter(v); },
+                [this] { return this->getNextChoiceRollCounter(); },
+                [this](int v) { this->setNextChoiceRollCounter(v); },
                 candidates
             );
 

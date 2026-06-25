@@ -36,6 +36,7 @@ public:
     void setup(CandidateBuilder builder, int requestedChoices,
                VoidFunc onDecrementCounter, IntAccessor onGetRefreshCounter,
                std::function<void(int)> onSetRefreshCounter,
+               IntAccessor onGetRollCounter, std::function<void(int)> onSetRollCounter,
                const QList<NextVideoChoice>& initialCandidates);
 private:
     void rebuildCards(int startIndex = 0);
@@ -45,6 +46,8 @@ private:
     void stopPreviewForIndex(int index);
     void stopAllPreviews();
     void rebuildForCurrentMode();
+    void removeExcessCards(int keepCount);
+    void resizeToFit();
     QList<NextVideoChoice> choices;
     Ui::NextChoiceDialog ui;
     int currentIndex = -1;
@@ -64,6 +67,8 @@ private:
     VoidFunc onDecrementCounter;
     IntAccessor onGetRefreshCounter;
     std::function<void(int)> onSetRefreshCounter;
+    IntAccessor onGetRollCounter;
+    std::function<void(int)> onSetRollCounter;
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
     void closeEvent(QCloseEvent* e) override;

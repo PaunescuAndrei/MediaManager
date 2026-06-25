@@ -1436,6 +1436,8 @@ void sqliteDB::createTables() {
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('timeWatchedIncrement', 'ALL', '0')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('next_choice_refresh_counter', 'PLUS', '0')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('next_choice_refresh_counter', 'MINUS', '0')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('next_choice_roll_counter', 'PLUS', '0')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('next_choice_roll_counter', 'MINUS', '0')");
     this->db.commit();
 }
 

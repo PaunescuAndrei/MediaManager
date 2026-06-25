@@ -113,8 +113,14 @@ NextChoiceDialog::NextChoiceDialog(QWidget* parent) : QDialog(parent)
         if (this->onDecrementCounter) {
             this->onDecrementCounter();
         }
-        if (this->appendMode && this->onGetRefreshCounter && this->onSetRefreshCounter) {
-            this->onSetRefreshCounter(this->onGetRefreshCounter() + 1);
+        if (this->appendMode) {
+            if (this->onGetRollCounter && this->onSetRollCounter) {
+                this->onSetRollCounter(this->onGetRollCounter() + 1);
+            }
+        } else {
+            if (this->onGetRefreshCounter && this->onSetRefreshCounter) {
+                this->onSetRefreshCounter(this->onGetRefreshCounter() + 1);
+            }
         }
         this->rebuildForCurrentMode();
     });
@@ -124,11 +130,10 @@ NextChoiceDialog::NextChoiceDialog(QWidget* parent) : QDialog(parent)
         }
     });
     connect(this->ui.refreshButton, &customQPushButton::middleClicked, this, [this] {
-        if (this->togglingEnabled && this->onSetRefreshCounter) {
-            this->onSetRefreshCounter(0);
-            if (this->candidateBuilder) {
-                this->setChoices(this->candidateBuilder(this->requestedChoicesCount));
-            }
+        if (this->togglingEnabled) {
+            if (this->onSetRefreshCounter) this->onSetRefreshCounter(0);
+            if (this->onSetRollCounter) this->onSetRollCounter(0);
+            this->rebuildForCurrentMode();
         }
     });
 
@@ -185,6 +190,7 @@ void NextChoiceDialog::setTogglingEnabled(bool enabled)
 void NextChoiceDialog::setup(CandidateBuilder builder, int requestedChoices,
                              VoidFunc onDecrementCounter, IntAccessor onGetRefreshCounter,
                              std::function<void(int)> onSetRefreshCounter,
+                             IntAccessor onGetRollCounter, std::function<void(int)> onSetRollCounter,
                              const QList<NextVideoChoice>& initialCandidates)
 {
     this->candidateBuilder = std::move(builder);
@@ -192,9 +198,11 @@ void NextChoiceDialog::setup(CandidateBuilder builder, int requestedChoices,
     this->onDecrementCounter = std::move(onDecrementCounter);
     this->onGetRefreshCounter = std::move(onGetRefreshCounter);
     this->onSetRefreshCounter = std::move(onSetRefreshCounter);
+    this->onGetRollCounter = std::move(onGetRollCounter);
+    this->onSetRollCounter = std::move(onSetRollCounter);
 
-    if (this->appendMode && this->onGetRefreshCounter && this->candidateBuilder) {
-        const int counter = this->onGetRefreshCounter();
+    if (this->appendMode && this->onGetRollCounter && this->candidateBuilder) {
+        const int counter = this->onGetRollCounter();
         this->setChoices(this->candidateBuilder((counter + 1) * requestedChoices));
     } else {
         this->setChoices(initialCandidates);
@@ -206,21 +214,53 @@ void NextChoiceDialog::rebuildForCurrentMode()
     if (!this->candidateBuilder) {
         return;
     }
-    int refCounter = 0;
-    if (this->onGetRefreshCounter) {
-        refCounter = this->onGetRefreshCounter();
+    if (this->appendMode) {
+        int rollCounter = 0;
+        if (this->onGetRollCounter) {
+            rollCounter = this->onGetRollCounter();
+        }
+        this->setChoices(this->candidateBuilder((rollCounter + 1) * this->requestedChoicesCount));
+    } else {
+        this->setChoices(this->candidateBuilder(this->requestedChoicesCount));
     }
-    const int totalChoices = this->appendMode
-        ? (refCounter + 1) * this->requestedChoicesCount
-        : this->requestedChoicesCount;
-    this->setChoices(this->candidateBuilder(totalChoices));
 }
 
 void NextChoiceDialog::setChoices(const QList<NextVideoChoice>& newChoices)
 {
     const int oldCount = this->choices.size();
+    const int newCount = newChoices.size();
+
+    if (newCount <= oldCount) {
+        bool prefixMatches = true;
+        for (int i = 0; i < newCount; ++i) {
+            if (newChoices[i].path != this->choices[i].path) {
+                prefixMatches = false;
+                break;
+            }
+        }
+        if (prefixMatches) {
+            if (newCount < oldCount) {
+                while (this->choices.size() > newCount) {
+                    const int idx = this->choices.size() - 1;
+                    this->choices.removeLast();
+                    if (auto* p = this->previewWidgets.value(idx)) {
+                        p->stopPreview(true);
+                    }
+                    this->previewWidgets.remove(idx);
+                }
+                this->removeExcessCards(newCount);
+            }
+            this->updateRefreshButtonText();
+            if (!this->choices.isEmpty()) {
+                this->applySelection(0);
+            }
+            this->resizeToFit();
+            return;
+        }
+    }
+
     bool doAppend = false;
-    if (this->appendMode && newChoices.size() > oldCount) {
+    if (this->appendMode && newCount > oldCount) {
         doAppend = true;
         for (int i = 0; i < oldCount; ++i) {
             if (this->choices[i].path != newChoices[i].path) {
@@ -242,7 +282,11 @@ void NextChoiceDialog::setChoices(const QList<NextVideoChoice>& newChoices)
         this->applySelection(0);
     }
 
-    // Dynamically size the dialog to fit cards while respecting screen bounds
+    this->resizeToFit();
+}
+
+void NextChoiceDialog::resizeToFit()
+{
     const int availableChoices = this->choices.size() > 0 ? this->choices.size() : 1;
     int columns = availableChoices;
     if (columns < 1) columns = 1;
@@ -550,6 +594,23 @@ void NextChoiceDialog::rebuildCards(int startIndex)
     if (usedColumns > maxColumns) usedColumns = maxColumns;
     for (int c = 0; c < maxColumns; ++c) {
         grid->setColumnStretch(c, c < usedColumns ? 1 : 0);
+    }
+}
+
+void NextChoiceDialog::removeExcessCards(int keepCount)
+{
+    QGridLayout* grid = qobject_cast<QGridLayout*>(this->ui.cardsLayout);
+    if (!grid) return;
+    for (int i = grid->count() - 1; i >= 0; --i) {
+        QLayoutItem* item = grid->itemAt(i);
+        if (item && item->widget()) {
+            const QVariant prop = item->widget()->property("choiceIndex");
+            if (prop.isValid() && prop.toInt() >= keepCount) {
+                QWidget* w = item->widget();
+                grid->removeWidget(w);
+                w->deleteLater();
+            }
+        }
     }
 }
 

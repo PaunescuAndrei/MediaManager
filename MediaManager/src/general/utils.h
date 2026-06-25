@@ -84,6 +84,8 @@ namespace utils {
 	QList<long double> calculateWeights(const QList<VideoWeightedData>& items, double biasViews, double biasRating, double biasTags, double biasBpm, double biasGeneral, long double maxViews, long double maxRating, long double maxTagsWeight, long double maxBpm, long double no_views_weight = 0, long double no_rating_weight = 0, long double no_tags_weight = 0);
 	QString weightedRandomChoice(const QList<VideoWeightedData>& items, QRandomGenerator& generator, double biasViews, double biasRating, double biasTags, double biasBpm, double biasGeneral, long double no_views_weight = 0, long double no_rating_weight = 0, long double no_tags_weight = 0);
 	QMap<int, long double> calculateProbabilities(const QList<VideoWeightedData>& items, double biasViews, double biasRating, double biasTags, double biasBpm, double biasGeneral, long double no_views_weight, long double no_rating_weight, long double no_tags_weight);
+	void computeRarities(QList<NextVideoChoice>& candidates,
+	                     int ssrPct, int srPct, int rPct);
 	quint32 stringToSeed(const QString& textSeed);
 
 	template <typename Func, typename... Args>

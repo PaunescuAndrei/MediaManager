@@ -1016,6 +1016,20 @@ int sqliteDB::getVideoCount(QString category) {
     return query.first() ? query.value(0).toInt() : 0;
 }
 
+int sqliteDB::getTotalViews(const QString& category) {
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare("SELECT COALESCE(SUM(views), 0) FROM videodetails WHERE category = ?");
+    query.bindValue(0, category);
+    if (!query.exec()) {
+        if (qMainApp) {
+            qMainApp->logger->log(QStringLiteral("Database Error at getTotalViews (%1): %2").arg(category, query.lastError().text()), "Database", query.lastError().text());
+            qMainApp->showErrorMessage("getTotalViews " + category + " " + query.lastError().text());
+        }
+        return 0;
+    }
+    return query.first() ? query.value(0).toInt() : 0;
+}
+
 QMap<double, int> sqliteDB::getRatingDistribution() {
     QSqlQuery query = QSqlQuery(this->db);
     query.prepare("SELECT rating, COUNT(*) FROM videodetails WHERE rating > 0 GROUP BY rating ORDER BY rating");

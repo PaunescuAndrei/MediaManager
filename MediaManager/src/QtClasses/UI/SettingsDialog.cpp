@@ -220,6 +220,11 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 		this->ui.nextMultiChoiceCount->setEnabled(checked);
 	});
 
+	if (mw->App->config->get_bool("next_multichoice_append_on_refresh"))
+		this->ui.nextMultiChoiceAppendOnRefresh->setCheckState(Qt::CheckState::Checked);
+	else
+		this->ui.nextMultiChoiceAppendOnRefresh->setCheckState(Qt::CheckState::Unchecked);
+
 	this->ui.SVspinBox->setValue(mw->App->db->getMainInfoValue("sv_target_count", "ALL","0").toInt());
 	this->oldSVmax = this->ui.SVspinBox->value();
 	connect(this->ui.CalculateSVcountButton, &QPushButton::clicked, this, [mw, this] {

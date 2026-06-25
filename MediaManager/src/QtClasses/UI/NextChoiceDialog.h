@@ -24,10 +24,12 @@ public:
         this->halfIcon = halfIcon;
         this->inactiveIcon = inactiveIcon;
     }
+    void setAppendMode(bool enabled);
 signals:
     void refreshRequested();
+    void resetRequested();
 private:
-    void rebuildCards();
+    void rebuildCards(int startIndex = 0);
     QWidget* buildCard(const NextVideoChoice& choice, int index);
     void applySelection(int index);
     void startPreviewForIndex(int index);
@@ -44,6 +46,7 @@ private:
     bool previewAutoplayAllMute = false;
     bool previewEnabled = true;
     QLabel* counterLabel = nullptr;
+    bool appendMode = false;
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
     void closeEvent(QCloseEvent* e) override;

@@ -57,6 +57,7 @@ public:
     void resetWatched(QString category, double progress = 0, QString watched = "No");
     void resetWatched(QString category, QJsonObject settings, double progress = 0, QString watched = "No");
     int getVideoCount(QString category);
+    int getTotalViews(const QString& category);
     QMap<double, int> getRatingDistribution();
     int getUnratedVideoCount();
     int getUniqueVideosWatched(QString category);

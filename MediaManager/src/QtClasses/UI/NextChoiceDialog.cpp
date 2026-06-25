@@ -112,6 +112,12 @@ NextChoiceDialog::NextChoiceDialog(QWidget* parent) : QDialog(parent)
     connect(this->ui.refreshButton, &QPushButton::clicked, this, [this] {
         emit this->refreshRequested();
     });
+    this->ui.refreshButton->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(this->ui.refreshButton, &QPushButton::customContextMenuRequested, this, [this] {
+        if (this->appendMode) {
+            emit this->resetRequested();
+        }
+    });
     connect(this->ui.randomButton, &QPushButton::clicked, this, [this] {
         if (!this->choices.isEmpty()) {
             int index = utils::randint(0, this->choices.size() - 1);
@@ -142,13 +148,34 @@ NextChoiceDialog::~NextChoiceDialog()
     this->stopAllPreviews();
 }
 
+void NextChoiceDialog::setAppendMode(bool enabled)
+{
+    this->appendMode = enabled;
+    this->updateRefreshButtonText();
+}
+
 void NextChoiceDialog::setChoices(const QList<NextVideoChoice>& newChoices)
 {
+    const int oldCount = this->choices.size();
+    bool doAppend = false;
+    if (this->appendMode && newChoices.size() > oldCount) {
+        doAppend = true;
+        for (int i = 0; i < oldCount; ++i) {
+            if (this->choices[i].path != newChoices[i].path) {
+                doAppend = false;
+                break;
+            }
+        }
+    }
     this->choices = newChoices;
     this->previewAutoplayAllMute = qMainApp->config->get_bool("preview_autoplay_all_mute");
     this->previewEnabled = qMainApp->config->get_bool("preview_next_choices_enabled");
     this->updateRefreshButtonText();
-    this->rebuildCards();
+    if (doAppend) {
+        this->rebuildCards(oldCount);
+    } else {
+        this->rebuildCards();
+    }
     if (!this->choices.isEmpty()) {
         this->applySelection(0);
     }
@@ -194,6 +221,11 @@ void NextChoiceDialog::setChoices(const QList<NextVideoChoice>& newChoices)
     if (desiredHeight > screenHeight - 40) desiredHeight = screenHeight - 40;
 
     this->resize(desiredWidth, desiredHeight);
+    if (QScreen* screen = QGuiApplication::primaryScreen()) {
+        QRect avail = screen->availableGeometry();
+        this->move(avail.x() + (avail.width() - this->width()) / 2,
+                   avail.y() + (avail.height() - this->height()) / 2);
+    }
 }
 
 NextVideoChoice NextChoiceDialog::selectedChoice() const
@@ -220,7 +252,9 @@ void NextChoiceDialog::updateRefreshButtonText()
             counterVar = value;
         }
     }
-    this->ui.refreshButton->setText(QStringLiteral("Refresh (%1)").arg(counterVar));
+    this->ui.refreshButton->setText(
+        QStringLiteral("%1 (%2)").arg(this->appendMode ? QStringLiteral("Roll") : QStringLiteral("Refresh")).arg(counterVar)
+    );
 }
 
 QWidget* NextChoiceDialog::buildCard(const NextVideoChoice& choice, int index)
@@ -418,30 +452,28 @@ void NextChoiceDialog::applySelection(int index)
     this->currentIndex = index;
 }
 
-void NextChoiceDialog::rebuildCards()
+void NextChoiceDialog::rebuildCards(int startIndex)
 {
     QGridLayout* grid = qobject_cast<QGridLayout*>(this->ui.cardsLayout);
     if (!grid) return;
-    this->stopAllPreviews();
-    this->previewWidgets.clear();
-    while (QLayoutItem* item = grid->takeAt(0)) {
-        if (QWidget* w = item->widget()) {
-            w->deleteLater();
+
+    if (startIndex == 0) {
+        this->stopAllPreviews();
+        this->previewWidgets.clear();
+        while (QLayoutItem* item = grid->takeAt(0)) {
+            if (QWidget* w = item->widget()) {
+                w->deleteLater();
+            }
+            delete item;
         }
-        delete item;
     }
 
     const int maxColumns = 3;
-    int row = 0;
-    int col = 0;
-    for (int i = 0; i < this->choices.size(); ++i) {
+    for (int i = startIndex; i < this->choices.size(); ++i) {
         QWidget* card = this->buildCard(this->choices[i], i);
+        int row = i / maxColumns;
+        int col = i % maxColumns;
         grid->addWidget(card, row, col);
-        col++;
-        if (col >= maxColumns) {
-            col = 0;
-            row++;
-        }
     }
     int usedColumns = this->choices.isEmpty() ? 1 : this->choices.size();
     if (usedColumns < 1) usedColumns = 1;

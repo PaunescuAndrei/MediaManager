@@ -230,6 +230,7 @@ public:
     int getNextChoiceRefreshCounter() const;
     void setNextChoiceRefreshCounter(int value);
     void incrementNextChoiceRefreshCounter(int delta);
+    bool appendOnRefreshEnabled() const;
     bool setNextVideo(const QPersistentModelIndex& current_source_index);
     int nextSequentialRow(const QPersistentModelIndex& current_source_index) const;
     bool seriesRandomVideo(const QPersistentModelIndex& current_source_index);

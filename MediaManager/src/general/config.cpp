@@ -48,6 +48,7 @@ void Config::init_defaults() {
 		{"minus_get_random_mode", "2"},
 		{"next_multichoice_enabled", "False"},
 		{"next_multichoice_count", "3"},
+		{"next_multichoice_append_on_refresh", "False"},
 		{"current_db", "MINUS"},
 		{"video_types",	""},
 		{"sv_types",""},

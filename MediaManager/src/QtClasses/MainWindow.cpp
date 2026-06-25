@@ -311,16 +311,24 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         std::optional<NextVideoChoice> selectedChoice;
         if (multichoiceEnabled && candidates.size() > 1) {
             NextChoiceDialog dialog;
+            const bool appendMode = this->appendOnRefreshEnabled();
             dialog.setStarIcons(this->active, this->halfactive, this->inactive);
             dialog.setCounterLabel(this->ui.counterLabel);
-            dialog.setChoices(candidates);
-            connect(&dialog, &NextChoiceDialog::refreshRequested, this, [this, &dialog, &settings, choiceCount] {
-                this->incrementCounterVar(-1);
-                dialog.updateRefreshButtonText();
-                this->incrementNextChoiceRefreshCounter(1);
-                QList<NextVideoChoice> refreshed = this->buildRandomCandidates(settings, choiceCount, false);
-                dialog.setChoices(refreshed);
-            });
+            dialog.setAppendMode(appendMode);
+
+            auto buildCandidates = [&](int count) {
+                return this->buildRandomCandidates(settings, count, false);
+            };
+
+            dialog.setup(
+                buildCandidates,
+                choiceCount,
+                [this] { this->incrementCounterVar(-1); },
+                [this] { return this->getNextChoiceRefreshCounter(); },
+                [this](int v) { this->setNextChoiceRefreshCounter(v); },
+                candidates
+            );
+
             if (dialog.exec() == QDialog::Accepted) {
                 selectedChoice = dialog.selectedChoice();
             }
@@ -398,9 +406,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         this->App->soundPlayer->playSoundEffect();
         this->incrementCounterVar(-1);
     });
-    connect(this->ui.counterLabel, &ProgressBarQLabel::textChanged, this, [this](const QString&) {
-        this->updateSaltSeedCache();
-    });
+
     connect(this->ui.currentVideo, &currentVideoQLabel::textChanged, this, [this](const QString&) {
         this->updateSaltSeedCache();
     });
@@ -2086,7 +2092,6 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
 
     const bool offerChoiceDialog = multichoiceEnabled && candidates.size() > 1 &&
         (mode == NextVideoModes::Random || (mode == NextVideoModes::SeriesRandom && !continuedSeries));
-
         std::optional<NextVideoChoice> selectedChoice;
         if (offerChoiceDialog) {
             NextChoiceDialog dialog;
@@ -2096,50 +2101,26 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
             dialog.setCounterLabel(this->ui.counterLabel);
             dialog.setAppendMode(appendMode);
 
-            if (appendMode) {
-                const int counter = this->getNextChoiceRefreshCounter();
-                QList<NextVideoChoice> all;
+            auto buildCandidates = [&](int count) -> QList<NextVideoChoice> {
+                QList<NextVideoChoice> result;
                 if (mode == NextVideoModes::Random) {
-                    all = this->buildRandomCandidates(settings, (counter + 1) * requestedChoices, true);
+                    result = this->buildRandomCandidates(settings, count, true);
                 } else if (mode == NextVideoModes::SeriesRandom) {
                     bool continuedSeries = false;
-                    all = this->buildSeriesRandomCandidates(currentSrcIdx, settings, (counter + 1) * requestedChoices, continuedSeries);
+                    result = this->buildSeriesRandomCandidates(currentSrcIdx, settings, count, continuedSeries);
                 }
-                dialog.setChoices(all);
-            } else {
-                dialog.setChoices(candidates);
-            }
+                return result;
+            };
 
-            connect(&dialog, &NextChoiceDialog::refreshRequested, this,
-                [this, &dialog, &settings, mode, requestedChoices, currentSrcIdx, appendMode] {
-                    this->incrementCounterVar(-1);
-                    this->incrementNextChoiceRefreshCounter(1);
-                    const int totalChoices = appendMode
-                        ? (this->getNextChoiceRefreshCounter() + 1) * requestedChoices
-                        : requestedChoices;
-                    QList<NextVideoChoice> all;
-                    if (mode == NextVideoModes::Random) {
-                        all = this->buildRandomCandidates(settings, totalChoices, true);
-                    } else if (mode == NextVideoModes::SeriesRandom) {
-                        bool continuedSeries = false;
-                        all = this->buildSeriesRandomCandidates(currentSrcIdx, settings, totalChoices, continuedSeries);
-                    }
-                    dialog.setChoices(all);
-                    dialog.updateRefreshButtonText();
-                });
+            dialog.setup(
+                buildCandidates,
+                requestedChoices,
+                [this] { this->incrementCounterVar(-1); },
+                [this] { return this->getNextChoiceRefreshCounter(); },
+                [this](int v) { this->setNextChoiceRefreshCounter(v); },
+                candidates
+            );
 
-            connect(&dialog, &NextChoiceDialog::resetRequested, this,
-                [this, &dialog, &settings, mode, requestedChoices, currentSrcIdx] {
-                    this->setNextChoiceRefreshCounter(0);
-                    QList<NextVideoChoice> batch;
-                    if (mode == NextVideoModes::Random) {
-                        batch = this->buildRandomCandidates(settings, requestedChoices, true);
-                    } else if (mode == NextVideoModes::SeriesRandom) {
-                        bool continuedSeries = false;
-                        batch = this->buildSeriesRandomCandidates(currentSrcIdx, settings, requestedChoices, continuedSeries);
-                    }
-                    dialog.setChoices(batch);
-                });
             if (dialog.exec() == QDialog::Accepted) {
                 selectedChoice = dialog.selectedChoice();
             }

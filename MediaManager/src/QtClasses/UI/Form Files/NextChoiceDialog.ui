@@ -34,7 +34,7 @@
        </spacer>
       </item>
       <item>
-       <widget class="QPushButton" name="refreshButton">
+       <widget class="customQPushButton" name="refreshButton">
         <property name="text">
          <string>Refresh</string>
         </property>
@@ -120,4 +120,11 @@
  </widget>
  <resources/>
  <connections/>
+ <customwidgets>
+  <customwidget>
+   <class>customQPushButton</class>
+   <extends>QPushButton</extends>
+   <header>customQPushButton.h</header>
+  </customwidget>
+ </customwidgets>
 </ui>

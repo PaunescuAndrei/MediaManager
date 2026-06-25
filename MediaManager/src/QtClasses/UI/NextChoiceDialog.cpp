@@ -110,14 +110,28 @@ NextChoiceDialog::NextChoiceDialog(QWidget* parent) : QDialog(parent)
     this->setWindowModality(Qt::WindowModal);
     this->setWindowFlag(Qt::WindowStaysOnTopHint, true);
     connect(this->ui.refreshButton, &QPushButton::clicked, this, [this] {
-        emit this->refreshRequested();
+        if (this->onDecrementCounter) {
+            this->onDecrementCounter();
+        }
+        if (this->appendMode && this->onGetRefreshCounter && this->onSetRefreshCounter) {
+            this->onSetRefreshCounter(this->onGetRefreshCounter() + 1);
+        }
+        this->rebuildForCurrentMode();
     });
-    this->ui.refreshButton->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(this->ui.refreshButton, &QPushButton::customContextMenuRequested, this, [this] {
-        if (this->appendMode) {
-            emit this->resetRequested();
+    connect(this->ui.refreshButton, &customQPushButton::rightClicked, this, [this] {
+        if (this->togglingEnabled) {
+            this->toggleAppendMode();
         }
     });
+    connect(this->ui.refreshButton, &customQPushButton::middleClicked, this, [this] {
+        if (this->togglingEnabled && this->onSetRefreshCounter) {
+            this->onSetRefreshCounter(0);
+            if (this->candidateBuilder) {
+                this->setChoices(this->candidateBuilder(this->requestedChoicesCount));
+            }
+        }
+    });
+
     connect(this->ui.randomButton, &QPushButton::clicked, this, [this] {
         if (!this->choices.isEmpty()) {
             int index = utils::randint(0, this->choices.size() - 1);
@@ -152,6 +166,54 @@ void NextChoiceDialog::setAppendMode(bool enabled)
 {
     this->appendMode = enabled;
     this->updateRefreshButtonText();
+}
+
+void NextChoiceDialog::toggleAppendMode()
+{
+    this->appendMode = !this->appendMode;
+    this->updateRefreshButtonText();
+    this->rebuildForCurrentMode();
+    qMainApp->config->set("next_multichoice_append_on_refresh", this->appendMode ? "True" : "False");
+    qMainApp->config->save_config();
+}
+
+void NextChoiceDialog::setTogglingEnabled(bool enabled)
+{
+    this->togglingEnabled = enabled;
+}
+
+void NextChoiceDialog::setup(CandidateBuilder builder, int requestedChoices,
+                             VoidFunc onDecrementCounter, IntAccessor onGetRefreshCounter,
+                             std::function<void(int)> onSetRefreshCounter,
+                             const QList<NextVideoChoice>& initialCandidates)
+{
+    this->candidateBuilder = std::move(builder);
+    this->requestedChoicesCount = requestedChoices;
+    this->onDecrementCounter = std::move(onDecrementCounter);
+    this->onGetRefreshCounter = std::move(onGetRefreshCounter);
+    this->onSetRefreshCounter = std::move(onSetRefreshCounter);
+
+    if (this->appendMode && this->onGetRefreshCounter && this->candidateBuilder) {
+        const int counter = this->onGetRefreshCounter();
+        this->setChoices(this->candidateBuilder((counter + 1) * requestedChoices));
+    } else {
+        this->setChoices(initialCandidates);
+    }
+}
+
+void NextChoiceDialog::rebuildForCurrentMode()
+{
+    if (!this->candidateBuilder) {
+        return;
+    }
+    int refCounter = 0;
+    if (this->onGetRefreshCounter) {
+        refCounter = this->onGetRefreshCounter();
+    }
+    const int totalChoices = this->appendMode
+        ? (refCounter + 1) * this->requestedChoicesCount
+        : this->requestedChoicesCount;
+    this->setChoices(this->candidateBuilder(totalChoices));
 }
 
 void NextChoiceDialog::setChoices(const QList<NextVideoChoice>& newChoices)
@@ -252,9 +314,17 @@ void NextChoiceDialog::updateRefreshButtonText()
             counterVar = value;
         }
     }
-    this->ui.refreshButton->setText(
-        QStringLiteral("%1 (%2)").arg(this->appendMode ? QStringLiteral("Roll") : QStringLiteral("Refresh")).arg(counterVar)
-    );
+    if (this->appendMode) {
+        this->ui.refreshButton->setText(
+            QStringLiteral("Roll (%1)").arg(counterVar));
+        this->ui.refreshButton->setToolTip(
+            QStringLiteral("Left-click: Roll more | Middle-click: Reset | Right-click: Switch to Refresh mode"));
+    } else {
+        this->ui.refreshButton->setText(
+            QStringLiteral("Refresh (%1)").arg(counterVar));
+        this->ui.refreshButton->setToolTip(
+            QStringLiteral("Left-click: Refresh | Middle-click: Reset | Right-click: Switch to Roll (Append) mode"));
+    }
 }
 
 QWidget* NextChoiceDialog::buildCard(const NextVideoChoice& choice, int index)

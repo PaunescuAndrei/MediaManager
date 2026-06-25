@@ -422,9 +422,10 @@
               </layout>
              </widget>
             </item>
-            <item>
-             <widget class="QWidget" name="nextMultiChoiceWidget" native="true">
-              <layout class="QHBoxLayout" name="horizontalLayout_nextMultiChoice">
+
+             <item>
+              <widget class="QWidget" name="autoContinueDelayWidget" native="true">
+              <layout class="QHBoxLayout" name="horizontalLayout_16">
                <property name="leftMargin">
                 <number>0</number>
                </property>
@@ -438,14 +439,14 @@
                 <number>0</number>
                </property>
                <item>
-                <widget class="QCheckBox" name="nextMultiChoiceEnabled">
+                <widget class="QCheckBox" name="autoContinue">
                  <property name="text">
-                  <string>Show choices for Next (Random)</string>
+                  <string>Auto Continue</string>
                  </property>
                 </widget>
                </item>
                <item>
-                <spacer name="horizontalSpacer_nextMultiChoice">
+                <spacer name="horizontalSpacer_15">
                  <property name="orientation">
                   <enum>Qt::Orientation::Horizontal</enum>
                  </property>
@@ -458,28 +459,31 @@
                 </spacer>
                </item>
                <item>
-                <widget class="QLabel" name="nextMultiChoiceCountLabel">
+                <widget class="QLabel" name="autoContinueDelayLabel">
                  <property name="text">
-                  <string>Choices:</string>
+                  <string>Delay:</string>
                  </property>
                 </widget>
                </item>
                <item>
-                <widget class="QSpinBox" name="nextMultiChoiceCount">
+                <widget class="QSpinBox" name="autoContinueDelay">
                  <property name="focusPolicy">
                   <enum>Qt::FocusPolicy::StrongFocus</enum>
                  </property>
                  <property name="alignment">
                   <set>Qt::AlignmentFlag::AlignCenter</set>
                  </property>
+                 <property name="suffix">
+                  <string> seconds</string>
+                 </property>
                  <property name="minimum">
-                  <number>2</number>
+                  <number>1</number>
                  </property>
                  <property name="maximum">
-                  <number>99</number>
+                  <number>60</number>
                  </property>
                  <property name="value">
-                  <number>3</number>
+                  <number>5</number>
                  </property>
                 </widget>
                </item>
@@ -487,42 +491,236 @@
              </widget>
             </item>
             <item>
-             <widget class="QWidget" name="nextMultiChoiceAppendWidget" native="true">
-              <layout class="QHBoxLayout" name="horizontalLayout_nextMultiChoiceAppend">
-               <property name="leftMargin">
-                <number>0</number>
-               </property>
-               <property name="topMargin">
-                <number>0</number>
-               </property>
-               <property name="rightMargin">
-                <number>0</number>
-               </property>
-               <property name="bottomMargin">
-                <number>0</number>
-               </property>
-               <item>
-                <widget class="QCheckBox" name="nextMultiChoiceAppendOnRefresh">
-                 <property name="text">
-                  <string>Append choices on refresh</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <spacer name="horizontalSpacer_nextMultiChoiceAppend">
-                 <property name="orientation">
-                  <enum>Qt::Orientation::Horizontal</enum>
-                 </property>
-                 <property name="sizeHint" stdset="0">
-                  <size>
-                   <width>40</width>
-                   <height>20</height>
-                  </size>
-                 </property>
-                </spacer>
-               </item>
-              </layout>
+             <widget class="QCheckBox" name="videoAutoplay">
+              <property name="text">
+               <string>Autoplay Videos</string>
+              </property>
              </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="skipAllowedProgress">
+              <property name="toolTip">
+               <string>When enabled, pressing Skip in the finish dialog will not decrement the MINUS counter.</string>
+              </property>
+              <property name="text">
+               <string>Allow Skip to progress counters</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="counterUseActualWatchTime">
+              <property name="toolTip">
+               <string>When enabled, the counter increment uses actual wall-clock watch time instead of video playback position.</string>
+              </property>
+              <property name="text">
+               <string>Use Actual Watch Time for Counter</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="singleInstance">
+              <property name="text">
+               <string>Single Instance</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QCheckBox" name="numlockOnly">
+              <property name="text">
+               <string>Numlock Only Hotkey</string>
+              </property>
+             </widget>
+            </item>
+             <item>
+              <widget class="QWidget" name="sessionSaveIntervalWidget" native="true">
+               <layout class="QHBoxLayout" name="horizontalLayout_sessionSaveInterval">
+                <property name="leftMargin">
+                 <number>0</number>
+                </property>
+                <property name="topMargin">
+                 <number>0</number>
+                </property>
+                <property name="rightMargin">
+                 <number>0</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>0</number>
+                </property>
+                <item>
+                 <widget class="QLabel" name="sessionSaveIntervalLabel">
+                  <property name="text">
+                   <string>Session save interval (seconds):</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <spacer name="horizontalSpacer_sessionSaveInterval">
+                  <property name="orientation">
+                   <enum>Qt::Orientation::Horizontal</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>40</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+                <item>
+                 <widget class="QSpinBox" name="sessionSaveIntervalSpinBox">
+                  <property name="focusPolicy">
+                   <enum>Qt::FocusPolicy::StrongFocus</enum>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignmentFlag::AlignCenter</set>
+                  </property>
+                  <property name="toolTip">
+                   <string>How often the current session is checkpointed to the database (0 = disabled)</string>
+                  </property>
+                  <property name="minimum">
+                   <number>0</number>
+                  </property>
+                  <property name="maximum">
+                   <number>3600</number>
+                  </property>
+                  <property name="value">
+                   <number>10</number>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+             </item>
+             <item>
+              <widget class="QCheckBox" name="emptyPlayerTracking">
+               <property name="toolTip">
+                <string>When enabled, external videos opened in empty player mode (right-click Watch) will have their watch time tracked even if not in the database</string>
+               </property>
+               <property name="text">
+                <string>Track external videos (empty player mode)</string>
+               </property>
+               <property name="checked">
+                <bool>true</bool>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QCheckBox" name="debugMode">
+               <property name="text">
+                <string>Debug Mode</string>
+               </property>
+              </widget>
+             </item>
+           </layout>
+          </widget>
+          </item>
+          <item>
+           <widget class="QGroupBox" name="nextChoiceGroupBox">
+            <property name="title">
+             <string>Next Choice Settings</string>
+            </property>
+            <layout class="QVBoxLayout" name="verticalLayout_nextChoice">
+             <item>
+              <widget class="QWidget" name="nextMultiChoiceWidget" native="true">
+               <layout class="QHBoxLayout" name="horizontalLayout_nextMultiChoice">
+                <property name="leftMargin">
+                 <number>0</number>
+                </property>
+                <property name="topMargin">
+                 <number>0</number>
+                </property>
+                <property name="rightMargin">
+                 <number>0</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>0</number>
+                </property>
+                <item>
+                 <widget class="QCheckBox" name="nextMultiChoiceEnabled">
+                  <property name="text">
+                   <string>Show choices for Next (Random)</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <spacer name="horizontalSpacer_nextMultiChoice">
+                  <property name="orientation">
+                   <enum>Qt::Orientation::Horizontal</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>40</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+                <item>
+                 <widget class="QLabel" name="nextMultiChoiceCountLabel">
+                  <property name="text">
+                   <string>Choices:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QSpinBox" name="nextMultiChoiceCount">
+                  <property name="focusPolicy">
+                   <enum>Qt::FocusPolicy::StrongFocus</enum>
+                  </property>
+                  <property name="alignment">
+                   <set>Qt::AlignmentFlag::AlignCenter</set>
+                  </property>
+                  <property name="minimum">
+                   <number>2</number>
+                  </property>
+                  <property name="maximum">
+                   <number>99</number>
+                  </property>
+                  <property name="value">
+                   <number>3</number>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
+             </item>
+             <item>
+              <widget class="QWidget" name="nextMultiChoiceAppendWidget" native="true">
+               <layout class="QHBoxLayout" name="horizontalLayout_nextMultiChoiceAppend">
+                <property name="leftMargin">
+                 <number>0</number>
+                </property>
+                <property name="topMargin">
+                 <number>0</number>
+                </property>
+                <property name="rightMargin">
+                 <number>0</number>
+                </property>
+                <property name="bottomMargin">
+                 <number>0</number>
+                </property>
+                <item>
+                 <widget class="QCheckBox" name="nextMultiChoiceAppendOnRefresh">
+                  <property name="text">
+                   <string>Append choices on refresh</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <spacer name="horizontalSpacer_nextMultiChoiceAppend">
+                  <property name="orientation">
+                   <enum>Qt::Orientation::Horizontal</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>40</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+               </layout>
+              </widget>
              </item>
              <item>
               <widget class="QWidget" name="raritySettingsWidget" native="true">
@@ -744,199 +942,11 @@
                </layout>
               </widget>
              </item>
-             <item>
-              <widget class="QWidget" name="autoContinueDelayWidget" native="true">
-              <layout class="QHBoxLayout" name="horizontalLayout_16">
-               <property name="leftMargin">
-                <number>0</number>
-               </property>
-               <property name="topMargin">
-                <number>0</number>
-               </property>
-               <property name="rightMargin">
-                <number>0</number>
-               </property>
-               <property name="bottomMargin">
-                <number>0</number>
-               </property>
-               <item>
-                <widget class="QCheckBox" name="autoContinue">
-                 <property name="text">
-                  <string>Auto Continue</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <spacer name="horizontalSpacer_15">
-                 <property name="orientation">
-                  <enum>Qt::Orientation::Horizontal</enum>
-                 </property>
-                 <property name="sizeHint" stdset="0">
-                  <size>
-                   <width>40</width>
-                   <height>20</height>
-                  </size>
-                 </property>
-                </spacer>
-               </item>
-               <item>
-                <widget class="QLabel" name="autoContinueDelayLabel">
-                 <property name="text">
-                  <string>Delay:</string>
-                 </property>
-                </widget>
-               </item>
-               <item>
-                <widget class="QSpinBox" name="autoContinueDelay">
-                 <property name="focusPolicy">
-                  <enum>Qt::FocusPolicy::StrongFocus</enum>
-                 </property>
-                 <property name="alignment">
-                  <set>Qt::AlignmentFlag::AlignCenter</set>
-                 </property>
-                 <property name="suffix">
-                  <string> seconds</string>
-                 </property>
-                 <property name="minimum">
-                  <number>1</number>
-                 </property>
-                 <property name="maximum">
-                  <number>60</number>
-                 </property>
-                 <property name="value">
-                  <number>5</number>
-                 </property>
-                </widget>
-               </item>
-              </layout>
-             </widget>
-            </item>
-            <item>
-             <widget class="QCheckBox" name="videoAutoplay">
-              <property name="text">
-               <string>Autoplay Videos</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QCheckBox" name="skipAllowedProgress">
-              <property name="toolTip">
-               <string>When enabled, pressing Skip in the finish dialog will not decrement the MINUS counter.</string>
-              </property>
-              <property name="text">
-               <string>Allow Skip to progress counters</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QCheckBox" name="counterUseActualWatchTime">
-              <property name="toolTip">
-               <string>When enabled, the counter increment uses actual wall-clock watch time instead of video playback position.</string>
-              </property>
-              <property name="text">
-               <string>Use Actual Watch Time for Counter</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QCheckBox" name="singleInstance">
-              <property name="text">
-               <string>Single Instance</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QCheckBox" name="numlockOnly">
-              <property name="text">
-               <string>Numlock Only Hotkey</string>
-              </property>
-             </widget>
-            </item>
-             <item>
-              <widget class="QWidget" name="sessionSaveIntervalWidget" native="true">
-               <layout class="QHBoxLayout" name="horizontalLayout_sessionSaveInterval">
-                <property name="leftMargin">
-                 <number>0</number>
-                </property>
-                <property name="topMargin">
-                 <number>0</number>
-                </property>
-                <property name="rightMargin">
-                 <number>0</number>
-                </property>
-                <property name="bottomMargin">
-                 <number>0</number>
-                </property>
-                <item>
-                 <widget class="QLabel" name="sessionSaveIntervalLabel">
-                  <property name="text">
-                   <string>Session save interval (seconds):</string>
-                  </property>
-                 </widget>
-                </item>
-                <item>
-                 <spacer name="horizontalSpacer_sessionSaveInterval">
-                  <property name="orientation">
-                   <enum>Qt::Orientation::Horizontal</enum>
-                  </property>
-                  <property name="sizeHint" stdset="0">
-                   <size>
-                    <width>40</width>
-                    <height>20</height>
-                   </size>
-                  </property>
-                 </spacer>
-                </item>
-                <item>
-                 <widget class="QSpinBox" name="sessionSaveIntervalSpinBox">
-                  <property name="focusPolicy">
-                   <enum>Qt::FocusPolicy::StrongFocus</enum>
-                  </property>
-                  <property name="alignment">
-                   <set>Qt::AlignmentFlag::AlignCenter</set>
-                  </property>
-                  <property name="toolTip">
-                   <string>How often the current session is checkpointed to the database (0 = disabled)</string>
-                  </property>
-                  <property name="minimum">
-                   <number>0</number>
-                  </property>
-                  <property name="maximum">
-                   <number>3600</number>
-                  </property>
-                  <property name="value">
-                   <number>10</number>
-                  </property>
-                 </widget>
-                </item>
-               </layout>
-              </widget>
-             </item>
-             <item>
-              <widget class="QCheckBox" name="emptyPlayerTracking">
-               <property name="toolTip">
-                <string>When enabled, external videos opened in empty player mode (right-click Watch) will have their watch time tracked even if not in the database</string>
-               </property>
-               <property name="text">
-                <string>Track external videos (empty player mode)</string>
-               </property>
-               <property name="checked">
-                <bool>true</bool>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QCheckBox" name="debugMode">
-               <property name="text">
-                <string>Debug Mode</string>
-               </property>
-              </widget>
-             </item>
-           </layout>
-          </widget>
-         </item>
-         <item>
-          <widget class="QGroupBox" name="previewGroupBox">
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QGroupBox" name="previewGroupBox">
            <property name="title">
             <string>Video Preview</string>
            </property>

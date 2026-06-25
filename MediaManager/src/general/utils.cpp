@@ -1256,7 +1256,12 @@ void utils::computeRarities(QList<NextVideoChoice>& candidates,
 
 	const int total = sortedIndices.size();
 
-	for (int rank = 0; rank < total; ++rank) {
+	int rank = 0;
+	while (rank < total) {
+		int groupEnd = rank + 1;
+		while (groupEnd < total && candidates[sortedIndices[groupEnd]].probability == candidates[sortedIndices[rank]].probability) {
+			groupEnd++;
+		}
 		const double percentile = (static_cast<double>(rank) / total) * 100.0;
 		int tier = 0;
 		if (percentile < ssrPct) {
@@ -1266,9 +1271,12 @@ void utils::computeRarities(QList<NextVideoChoice>& candidates,
 		} else if (percentile < rPct) {
 			tier = 1;
 		}
-		const int idx = sortedIndices[rank];
-		candidates[idx].rarity = tier;
-		candidates[idx].rarityScore = candidates[idx].probability;
+		for (int i = rank; i < groupEnd; ++i) {
+			const int idx = sortedIndices[i];
+			candidates[idx].rarity = tier;
+			candidates[idx].rarityScore = candidates[idx].probability;
+		}
+		rank = groupEnd;
 	}
 }
 

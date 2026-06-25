@@ -18,3 +18,7 @@ MediaManager/src/resources/models/
 
 # Third party dependencies (downloaded via script)
 MediaManager/src/thirdparty/onnxruntime/
+
+# Brainstorming / planning artifacts
+docs/superpowers/
+.superpowers/

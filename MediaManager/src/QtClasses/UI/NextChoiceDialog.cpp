@@ -26,88 +26,88 @@
 namespace {
 class ChoiceCardWidget : public QWidget {
 public:
-	explicit ChoiceCardWidget(int index, int rarity, const QColor& color, QWidget* parent = nullptr)
-		: QWidget(parent), rarity(rarity), rarityColor(color) {
-		this->setAttribute(Qt::WA_Hover, true);
-		this->setMouseTracking(true);
-		this->setProperty("choiceIndex", index);
-		this->setCursor(Qt::PointingHandCursor);
-		this->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
-	}
+    explicit ChoiceCardWidget(int index, int rarity, const QColor& color, QWidget* parent = nullptr)
+        : QWidget(parent), rarity(rarity), rarityColor(color) {
+        this->setAttribute(Qt::WA_Hover, true);
+        this->setMouseTracking(true);
+        this->setProperty("choiceIndex", index);
+        this->setCursor(Qt::PointingHandCursor);
+        this->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+    }
 protected:
-	bool event(QEvent* e) override {
-		switch (e->type()) {
-		case QEvent::Enter:
-		case QEvent::HoverEnter:
-			this->hovered = true;
-			this->update();
-			break;
-		case QEvent::Leave:
-		case QEvent::HoverLeave:
-			this->hovered = false;
-			this->update();
-			break;
-		case QEvent::PaletteChange:
-			this->update();
-			break;
-		default:
-			break;
-		}
-		return QWidget::event(e);
-	}
+    bool event(QEvent* e) override {
+        switch (e->type()) {
+        case QEvent::Enter:
+        case QEvent::HoverEnter:
+            this->hovered = true;
+            this->update();
+            break;
+        case QEvent::Leave:
+        case QEvent::HoverLeave:
+            this->hovered = false;
+            this->update();
+            break;
+        case QEvent::PaletteChange:
+            this->update();
+            break;
+        default:
+            break;
+        }
+        return QWidget::event(e);
+    }
 
-	void paintEvent(QPaintEvent*) override {
-		QPainter painter(this);
-		painter.setRenderHint(QPainter::Antialiasing, true);
+    void paintEvent(QPaintEvent*) override {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
 
-		QColor background = this->palette().color(QPalette::Base);
-		if (background.isValid()) {
-			background = background.darker(115);
-		} else {
-			background = QColor(43, 43, 43);
-		}
-		if (this->rarityColor.isValid() && this->rarity >= 1) {
-			const double tint = 0.05;
-			const int r = static_cast<int>(background.red() * (1.0 - tint) + this->rarityColor.red() * tint);
-			const int g = static_cast<int>(background.green() * (1.0 - tint) + this->rarityColor.green() * tint);
-			const int b = static_cast<int>(background.blue() * (1.0 - tint) + this->rarityColor.blue() * tint);
-			background = QColor(r, g, b);
-		}
+        QColor background = this->palette().color(QPalette::Base);
+        if (background.isValid()) {
+            background = background.darker(115);
+        } else {
+            background = QColor(43, 43, 43);
+        }
+        if (this->rarityColor.isValid() && this->rarity >= 1) {
+            const double tint = 0.05;
+            const int r = static_cast<int>(background.red() * (1.0 - tint) + this->rarityColor.red() * tint);
+            const int g = static_cast<int>(background.green() * (1.0 - tint) + this->rarityColor.green() * tint);
+            const int b = static_cast<int>(background.blue() * (1.0 - tint) + this->rarityColor.blue() * tint);
+            background = QColor(r, g, b);
+        }
 
-		QColor border;
-		if (this->hovered) {
-			border = this->palette().color(QPalette::Highlight);
-			if (!border.isValid()) border = QColor(90, 160, 255);
-		} else if (this->rarityColor.isValid() && this->rarity >= 1) {
-			border = this->rarityColor;
-		} else {
-			border = this->palette().color(QPalette::Mid);
-			if (!border.isValid()) border = QColor(85, 85, 85);
-		}
+        QColor border;
+        if (this->hovered) {
+            border = this->palette().color(QPalette::Highlight);
+            if (!border.isValid()) border = QColor(90, 160, 255);
+        } else if (this->rarityColor.isValid() && this->rarity >= 1) {
+            border = this->rarityColor;
+        } else {
+            border = this->palette().color(QPalette::Mid);
+            if (!border.isValid()) border = QColor(85, 85, 85);
+        }
 
-		QRectF rect = this->rect();
-		rect.adjust(0.5, 0.5, -0.5, -0.5);
+        QRectF rect = this->rect();
+        rect.adjust(0.5, 0.5, -0.5, -0.5);
 
-		if (this->rarityColor.isValid() && this->rarity >= 1 && !this->hovered) {
-			const double glowAlpha = (this->rarity == 3) ? 0.35 : (this->rarity == 2) ? 0.25 : 0.15;
-			QColor glowColor = this->rarityColor;
-			glowColor.setAlphaF(glowAlpha);
-			QPen glowPen(glowColor, (this->rarity == 3) ? 6.0 : 4.0);
-			painter.setPen(glowPen);
-			painter.setBrush(Qt::NoBrush);
-			QRectF glowRect = rect.adjusted(-2, -2, 2, 2);
-			painter.drawRoundedRect(glowRect, 10.0, 10.0);
-		}
+        if (this->rarityColor.isValid() && this->rarity >= 1 && !this->hovered) {
+            const double glowAlpha = (this->rarity == 3) ? 0.35 : (this->rarity == 2) ? 0.25 : 0.15;
+            QColor glowColor = this->rarityColor;
+            glowColor.setAlphaF(glowAlpha);
+            QPen glowPen(glowColor, (this->rarity == 3) ? 6.0 : 4.0);
+            painter.setPen(glowPen);
+            painter.setBrush(Qt::NoBrush);
+            QRectF glowRect = rect.adjusted(-2, -2, 2, 2);
+            painter.drawRoundedRect(glowRect, 10.0, 10.0);
+        }
 
-		painter.setBrush(background);
-		const double borderWidth = (this->rarity >= 2) ? 2.0 : (this->rarity == 1) ? 1.5 : 1.0;
-		painter.setPen(QPen(border, borderWidth));
-		painter.drawRoundedRect(rect, 8.0, 8.0);
-	}
+        painter.setBrush(background);
+        const double borderWidth = (this->rarity >= 2) ? 2.0 : (this->rarity == 1) ? 1.5 : 1.0;
+        painter.setPen(QPen(border, borderWidth));
+        painter.drawRoundedRect(rect, 8.0, 8.0);
+    }
 private:
-	bool hovered = false;
-	int rarity = -1;
-	QColor rarityColor;
+    bool hovered = false;
+    int rarity = -1;
+    QColor rarityColor;
 };
 
 class HorizontalScrollArea : public QScrollArea {

@@ -1928,6 +1928,13 @@ QList<NextVideoChoice> MainWindow::buildRandomCandidates(const NextVideoSettings
         }
     }
 
+    if (this->App->config->get_bool("rarity_enabled")) {
+        utils::computeRarities(choices,
+            this->App->config->get("rarity_ssr_pct").toInt(),
+            this->App->config->get("rarity_sr_pct").toInt(),
+            this->App->config->get("rarity_r_pct").toInt());
+    }
+
     return choices;
 }
 
@@ -2025,6 +2032,13 @@ QList<NextVideoChoice> MainWindow::buildSeriesRandomCandidates(const QPersistent
             }
             choices.append(choice.value());
         }
+    }
+
+    if (this->App->config->get_bool("rarity_enabled")) {
+        utils::computeRarities(choices,
+            this->App->config->get("rarity_ssr_pct").toInt(),
+            this->App->config->get("rarity_sr_pct").toInt(),
+            this->App->config->get("rarity_r_pct").toInt());
     }
 
     return choices;

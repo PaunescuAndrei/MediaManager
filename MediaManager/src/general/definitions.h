@@ -33,6 +33,8 @@ struct NextVideoChoice {
 	double rating = 0.0;
 	double probability = -1.0; // percent, -1 when not available
 	double bpm = -1.0;
+	int rarity = -1;            // 0=N, 1=R, 2=SR, 3=SSR, -1=disabled
+	double rarityScore = 0.0;   // raw weighted score for potential debug/tooltip
 	bool resetProgress = true;
 };
 

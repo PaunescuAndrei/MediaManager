@@ -256,21 +256,20 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 	setRarityWidgetsEnabled(this->ui.rarityEnabled->isChecked());
 	connect(this->ui.rarityEnabled, &QCheckBox::toggled, this, setRarityWidgetsEnabled);
 
-	auto connectColorButton = [this, mw](QPushButton* btn, const QString& configKey) {
-		connect(btn, &QPushButton::clicked, this, [this, mw, btn, configKey] {
-			QColor current(mw->App->config->get(configKey));
+	auto connectColorButton = [this](QPushButton* btn) {
+		connect(btn, &QPushButton::clicked, this, [this, btn] {
+			QColor current(btn->text());
 			QColor chosen = QColorDialog::getColor(current, this, "Choose Color");
 			if (chosen.isValid()) {
-				mw->App->config->set(configKey, chosen.name());
 				btn->setStyleSheet(QString("background-color: %1; color: %2; border: 1px solid #555; border-radius: 3px;")
 					.arg(chosen.name()).arg(chosen.lightnessF() > 0.5 ? "#000" : "#fff"));
 				btn->setText(chosen.name().toUpper());
 			}
 		});
 	};
-	connectColorButton(this->ui.raritySsrColorBtn, "rarity_ssr_color");
-	connectColorButton(this->ui.raritySrColorBtn, "rarity_sr_color");
-	connectColorButton(this->ui.rarityRColorBtn, "rarity_r_color");
+	connectColorButton(this->ui.raritySsrColorBtn);
+	connectColorButton(this->ui.raritySrColorBtn);
+	connectColorButton(this->ui.rarityRColorBtn);
 
 	this->ui.SVspinBox->setValue(mw->App->db->getMainInfoValue("sv_target_count", "ALL","0").toInt());
 	this->oldSVmax = this->ui.SVspinBox->value();

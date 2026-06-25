@@ -2862,6 +2862,10 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     config->set("next_multichoice_enabled", dialog->ui.nextMultiChoiceEnabled->isChecked() ? "True" : "False");
     config->set("next_multichoice_count", QString::number(dialog->ui.nextMultiChoiceCount->value()));
     config->set("next_multichoice_append_on_refresh", dialog->ui.nextMultiChoiceAppendOnRefresh->isChecked() ? "True" : "False");
+    config->set("rarity_enabled", dialog->ui.rarityEnabled->isChecked() ? "True" : "False");
+    config->set("rarity_ssr_pct", QString::number(dialog->ui.raritySsrPct->value()));
+    config->set("rarity_sr_pct", QString::number(dialog->ui.raritySrPct->value()));
+    config->set("rarity_r_pct", QString::number(dialog->ui.rarityRPct->value()));
     config->set("search_timer_interval", QString::number(dialog->ui.searchTimerInterval->value()));
     config->set("notification_duration_ms", QString::number(dialog->ui.notificationDurationSpinBox->value()));
     if (this->search_timer->isActive()) {

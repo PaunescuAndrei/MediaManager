@@ -4,6 +4,7 @@
 #include "MainApp.h"
 #include "config.h"
 #include <QPushButton>
+#include <QColorDialog>
 #include "utils.h"
 #include <QTreeWidget>
 #include "stylesQt.h"
@@ -224,6 +225,52 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 		this->ui.nextMultiChoiceAppendOnRefresh->setCheckState(Qt::CheckState::Checked);
 	else
 		this->ui.nextMultiChoiceAppendOnRefresh->setCheckState(Qt::CheckState::Unchecked);
+
+	if (mw->App->config->get_bool("rarity_enabled"))
+		this->ui.rarityEnabled->setCheckState(Qt::CheckState::Checked);
+	else
+		this->ui.rarityEnabled->setCheckState(Qt::CheckState::Unchecked);
+	this->ui.raritySsrPct->setValue(mw->App->config->get("rarity_ssr_pct").toInt());
+	this->ui.raritySrPct->setValue(mw->App->config->get("rarity_sr_pct").toInt());
+	this->ui.rarityRPct->setValue(mw->App->config->get("rarity_r_pct").toInt());
+
+	auto setupColorButton = [mw](QPushButton* btn, const QString& configKey) {
+		QColor c(mw->App->config->get(configKey));
+		btn->setStyleSheet(QString("background-color: %1; color: %2; border: 1px solid #555; border-radius: 3px;")
+			.arg(c.name())
+			.arg(c.lightnessF() > 0.5 ? "#000" : "#fff"));
+		btn->setText(c.name().toUpper());
+	};
+	setupColorButton(this->ui.raritySsrColorBtn, "rarity_ssr_color");
+	setupColorButton(this->ui.raritySrColorBtn, "rarity_sr_color");
+	setupColorButton(this->ui.rarityRColorBtn, "rarity_r_color");
+
+	auto setRarityWidgetsEnabled = [this](bool enabled) {
+		this->ui.raritySsrPct->setEnabled(enabled);
+		this->ui.raritySrPct->setEnabled(enabled);
+		this->ui.rarityRPct->setEnabled(enabled);
+		this->ui.raritySsrColorBtn->setEnabled(enabled);
+		this->ui.raritySrColorBtn->setEnabled(enabled);
+		this->ui.rarityRColorBtn->setEnabled(enabled);
+	};
+	setRarityWidgetsEnabled(this->ui.rarityEnabled->isChecked());
+	connect(this->ui.rarityEnabled, &QCheckBox::toggled, this, setRarityWidgetsEnabled);
+
+	auto connectColorButton = [this, mw](QPushButton* btn, const QString& configKey) {
+		connect(btn, &QPushButton::clicked, this, [this, mw, btn, configKey] {
+			QColor current(mw->App->config->get(configKey));
+			QColor chosen = QColorDialog::getColor(current, this, "Choose Color");
+			if (chosen.isValid()) {
+				mw->App->config->set(configKey, chosen.name());
+				btn->setStyleSheet(QString("background-color: %1; color: %2; border: 1px solid #555; border-radius: 3px;")
+					.arg(chosen.name()).arg(chosen.lightnessF() > 0.5 ? "#000" : "#fff"));
+				btn->setText(chosen.name().toUpper());
+			}
+		});
+	};
+	connectColorButton(this->ui.raritySsrColorBtn, "rarity_ssr_color");
+	connectColorButton(this->ui.raritySrColorBtn, "rarity_sr_color");
+	connectColorButton(this->ui.rarityRColorBtn, "rarity_r_color");
 
 	this->ui.SVspinBox->setValue(mw->App->db->getMainInfoValue("sv_target_count", "ALL","0").toInt());
 	this->oldSVmax = this->ui.SVspinBox->value();

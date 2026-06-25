@@ -1814,15 +1814,6 @@ void MainWindow::setNextChoiceRefreshCounter(int value) {
     this->App->db->setMainInfoValue("next_choice_refresh_counter", this->App->currentDB, QString::number(value));
 }
 
-void MainWindow::incrementNextChoiceRefreshCounter(int delta) {
-    int value = this->getNextChoiceRefreshCounter();
-    value += delta;
-    if (value < 0) {
-        value = 0;
-    }
-    this->setNextChoiceRefreshCounter(value);
-}
-
 int MainWindow::getNextChoiceRollCounter() const {
     return this->App->db->getMainInfoValue("next_choice_roll_counter", this->App->currentDB, "0").toInt();
 }
@@ -1832,15 +1823,6 @@ void MainWindow::setNextChoiceRollCounter(int value) {
         value = 0;
     }
     this->App->db->setMainInfoValue("next_choice_roll_counter", this->App->currentDB, QString::number(value));
-}
-
-void MainWindow::incrementNextChoiceRollCounter(int delta) {
-    int value = this->getNextChoiceRollCounter();
-    value += delta;
-    if (value < 0) {
-        value = 0;
-    }
-    this->setNextChoiceRollCounter(value);
 }
 
 bool MainWindow::appendOnRefreshEnabled() const

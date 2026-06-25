@@ -16,6 +16,7 @@ public:
     using CandidateBuilder = std::function<QList<NextVideoChoice>(int count)>;
     using VoidFunc = std::function<void()>;
     using IntAccessor = std::function<int()>;
+    using IntMutator = std::function<void(int)>;
 
     explicit NextChoiceDialog(QWidget* parent = nullptr);
     ~NextChoiceDialog();
@@ -35,8 +36,8 @@ public:
 
     void setup(CandidateBuilder builder, int requestedChoices,
                VoidFunc onDecrementCounter, IntAccessor onGetRefreshCounter,
-               std::function<void(int)> onSetRefreshCounter,
-               IntAccessor onGetRollCounter, std::function<void(int)> onSetRollCounter,
+               IntMutator onSetRefreshCounter,
+               IntAccessor onGetRollCounter, IntMutator onSetRollCounter,
                const QList<NextVideoChoice>& initialCandidates);
 private:
     void rebuildCards(int startIndex = 0);
@@ -66,9 +67,9 @@ private:
     int requestedChoicesCount = 1;
     VoidFunc onDecrementCounter;
     IntAccessor onGetRefreshCounter;
-    std::function<void(int)> onSetRefreshCounter;
+    IntMutator onSetRefreshCounter;
     IntAccessor onGetRollCounter;
-    std::function<void(int)> onSetRollCounter;
+    IntMutator onSetRollCounter;
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
     void closeEvent(QCloseEvent* e) override;

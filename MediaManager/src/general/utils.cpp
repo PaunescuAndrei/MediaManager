@@ -1239,37 +1239,37 @@ QMap<int, long double> utils::calculateProbabilities(const QList<VideoWeightedDa
 void utils::computeRarities(QList<NextVideoChoice>& candidates,
                             int ssrPct, int srPct, int rPct)
 {
-    if (candidates.isEmpty()) return;
+	if (candidates.isEmpty()) return;
 
-    QList<int> sortedIndices;
-    sortedIndices.reserve(candidates.size());
-    for (int i = 0; i < candidates.size(); ++i) {
-        if (candidates[i].probability >= 0.0) {
-            sortedIndices.append(i);
-        }
-    }
-    if (sortedIndices.isEmpty()) return;
+	QList<int> sortedIndices;
+	sortedIndices.reserve(candidates.size());
+	for (int i = 0; i < candidates.size(); ++i) {
+		if (candidates[i].probability >= 0.0) {
+			sortedIndices.append(i);
+		}
+	}
+	if (sortedIndices.isEmpty()) return;
 
-    std::sort(sortedIndices.begin(), sortedIndices.end(), [&](int a, int b) {
-        return candidates[a].probability > candidates[b].probability;
-    });
+	std::sort(sortedIndices.begin(), sortedIndices.end(), [&](int a, int b) {
+		return candidates[a].probability > candidates[b].probability;
+	});
 
-    const int total = sortedIndices.size();
+	const int total = sortedIndices.size();
 
-    for (int rank = 0; rank < total; ++rank) {
-        const double percentile = (static_cast<double>(rank) / total) * 100.0;
-        int tier = 0;
-        if (percentile < ssrPct) {
-            tier = 3;
-        } else if (percentile < srPct) {
-            tier = 2;
-        } else if (percentile < rPct) {
-            tier = 1;
-        }
-        const int idx = sortedIndices[rank];
-        candidates[idx].rarity = tier;
-        candidates[idx].rarityScore = candidates[idx].probability;
-    }
+	for (int rank = 0; rank < total; ++rank) {
+		const double percentile = (static_cast<double>(rank) / total) * 100.0;
+		int tier = 0;
+		if (percentile < ssrPct) {
+			tier = 3;
+		} else if (percentile < srPct) {
+			tier = 2;
+		} else if (percentile < rPct) {
+			tier = 1;
+		}
+		const int idx = sortedIndices[rank];
+		candidates[idx].rarity = tier;
+		candidates[idx].rarityScore = candidates[idx].probability;
+	}
 }
 
 quint32 utils::stringToSeed(const QString& textSeed) {

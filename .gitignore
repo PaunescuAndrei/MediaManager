@@ -22,3 +22,4 @@ MediaManager/src/thirdparty/onnxruntime/
 # Brainstorming / planning artifacts
 docs/superpowers/
 .superpowers/
+CLAUDE.md

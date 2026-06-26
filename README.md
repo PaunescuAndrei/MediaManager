@@ -57,7 +57,7 @@ python MediaManager/src/thirdparty/update_dependencies.py
 ```
 
 This will download and place the following into `MediaManager/src/`:
-- **ONNX Runtime (v1.23.2)**: Headers and DLLs.
+- **ONNX Runtime (v1.24.3)**: Headers and DLLs.
 - **Beat This!**: Source code and API headers.
 - **beat_this.onnx**: The AI model file required for beat detection.
 
@@ -76,7 +76,7 @@ This will download and place the following into `MediaManager/src/`:
 
 4.  **Run**:
     The executable will be output to:
-    `MediaManager/x64/ReleaseDebug/MediaManager.exe`
+    `x64/ReleaseDebug/MediaManager.exe`
 
 ## Project Structure
 

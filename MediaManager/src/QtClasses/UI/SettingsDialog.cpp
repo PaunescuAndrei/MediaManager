@@ -366,6 +366,10 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
     this->ui.bpmThreadsSpinBox->setValue(mw->App->config->get("bpm_threads").toInt());
     int sessionSaveInterval = qBound(0, mw->App->config->get("session_save_interval_seconds").toInt(), this->ui.sessionSaveIntervalSpinBox->maximum());
     this->ui.sessionSaveIntervalSpinBox->setValue(sessionSaveInterval);
+    int dailyVideoGoal = qBound(0, mw->App->config->get("daily_video_goal").toInt(), this->ui.dailyVideoGoalSpinBox->maximum());
+    this->ui.dailyVideoGoalSpinBox->setValue(dailyVideoGoal);
+    int dailyTimeGoal = qBound(0, mw->App->config->get("daily_time_goal_minutes").toInt(), this->ui.dailyTimeGoalSpinBox->maximum());
+    this->ui.dailyTimeGoalSpinBox->setValue(dailyTimeGoal);
     if (mw->App->config->get_bool("empty_player_tracking"))
         this->ui.emptyPlayerTracking->setCheckState(Qt::CheckState::Checked);
     else

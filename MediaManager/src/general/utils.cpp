@@ -1006,6 +1006,7 @@ QString utils::formatTimeAgo(qint64 seconds) {
 	}
 }
 
+
 bool utils::isSingleInstanceRunning(QString appid) {
 	QLocalSocket socket;
 	socket.connectToServer(appid);

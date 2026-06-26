@@ -70,6 +70,7 @@ namespace utils {
 	void changeQImageHue(QImage& img, QColor& newcolor, double blend_ratio);
 	std::string getAppId(const char* VERSION);
 	QString formatTimeAgo(qint64 seconds);
+
 	QSize adjustSizeForAspect(const QSize& baseSize, double contentWidthFraction, int nonContentHeight, std::initializer_list<double> aspectGuesses);
 	bool isSingleInstanceRunning(QString appid);
 	void openFileExplorer(QString path);

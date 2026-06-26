@@ -8,6 +8,8 @@
 #include <QSqlQuery>
 #include <QEvent>
 #include <QApplication>
+#include <QProgressBar>
+#include <QPushButton>
 
 StatsDialog::StatsDialog(QWidget* parent) : QDialog(parent)
 {
@@ -161,6 +163,572 @@ void StatsDialog::addStatToGrid(QGridLayout* layout, int row, const QString& lab
     layout->addWidget(createStatLabel("", value, true), row, 1, Qt::AlignRight);
 }
 
+void StatsDialog::setupAchievements(MainApp* app)
+{
+    int totalWatchDays = app->db->getTotalWatchDays();
+    QDateTime firstWatch = app->db->getFirstWatchDate();
+    QString firstWatchStr = firstWatch.isValid() ? firstWatch.toString("MMMM d, yyyy") : "N/A";
+    int totalVideos = app->db->getVideoCount("PLUS") + app->db->getVideoCount("MINUS");
+
+    QGridLayout* layout = qobject_cast<QGridLayout*>(ui.overviewTab->findChild<QGridLayout*>("video_grid_layout"));
+    if (!layout) return;
+
+    // Find the row after existing video stats and add achievements
+    int row = layout->rowCount();
+    addStatToGrid(layout, row++, "Total Active Days:", QString::number(totalWatchDays));
+    addStatToGrid(layout, row++, "First Video Watched:", firstWatchStr);
+    addStatToGrid(layout, row++, "Total Videos in Library:", QString::number(totalVideos));
+
+    // Today's Progress section
+    QGridLayout* goalsLayout = new QGridLayout();
+    QWidget* goalsContainer = new QWidget();
+    goalsContainer->setLayout(goalsLayout);
+
+    QLabel* progressTitle = new QLabel("Today's Progress");
+    QFont titleFont = progressTitle->font();
+    titleFont.setBold(true);
+    titleFont.setPointSize(14);
+    progressTitle->setFont(titleFont);
+
+    int goalRow = 0;
+    QLabel* videoGoalLabel = new QLabel("Video Goal:");
+    goalsLayout->addWidget(videoGoalLabel, goalRow, 0);
+
+    int dailyVideoGoal = app->config->get("daily_video_goal").toInt();
+    int videosToday = app->db->getVideosWatchedToday("PLUS") + app->db->getVideosWatchedToday("MINUS");
+    QProgressBar* videoBar = new QProgressBar();
+    videoBar->setRange(0, std::max(dailyVideoGoal, 1));
+    videoBar->setValue(std::min(videosToday, dailyVideoGoal));
+    videoBar->setFormat(QString("%1 / %2").arg(videosToday).arg(dailyVideoGoal));
+    videoBar->setTextVisible(true);
+    videoBar->setMinimumHeight(22);
+    goalsLayout->addWidget(videoBar, goalRow++, 1);
+
+    QLabel* timeGoalLabel = new QLabel("Watch Time Goal:");
+    goalsLayout->addWidget(timeGoalLabel, goalRow, 0);
+
+    int dailyTimeGoalMin = app->config->get("daily_time_goal_minutes").toInt();
+    int dailyTimeGoalSec = dailyTimeGoalMin * 60;
+    double watchedToday = app->db->getTotalWatchedTimeToday();
+    QProgressBar* timeBar = new QProgressBar();
+    timeBar->setRange(0, std::max(dailyTimeGoalSec, 1));
+    timeBar->setValue(std::min(static_cast<int>(watchedToday), dailyTimeGoalSec));
+    QString timeProgressStr = QString("%1 / %2").arg(
+        QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(watchedToday))),
+        QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(dailyTimeGoalSec))));
+    timeBar->setFormat(timeProgressStr);
+    timeBar->setTextVisible(true);
+    timeBar->setMinimumHeight(22);
+    goalsLayout->addWidget(timeBar, goalRow++, 1);
+
+    // Insert goals after the video stats
+    QVBoxLayout* overviewLayout = qobject_cast<QVBoxLayout*>(ui.overviewTab->layout());
+    if (overviewLayout) {
+        QFrame* line = new QFrame();
+        line->setFrameShape(QFrame::HLine);
+        overviewLayout->insertWidget(overviewLayout->count() - 1, line);
+        overviewLayout->insertWidget(overviewLayout->count() - 1, progressTitle);
+        overviewLayout->insertWidget(overviewLayout->count() - 1, goalsContainer);
+    }
+
+    // Cache shared values so setupStreaksTab can reuse them
+    m_cachedVideosToday = videosToday;
+    m_cachedWatchedTodaySec = watchedToday;
+    m_cachedDailyVideoGoal = dailyVideoGoal;
+    m_cachedDailyTimeGoalSec = dailyTimeGoalSec;
+}
+
+void StatsDialog::setupStreaksTab(MainApp* app)
+{
+    m_app = app;
+
+    // Streak display
+    QGridLayout* streakLayout = ui.streakDisplayLayout;
+    WatchStreak streak = app->db->getWatchStreak();
+    int totalDays = app->db->getTotalWatchDays();
+    QDateTime firstWatch = app->db->getFirstWatchDate();
+
+    // Relative date helper (avoids duplicated logic for streakStart / lastWatched)
+    auto relativeDate = [](const QDate& d) -> QString {
+        QDate today = QDate::currentDate();
+        if (d == today) return QStringLiteral("Today");
+        if (d == today.addDays(-1)) return QStringLiteral("Yesterday");
+        return d.toString(QStringLiteral("MMM d, yyyy"));
+    };
+
+    // Current Streak - large prominent display
+    QLabel* currentLabel = new QLabel("Current Streak");
+    QFont currentTitleFont = currentLabel->font();
+    currentTitleFont.setPointSize(12);
+    currentTitleFont.setBold(true);
+    currentLabel->setFont(currentTitleFont);
+    streakLayout->addWidget(currentLabel, 0, 0, Qt::AlignCenter);
+
+    QLabel* streakCurrentLabel = new QLabel(QString::number(streak.currentStreak));
+    QFont streakFont = streakCurrentLabel->font();
+    streakFont.setPointSize(48);
+    streakFont.setBold(true);
+    streakCurrentLabel->setFont(streakFont);
+    streakCurrentLabel->setAlignment(Qt::AlignCenter);
+    streakLayout->addWidget(streakCurrentLabel, 1, 0, Qt::AlignCenter);
+
+    QLabel* currentUnit = new QLabel(streak.currentStreak == 1 ? "day" : "days");
+    currentUnit->setAlignment(Qt::AlignCenter);
+    streakLayout->addWidget(currentUnit, 2, 0, Qt::AlignCenter);
+
+    // Longest Streak
+    QLabel* longestLabel = new QLabel("Longest Streak");
+    QFont longestTitleFont = longestLabel->font();
+    longestTitleFont.setPointSize(12);
+    longestTitleFont.setBold(true);
+    longestLabel->setFont(longestTitleFont);
+    streakLayout->addWidget(longestLabel, 0, 1, Qt::AlignCenter);
+
+    QLabel* streakLongestLabel = new QLabel(QString::number(streak.longestStreak));
+    QFont longestStreakFont = streakLongestLabel->font();
+    longestStreakFont.setPointSize(48);
+    longestStreakFont.setBold(true);
+    streakLongestLabel->setFont(longestStreakFont);
+    streakLongestLabel->setAlignment(Qt::AlignCenter);
+    streakLayout->addWidget(streakLongestLabel, 1, 1, Qt::AlignCenter);
+
+    QLabel* longestUnit = new QLabel(streak.longestStreak == 1 ? "day" : "days");
+    longestUnit->setAlignment(Qt::AlignCenter);
+    streakLayout->addWidget(longestUnit, 2, 1, Qt::AlignCenter);
+
+    // Bottom stats — 2x2 grid
+    QFont statFont;
+    statFont.setPointSize(11);
+
+    // Row 3, Col 0: Streak Since (under Current Streak)
+    QString streakStartStr = (streak.currentStreak > 0 && streak.streakStartDate.isValid())
+        ? relativeDate(streak.streakStartDate) : QStringLiteral("—");
+    QLabel* streakStartLabel = new QLabel(QString("Streak Since: %1").arg(streakStartStr));
+    streakStartLabel->setAlignment(Qt::AlignCenter);
+    streakStartLabel->setFont(statFont);
+    streakLayout->addWidget(streakStartLabel, 3, 0, Qt::AlignCenter);
+
+    // Row 3, Col 1: Total Active Days (under Longest Streak)
+    QLabel* totalActiveDaysLabel = new QLabel(QString("Total Active Days: %1").arg(totalDays));
+    totalActiveDaysLabel->setAlignment(Qt::AlignCenter);
+    totalActiveDaysLabel->setFont(statFont);
+    streakLayout->addWidget(totalActiveDaysLabel, 3, 1, Qt::AlignCenter);
+
+    // Row 4, Col 0: Last Watched
+    QString lastWatchedStr = streak.lastWatchedDate.isValid()
+        ? relativeDate(streak.lastWatchedDate) : QStringLiteral("N/A");
+    QLabel* lastWatchedLabel = new QLabel(QString("Last Watched: %1").arg(lastWatchedStr));
+    lastWatchedLabel->setAlignment(Qt::AlignCenter);
+    lastWatchedLabel->setFont(statFont);
+    streakLayout->addWidget(lastWatchedLabel, 4, 0, Qt::AlignCenter);
+
+    // Row 4, Col 1: Longest Streak date interval (under Total Active Days)
+    QString longestIntervalStr;
+    if (streak.longestStreak > 0 && streak.longestStreakStartDate.isValid() && streak.longestStreakEndDate.isValid()) {
+        if (streak.longestStreakStartDate == streak.longestStreakEndDate)
+            longestIntervalStr = streak.longestStreakStartDate.toString("MMM d, yyyy");
+        else
+            longestIntervalStr = QString("%1 – %2")
+                .arg(streak.longestStreakStartDate.toString("MMM d, yyyy"))
+                .arg(streak.longestStreakEndDate.toString("MMM d, yyyy"));
+    } else {
+        longestIntervalStr = QStringLiteral("—");
+    }
+    QLabel* longestIntervalLabel = new QLabel(QString("Longest Streak: %1").arg(longestIntervalStr));
+    longestIntervalLabel->setAlignment(Qt::AlignCenter);
+    longestIntervalLabel->setFont(statFont);
+    streakLayout->addWidget(longestIntervalLabel, 4, 1, Qt::AlignCenter);
+
+    // Streak calendar heatmap (last 6 months) — cache for reuse by setupContributionHeatmap
+    m_heatmapCache = app->db->getDailyWatchedHistory(186);
+    ContributionHeatmapWidget* streakCalendar = new ContributionHeatmapWidget();
+    streakCalendar->setData(m_heatmapCache);
+    ui.streakCalendarLayout->addWidget(streakCalendar);
+    ui.streakCalendarLayout->setAlignment(streakCalendar, Qt::AlignCenter);
+
+    // Watching Since under the heatmap
+    QString firstStr = firstWatch.isValid() ? firstWatch.toString("MMMM d, yyyy") : "N/A";
+    QLabel* firstWatchLabel = new QLabel(QString("Watching Since: %1").arg(firstStr));
+    firstWatchLabel->setAlignment(Qt::AlignCenter);
+    firstWatchLabel->setFont(statFont);
+    ui.streakCalendarLayout->addWidget(firstWatchLabel);
+
+    // Daily Goals — reuse cached values from setupAchievements when available
+    QGridLayout* goalsGrid = ui.goalsGridLayout;
+    int row = 0;
+
+    int dailyVideoGoal = m_cachedDailyVideoGoal >= 0
+        ? m_cachedDailyVideoGoal
+        : app->config->get("daily_video_goal").toInt();
+    int videosToday = m_cachedVideosToday >= 0
+        ? m_cachedVideosToday
+        : app->db->getVideosWatchedToday("PLUS") + app->db->getVideosWatchedToday("MINUS");
+
+    QLabel* dailyVideoGoalLabel = new QLabel(QString("Videos: %1 / %2").arg(videosToday).arg(dailyVideoGoal));
+    goalsGrid->addWidget(dailyVideoGoalLabel, row, 0);
+
+    QProgressBar* dailyVideoGoalBar = new QProgressBar();
+    dailyVideoGoalBar->setRange(0, std::max(dailyVideoGoal, 1));
+    dailyVideoGoalBar->setValue(std::min(videosToday, dailyVideoGoal));
+    dailyVideoGoalBar->setTextVisible(true);
+    dailyVideoGoalBar->setMinimumHeight(22);
+    goalsGrid->addWidget(dailyVideoGoalBar, row++, 1);
+
+    int dailyTimeGoalMin = m_cachedDailyTimeGoalSec >= 0
+        ? m_cachedDailyTimeGoalSec / 60
+        : app->config->get("daily_time_goal_minutes").toInt();
+    int dailyTimeGoalSec = m_cachedDailyTimeGoalSec >= 0
+        ? m_cachedDailyTimeGoalSec
+        : dailyTimeGoalMin * 60;
+    double watchedToday = m_cachedWatchedTodaySec >= 0.0
+        ? m_cachedWatchedTodaySec
+        : app->db->getTotalWatchedTimeToday();
+
+    QLabel* dailyTimeGoalLabel = new QLabel(QString("Time: %1 / %2").arg(
+        QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(watchedToday))),
+        QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(dailyTimeGoalSec)))));
+    goalsGrid->addWidget(dailyTimeGoalLabel, row, 0);
+
+    QProgressBar* dailyTimeGoalBar = new QProgressBar();
+    dailyTimeGoalBar->setRange(0, std::max(dailyTimeGoalSec, 1));
+    dailyTimeGoalBar->setValue(std::min(static_cast<int>(watchedToday), dailyTimeGoalSec));
+    dailyTimeGoalBar->setTextVisible(true);
+    dailyTimeGoalBar->setMinimumHeight(22);
+    goalsGrid->addWidget(dailyTimeGoalBar, row++, 1);
+}
+
+void StatsDialog::addAuthorRow(QGridLayout* layout, int row, int rank, const QString& author, const QString& value, const QColor& barColor)
+{
+    QLabel* rankLabel = new QLabel(QString("#%1").arg(rank));
+    QFont rankFont = rankLabel->font();
+    if (rank <= 3) rankFont.setBold(true);
+    rankLabel->setFont(rankFont);
+    if (rank <= 3) {
+        QColor medalColor = rank == 1 ? QColor("#FFD700") : rank == 2 ? QColor("#C0C0C0") : QColor("#CD7F32");
+        rankLabel->setStyleSheet(QString("color: %1;").arg(medalColor.name()));
+    }
+    rankLabel->setFixedWidth(32);
+    layout->addWidget(rankLabel, row, 0, Qt::AlignCenter);
+
+    QLabel* authorLabel = new QLabel(author);
+    authorLabel->setFont(rankFont);
+    authorLabel->setTextFormat(Qt::PlainText);
+    layout->addWidget(authorLabel, row, 1, Qt::AlignLeft | Qt::AlignVCenter);
+
+    if (barColor.isValid()) {
+        // value is the display text (e.g. "45.3%"), extract the number for the bar fill
+        QString numStr = value;
+        numStr.remove('%').remove(" ★");
+        int barVal = qBound(0, qRound(numStr.toDouble()), 100);
+
+        QProgressBar* bar = new QProgressBar();
+        bar->setRange(0, 100);
+        bar->setValue(barVal);
+        bar->setFormat(QString(" %1 ").arg(value)); // padding so text doesn't hug edges
+        bar->setTextVisible(true);
+        bar->setMinimumHeight(20);
+        bar->setStyleSheet(QString(
+            "QProgressBar { background: palette(base); border: 1px solid palette(mid);"
+            " border-radius: 2px; text-align: center; }"
+            "QProgressBar::chunk { background: %1; border-radius: 1px; }").arg(barColor.name()));
+        layout->addWidget(bar, row, 2);
+    } else {
+        QLabel* valLabel = new QLabel(value);
+        valLabel->setAlignment(Qt::AlignCenter);
+        QFont valFont = valLabel->font();
+        valFont.setBold(true);
+        valLabel->setFont(valFont);
+        layout->addWidget(valLabel, row, 2, Qt::AlignCenter);
+    }
+}
+
+void StatsDialog::setupAuthorsTab(MainApp* app)
+{
+    m_app = app;
+
+    // Update category dropdown to use config names
+    QString plusName = app->config->get("plus_category_name");
+    QString minusName = app->config->get("minus_category_name");
+    ui.authorsCategoryCombo->setItemText(1, plusName);
+    ui.authorsCategoryCombo->setItemText(2, minusName);
+
+    connect(ui.authorsRefreshBtn, &QPushButton::clicked, this, &StatsDialog::refreshAuthors);
+    refreshAuthors();
+}
+
+void StatsDialog::refreshAuthors()
+{
+    if (!m_app) return;
+    // Map combo index back to internal category name
+    static const char* catKeys[] = {"ALL", "PLUS", "MINUS"};
+    int catIdx = qBound(0, ui.authorsCategoryCombo->currentIndex(), 2);
+    QString category = catKeys[catIdx];
+
+    // Resolve category display name from config
+    QString catName = category;
+    if (category == "PLUS")
+        catName = m_app->config->get("plus_category_name");
+    else if (category == "MINUS")
+        catName = m_app->config->get("minus_category_name");
+
+    // Helper: clear a layout completely, deleting all child widgets (first-call only)
+    auto clearLayout = [](QLayout* layout) {
+        if (!layout) return;
+        QLayoutItem* item;
+        while ((item = layout->takeAt(0)) != nullptr) {
+            if (item->widget()) delete item->widget();
+            if (item->layout()) {
+                // Recurse into sub-layouts
+                QLayout* sub = item->layout();
+                QLayoutItem* subItem;
+                while ((subItem = sub->takeAt(0)) != nullptr) {
+                    if (subItem->widget()) delete subItem->widget();
+                    delete subItem;
+                }
+            }
+            delete item;
+        }
+    };
+
+    // Helper: remove only data rows (row >= 1) from a grid, leaving header row intact
+    auto clearGridDataRows = [](QGridLayout* grid) {
+        for (int i = grid->count() - 1; i >= 0; --i) {
+            QLayoutItem* item = grid->itemAt(i);
+            if (!item) continue;
+            int row, col, rowSpan, colSpan;
+            grid->getItemPosition(i, &row, &col, &rowSpan, &colSpan);
+            if (row >= 1) {
+                if (item->widget()) delete item->widget();
+                grid->removeItem(item);
+                delete item;
+            }
+        }
+    };
+
+    // Helper: update the first widget (title label) in a VBoxLayout
+    auto updateTitle = [](QVBoxLayout* layout, const QString& text) {
+        if (QLayoutItem* first = layout->itemAt(0)) {
+            if (QLabel* label = qobject_cast<QLabel*>(first->widget()))
+                label->setText(text);
+        }
+    };
+
+    // Helper: create a centered section title label
+    auto makeTitle = [](const QString& text) {
+        QLabel* label = new QLabel(text);
+        QFont f = label->font();
+        f.setPointSize(12);
+        f.setBold(true);
+        label->setFont(f);
+        label->setAlignment(Qt::AlignCenter);
+        return label;
+    };
+
+    // --- Top Authors by Views ---
+    {
+        QVBoxLayout* existing = ui.topAuthorsLayout;
+        QString titleText = QString("Top %1 Authors by Views").arg(catName);
+        QGridLayout* grid;
+
+        if (!m_topAuthorsGrid) {
+            clearLayout(existing);
+            existing->addWidget(makeTitle(titleText));
+            grid = new QGridLayout();
+            QLabel* headerRank = new QLabel("#");
+            QLabel* headerAuthor = new QLabel("Author");
+            QLabel* headerViews = new QLabel("Views");
+            QFont headerFont = headerRank->font();
+            headerFont.setBold(true);
+            headerRank->setFont(headerFont); headerAuthor->setFont(headerFont); headerViews->setFont(headerFont);
+            grid->addWidget(headerRank, 0, 0, Qt::AlignCenter);
+            grid->addWidget(headerAuthor, 0, 1, Qt::AlignLeft);
+            grid->addWidget(headerViews, 0, 2, Qt::AlignCenter);
+            grid->setColumnStretch(0, 0);
+            grid->setColumnStretch(1, 1);
+            grid->setColumnStretch(2, 0);
+            existing->addLayout(grid);
+            m_topAuthorsGrid = grid;
+        } else {
+            updateTitle(existing, titleText);
+            grid = m_topAuthorsGrid;
+            clearGridDataRows(grid);
+        }
+
+        auto topAuthors = m_app->db->getTopAuthors(10, category);
+        int row = 1;
+        for (const auto& pair : topAuthors) {
+            addAuthorRow(grid, row, row, pair.first, QString::number(pair.second));
+            row++;
+        }
+        if (topAuthors.isEmpty())
+            grid->addWidget(new QLabel("No data available"), 1, 0, 1, 3, Qt::AlignCenter);
+    }
+
+    // --- Top Authors by Rating ---
+    {
+        QVBoxLayout* existing = ui.topRatedAuthorsLayout;
+        QString titleText = QString("Top %1 Authors by Rating").arg(catName);
+        QGridLayout* grid;
+
+        if (!m_topRatedGrid) {
+            clearLayout(existing);
+            existing->addWidget(makeTitle(titleText));
+            grid = new QGridLayout();
+            QLabel* headerRank = new QLabel("#");
+            QLabel* headerAuthor = new QLabel("Author");
+            QLabel* headerRating = new QLabel("Avg Rating");
+            QFont headerFont = headerRank->font();
+            headerFont.setBold(true);
+            headerRank->setFont(headerFont); headerAuthor->setFont(headerFont); headerRating->setFont(headerFont);
+            grid->addWidget(headerRank, 0, 0, Qt::AlignCenter);
+            grid->addWidget(headerAuthor, 0, 1, Qt::AlignLeft);
+            grid->addWidget(headerRating, 0, 2, Qt::AlignCenter);
+            grid->setColumnStretch(0, 0);
+            grid->setColumnStretch(1, 1);
+            grid->setColumnStretch(2, 0);
+            existing->addLayout(grid);
+            m_topRatedGrid = grid;
+        } else {
+            updateTitle(existing, titleText);
+            grid = m_topRatedGrid;
+            clearGridDataRows(grid);
+        }
+
+        auto topRated = m_app->db->getTopAuthorsByRating(10, category);
+        int row = 1;
+        for (const auto& pair : topRated) {
+            addAuthorRow(grid, row, row, pair.first, QString::number(pair.second, 'f', 2));
+            row++;
+        }
+        if (topRated.isEmpty())
+            grid->addWidget(new QLabel("No data available (min 3 rated videos required)"), 1, 0, 1, 3, Qt::AlignCenter);
+    }
+
+    // --- Author Completion Rates (scrollable, uncompleted first) ---
+    {
+        QVBoxLayout* existing = ui.completionLayout;
+        QString titleText = QString("%1 Author Completion Rates").arg(catName);
+        QGridLayout* grid;
+
+        if (!m_completionGrid) {
+            clearLayout(existing);
+            existing->addWidget(makeTitle(titleText));
+
+            QScrollArea* scroll = new QScrollArea();
+            scroll->setWidgetResizable(true);
+            scroll->setFrameShape(QFrame::NoFrame);
+            scroll->setMaximumHeight(320);
+
+            QWidget* scrollContent = new QWidget();
+            grid = new QGridLayout(scrollContent);
+            grid->setContentsMargins(0, 0, 0, 0);
+
+            QLabel* headerRank = new QLabel("#");
+            QLabel* headerAuthor = new QLabel("Author");
+            QLabel* headerCompletion = new QLabel("Completion %");
+            QFont headerFont = headerRank->font();
+            headerFont.setBold(true);
+            headerRank->setFont(headerFont); headerAuthor->setFont(headerFont); headerCompletion->setFont(headerFont);
+            grid->addWidget(headerRank, 0, 0, Qt::AlignCenter);
+            grid->addWidget(headerAuthor, 0, 1, Qt::AlignLeft);
+            grid->addWidget(headerCompletion, 0, 2, Qt::AlignCenter);
+            grid->setColumnStretch(0, 0);
+            grid->setColumnStretch(1, 1);
+            grid->setColumnStretch(2, 0);
+
+            scroll->setWidget(scrollContent);
+            existing->addWidget(scroll);
+            m_completionGrid = grid;
+        } else {
+            updateTitle(existing, titleText);
+            grid = m_completionGrid;
+            clearGridDataRows(grid);
+        }
+
+        auto completion = m_app->db->getAuthorCompletion(category);
+        int row = 1;
+        for (const auto& pair : completion) {
+            QColor barColor = pair.second >= 75.0 ? QColor("#4CAF50") :
+                              pair.second >= 50.0 ? QColor("#FF9800") : QColor("#F44336");
+            addAuthorRow(grid, row, row, pair.first,
+                         QString::number(pair.second, 'f', 1) + "%", barColor);
+            row++;
+        }
+        if (completion.isEmpty())
+            grid->addWidget(new QLabel("No data available (min 3 videos required)"), 1, 0, 1, 3, Qt::AlignCenter);
+    }
+
+    // --- Hidden Gems (scrollable) ---
+    {
+        QVBoxLayout* existing = ui.hiddenGemsLayout;
+        QString titleText = QString("%1 Hidden Gems — Top Rated & Unwatched").arg(catName);
+        QGridLayout* grid;
+
+        if (!m_hiddenGemsGrid) {
+            clearLayout(existing);
+            existing->addWidget(makeTitle(titleText));
+
+            QScrollArea* scroll = new QScrollArea();
+            scroll->setWidgetResizable(true);
+            scroll->setFrameShape(QFrame::NoFrame);
+            scroll->setMaximumHeight(320);
+
+            QWidget* scrollContent = new QWidget();
+            grid = new QGridLayout(scrollContent);
+            grid->setContentsMargins(0, 0, 0, 0);
+
+            QLabel* headerAuthor = new QLabel("Author");
+            QLabel* headerCount = new QLabel("Unwatched");
+            QLabel* headerRating = new QLabel("Avg Rating");
+            QFont headerFont = headerAuthor->font();
+            headerFont.setBold(true);
+            headerAuthor->setFont(headerFont); headerCount->setFont(headerFont); headerRating->setFont(headerFont);
+            grid->addWidget(headerAuthor, 0, 0, Qt::AlignLeft);
+            grid->addWidget(headerCount, 0, 1, Qt::AlignCenter);
+            grid->addWidget(headerRating, 0, 2, Qt::AlignCenter);
+            grid->setColumnStretch(0, 1);
+            grid->setColumnStretch(1, 0);
+            grid->setColumnStretch(2, 0);
+
+            scroll->setWidget(scrollContent);
+            existing->addWidget(scroll);
+            m_hiddenGemsGrid = grid;
+        } else {
+            updateTitle(existing, titleText);
+            grid = m_hiddenGemsGrid;
+            clearGridDataRows(grid);
+        }
+
+        auto hiddenGems = m_app->db->getTopRatedUnwatched(20, category);
+        int row = 1;
+        for (const auto& gem : hiddenGems) {
+            QLabel* authorLabel = new QLabel(gem.author);
+            authorLabel->setTextFormat(Qt::PlainText);
+            grid->addWidget(authorLabel, row, 0, Qt::AlignLeft | Qt::AlignVCenter);
+
+            QLabel* countLabel = new QLabel(QString::number(gem.count));
+            countLabel->setAlignment(Qt::AlignCenter);
+            grid->addWidget(countLabel, row, 1, Qt::AlignCenter);
+
+            QLabel* ratingLabel = new QLabel(QString::number(gem.avgRating, 'f', 1) + " ★");
+            ratingLabel->setAlignment(Qt::AlignCenter);
+            QFont ratingFont = ratingLabel->font();
+            ratingFont.setBold(true);
+            ratingLabel->setFont(ratingFont);
+            grid->addWidget(ratingLabel, row, 2, Qt::AlignCenter);
+            row++;
+        }
+        if (hiddenGems.isEmpty()) {
+            QLabel* empty = new QLabel("No hidden gems found — all rated videos have been watched!");
+            empty->setStyleSheet("color: palette(highlight);");
+            QFont emptyFont = empty->font();
+            emptyFont.setBold(true);
+            empty->setFont(emptyFont);
+            grid->addWidget(empty, 1, 0, 1, 3, Qt::AlignCenter);
+        }
+    }
+}
+
 StatsDialog::~StatsDialog()
 {
 }
@@ -177,7 +745,7 @@ void StatsDialog::setupChartsTab(MainApp* app)
 {
     m_app = app;
     setupContributionHeatmap(ui.heatmapLayout);
-    ui.dateRangeCombo->setCurrentIndex(1);
+    ui.dateRangeCombo->setCurrentIndex(2);  // "Last 30 days"
     createDailyBars(ui.dailyBarsLayout);
     createHourlyHistogram(ui.hourlyLayout);
     createDayOfWeek(ui.dayOfWeekLayout);
@@ -200,11 +768,12 @@ bool StatsDialog::showCounts() const
 int StatsDialog::selectedDays() const
 {
     switch (ui.dateRangeCombo->currentIndex()) {
-        case 0: return 7;
-        case 1: return 30;
-        case 2: return 90;
-        case 3: return 180;
-        case 4: return 365;
+        case 0: return 1;    // Today
+        case 1: return 7;
+        case 2: return 30;
+        case 3: return 90;
+        case 4: return 180;
+        case 5: return 365;
         default: return 36500;
     }
 }
@@ -222,9 +791,11 @@ void StatsDialog::refreshCharts()
 
 void StatsDialog::setupContributionHeatmap(QLayout* layout)
 {
-    auto data = m_app->db->getDailyWatchedHistory(186);
+    // Reuse cached heatmap data if setupStreaksTab already fetched it
+    if (m_heatmapCache.isEmpty())
+        m_heatmapCache = m_app->db->getDailyWatchedHistory(186);
     auto* heatmap = new ContributionHeatmapWidget();
-    heatmap->setData(data);
+    heatmap->setData(m_heatmapCache);
     layout->addWidget(heatmap);
     layout->setAlignment(heatmap, Qt::AlignCenter);
 }

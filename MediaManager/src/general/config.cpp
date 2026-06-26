@@ -145,6 +145,8 @@ void Config::init_defaults() {
         {"bpm_calculation_types", ""},
         {"session_save_interval_seconds", "10"},
         {"empty_player_tracking", "True"},
+        {"daily_video_goal", "5"},
+        {"daily_time_goal_minutes", "60"},
 	});
 }
 

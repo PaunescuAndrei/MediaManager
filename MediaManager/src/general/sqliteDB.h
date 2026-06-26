@@ -80,5 +80,18 @@ public:
     QVector<QPair<int, int>> getHourlyWatchedCount(int days = -1);
     QVector<QPair<int, double>> getDayOfWeekDistribution(int days = -1);
     QVector<QPair<int, int>> getDayOfWeekCount(int days = -1);
+    WatchStreak getWatchStreak();
+    QVector<QPair<QString, int>> getTopAuthors(int limit, const QString& category);
+    QVector<QPair<QString, double>> getTopAuthorsByRating(int limit, const QString& category);
+    QVector<QPair<QString, double>> getAuthorCompletion(const QString& category);
+    struct TopRatedUnwatched {
+        QString author;
+        int count = 0;
+        double avgRating = 0.0;
+    };
+    QVector<TopRatedUnwatched> getTopRatedUnwatched(int limit, const QString& category);
+
+    int getTotalWatchDays();
+    QDateTime getFirstWatchDate();
 };
 

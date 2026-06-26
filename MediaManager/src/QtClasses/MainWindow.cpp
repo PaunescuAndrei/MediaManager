@@ -1142,6 +1142,9 @@ void MainWindow::openStats() {
     dialog->setupTimeStats(this->App);
     dialog->setupVideoStats(this->App);
     dialog->setupRatingStats(this->App);
+    dialog->setupAchievements(this->App);
+    dialog->setupStreaksTab(this->App);
+    dialog->setupAuthorsTab(this->App);
     dialog->setupChartsTab(this->App);
     
     // Play sound effects
@@ -3068,6 +3071,8 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         config->set("counter_use_actual_watch_time", "False");
     this->counter_use_actual_watch_time = config->get_bool("counter_use_actual_watch_time");
     config->set("session_save_interval_seconds", QString::number(dialog->ui.sessionSaveIntervalSpinBox->value()));
+    config->set("daily_video_goal", QString::number(dialog->ui.dailyVideoGoalSpinBox->value()));
+    config->set("daily_time_goal_minutes", QString::number(dialog->ui.dailyTimeGoalSpinBox->value()));
     if (dialog->ui.emptyPlayerTracking->checkState() == Qt::CheckState::Checked)
         config->set("empty_player_tracking", "True");
     else

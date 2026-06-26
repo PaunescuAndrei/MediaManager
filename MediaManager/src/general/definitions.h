@@ -2,6 +2,7 @@
 #include <QString>
 #include <QStringList>
 #include <QMetaType>
+#include <QDate>
 #include <QList>
 #include <QTreeWidgetItem>
 
@@ -42,6 +43,15 @@ struct AuthorVideoData {
 	QString author;
 	QList<VideoWeightedData> videos;
 	QTreeWidgetItem* firstItem;
+};
+
+struct WatchStreak {
+    int currentStreak = 0;
+    int longestStreak = 0;
+    QDate streakStartDate;         // first day of the current streak
+    QDate lastWatchedDate;         // most recent watch date
+    QDate longestStreakStartDate;  // earliest date of the longest streak
+    QDate longestStreakEndDate;    // latest date of the longest streak
 };
 
 struct WeightedBiasSettings {

@@ -199,6 +199,335 @@
        </item>
       </layout>
      </widget>
+     <widget class="QWidget" name="streaksTab">
+      <attribute name="title">
+       <string>Streaks</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="streaksTabLayout">
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QScrollArea" name="streaksScrollArea">
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="streaksScrollContent">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>794</width>
+            <height>800</height>
+           </rect>
+          </property>
+          <layout class="QVBoxLayout" name="streaksMainLayout">
+           <item>
+            <widget class="QLabel" name="streaksTitleLabel">
+             <property name="font">
+              <font>
+               <pointsize>18</pointsize>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>Watch Streaks</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignmentFlag::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="streakDisplayContainer" native="true">
+             <layout class="QGridLayout" name="streakDisplayLayout"/>
+            </widget>
+           </item>
+           <item>
+            <widget class="Line" name="streakLine1">
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="streakCalendarContainer" native="true">
+             <layout class="QVBoxLayout" name="streakCalendarLayout"/>
+            </widget>
+           </item>
+           <item>
+            <widget class="Line" name="streakLine2">
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="goalsContainer" native="true">
+             <layout class="QVBoxLayout" name="goalsLayout">
+              <item>
+               <widget class="QLabel" name="goalsTitleLabel">
+                <property name="font">
+                 <font>
+                  <pointsize>14</pointsize>
+                  <bold>true</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>Daily Goals</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QWidget" name="goalsGridContainer" native="true">
+                <layout class="QGridLayout" name="goalsGridLayout"/>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <spacer name="streaksSpacer">
+             <property name="orientation">
+              <enum>Qt::Orientation::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="authorsTab">
+      <attribute name="title">
+       <string>Authors</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="authorsTabLayout">
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QScrollArea" name="authorsScrollArea">
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="authorsScrollContent">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>794</width>
+            <height>800</height>
+           </rect>
+          </property>
+          <layout class="QVBoxLayout" name="authorsMainLayout">
+           <item>
+            <widget class="QLabel" name="authorsTitleLabel">
+             <property name="font">
+              <font>
+               <pointsize>18</pointsize>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>Author &amp; Series Insights</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignmentFlag::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="authorsFilterRow" native="true">
+             <layout class="QHBoxLayout" name="authorsFilterLayout">
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="topMargin">
+               <number>0</number>
+              </property>
+              <property name="rightMargin">
+               <number>0</number>
+              </property>
+              <property name="bottomMargin">
+               <number>0</number>
+              </property>
+              <item>
+               <spacer name="authorsLeftSpacer">
+                <property name="orientation">
+                 <enum>Qt::Orientation::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+              <item>
+               <widget class="QLabel" name="authorsCategoryLabel">
+                <property name="text">
+                 <string>Category:</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QComboBox" name="authorsCategoryCombo">
+                <item>
+                 <property name="text"><string>ALL</string></property>
+                </item>
+                <item>
+                 <property name="text"><string>PLUS</string></property>
+                </item>
+                <item>
+                 <property name="text"><string>MINUS</string></property>
+                </item>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="authorsRefreshBtn">
+                <property name="text">
+                 <string>Refresh</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="authorsRightSpacer">
+                <property name="orientation">
+                 <enum>Qt::Orientation::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="topAuthorsContainer" native="true">
+             <layout class="QVBoxLayout" name="topAuthorsLayout">
+              <item>
+               <widget class="QLabel" name="topAuthorsTitle">
+                <property name="font">
+                 <font>
+                  <pointsize>14</pointsize>
+                  <bold>true</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>Top Authors by Views</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="topRatedAuthorsContainer" native="true">
+             <layout class="QVBoxLayout" name="topRatedAuthorsLayout">
+              <item>
+               <widget class="QLabel" name="topRatedAuthorsTitle">
+                <property name="font">
+                 <font>
+                  <pointsize>14</pointsize>
+                  <bold>true</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>Top Authors by Rating</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="authorCompletionContainer" native="true">
+             <layout class="QVBoxLayout" name="completionLayout">
+              <item>
+               <widget class="QLabel" name="authorCompletionTitle">
+                <property name="font">
+                 <font>
+                  <pointsize>14</pointsize>
+                  <bold>true</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>Author Completion Rates</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="hiddenGemsContainer" native="true">
+             <layout class="QVBoxLayout" name="hiddenGemsLayout">
+              <item>
+               <widget class="QLabel" name="hiddenGemsTitle">
+                <property name="font">
+                 <font>
+                  <pointsize>14</pointsize>
+                  <bold>true</bold>
+                 </font>
+                </property>
+                <property name="text">
+                 <string>Hidden Gems — Top Rated &amp; Unwatched</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <spacer name="authorsSpacer">
+             <property name="orientation">
+              <enum>Qt::Orientation::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
      <widget class="QWidget" name="chartsTab">
       <attribute name="title">
        <string>Charts</string>
@@ -284,6 +613,11 @@
               </item>
               <item>
                <widget class="QComboBox" name="dateRangeCombo">
+                <item>
+                 <property name="text">
+                  <string>Today</string>
+                 </property>
+                </item>
                 <item>
                  <property name="text">
                   <string>Last 7 days</string>

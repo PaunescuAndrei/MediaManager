@@ -25,8 +25,9 @@ sqliteDB::sqliteDB(QString location, std::string conname) {
     }
 
     this->enableForeignKeys();
-    //QSqlQuery query = QSqlQuery("PRAGMA journal_mode = WAL;", this->db);
-    //query.exec();
+    // WAL mode disabled — needs proper checkpointing and -wal/-shm cleanup before enabling
+    //QSqlQuery walQuery = QSqlQuery(QStringLiteral("PRAGMA journal_mode = WAL;"), this->db);
+    //walQuery.exec();
     this->createTables();
 }
 
@@ -1344,6 +1345,233 @@ QVector<QPair<int, int>> sqliteDB::getDayOfWeekCount(int days)
         results.append({query.value(0).toInt(), query.value(1).toInt()});
     }
     return results;
+}
+
+WatchStreak sqliteDB::getWatchStreak()
+{
+    WatchStreak streak;
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT DISTINCT date(session_start) as day "
+        "FROM watch_history "
+        "WHERE completed = 1 "
+        "ORDER BY day DESC"));
+    if (!query.exec()) return streak;
+
+    QList<QDate> dates;
+    while (query.next()) {
+        dates.append(QDate::fromString(query.value(0).toString(), "yyyy-MM-dd"));
+    }
+
+    if (dates.isEmpty()) return streak;
+
+    // Current streak: consecutive days from today (or yesterday) going backwards
+    QDate today = QDate::currentDate();
+    QDate checkDate = dates.first();
+    int currentStreak = 0;
+    if (checkDate == today) {
+        currentStreak = 1;
+        for (int i = 1; i < dates.size(); i++) {
+            if (dates[i] == dates[i - 1].addDays(-1)) {
+                currentStreak++;
+            } else {
+                break;
+            }
+        }
+    }
+    // If no watch today, streak may have ended yesterday — check
+    if (currentStreak == 0 && !dates.isEmpty() && dates.first() == today.addDays(-1)) {
+        currentStreak = 1;
+        for (int i = 1; i < dates.size(); i++) {
+            if (dates[i] == dates[i - 1].addDays(-1)) {
+                currentStreak++;
+            } else {
+                break;
+            }
+        }
+    }
+
+    // Longest streak: find the longest consecutive run
+    int longestStreak = 1;
+    int runLength = 1;
+    int runStartIdx = 0;
+    int bestStartIdx = 0;
+    int bestEndIdx = 0;
+    for (int i = 1; i < dates.size(); i++) {
+        if (dates[i] == dates[i - 1].addDays(-1)) {
+            runLength++;
+        } else {
+            if (runLength > longestStreak) {
+                longestStreak = runLength;
+                bestStartIdx = runStartIdx;
+                bestEndIdx = i - 1;
+            }
+            runLength = 1;
+            runStartIdx = i;
+        }
+    }
+    if (runLength > longestStreak) {
+        longestStreak = runLength;
+        bestStartIdx = runStartIdx;
+        bestEndIdx = dates.size() - 1;
+    }
+
+    streak.currentStreak = currentStreak;
+    streak.longestStreak = longestStreak;
+
+    // Last watched date is the most recent date in the list
+    streak.lastWatchedDate = dates.first();
+
+    // Compute streak start date
+    if (currentStreak > 0) {
+        // The streak end is the most recent date in the current run
+        QDate streakEnd = dates.first();
+        // Streak start = streakEnd minus (currentStreak - 1) days
+        streak.streakStartDate = streakEnd.addDays(-(currentStreak - 1));
+    }
+
+    // Longest streak date range (dates are descending: bestStartIdx = newest, bestEndIdx = oldest)
+    if (longestStreak > 0 && bestEndIdx >= bestStartIdx && bestEndIdx < dates.size()) {
+        streak.longestStreakEndDate = dates[bestStartIdx];     // chronologically latest
+        streak.longestStreakStartDate = dates[bestEndIdx];      // chronologically earliest
+    }
+
+    return streak;
+}
+
+QVector<QPair<QString, int>> sqliteDB::getTopAuthors(int limit, const QString& category)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    if (category == "ALL") {
+        query.prepare(QStringLiteral(
+            "SELECT author, SUM(views) as total_views FROM videodetails "
+            "WHERE author != '' AND views > 0 "
+            "GROUP BY author ORDER BY total_views DESC LIMIT ?"));
+    } else {
+        query.prepare(QStringLiteral(
+            "SELECT author, SUM(views) as total_views FROM videodetails "
+            "WHERE category = ? AND author != '' AND views > 0 "
+            "GROUP BY author ORDER BY total_views DESC LIMIT ?"));
+        query.addBindValue(category);
+    }
+    query.addBindValue(limit);
+    QVector<QPair<QString, int>> results;
+    if (!query.exec()) return results;
+    while (query.next()) {
+        results.append({query.value(0).toString(), query.value(1).toInt()});
+    }
+    return results;
+}
+
+QVector<QPair<QString, double>> sqliteDB::getTopAuthorsByRating(int limit, const QString& category)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    if (category == "ALL") {
+        query.prepare(QStringLiteral(
+            "SELECT author, AVG(NULLIF(rating, 0)) as avg_rating FROM videodetails "
+            "WHERE author != '' AND rating > 0 "
+            "GROUP BY author HAVING COUNT(*) >= 3 "
+            "ORDER BY avg_rating DESC LIMIT ?"));
+    } else {
+        query.prepare(QStringLiteral(
+            "SELECT author, AVG(NULLIF(rating, 0)) as avg_rating FROM videodetails "
+            "WHERE category = ? AND author != '' AND rating > 0 "
+            "GROUP BY author HAVING COUNT(*) >= 3 "
+            "ORDER BY avg_rating DESC LIMIT ?"));
+        query.addBindValue(category);
+    }
+    query.addBindValue(limit);
+    QVector<QPair<QString, double>> results;
+    if (!query.exec()) return results;
+    while (query.next()) {
+        results.append({query.value(0).toString(), query.value(1).toDouble()});
+    }
+    return results;
+}
+
+QVector<QPair<QString, double>> sqliteDB::getAuthorCompletion(const QString& category)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    if (category == "ALL") {
+        query.prepare(QStringLiteral(
+            "SELECT author, "
+            "CAST(SUM(CASE WHEN views > 0 THEN 1 ELSE 0 END) AS REAL) / COUNT(*) * 100.0 as completion_pct "
+            "FROM videodetails WHERE author != '' "
+            "GROUP BY author HAVING COUNT(*) >= 3 "
+            "ORDER BY completion_pct ASC"));
+    } else {
+        query.prepare(QStringLiteral(
+            "SELECT author, "
+            "CAST(SUM(CASE WHEN views > 0 THEN 1 ELSE 0 END) AS REAL) / COUNT(*) * 100.0 as completion_pct "
+            "FROM videodetails WHERE category = ? AND author != '' "
+            "GROUP BY author HAVING COUNT(*) >= 3 "
+            "ORDER BY completion_pct ASC"));
+        query.addBindValue(category);
+    }
+    QVector<QPair<QString, double>> results;
+    if (!query.exec()) return results;
+    while (query.next()) {
+        results.append({query.value(0).toString(), query.value(1).toDouble()});
+    }
+    return results;
+}
+
+QVector<sqliteDB::TopRatedUnwatched> sqliteDB::getTopRatedUnwatched(int limit, const QString& category)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    if (category == "ALL") {
+        query.prepare(QStringLiteral(
+            "SELECT author, COUNT(*) as cnt, AVG(rating) as avg_r "
+            "FROM videodetails "
+            "WHERE rating > 0 AND views = 0 AND author != '' "
+            "GROUP BY author "
+            "HAVING AVG(rating) >= 2.0 "
+            "ORDER BY avg_r DESC LIMIT ?"));
+    } else {
+        query.prepare(QStringLiteral(
+            "SELECT author, COUNT(*) as cnt, AVG(rating) as avg_r "
+            "FROM videodetails "
+            "WHERE category = ? AND rating > 0 AND views = 0 AND author != '' "
+            "GROUP BY author "
+            "HAVING AVG(rating) >= 2.0 "
+            "ORDER BY avg_r DESC LIMIT ?"));
+        query.addBindValue(category);
+    }
+    query.addBindValue(limit);
+    QVector<TopRatedUnwatched> results;
+    if (!query.exec()) return results;
+    while (query.next()) {
+        TopRatedUnwatched item;
+        item.author = query.value(0).toString();
+        item.count = query.value(1).toInt();
+        item.avgRating = query.value(2).toDouble();
+        results.append(item);
+    }
+    return results;
+}
+
+
+int sqliteDB::getTotalWatchDays()
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT COUNT(DISTINCT date(session_start)) FROM watch_history WHERE completed = 1"));
+    if (!query.exec()) return 0;
+    if (query.first())
+        return query.value(0).toInt();
+    return 0;
+}
+
+QDateTime sqliteDB::getFirstWatchDate()
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT MIN(session_start) FROM watch_history"));
+    if (!query.exec()) return {};
+    if (query.first()) {
+        return QDateTime::fromString(query.value(0).toString(), "yyyy-MM-dd HH:mm:ss");
+    }
+    return {};
 }
 
 void sqliteDB::createTables() {

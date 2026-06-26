@@ -880,12 +880,16 @@ void StatsDialog::updateDailyBars()
     auto* set = new QBarSet("Data");
     set->setColor(palette().color(QPalette::Highlight));
 
+    // Pick date format based on range
+    QString dateFormat = days <= 14 ? QStringLiteral("dd")
+                       : QStringLiteral("MM-dd");
+
     if (showCounts()) {
         auto data = m_app->db->getDailyWatchedCount(days);
         for (const auto& pair : data) {
             *set << pair.second;
             if (pair.second > maxVal) maxVal = pair.second;
-            categories << (days <= 14 ? pair.first.toString("dd") : pair.first.toString("MM-dd"));
+            categories << pair.first.toString(dateFormat);
         }
         m_dailyChart->setTitle("Daily Videos Watched");
         m_dailyAxisY->setTitleText("Videos");
@@ -900,7 +904,7 @@ void StatsDialog::updateDailyBars()
         maxVal /= divisor;
         for (const auto& pair : data) {
             *set << pair.second / divisor;
-            categories << (days <= 14 ? pair.first.toString("dd") : pair.first.toString("MM-dd"));
+            categories << pair.first.toString(dateFormat);
         }
         m_dailyChart->setTitle("Daily Watched Time");
         m_dailyAxisY->setTitleText(unit);
@@ -920,7 +924,10 @@ void StatsDialog::updateDailyBars()
 
     m_dailyAxisX->clear();
     m_dailyAxisX->append(categories);
-    m_dailyAxisX->setLabelsAngle(days > 30 ? -90 : 0);
+    m_dailyAxisX->setLabelsAngle(days > 14 ? -90 : 0);
+
+    // Give each bar enough width so all date labels are readable; horizontal scrollbar appears when needed
+    m_dailyChartView->setMinimumWidth(categories.size() * 24);
 
     m_dailyAxisY->setRange(0, maxVal * 1.15);
 }

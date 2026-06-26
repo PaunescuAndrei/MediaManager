@@ -6,7 +6,7 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>800</width>
+    <width>900</width>
     <height>1071</height>
    </rect>
   </property>
@@ -61,7 +61,7 @@
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>794</width>
+            <width>894</width>
             <height>1039</height>
            </rect>
           </property>
@@ -226,8 +226,8 @@
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>794</width>
-            <height>800</height>
+            <width>894</width>
+            <height>1039</height>
            </rect>
           </property>
           <layout class="QVBoxLayout" name="streaksMainLayout">
@@ -341,8 +341,8 @@
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>794</width>
-            <height>800</height>
+            <width>894</width>
+            <height>1039</height>
            </rect>
           </property>
           <layout class="QVBoxLayout" name="authorsMainLayout">
@@ -400,13 +400,19 @@
               <item>
                <widget class="QComboBox" name="authorsCategoryCombo">
                 <item>
-                 <property name="text"><string>ALL</string></property>
+                 <property name="text">
+                  <string>ALL</string>
+                 </property>
                 </item>
                 <item>
-                 <property name="text"><string>PLUS</string></property>
+                 <property name="text">
+                  <string>PLUS</string>
+                 </property>
                 </item>
                 <item>
-                 <property name="text"><string>MINUS</string></property>
+                 <property name="text">
+                  <string>MINUS</string>
+                 </property>
                 </item>
                </widget>
               </item>
@@ -555,7 +561,7 @@
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>794</width>
+            <width>894</width>
             <height>1039</height>
            </rect>
           </property>

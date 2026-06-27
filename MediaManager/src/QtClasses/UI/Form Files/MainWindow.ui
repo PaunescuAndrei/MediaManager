@@ -111,6 +111,9 @@
              </property>
              <item>
               <widget class="ProgressBarQLabel" name="totalListLabel">
+               <property name="toolTip">
+                <string>Videos shown / total in database. Click to switch between MINUS and PLUS categories</string>
+               </property>
                <property name="minimumSize">
                 <size>
                  <width>45</width>
@@ -162,6 +165,9 @@
                       <pointsize>10</pointsize>
                      </font>
                     </property>
+                    <property name="toolTip">
+                     <string>Left-click: Open the selected video in the media player | Right-click: Open empty player for external files</string>
+                    </property>
                     <property name="text">
                      <string>Watch</string>
                     </property>
@@ -173,6 +179,14 @@
                      <font>
                       <pointsize>10</pointsize>
                      </font>
+                    </property>
+                    <property name="toolTip">
+                     <string>Left-click: Next video in the current mode
+Middle-click: Skip without updating counters
+Right-click: Cycle between modes
+  Sequential — next video in list order
+  Random (R) — random video using weighted selection
+  SeriesRandom (SR) — next unwatched by the same author; if series is complete, random video from a different author</string>
                     </property>
                     <property name="text">
                      <string>Next</string>
@@ -186,6 +200,14 @@
                       <pointsize>10</pointsize>
                      </font>
                     </property>
+                    <property name="toolTip">
+                     <string>Left-click: Play a random video in the current mode
+Middle-click: Open the filter dialog
+Right-click: Cycle between modes
+  Normal — random from all videos, respecting default filters
+  Filtered (F) — random using active Filter Dialog settings
+  All — random from all videos, ignoring defaults</string>
+                    </property>
                     <property name="text">
                      <string>Get Random</string>
                     </property>
@@ -197,6 +219,9 @@
                      <font>
                       <pointsize>10</pointsize>
                      </font>
+                    </property>
+                    <property name="toolTip">
+                     <string>Add new video files or folders to the database</string>
                     </property>
                     <property name="text">
                      <string>Insert</string>
@@ -210,6 +235,9 @@
                       <pointsize>10</pointsize>
                      </font>
                     </property>
+                    <property name="toolTip">
+                     <string>Open the global tags editor to manage all available tags</string>
+                    </property>
                     <property name="text">
                      <string>Tags</string>
                     </property>
@@ -221,6 +249,9 @@
                      <font>
                       <pointsize>10</pointsize>
                      </font>
+                    </property>
+                    <property name="toolTip">
+                     <string>Left-click: Open application settings | Right-click: Open statistics</string>
                     </property>
                     <property name="text">
                      <string>Settings</string>
@@ -241,7 +272,7 @@
                      </font>
                     </property>
                     <property name="toolTip">
-                     <string>Update Watched to &quot;Yes&quot;</string>
+                     <string>When checked, pressing Next automatically marks the current video as watched</string>
                     </property>
                     <property name="text">
                      <string>UW</string>
@@ -258,6 +289,9 @@
                    <widget class="shokoButton" name="shoko_button">
                     <property name="styleSheet">
                      <string notr="true">padding: 0; border: 0; margin:0;</string>
+                    </property>
+                    <property name="toolTip">
+                     <string>Connect to Shoko metadata server</string>
                     </property>
                     <property name="text">
                      <string/>
@@ -353,6 +387,9 @@
                      </property>
                      <item>
                       <widget class="currentVideoQLabel" name="currentVideo">
+                       <property name="toolTip">
+                        <string>Currently selected video name and path</string>
+                       </property>
                        <property name="sizePolicy">
                         <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
                          <horstretch>0</horstretch>
@@ -451,6 +488,9 @@
                         <verstretch>0</verstretch>
                        </sizepolicy>
                       </property>
+                      <property name="toolTip">
+                       <string>Accumulated watch time / time limit. Click to add watched time manually</string>
+                      </property>
                       <property name="minimumSize">
                        <size>
                         <width>130</width>
@@ -526,6 +566,9 @@
              </item>
              <item>
               <widget class="ProgressBarQLabel" name="counterLabel">
+               <property name="toolTip">
+                <string>Special video rotation counter. Click to set, scroll to adjust</string>
+               </property>
                <property name="minimumSize">
                 <size>
                  <width>45</width>
@@ -578,6 +621,9 @@
               </property>
               <item>
                <widget class="QLineEdit" name="searchBar">
+                <property name="toolTip">
+                 <string>Type to filter videos by name, author, or path</string>
+                </property>
                 <property name="clearButtonEnabled">
                  <bool>true</bool>
                 </property>
@@ -585,6 +631,9 @@
               </item>
               <item>
                <widget class="QCheckBox" name="visibleOnlyCheckBox">
+                <property name="toolTip">
+                 <string>When checked, only show videos passing active filters</string>
+                </property>
                 <property name="text">
                  <string>Visible Only</string>
                 </property>
@@ -592,6 +641,9 @@
               </item>
               <item>
                <widget class="QPushButton" name="searchButton">
+                <property name="toolTip">
+                 <string>Apply the current search filter</string>
+                </property>
                 <property name="text">
                  <string>Search</string>
                 </property>

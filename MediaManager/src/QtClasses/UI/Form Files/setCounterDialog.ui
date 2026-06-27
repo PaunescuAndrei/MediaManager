@@ -136,6 +136,9 @@
     <layout class="QHBoxLayout" name="Buttons">
      <item>
       <widget class="QPushButton" name="SetBtn">
+       <property name="toolTip">
+        <string>Set the counter to the specified value</string>
+       </property>
        <property name="text">
         <string>Set</string>
        </property>
@@ -143,6 +146,9 @@
      </item>
      <item>
       <widget class="QPushButton" name="Addbtn">
+       <property name="toolTip">
+        <string>Increase the counter by the specified value</string>
+       </property>
        <property name="text">
         <string>Add</string>
        </property>
@@ -150,6 +156,9 @@
      </item>
      <item>
       <widget class="QPushButton" name="SubstractBtn">
+       <property name="toolTip">
+        <string>Decrease the counter by the specified value</string>
+       </property>
        <property name="text">
         <string>Substract</string>
        </property>

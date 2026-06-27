@@ -31,8 +31,6 @@ UpdatePathsDialog::UpdatePathsDialog(QWidget* parent, MainWindow* mainWindow)
     ui.algorithmComboBox->setItemData(1, "Finds best partial string matches", Qt::ToolTipRole);
     ui.algorithmComboBox->setItemData(2, "Matches regardless of word order (recommended)", Qt::ToolTipRole);
     ui.algorithmComboBox->setItemData(3, "Like Token Sort but more lenient", Qt::ToolTipRole);
-    
-    ui.autoMatchButton->setToolTip("Find best matching files using current algorithm");
 
     connect(ui.tableWidget, &QTableWidget::itemDoubleClicked, this, [](QTableWidgetItem* item) {
         QApplication::clipboard()->setText(item->text());

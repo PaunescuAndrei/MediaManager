@@ -52,6 +52,9 @@
          </property>
          <item>
           <widget class="QCheckBox" name="ignore_defaults">
+           <property name="toolTip">
+            <string>When checked, include videos that would otherwise be hidden by default watched/type filters</string>
+           </property>
            <property name="text">
             <string>Ignore Defaults (Watched and Types)</string>
            </property>
@@ -151,6 +154,9 @@
             </item>
             <item>
              <widget class="QCheckBox" name="include_unrated">
+              <property name="toolTip">
+               <string>Include videos that have no rating set</string>
+              </property>
               <property name="text">
                <string>Include Unrated.</string>
               </property>

@@ -404,6 +404,9 @@
               </item>
               <item>
                <widget class="QComboBox" name="authorsCategoryCombo">
+                <property name="toolTip">
+                 <string>Filter authors by database category</string>
+                </property>
                 <item>
                  <property name="text">
                   <string>ALL</string>
@@ -423,6 +426,9 @@
               </item>
               <item>
                <widget class="QPushButton" name="authorsRefreshBtn">
+                <property name="toolTip">
+                 <string>Refresh author and series statistics</string>
+                </property>
                 <property name="text">
                  <string>Refresh</string>
                 </property>
@@ -624,6 +630,9 @@
               </item>
               <item>
                <widget class="QComboBox" name="dateRangeCombo">
+                <property name="toolTip">
+                 <string>Select the date range for chart data</string>
+                </property>
                 <item>
                  <property name="text">
                   <string>Today</string>
@@ -670,6 +679,9 @@
               </item>
               <item>
                <widget class="QComboBox" name="metricCombo">
+                <property name="toolTip">
+                 <string>Choose which metric to display on charts</string>
+                </property>
                 <item>
                  <property name="text">
                   <string>Watched Time</string>
@@ -684,6 +696,9 @@
               </item>
               <item>
                <widget class="QPushButton" name="refreshChartsButton">
+                <property name="toolTip">
+                 <string>Refresh all chart data</string>
+                </property>
                 <property name="text">
                  <string>Refresh</string>
                 </property>

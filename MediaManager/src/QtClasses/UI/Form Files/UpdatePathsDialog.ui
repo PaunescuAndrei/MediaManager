@@ -50,6 +50,9 @@
       </item>
       <item>
        <widget class="QPushButton" name="autoMatchButton">
+        <property name="toolTip">
+         <string>Find best matching files using the current algorithm</string>
+        </property>
         <property name="text">
          <string>Find Best Matches</string>
         </property>
@@ -57,6 +60,9 @@
       </item>
       <item>
        <widget class="QCheckBox" name="autoMatchOnChangeCheckBox">
+        <property name="toolTip">
+         <string>Automatically re-match files when the algorithm is changed</string>
+        </property>
         <property name="text">
          <string>Auto-match on algorithm change</string>
         </property>
@@ -67,6 +73,9 @@
       </item>
       <item>
        <widget class="QCheckBox" name="sortByScoreCheckBox">
+        <property name="toolTip">
+         <string>Sort results by match quality (highest score first)</string>
+        </property>
         <property name="text">
          <string>Sort by match score</string>
         </property>
@@ -77,6 +86,9 @@
       </item>
       <item>
        <widget class="QCheckBox" name="filterVideoCheckBox">
+        <property name="toolTip">
+         <string>Only show recognized video file types in the results</string>
+        </property>
         <property name="text">
          <string>Only show video files</string>
         </property>

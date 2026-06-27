@@ -167,6 +167,9 @@
         </item>
         <item>
          <widget class="QCheckBox" name="showExistingCheckBox">
+          <property name="toolTip">
+           <string>Show files already present in the database alongside new ones</string>
+          </property>
           <property name="text">
            <string>Show existing files</string>
           </property>
@@ -177,6 +180,9 @@
         </item>
         <item>
          <widget class="QCheckBox" name="ResetWatchedCheckBox">
+          <property name="toolTip">
+           <string>Reset watched status to &quot;No&quot; for newly inserted videos</string>
+          </property>
           <property name="text">
            <string>Reset watched status to &quot;No&quot;.</string>
           </property>

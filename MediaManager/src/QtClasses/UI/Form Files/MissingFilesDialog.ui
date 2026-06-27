@@ -32,6 +32,9 @@
     <layout class="QHBoxLayout" name="buttonLayout">
      <item>
       <widget class="QPushButton" name="deleteSelectedBtn">
+       <property name="toolTip">
+        <string>Remove selected entries from the database</string>
+       </property>
        <property name="text">
         <string>Delete Selected from DB</string>
        </property>
@@ -39,6 +42,9 @@
      </item>
      <item>
       <widget class="QPushButton" name="deleteAllBtn">
+       <property name="toolTip">
+        <string>Remove all listed entries from the database</string>
+       </property>
        <property name="text">
         <string>Delete All from DB</string>
        </property>

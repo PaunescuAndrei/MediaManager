@@ -69,6 +69,9 @@
             <property name="text">
              <string>Browse</string>
             </property>
+            <property name="toolTip">
+             <string>Browse for a video file or folder to add</string>
+            </property>
            </widget>
           </item>
          </layout>

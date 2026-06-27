@@ -28,6 +28,9 @@
      </item>
      <item>
       <widget class="QCheckBox" name="checkBox_remember">
+       <property name="toolTip">
+        <string>Remember the last loaded backup across sessions for quick restore</string>
+       </property>
        <property name="text">
         <string>Remember last load</string>
        </property>

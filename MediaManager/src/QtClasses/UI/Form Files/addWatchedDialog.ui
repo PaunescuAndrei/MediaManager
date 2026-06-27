@@ -208,6 +208,9 @@
          <verstretch>0</verstretch>
         </sizepolicy>
        </property>
+       <property name="toolTip">
+        <string>Add the entered time to the watched counter</string>
+       </property>
        <property name="text">
         <string>Add</string>
        </property>

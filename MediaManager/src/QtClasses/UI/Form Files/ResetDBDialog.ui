@@ -66,6 +66,9 @@
           </item>
           <item>
            <widget class="QPushButton" name="BrowseButton">
+            <property name="toolTip">
+             <string>Browse for a folder to add as a database path</string>
+            </property>
             <property name="text">
              <string>Browse</string>
             </property>
@@ -104,6 +107,9 @@
          <verstretch>0</verstretch>
         </sizepolicy>
        </property>
+       <property name="toolTip">
+        <string>Replace the current database path with the entered one</string>
+       </property>
        <property name="text">
         <string>Set</string>
        </property>
@@ -116,6 +122,9 @@
          <horstretch>0</horstretch>
          <verstretch>0</verstretch>
         </sizepolicy>
+       </property>
+       <property name="toolTip">
+        <string>Add the entered path to the database</string>
        </property>
        <property name="text">
         <string>Add</string>

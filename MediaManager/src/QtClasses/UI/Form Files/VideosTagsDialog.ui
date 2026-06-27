@@ -47,6 +47,9 @@
       </item>
       <item>
        <widget class="QPushButton" name="editTagsButton">
+        <property name="toolTip">
+         <string>Open the global tags editor to manage available tags</string>
+        </property>
         <property name="text">
          <string>Edit Tags</string>
         </property>
@@ -157,6 +160,9 @@
          </item>
          <item>
           <widget class="QPushButton" name="InsertButton">
+           <property name="toolTip">
+            <string>Add selected tags to the video</string>
+           </property>
            <property name="text">
             <string>=&gt;</string>
            </property>
@@ -164,6 +170,9 @@
          </item>
          <item>
           <widget class="QPushButton" name="RemoveButton">
+           <property name="toolTip">
+            <string>Remove selected tags from the video</string>
+           </property>
            <property name="text">
             <string>&lt;=</string>
            </property>

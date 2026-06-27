@@ -42,6 +42,9 @@
       </item>
       <item>
        <widget class="QPushButton" name="randomButton">
+        <property name="toolTip">
+         <string>Pick a random video from the choices shown below</string>
+        </property>
         <property name="text">
          <string>Random</string>
         </property>

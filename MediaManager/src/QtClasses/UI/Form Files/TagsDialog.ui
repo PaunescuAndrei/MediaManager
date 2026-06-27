@@ -54,6 +54,9 @@
         <property name="focusPolicy">
          <enum>Qt::FocusPolicy::StrongFocus</enum>
         </property>
+        <property name="toolTip">
+         <string>Higher priority tags sort first in the list (range: -9999 to 9999)</string>
+        </property>
         <property name="minimum">
          <number>-9999</number>
         </property>
@@ -67,6 +70,9 @@
       </item>
       <item>
        <widget class="QPushButton" name="addTagButton">
+        <property name="toolTip">
+         <string>Add a new tag with the specified name and priority</string>
+        </property>
         <property name="text">
          <string>Add Tag</string>
         </property>

@@ -565,6 +565,9 @@
              <verstretch>0</verstretch>
             </sizepolicy>
            </property>
+           <property name="toolTip">
+            <string>Advance to the next video and update counters</string>
+           </property>
            <property name="text">
             <string>Next</string>
            </property>
@@ -575,6 +578,9 @@
          </item>
          <item>
           <widget class="QPushButton" name="skipButton">
+           <property name="toolTip">
+            <string>Skip to the next video without updating counters</string>
+           </property>
            <property name="text">
             <string>Skip</string>
            </property>
@@ -582,6 +588,9 @@
          </item>
          <item>
           <widget class="QPushButton" name="replayButton">
+           <property name="toolTip">
+            <string>Replay the current video from the beginning, updating views and counters</string>
+           </property>
            <property name="text">
             <string>Replay</string>
            </property>
@@ -589,6 +598,9 @@
          </item>
          <item>
           <widget class="QPushButton" name="tagsButton">
+           <property name="toolTip">
+            <string>Edit tags for the current video</string>
+           </property>
            <property name="text">
             <string>Tags</string>
            </property>

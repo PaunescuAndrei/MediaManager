@@ -28,6 +28,9 @@
      </item>
      <item>
       <widget class="QCheckBox" name="checkBox_random">
+       <property name="toolTip">
+        <string>Pick a random video from the selected playlist</string>
+       </property>
        <property name="text">
         <string>Random item from playlist</string>
        </property>

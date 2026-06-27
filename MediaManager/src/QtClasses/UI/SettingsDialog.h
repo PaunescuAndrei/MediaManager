@@ -2,8 +2,13 @@
 #include <QDialog>
 #include "ui_SettingsDialog.h"
 #include "WheelStrongFocusEventFilter.h"
+#include "stylesQt.h"
 
 class MainWindow;
+class QSpinBox;
+class QDoubleSpinBox;
+class QCheckBox;
+class QSlider;
 
 class SettingsDialog :
     public QDialog
@@ -30,10 +35,26 @@ public:
     double old_mascotsChanceSpinBox = 0;
     double old_aicon_fps_modifier = 1.0;
     int old_mascotsFreqSpinBox = 400;
+
     SettingsDialog(QWidget* parent = nullptr);
     ~SettingsDialog();
     Ui::SettingsDialog ui;
-protected:
-    bool eventFilter(QObject* o, QEvent* e) override;
-};
 
+private:
+    // Per-category setup methods
+    void setupGeneralPage(class MainWindow* mw);
+    void setupPlaybackPage(class MainWindow* mw);
+    void setupAppearancePage(class MainWindow* mw);
+    void setupAudioPage(class MainWindow* mw);
+    void setupDatabasePage(class MainWindow* mw);
+    void setupRandomPage(class MainWindow* mw);
+
+    // Helper methods
+    void setupCheckBox(QCheckBox* cb, const QString& configKey, class MainWindow* mw);
+    void bindSliderToSpinBox(QSlider* slider, QDoubleSpinBox* spinbox);
+    void wireApplyEnable();
+    void installWheelFilters(WheelStrongFocusEventFilter* filter);
+
+    template<typename T>
+    void setupSpinStyle(T* sb, const QString& key) { sb->setStyleSheet(get_stylesheet(key)); }
+};

@@ -2838,6 +2838,11 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         config->set("preview_remember_position", rememberPos ? "True" : "False");
         dialog->oldPreviewRememberPosition = rememberPos;
     }
+    bool seededRandom = dialog->ui.previewSeededRandom->isChecked();
+    if (seededRandom != dialog->oldPreviewSeededRandom) {
+        config->set("preview_seeded_random", seededRandom ? "True" : "False");
+        dialog->oldPreviewSeededRandom = seededRandom;
+    }
     if (dialog->ui.previewEnabled->isChecked() != dialog->oldPreviewNextChoicesEnabled) {
         config->set("preview_next_choices_enabled", dialog->ui.previewEnabled->isChecked() ? "True" : "False");
         dialog->oldPreviewNextChoicesEnabled = dialog->ui.previewEnabled->isChecked();

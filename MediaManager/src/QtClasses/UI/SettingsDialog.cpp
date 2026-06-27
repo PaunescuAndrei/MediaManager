@@ -6,662 +6,546 @@
 #include <QPushButton>
 #include <QColorDialog>
 #include "utils.h"
-#include <QTreeWidget>
 #include "stylesQt.h"
-#include <QMap>
 #include <QSpinBox>
 #include <QSignalBlocker>
 #include "flowlayout.h"
 #include <QCheckBox>
+#include <QListWidget>
 
-SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
+// ---------------------------------------------------------------------------
+// Shared style constants
+// ---------------------------------------------------------------------------
+
+static const char* kColorBtnStyle =
+    "background-color: %1; color: %2; border: 1px solid #555; border-radius: 3px;";
+
+// ---------------------------------------------------------------------------
+// Helper methods
+// ---------------------------------------------------------------------------
+
+void SettingsDialog::setupCheckBox(QCheckBox* cb, const QString& configKey, MainWindow* mw)
 {
-	this->ui.setupUi(this);
-	this->setWindowModality(Qt::WindowModal);
-	this->ui.SVspinBox->setStyleSheet(get_stylesheet("spinbox"));
-	this->ui.mascotsChanceSpinBox->setStyleSheet(get_stylesheet("spinbox"));
-	this->ui.volumeSpinBox->setStyleSheet(get_stylesheet("spinbox"));
-	this->ui.mascotsFreqSpinBox->setStyleSheet(get_stylesheet("spinbox"));
-	this->ui.soundEffectsVolume->setStyleSheet(get_stylesheet("spinbox"));
-	this->ui.specialSoundEffectsVolume->setStyleSheet(get_stylesheet("spinbox"));
-	this->ui.soundEffectsChance->setStyleSheet(get_stylesheet("spinbox"));
-    this->ui.soundEffectsChainChance->setStyleSheet(get_stylesheet("spinbox"));
-    this->ui.MinutesSpinBox->setStyleSheet(get_stylesheet("spinbox"));
-    this->ui.SecondsSpinBox->setStyleSheet(get_stylesheet("spinbox"));
-    this->ui.aicon_fps_modifier_spinBox->setStyleSheet(get_stylesheet("doublespinbox"));
-    this->ui.searchTimerInterval->setStyleSheet(get_stylesheet("spinbox"));
-    this->ui.notificationDurationSpinBox->setStyleSheet(get_stylesheet("spinbox"));
-    this->ui.nextMultiChoiceCount->setStyleSheet(get_stylesheet("spinbox"));
-    this->ui.previewMainHistoryCount->setStyleSheet(get_stylesheet("spinbox"));
-    this->ui.previewPopupWidth->setStyleSheet(get_stylesheet("spinbox"));
-    this->ui.previewPopupHeight->setStyleSheet(get_stylesheet("spinbox"));
-    this->ui.previewOverlayScale->setStyleSheet(get_stylesheet("doublespinbox"));
-    this->ui.previewOverlayPadX->setStyleSheet(get_stylesheet("spinbox"));
-    this->ui.previewOverlayPadY->setStyleSheet(get_stylesheet("spinbox"));
-    this->ui.previewOverlayMargin->setStyleSheet(get_stylesheet("spinbox"));
-    this->ui.bpmThreadsSpinBox->setStyleSheet(get_stylesheet("spinbox"));
-    this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(false);
-
-	MainWindow* mw = (MainWindow*)parent;
-	this->ui.plusCatRadioBtn->setText(mw->App->config->get("plus_category_name"));
-	this->ui.minusCatRadioBtn->setText(mw->App->config->get("minus_category_name"));
-	connect(this->ui.resetBtn, &QPushButton::clicked, this, [mw,this] {
-		mw->resetDBDialogButton(this); 
-		QSignalBlocker blocker(this->ui.SVspinBox);
-		this->ui.SVspinBox->setValue(mw->sv_target_count);
-		this->oldSVmax = this->ui.SVspinBox->value();
-		blocker.unblock();
-	});
-	connect(this->ui.loadBtn, &QPushButton::clicked, this, [mw,this] {
-		mw->loadDB(this);
-		QSignalBlocker blocker(this->ui.SVspinBox);
-		this->ui.SVspinBox->setValue(mw->sv_target_count);
-		this->oldSVmax = this->ui.SVspinBox->value();
-		blocker.unblock();
-	});
-	connect(this->ui.backupBtn, &QPushButton::clicked, this, [mw, this] {mw->backupDB(this); });
-	connect(this->ui.resetWatchedButton, &QPushButton::clicked, this, [mw, this] {
-		mw->resetWatchedDB(this); 
-		QSignalBlocker blocker(this->ui.SVspinBox);
-		this->ui.SVspinBox->setValue(mw->sv_target_count);
-		this->oldSVmax = this->ui.SVspinBox->value();
-		blocker.unblock();
-	});
-	connect(this->ui.cleanMissingBtn, &QPushButton::clicked, this, [mw, this] { mw->cleanMissingFilesDialog(this); });
-	connect(this->ui.cacheIconButton, &QPushButton::clicked, this, [mw, this] {mw->animatedIcon->rebuildIconCacheNonBlocking(); });
-	connect(this->ui.cacheBeatsButton, &QPushButton::clicked, this, [mw, this] {mw->App->MascotsAnimation->rebuildBeatsCacheNonBlocking(); });
-	connect(this->ui.cacheThumbsButton, &QPushButton::clicked, this, [mw, this] {mw->thumbnailManager->rebuildThumbnailCache(mw->App->db->db,true); });
-	connect(this->ui.cacheThumbsButton, &customQPushButton::rightClicked, this, [mw, this] {mw->thumbnailManager->rebuildThumbnailCache(mw->App->db->db, false); });
-	if (mw->App->config->get_bool("music_on"))
-		this->ui.musicOnOff->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.musicOnOff->setCheckState(Qt::CheckState::Unchecked);
-	this->ui.volumeSpinBox->setValue(mw->App->config->get("music_volume").toInt());
-	this->oldVolume = this->ui.volumeSpinBox->value();
-	connect(this->ui.volumeSpinBox, &QSpinBox::valueChanged, [mw,this] { if(mw->App->musicPlayer) mw->App->musicPlayer->setVolume(this->ui.volumeSpinBox->value()); });
-	if (mw->App->config->get_bool("music_random_start"))
-		this->ui.musicRandomStart->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.musicRandomStart->setCheckState(Qt::CheckState::Unchecked);
-	if (mw->App->config->get_bool("music_loop_first"))
-		this->ui.musicLoopFirst->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.musicLoopFirst->setCheckState(Qt::CheckState::Unchecked);
-	if (mw->App->config->get_bool("animated_icon_flag"))
-		this->ui.AnimatedIcons->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.AnimatedIcons->setCheckState(Qt::CheckState::Unchecked);
-	if (mw->App->config->get_bool("random_icon"))
-		this->ui.randomIcon->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.randomIcon->setCheckState(Qt::CheckState::Unchecked);
-	if (mw->App->config->get_bool("default_icon_not_watching"))
-		this->ui.defaultIconNotWatching->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.defaultIconNotWatching->setCheckState(Qt::CheckState::Unchecked);
-	if (mw->App->config->get_bool("mascots"))
-		this->ui.mascotsOnOff->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.mascotsOnOff->setCheckState(Qt::CheckState::Unchecked);
-	if (mw->App->config->get_bool("mascots_allfiles_random"))
-		this->ui.mascotsAllFilesRandom->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.mascotsAllFilesRandom->setCheckState(Qt::CheckState::Unchecked);
-	if (mw->App->config->get_bool("mascots_mirror"))
-		this->ui.mascotsMirror->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.mascotsMirror->setCheckState(Qt::CheckState::Unchecked);
-	if (mw->App->config->get_bool("mascots_animated"))
-		this->ui.mascotsAnimated->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.mascotsAnimated->setCheckState(Qt::CheckState::Unchecked);
-	if (mw->App->config->get_bool("mascots_color_theme"))
-		this->ui.mascotsExtractColor->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.mascotsExtractColor->setCheckState(Qt::CheckState::Unchecked);
-	if (mw->App->config->get_bool("mascots_center_content"))
-		this->ui.mascotsCenterContent->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.mascotsCenterContent->setCheckState(Qt::CheckState::Unchecked);
-	if (mw->App->config->get_bool("mascots_use_seed"))
-		this->ui.mascotsUseSeed->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.mascotsUseSeed->setCheckState(Qt::CheckState::Unchecked);
-	if (mw->App->config->get("current_db") == "MINUS")
-		this->ui.minusCatRadioBtn->setChecked(true);
-	else if(mw->App->config->get("current_db") == "PLUS")
-		this->ui.plusCatRadioBtn->setChecked(true);
-	if (mw->App->config->get_bool("single_instance"))
-		this->ui.singleInstance->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.singleInstance->setCheckState(Qt::CheckState::Unchecked);
-	if (mw->App->config->get_bool("numlock_only_on"))
-		this->ui.numlockOnly->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.numlockOnly->setCheckState(Qt::CheckState::Unchecked);
-
-	if (mw->App->config->get_bool("video_autoplay"))
-		this->ui.videoAutoplay->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.videoAutoplay->setCheckState(Qt::CheckState::Unchecked);
-	if (mw->App->config->get_bool("tooltips_enabled"))
-		this->ui.tooltipsEnabled->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.tooltipsEnabled->setCheckState(Qt::CheckState::Unchecked);
-	this->ui.tooltipDelaySpinBox->setValue(mw->App->config->get("tooltip_delay_ms").toInt());
-	int previewVolume = qBound(0, mw->App->config->get("preview_volume").toInt(), 100);
-	this->ui.previewVolumeSpinBox->setValue(previewVolume);
-	this->oldPreviewVolume = previewVolume;
-    bool previewsEnabled = mw->App->config->get_bool("preview_next_choices_enabled");
-    this->ui.previewEnabled->setCheckState(previewsEnabled ? Qt::CheckState::Checked : Qt::CheckState::Unchecked);
-    this->oldPreviewNextChoicesEnabled = previewsEnabled;
-
-    if (mw->App->config->get_bool("preview_random_start"))
-        this->ui.previewRandomStart->setCheckState(Qt::CheckState::Checked);
+    if (mw->App->config->get_bool(configKey))
+        cb->setCheckState(Qt::CheckState::Checked);
     else
-        this->ui.previewRandomStart->setCheckState(Qt::CheckState::Unchecked);
-    this->oldPreviewRandomStart = this->ui.previewRandomStart->isChecked();
-    if (mw->App->config->get_bool("preview_random_each_hover"))
-        this->ui.previewRandomEachHover->setCheckState(Qt::CheckState::Checked);
+        cb->setCheckState(Qt::CheckState::Unchecked);
+}
+
+void SettingsDialog::bindSliderToSpinBox(QSlider* slider, QDoubleSpinBox* spinbox)
+{
+    connect(slider, &QSlider::valueChanged, this, [spinbox](int value) {
+        spinbox->blockSignals(true);
+        spinbox->setValue(value / 100.0);
+        spinbox->blockSignals(false);
+    });
+    connect(spinbox, &QDoubleSpinBox::valueChanged, this, [slider](double value) {
+        slider->blockSignals(true);
+        slider->setValue(static_cast<int>(value * 100));
+        slider->blockSignals(false);
+    });
+}
+
+static void applyColorBtnStyle(QPushButton* btn, const QColor& c)
+{
+    btn->setStyleSheet(QString(kColorBtnStyle)
+        .arg(c.name())
+        .arg(c.lightnessF() > 0.5 ? "#000" : "#fff"));
+    btn->setText(c.name().toUpper());
+}
+
+void SettingsDialog::wireApplyEnable()
+{
+    QPushButton* applyBtn = this->ui.buttonBox->button(QDialogButtonBox::Apply);
+
+    // Single recursive tree walk — dispatch by concrete type
+    const QList<QWidget*> widgets = this->findChildren<QWidget*>();
+    for (QWidget* w : widgets) {
+        if (auto* sb = qobject_cast<QSpinBox*>(w))
+            connect(sb, &QSpinBox::valueChanged, this, [applyBtn] { applyBtn->setEnabled(true); });
+        else if (auto* dsb = qobject_cast<QDoubleSpinBox*>(w))
+            connect(dsb, &QDoubleSpinBox::valueChanged, this, [applyBtn] { applyBtn->setEnabled(true); });
+        else if (auto* cb = qobject_cast<QCheckBox*>(w))
+            connect(cb, &QCheckBox::checkStateChanged, this, [applyBtn] { applyBtn->setEnabled(true); });
+        else if (auto* rb = qobject_cast<QRadioButton*>(w))
+            connect(rb, &QRadioButton::toggled, this, [applyBtn] { applyBtn->setEnabled(true); });
+        else if (auto* gb = qobject_cast<QGroupBox*>(w))
+            connect(gb, &QGroupBox::toggled, this, [applyBtn] { applyBtn->setEnabled(true); });
+        else if (auto* sl = qobject_cast<QSlider*>(w))
+            connect(sl, &QSlider::valueChanged, this, [applyBtn] { applyBtn->setEnabled(true); });
+        else if (auto* le = qobject_cast<QLineEdit*>(w))
+            connect(le, &QLineEdit::textChanged, this, [applyBtn] { applyBtn->setEnabled(true); });
+    }
+}
+
+void SettingsDialog::installWheelFilters(WheelStrongFocusEventFilter* filter)
+{
+    const QList<QWidget*> widgets = this->findChildren<QWidget*>();
+    for (QWidget* w : widgets) {
+        if (qobject_cast<QSpinBox*>(w) || qobject_cast<QDoubleSpinBox*>(w)
+            || qobject_cast<QSlider*>(w)) {
+            w->installEventFilter(filter);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Per-category page setup
+// ---------------------------------------------------------------------------
+
+void SettingsDialog::setupGeneralPage(MainWindow* mw)
+{
+    Config* config = mw->App->config;
+
+    // --- SV Target Count ---
+    setupSpinStyle(this->ui.SVspinBox, "spinbox");
+    this->ui.SVspinBox->setValue(mw->App->db->getMainInfoValue("sv_target_count", "ALL", "0").toInt());
+    this->oldSVmax = this->ui.SVspinBox->value();
+    connect(this->ui.CalculateSVcountButton, &QPushButton::clicked, this, [mw, this] {
+        int val = mw->calculate_sv_target();
+        this->ui.SVspinBox->setValue(val);
+    });
+
+    // --- Special Video Mode ---
+    QString specialMode = config->get("sv_mode").toUpper();
+    if (specialMode != "PLUS" && specialMode != "MINUS")
+        specialMode = "MINUS";
+    int idx = this->ui.specialSvModeCombo->findText(specialMode, Qt::MatchFixedString);
+    if (idx < 0) idx = 0;
+    this->ui.specialSvModeCombo->setCurrentIndex(idx);
+
+    setupCheckBox(this->ui.svTrackInPlus, "sv_track_in_plus", mw);
+
+    // --- Time Watched Limit ---
+    setupSpinStyle(this->ui.MinutesSpinBox, "spinbox");
+    setupSpinStyle(this->ui.SecondsSpinBox, "spinbox");
+    int timeWatchedLimit = config->get("time_watched_limit").toInt();
+    this->ui.MinutesSpinBox->setValue(timeWatchedLimit / 60);
+    this->ui.SecondsSpinBox->setValue(timeWatchedLimit % 60);
+
+    // --- Search Timer ---
+    setupSpinStyle(this->ui.searchTimerInterval, "spinbox");
+    this->ui.searchTimerInterval->setValue(config->get("search_timer_interval").toInt());
+
+    // --- Notification Duration ---
+    setupSpinStyle(this->ui.notificationDurationSpinBox, "spinbox");
+    this->ui.notificationDurationSpinBox->setValue(config->get("notification_duration_ms").toInt());
+
+    // --- Random Seed ---
+    setupCheckBox(this->ui.seedCheckBox, "random_use_seed", mw);
+    this->ui.seedLineEdit->setText(config->get("random_seed"));
+
+    // --- Auto Continue ---
+    setupCheckBox(this->ui.autoContinue, "auto_continue", mw);
+    setupSpinStyle(this->ui.autoContinueDelay, "spinbox");
+    this->ui.autoContinueDelay->setValue(config->get("auto_continue_delay").toInt());
+
+    // --- Simple checkboxes ---
+    setupCheckBox(this->ui.videoAutoplay, "video_autoplay", mw);
+    setupCheckBox(this->ui.skipAllowedProgress, "skip_progress_enabled", mw);
+    setupCheckBox(this->ui.counterUseActualWatchTime, "counter_use_actual_watch_time", mw);
+    setupCheckBox(this->ui.singleInstance, "single_instance", mw);
+    setupCheckBox(this->ui.numlockOnly, "numlock_only_on", mw);
+
+    // --- Session save interval ---
+    setupSpinStyle(this->ui.sessionSaveIntervalSpinBox, "spinbox");
+    int sessInterval = qBound(0, config->get("session_save_interval_seconds").toInt(),
+                              this->ui.sessionSaveIntervalSpinBox->maximum());
+    this->ui.sessionSaveIntervalSpinBox->setValue(sessInterval);
+
+    setupCheckBox(this->ui.emptyPlayerTracking, "empty_player_tracking", mw);
+
+    // --- Debug Mode ---
+    if (mw->App->debug_mode)
+        this->ui.debugMode->setCheckState(Qt::CheckState::Checked);
     else
-        this->ui.previewRandomEachHover->setCheckState(Qt::CheckState::Unchecked);
-    this->oldPreviewRandomEachHover = this->ui.previewRandomEachHover->isChecked();
-    if (mw->App->config->get_bool("preview_autoplay_all_mute"))
-        this->ui.previewAutoplayAllMute->setCheckState(Qt::CheckState::Checked);
-    else
-        this->ui.previewAutoplayAllMute->setCheckState(Qt::CheckState::Unchecked);
-    this->oldPreviewAutoplayAllMute = this->ui.previewAutoplayAllMute->isChecked();
-    this->ui.previewSeekSeconds->setValue(mw->App->config->get("preview_seek_seconds").toDouble());
-    double overlayScale = qBound(0.1, mw->App->config->get("preview_overlay_scale").toDouble(), 5.0);
-    int overlayPadX = qBound(0, mw->App->config->get("preview_overlay_pad_x").toInt(), this->ui.previewOverlayPadX->maximum());
-    int overlayPadY = qBound(0, mw->App->config->get("preview_overlay_pad_y").toInt(), this->ui.previewOverlayPadY->maximum());
-    int overlayMargin = qBound(0, mw->App->config->get("preview_overlay_margin").toInt(), this->ui.previewOverlayMargin->maximum());
+        this->ui.debugMode->setCheckState(Qt::CheckState::Unchecked);
+
+    // --- Daily Goals ---
+    setupSpinStyle(this->ui.dailyVideoGoalSpinBox, "spinbox");
+    setupSpinStyle(this->ui.dailyTimeGoalSpinBox, "spinbox");
+    int dailyVid = qBound(0, config->get("daily_video_goal").toInt(),
+                          this->ui.dailyVideoGoalSpinBox->maximum());
+    int dailyTime = qBound(0, config->get("daily_time_goal_minutes").toInt(),
+                           this->ui.dailyTimeGoalSpinBox->maximum());
+    this->ui.dailyVideoGoalSpinBox->setValue(dailyVid);
+    this->ui.dailyTimeGoalSpinBox->setValue(dailyTime);
+
+    // --- Tooltip Settings ---
+    setupCheckBox(this->ui.tooltipsEnabled, "tooltips_enabled", mw);
+    setupSpinStyle(this->ui.tooltipDelaySpinBox, "spinbox");
+    this->ui.tooltipDelaySpinBox->setValue(config->get("tooltip_delay_ms").toInt());
+}
+
+void SettingsDialog::setupPlaybackPage(MainWindow* mw)
+{
+    Config* config = mw->App->config;
+
+    // --- Next Choice ---
+    setupCheckBox(this->ui.nextMultiChoiceEnabled, "next_multichoice_enabled", mw);
+    setupSpinStyle(this->ui.nextMultiChoiceCount, "spinbox");
+    int nextChoices = config->get("next_multichoice_count").toInt();
+    if (nextChoices < this->ui.nextMultiChoiceCount->minimum())
+        nextChoices = this->ui.nextMultiChoiceCount->minimum();
+    this->ui.nextMultiChoiceCount->setValue(nextChoices);
+    this->ui.nextMultiChoiceCount->setEnabled(this->ui.nextMultiChoiceEnabled->isChecked());
+    connect(this->ui.nextMultiChoiceEnabled, &QCheckBox::toggled, this, [this](bool checked) {
+        this->ui.nextMultiChoiceCount->setEnabled(checked);
+    });
+
+    setupCheckBox(this->ui.nextMultiChoiceAppendOnRefresh, "next_multichoice_append_on_refresh", mw);
+
+    // --- Rarity Tiers ---
+    setupCheckBox(this->ui.rarityEnabled, "rarity_enabled", mw);
+    setupSpinStyle(this->ui.raritySsrPct, "spinbox");
+    setupSpinStyle(this->ui.raritySrPct, "spinbox");
+    setupSpinStyle(this->ui.rarityRPct, "spinbox");
+    this->ui.raritySsrPct->setValue(config->get("rarity_ssr_pct").toInt());
+    this->ui.raritySrPct->setValue(config->get("rarity_sr_pct").toInt());
+    this->ui.rarityRPct->setValue(config->get("rarity_r_pct").toInt());
+
+    auto setupColorButton = [mw](QPushButton* btn, const QString& configKey) {
+        applyColorBtnStyle(btn, QColor(mw->App->config->get(configKey)));
+    };
+    setupColorButton(this->ui.raritySsrColorBtn, "rarity_ssr_color");
+    setupColorButton(this->ui.raritySrColorBtn, "rarity_sr_color");
+    setupColorButton(this->ui.rarityRColorBtn, "rarity_r_color");
+
+    auto setRarityWidgetsEnabled = [this](bool enabled) {
+        this->ui.raritySsrPct->setEnabled(enabled);
+        this->ui.raritySrPct->setEnabled(enabled);
+        this->ui.rarityRPct->setEnabled(enabled);
+        this->ui.raritySsrColorBtn->setEnabled(enabled);
+        this->ui.raritySrColorBtn->setEnabled(enabled);
+        this->ui.rarityRColorBtn->setEnabled(enabled);
+    };
+    setRarityWidgetsEnabled(this->ui.rarityEnabled->isChecked());
+    connect(this->ui.rarityEnabled, &QCheckBox::toggled, this, setRarityWidgetsEnabled);
+
+    auto connectColorButton = [this](QPushButton* btn) {
+        connect(btn, &QPushButton::clicked, this, [this, btn] {
+            QColor current(btn->text());
+            QColor chosen = QColorDialog::getColor(current, this, "Choose Color");
+            if (chosen.isValid())
+                applyColorBtnStyle(btn, chosen);
+        });
+    };
+    connectColorButton(this->ui.raritySsrColorBtn);
+    connectColorButton(this->ui.raritySrColorBtn);
+    connectColorButton(this->ui.rarityRColorBtn);
+
+    // --- Video Preview: General ---
+    setupSpinStyle(this->ui.previewVolumeSpinBox, "spinbox");
+    int previewVol = qBound(0, config->get("preview_volume").toInt(), 100);
+    this->ui.previewVolumeSpinBox->setValue(previewVol);
+    this->oldPreviewVolume = previewVol;
+
+    setupSpinStyle(this->ui.previewSeekSeconds, "doublespinbox");
+    this->ui.previewSeekSeconds->setValue(config->get("preview_seek_seconds").toDouble());
+
+    setupSpinStyle(this->ui.previewOverlayScale, "doublespinbox");
+    setupSpinStyle(this->ui.previewOverlayPadX, "spinbox");
+    setupSpinStyle(this->ui.previewOverlayPadY, "spinbox");
+    setupSpinStyle(this->ui.previewOverlayMargin, "spinbox");
+    double overlayScale = qBound(0.1, config->get("preview_overlay_scale").toDouble(), 5.0);
+    int padX = qBound(0, config->get("preview_overlay_pad_x").toInt(), this->ui.previewOverlayPadX->maximum());
+    int padY = qBound(0, config->get("preview_overlay_pad_y").toInt(), this->ui.previewOverlayPadY->maximum());
+    int margin = qBound(0, config->get("preview_overlay_margin").toInt(), this->ui.previewOverlayMargin->maximum());
     this->ui.previewOverlayScale->setValue(overlayScale);
-    this->ui.previewOverlayPadX->setValue(overlayPadX);
-    this->ui.previewOverlayPadY->setValue(overlayPadY);
-    this->ui.previewOverlayMargin->setValue(overlayMargin);
+    this->ui.previewOverlayPadX->setValue(padX);
+    this->ui.previewOverlayPadY->setValue(padY);
+    this->ui.previewOverlayMargin->setValue(margin);
     this->oldPreviewOverlayScale = overlayScale;
-    this->oldPreviewOverlayPadX = overlayPadX;
-    this->oldPreviewOverlayPadY = overlayPadY;
-    this->oldPreviewOverlayMargin = overlayMargin;
-    if (mw->App->config->get_bool("preview_seeded_random"))
-        this->ui.previewSeededRandom->setCheckState(Qt::CheckState::Checked);
-    else
-        this->ui.previewSeededRandom->setCheckState(Qt::CheckState::Unchecked);
+    this->oldPreviewOverlayPadX = padX;
+    this->oldPreviewOverlayPadY = padY;
+    this->oldPreviewOverlayMargin = margin;
+
+    setupCheckBox(this->ui.previewRandomStart, "preview_random_start", mw);
+    this->oldPreviewRandomStart = this->ui.previewRandomStart->isChecked();
+    setupCheckBox(this->ui.previewSeededRandom, "preview_seeded_random", mw);
     this->oldPreviewSeededRandom = this->ui.previewSeededRandom->isChecked();
-    if (mw->App->config->get_bool("preview_remember_position"))
-        this->ui.previewRememberPosition->setCheckState(Qt::CheckState::Checked);
-    else
-        this->ui.previewRememberPosition->setCheckState(Qt::CheckState::Unchecked);
+    setupCheckBox(this->ui.previewRememberPosition, "preview_remember_position", mw);
     this->oldPreviewRememberPosition = this->ui.previewRememberPosition->isChecked();
-    bool previewMainEnabled = mw->App->config->get_bool("preview_main_enabled");
-    this->ui.previewMainEnabled->setCheckState(previewMainEnabled ? Qt::CheckState::Checked : Qt::CheckState::Unchecked);
-    this->oldPreviewMainEnabled = previewMainEnabled;
-    int previewHistory = qBound(this->ui.previewMainHistoryCount->minimum(), mw->App->config->get("preview_main_history_count").toInt(), this->ui.previewMainHistoryCount->maximum());
-    this->ui.previewMainHistoryCount->setValue(previewHistory);
-    this->oldPreviewMainHistoryCount = previewHistory;
-    int popupW = qBound(this->ui.previewPopupWidth->minimum(), mw->App->config->get("preview_main_width").toInt(), this->ui.previewPopupWidth->maximum());
-    int popupH = qBound(this->ui.previewPopupHeight->minimum(), mw->App->config->get("preview_main_height").toInt(), this->ui.previewPopupHeight->maximum());
+
+    // --- Video Preview: Main list ---
+    bool previewMain = config->get_bool("preview_main_enabled");
+    this->ui.previewMainEnabled->setCheckState(previewMain ? Qt::CheckState::Checked : Qt::CheckState::Unchecked);
+    this->oldPreviewMainEnabled = previewMain;
+
+    setupSpinStyle(this->ui.previewPopupWidth, "spinbox");
+    setupSpinStyle(this->ui.previewPopupHeight, "spinbox");
+    int popupW = qBound(this->ui.previewPopupWidth->minimum(), config->get("preview_main_width").toInt(),
+                        this->ui.previewPopupWidth->maximum());
+    int popupH = qBound(this->ui.previewPopupHeight->minimum(), config->get("preview_main_height").toInt(),
+                        this->ui.previewPopupHeight->maximum());
     this->ui.previewPopupWidth->setValue(popupW);
     this->ui.previewPopupHeight->setValue(popupH);
     this->oldPreviewPopupWidth = popupW;
     this->oldPreviewPopupHeight = popupH;
-    // Allow hover-random and remember position to be toggled independently; their interaction is handled in each preview context.
-	if (mw->App->config->get_bool("auto_continue"))
-		this->ui.autoContinue->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.autoContinue->setCheckState(Qt::CheckState::Unchecked);
 
-	this->ui.autoContinueDelay->setValue(mw->App->config->get("auto_continue_delay").toInt());
-	if (mw->App->config->get_bool("next_multichoice_enabled"))
-		this->ui.nextMultiChoiceEnabled->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.nextMultiChoiceEnabled->setCheckState(Qt::CheckState::Unchecked);
-	int nextChoices = mw->App->config->get("next_multichoice_count").toInt();
-	if (nextChoices < this->ui.nextMultiChoiceCount->minimum())
-		nextChoices = this->ui.nextMultiChoiceCount->minimum();
-	this->ui.nextMultiChoiceCount->setValue(nextChoices);
-	this->ui.nextMultiChoiceCount->setEnabled(this->ui.nextMultiChoiceEnabled->isChecked());
-	connect(this->ui.nextMultiChoiceEnabled, &QCheckBox::toggled, this, [this](bool checked) {
-		this->ui.nextMultiChoiceCount->setEnabled(checked);
-	});
+    setupSpinStyle(this->ui.previewMainHistoryCount, "spinbox");
+    int histCount = qBound(this->ui.previewMainHistoryCount->minimum(),
+                           config->get("preview_main_history_count").toInt(),
+                           this->ui.previewMainHistoryCount->maximum());
+    this->ui.previewMainHistoryCount->setValue(histCount);
+    this->oldPreviewMainHistoryCount = histCount;
 
-	if (mw->App->config->get_bool("next_multichoice_append_on_refresh"))
-		this->ui.nextMultiChoiceAppendOnRefresh->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.nextMultiChoiceAppendOnRefresh->setCheckState(Qt::CheckState::Unchecked);
+    // --- Video Preview: Next choices dialog ---
+    bool previewsEnabled = config->get_bool("preview_next_choices_enabled");
+    this->ui.previewEnabled->setCheckState(previewsEnabled ? Qt::CheckState::Checked : Qt::CheckState::Unchecked);
+    this->oldPreviewNextChoicesEnabled = previewsEnabled;
 
-	if (mw->App->config->get_bool("rarity_enabled"))
-		this->ui.rarityEnabled->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.rarityEnabled->setCheckState(Qt::CheckState::Unchecked);
-	this->ui.raritySsrPct->setValue(mw->App->config->get("rarity_ssr_pct").toInt());
-	this->ui.raritySrPct->setValue(mw->App->config->get("rarity_sr_pct").toInt());
-	this->ui.rarityRPct->setValue(mw->App->config->get("rarity_r_pct").toInt());
+    setupCheckBox(this->ui.previewAutoplayAllMute, "preview_autoplay_all_mute", mw);
+    this->oldPreviewAutoplayAllMute = this->ui.previewAutoplayAllMute->isChecked();
+    setupCheckBox(this->ui.previewRandomEachHover, "preview_random_each_hover", mw);
+    this->oldPreviewRandomEachHover = this->ui.previewRandomEachHover->isChecked();
+}
 
-	auto setupColorButton = [mw](QPushButton* btn, const QString& configKey) {
-		QColor c(mw->App->config->get(configKey));
-		btn->setStyleSheet(QString("background-color: %1; color: %2; border: 1px solid #555; border-radius: 3px;")
-			.arg(c.name())
-			.arg(c.lightnessF() > 0.5 ? "#000" : "#fff"));
-		btn->setText(c.name().toUpper());
-	};
-	setupColorButton(this->ui.raritySsrColorBtn, "rarity_ssr_color");
-	setupColorButton(this->ui.raritySrColorBtn, "rarity_sr_color");
-	setupColorButton(this->ui.rarityRColorBtn, "rarity_r_color");
+void SettingsDialog::setupAppearancePage(MainWindow* mw)
+{
+    Config* config = mw->App->config;
 
-	auto setRarityWidgetsEnabled = [this](bool enabled) {
-		this->ui.raritySsrPct->setEnabled(enabled);
-		this->ui.raritySrPct->setEnabled(enabled);
-		this->ui.rarityRPct->setEnabled(enabled);
-		this->ui.raritySsrColorBtn->setEnabled(enabled);
-		this->ui.raritySrColorBtn->setEnabled(enabled);
-		this->ui.rarityRColorBtn->setEnabled(enabled);
-	};
-	setRarityWidgetsEnabled(this->ui.rarityEnabled->isChecked());
-	connect(this->ui.rarityEnabled, &QCheckBox::toggled, this, setRarityWidgetsEnabled);
+    // --- Icon Settings ---
+    setupCheckBox(this->ui.AnimatedIcons, "animated_icon_flag", mw);
+    setupCheckBox(this->ui.randomIcon, "random_icon", mw);
+    setupCheckBox(this->ui.defaultIconNotWatching, "default_icon_not_watching", mw);
 
-	auto connectColorButton = [this](QPushButton* btn) {
-		connect(btn, &QPushButton::clicked, this, [this, btn] {
-			QColor current(btn->text());
-			QColor chosen = QColorDialog::getColor(current, this, "Choose Color");
-			if (chosen.isValid()) {
-				btn->setStyleSheet(QString("background-color: %1; color: %2; border: 1px solid #555; border-radius: 3px;")
-					.arg(chosen.name()).arg(chosen.lightnessF() > 0.5 ? "#000" : "#fff"));
-				btn->setText(chosen.name().toUpper());
-			}
-		});
-	};
-	connectColorButton(this->ui.raritySsrColorBtn);
-	connectColorButton(this->ui.raritySrColorBtn);
-	connectColorButton(this->ui.rarityRColorBtn);
+    setupSpinStyle(this->ui.aicon_fps_modifier_spinBox, "doublespinbox");
+    this->ui.aicon_fps_modifier_spinBox->setValue(config->get("animated_icon_fps_modifier").toDouble());
+    this->old_aicon_fps_modifier = this->ui.aicon_fps_modifier_spinBox->value();
+    connect(this->ui.aicon_fps_modifier_spinBox, &QDoubleSpinBox::valueChanged, this, [mw, this] {
+        mw->animatedIcon->fps_modifier = this->ui.aicon_fps_modifier_spinBox->value();
+    });
 
-	this->ui.SVspinBox->setValue(mw->App->db->getMainInfoValue("sv_target_count", "ALL","0").toInt());
-	this->oldSVmax = this->ui.SVspinBox->value();
-	connect(this->ui.CalculateSVcountButton, &QPushButton::clicked, this, [mw, this] {
-		int val = mw->calculate_sv_target(); 
-		this->ui.SVspinBox->setValue(val);
-	});
-	QString specialMode = mw->App->config->get("sv_mode").toUpper();
-	if (specialMode != "PLUS" && specialMode != "MINUS")
-		specialMode = "MINUS";
-	int specialModeIndex = this->ui.specialSvModeCombo->findText(specialMode, Qt::MatchFixedString);
-	if (specialModeIndex < 0)
-		specialModeIndex = 0;
-	this->ui.specialSvModeCombo->setCurrentIndex(specialModeIndex);
-	if (mw->App->config->get_bool("sv_track_in_plus"))
-		this->ui.svTrackInPlus->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.svTrackInPlus->setCheckState(Qt::CheckState::Unchecked);
-	if (mw->App->config->get_bool("mascots_random_change"))
-		this->ui.mascotsRandomChange->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.mascotsRandomChange->setCheckState(Qt::CheckState::Unchecked);
-	this->ui.mascotsChanceSpinBox->setValue(mw->App->config->get("mascots_random_chance").toInt());
-	this->old_mascotsChanceSpinBox = this->ui.mascotsChanceSpinBox->value() / 100.0;
-	connect(this->ui.mascotsChanceSpinBox, &QSpinBox::valueChanged, this, [mw, this] {mw->App->MascotsAnimation->set_random_chance(this->ui.mascotsChanceSpinBox->value()/100.0); });
-	this->ui.mascotsFreqSpinBox->setValue(mw->App->config->get("mascots_frequency").toInt());
-	this->old_mascotsFreqSpinBox = this->ui.mascotsFreqSpinBox->value();
-	connect(this->ui.mascotsFreqSpinBox, &QSpinBox::valueChanged, this, [mw, this] {mw->App->MascotsAnimation->frequency = this->ui.mascotsFreqSpinBox->value(); });
-	
-	if (mw->App->config->get_bool("sound_effects_on"))
-		this->ui.soundEffectsOnOff->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.soundEffectsOnOff->setCheckState(Qt::CheckState::Unchecked);
-	this->ui.soundEffectsVolume->setValue(mw->App->config->get("sound_effects_volume").toInt());
-	if (mw->App->config->get_bool("sound_effects_special_on"))
-		this->ui.specialSoundEffectsOnOff->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.specialSoundEffectsOnOff->setCheckState(Qt::CheckState::Unchecked);
-	this->ui.specialSoundEffectsVolume->setValue(mw->App->config->get("sound_effects_special_volume").toInt());
-	if (mw->App->config->get_bool("sound_effects_exit"))
-		this->ui.soundEffectsExit->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.soundEffectsExit->setCheckState(Qt::CheckState::Unchecked);
-	if (mw->App->config->get_bool("sound_effects_start"))
-		this->ui.soundEffectsStart->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.soundEffectsStart->setCheckState(Qt::CheckState::Unchecked);
-	if (mw->App->config->get_bool("sound_effects_clicks"))
-		this->ui.soundEffectsClicks->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.soundEffectsClicks->setCheckState(Qt::CheckState::Unchecked);
-	if (mw->App->config->get_bool("sound_effects_playpause"))
-		this->ui.soundEffectsPlay->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.soundEffectsPlay->setCheckState(Qt::CheckState::Unchecked);
-	this->ui.soundEffectsChance->setValue(mw->App->config->get("sound_effects_chance_playpause").toInt());
-	if (mw->App->config->get_bool("sound_effects_chain_playpause"))
-		this->ui.soundEffectsChainPlay->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.soundEffectsChainPlay->setCheckState(Qt::CheckState::Unchecked);
-	this->ui.soundEffectsChainChance->setValue(mw->App->config->get("sound_effects_chain_chance").toInt());
+    // --- Mascots Settings ---
+    setupCheckBox(this->ui.mascotsOnOff, "mascots", mw);
+    setupCheckBox(this->ui.mascotsAllFilesRandom, "mascots_allfiles_random", mw);
+    setupCheckBox(this->ui.mascotsMirror, "mascots_mirror", mw);
+    setupCheckBox(this->ui.mascotsAnimated, "mascots_animated", mw);
+    setupCheckBox(this->ui.mascotsExtractColor, "mascots_color_theme", mw);
+    setupCheckBox(this->ui.mascotsCenterContent, "mascots_center_content", mw);
+    setupCheckBox(this->ui.mascotsUseSeed, "mascots_use_seed", mw);
 
-	if(mw->App->debug_mode == true)
-		this->ui.debugMode->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.debugMode->setCheckState(Qt::CheckState::Unchecked);
-	if (mw->App->config->get_bool("skip_progress_enabled"))
-		this->ui.skipAllowedProgress->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.skipAllowedProgress->setCheckState(Qt::CheckState::Unchecked);
-	if (mw->App->config->get_bool("counter_use_actual_watch_time"))
-		this->ui.counterUseActualWatchTime->setCheckState(Qt::CheckState::Checked);
-	else
-		this->ui.counterUseActualWatchTime->setCheckState(Qt::CheckState::Unchecked);
+    setupSpinStyle(this->ui.mascotsFreqSpinBox, "spinbox");
+    this->ui.mascotsFreqSpinBox->setValue(config->get("mascots_frequency").toInt());
+    this->old_mascotsFreqSpinBox = this->ui.mascotsFreqSpinBox->value();
+    connect(this->ui.mascotsFreqSpinBox, &QSpinBox::valueChanged, this, [mw, this] {
+        mw->App->MascotsAnimation->frequency = this->ui.mascotsFreqSpinBox->value();
+    });
 
-	int time_watched_limit = mw->App->config->get("time_watched_limit").toInt();
-	int minutes_limit = time_watched_limit / 60;
-	int seconds_limit = time_watched_limit % 60;
+    setupCheckBox(this->ui.mascotsRandomChange, "mascots_random_change", mw);
+    setupSpinStyle(this->ui.mascotsChanceSpinBox, "spinbox");
+    this->ui.mascotsChanceSpinBox->setValue(config->get("mascots_random_chance").toInt());
+    this->old_mascotsChanceSpinBox = this->ui.mascotsChanceSpinBox->value() / 100.0;
+    connect(this->ui.mascotsChanceSpinBox, &QSpinBox::valueChanged, this, [mw, this] {
+        mw->App->MascotsAnimation->set_random_chance(this->ui.mascotsChanceSpinBox->value() / 100.0);
+    });
+}
 
-	this->ui.MinutesSpinBox->setValue(minutes_limit);
-	this->ui.SecondsSpinBox->setValue(seconds_limit);
+void SettingsDialog::setupAudioPage(MainWindow* mw)
+{
+    Config* config = mw->App->config;
 
-	this->ui.aicon_fps_modifier_spinBox->setValue(mw->App->config->get("animated_icon_fps_modifier").toDouble());
-	this->old_aicon_fps_modifier = this->ui.aicon_fps_modifier_spinBox->value();
-	connect(this->ui.aicon_fps_modifier_spinBox, &QDoubleSpinBox::valueChanged, this, [mw, this] {mw->animatedIcon->fps_modifier = this->ui.aicon_fps_modifier_spinBox->value(); });
+    // --- Music Settings ---
+    setupCheckBox(this->ui.musicOnOff, "music_on", mw);
+    setupSpinStyle(this->ui.volumeSpinBox, "spinbox");
+    this->ui.volumeSpinBox->setValue(config->get("music_volume").toInt());
+    this->oldVolume = this->ui.volumeSpinBox->value();
+    connect(this->ui.volumeSpinBox, &QSpinBox::valueChanged, this, [mw, this] {
+        if (mw->App->musicPlayer)
+            mw->App->musicPlayer->setVolume(this->ui.volumeSpinBox->value());
+    });
 
-    if (mw->App->config->get_bool("random_use_seed"))
-        this->ui.seedCheckBox->setCheckState(Qt::CheckState::Checked);
-    else
-        this->ui.seedCheckBox->setCheckState(Qt::CheckState::Unchecked);
-    this->ui.seedLineEdit->setText(mw->App->config->get("random_seed"));
-    this->ui.searchTimerInterval->setValue(mw->App->config->get("search_timer_interval").toInt());
-    this->ui.notificationDurationSpinBox->setValue(mw->App->config->get("notification_duration_ms").toInt());
-    this->ui.bpmThreadsSpinBox->setValue(mw->App->config->get("bpm_threads").toInt());
-    int sessionSaveInterval = qBound(0, mw->App->config->get("session_save_interval_seconds").toInt(), this->ui.sessionSaveIntervalSpinBox->maximum());
-    this->ui.sessionSaveIntervalSpinBox->setValue(sessionSaveInterval);
-    int dailyVideoGoal = qBound(0, mw->App->config->get("daily_video_goal").toInt(), this->ui.dailyVideoGoalSpinBox->maximum());
-    this->ui.dailyVideoGoalSpinBox->setValue(dailyVideoGoal);
-    int dailyTimeGoal = qBound(0, mw->App->config->get("daily_time_goal_minutes").toInt(), this->ui.dailyTimeGoalSpinBox->maximum());
-    this->ui.dailyTimeGoalSpinBox->setValue(dailyTimeGoal);
-    if (mw->App->config->get_bool("empty_player_tracking"))
-        this->ui.emptyPlayerTracking->setCheckState(Qt::CheckState::Checked);
-    else
-        this->ui.emptyPlayerTracking->setCheckState(Qt::CheckState::Unchecked);
+    setupCheckBox(this->ui.musicRandomStart, "music_random_start", mw);
+    setupCheckBox(this->ui.musicLoopFirst, "music_loop_first", mw);
 
-    // BPM Types FlowLayout
-    FlowLayout* bpmTypesFlowLayout = new FlowLayout;
-    bpmTypesFlowLayout->setContentsMargins(0, 0, 0, 0);
-    QStringList configTypes = mw->App->config->get("bpm_calculation_types").split(',', Qt::SkipEmptyParts);
-    QStringList allVideoTypes = mw->App->config->get("video_types").split(',', Qt::SkipEmptyParts);
-    
+    // --- Sound Effects Settings ---
+    setupCheckBox(this->ui.soundEffectsOnOff, "sound_effects_on", mw);
+    setupSpinStyle(this->ui.soundEffectsVolume, "spinbox");
+    this->ui.soundEffectsVolume->setValue(config->get("sound_effects_volume").toInt());
+
+    setupCheckBox(this->ui.specialSoundEffectsOnOff, "sound_effects_special_on", mw);
+    setupSpinStyle(this->ui.specialSoundEffectsVolume, "spinbox");
+    this->ui.specialSoundEffectsVolume->setValue(config->get("sound_effects_special_volume").toInt());
+
+    setupCheckBox(this->ui.soundEffectsStart, "sound_effects_start", mw);
+    setupCheckBox(this->ui.soundEffectsExit, "sound_effects_exit", mw);
+    setupCheckBox(this->ui.soundEffectsClicks, "sound_effects_clicks", mw);
+
+    setupCheckBox(this->ui.soundEffectsPlay, "sound_effects_playpause", mw);
+    setupSpinStyle(this->ui.soundEffectsChance, "spinbox");
+    this->ui.soundEffectsChance->setValue(config->get("sound_effects_chance_playpause").toInt());
+
+    setupCheckBox(this->ui.soundEffectsChainPlay, "sound_effects_chain_playpause", mw);
+    setupSpinStyle(this->ui.soundEffectsChainChance, "spinbox");
+    this->ui.soundEffectsChainChance->setValue(config->get("sound_effects_chain_chance").toInt());
+}
+
+void SettingsDialog::setupDatabasePage(MainWindow* mw)
+{
+    Config* config = mw->App->config;
+
+    // --- Starting DB Radio Buttons ---
+    this->ui.plusCatRadioBtn->setText(config->get("plus_category_name"));
+    this->ui.minusCatRadioBtn->setText(config->get("minus_category_name"));
+    if (config->get("current_db") == "MINUS")
+        this->ui.minusCatRadioBtn->setChecked(true);
+    else if (config->get("current_db") == "PLUS")
+        this->ui.plusCatRadioBtn->setChecked(true);
+
+    // --- DB Action Buttons ---
+    connect(this->ui.resetBtn, &QPushButton::clicked, this, [mw, this] {
+        mw->resetDBDialogButton(this);
+        QSignalBlocker blocker(this->ui.SVspinBox);
+        this->ui.SVspinBox->setValue(mw->sv_target_count);
+        this->oldSVmax = this->ui.SVspinBox->value();
+    });
+    connect(this->ui.loadBtn, &QPushButton::clicked, this, [mw, this] {
+        mw->loadDB(this);
+        QSignalBlocker blocker(this->ui.SVspinBox);
+        this->ui.SVspinBox->setValue(mw->sv_target_count);
+        this->oldSVmax = this->ui.SVspinBox->value();
+    });
+    connect(this->ui.backupBtn, &QPushButton::clicked, this, [mw, this] { mw->backupDB(this); });
+    connect(this->ui.resetWatchedButton, &QPushButton::clicked, this, [mw, this] {
+        mw->resetWatchedDB(this);
+        QSignalBlocker blocker(this->ui.SVspinBox);
+        this->ui.SVspinBox->setValue(mw->sv_target_count);
+        this->oldSVmax = this->ui.SVspinBox->value();
+    });
+    connect(this->ui.cleanMissingBtn, &QPushButton::clicked, this,
+            [mw, this] { mw->cleanMissingFilesDialog(this); });
+
+    // --- Cache Buttons ---
+    connect(this->ui.cacheIconButton, &QPushButton::clicked, this,
+            [mw] { mw->animatedIcon->rebuildIconCacheNonBlocking(); });
+    connect(this->ui.cacheBeatsButton, &QPushButton::clicked, this,
+            [mw] { mw->App->MascotsAnimation->rebuildBeatsCacheNonBlocking(); });
+    connect(this->ui.cacheThumbsButton, &QPushButton::clicked, this,
+            [mw] { mw->thumbnailManager->rebuildThumbnailCache(mw->App->db->db, true); });
+    connect(this->ui.cacheThumbsButton, &customQPushButton::rightClicked, this,
+            [mw] { mw->thumbnailManager->rebuildThumbnailCache(mw->App->db->db, false); });
+
+    // --- BPM Settings ---
+    setupSpinStyle(this->ui.bpmThreadsSpinBox, "spinbox");
+    this->ui.bpmThreadsSpinBox->setValue(config->get("bpm_threads").toInt());
+
+    // BPM Types FlowLayout (populated programmatically)
+    FlowLayout* bpmFlow = new FlowLayout;
+    bpmFlow->setContentsMargins(0, 0, 0, 0);
+    QStringList configTypes = config->get("bpm_calculation_types").split(',', Qt::SkipEmptyParts);
+    QStringList allVideoTypes = config->get("video_types").split(',', Qt::SkipEmptyParts);
     for (const QString& type : allVideoTypes) {
         if (type.isEmpty()) continue;
         QCheckBox* checkbox = new QCheckBox(type, this);
         checkbox->setProperty("type_name", type);
-        if (configTypes.contains(type)) {
+        if (configTypes.contains(type))
             checkbox->setChecked(true);
-        }
         connect(checkbox, &QCheckBox::checkStateChanged, this, [this] {
-            this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(true); 
+            this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(true);
         });
-        bpmTypesFlowLayout->addWidget(checkbox);
+        bpmFlow->addWidget(checkbox);
     }
-    this->ui.bpmTypesWidget->setLayout(bpmTypesFlowLayout);
-
-    this->ui.weightedRandMinusGroupBox->setTitle(this->ui.weightedRandMinusGroupBox->title().replace("MINUS", mw->App->config->get("minus_category_name"), Qt::CaseSensitive));
-	this->ui.weightedRandPlusGroupBox->setTitle(this->ui.weightedRandPlusGroupBox->title().replace("PLUS", mw->App->config->get("plus_category_name"), Qt::CaseSensitive));
-	WheelStrongFocusEventFilter* filter = new WheelStrongFocusEventFilter(this);
-
-	//MINUS Weighted settings
-	this->ui.weightedRandMinusGroupBox->setChecked(mw->App->config->get_bool("weighted_random_minus"));
-	this->ui.generalBiasMinusSlider->installEventFilter(filter);
-	connect(this->ui.generalBiasMinusSlider, &QSlider::valueChanged, this, [this](int value) {
-		this->ui.generalBiasMinusSpinBox->blockSignals(true);
-		this->ui.generalBiasMinusSpinBox->setValue(value / 100.0);
-		this->ui.generalBiasMinusSpinBox->blockSignals(false);
-	});
-	connect(this->ui.generalBiasMinusSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-		this->ui.generalBiasMinusSlider->blockSignals(true);
-		this->ui.generalBiasMinusSlider->setValue(value * 100);
-		this->ui.generalBiasMinusSlider->blockSignals(false);
-	});
-	this->ui.generalBiasMinusSpinBox->setValue(mw->App->config->get("random_general_bias_minus").toDouble());
-
-	this->ui.viewsBiasMinusSlider->installEventFilter(filter);
-	connect(this->ui.viewsBiasMinusSlider, &QSlider::valueChanged, this, [this](int value) {
-		this->ui.viewsBiasMinusSpinBox->blockSignals(true);
-		this->ui.viewsBiasMinusSpinBox->setValue(value / 100.0);
-		this->ui.viewsBiasMinusSpinBox->blockSignals(false);
-	});
-	connect(this->ui.viewsBiasMinusSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-		this->ui.viewsBiasMinusSlider->blockSignals(true);
-		this->ui.viewsBiasMinusSlider->setValue(value * 100);
-		this->ui.viewsBiasMinusSlider->blockSignals(false);
-	});
-	this->ui.viewsBiasMinusSpinBox->setValue(mw->App->config->get("random_views_bias_minus").toDouble());
-
-	this->ui.ratingBiasMinusSlider->installEventFilter(filter);
-	connect(this->ui.ratingBiasMinusSlider, &QSlider::valueChanged, this, [this](int value) {
-		this->ui.ratingBiasMinusSpinBox->blockSignals(true);
-		this->ui.ratingBiasMinusSpinBox->setValue(value / 100.0);
-		this->ui.ratingBiasMinusSpinBox->blockSignals(false);
-	});
-	connect(this->ui.ratingBiasMinusSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-		this->ui.ratingBiasMinusSlider->blockSignals(true);
-		this->ui.ratingBiasMinusSlider->setValue(value * 100);
-		this->ui.ratingBiasMinusSlider->blockSignals(false);
-	});
-	this->ui.ratingBiasMinusSpinBox->setValue(mw->App->config->get("random_rating_bias_minus").toDouble());
-
-	this->ui.tagsBiasMinusSlider->installEventFilter(filter);
-	connect(this->ui.tagsBiasMinusSlider, &QSlider::valueChanged, this, [this](int value) {
-		this->ui.tagsBiasMinusSpinBox->blockSignals(true);
-		this->ui.tagsBiasMinusSpinBox->setValue(value / 100.0);
-		this->ui.tagsBiasMinusSpinBox->blockSignals(false);
-	});
-	connect(this->ui.tagsBiasMinusSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-		this->ui.tagsBiasMinusSlider->blockSignals(true);
-		this->ui.tagsBiasMinusSlider->setValue(value * 100);
-		this->ui.tagsBiasMinusSlider->blockSignals(false);
-	});
-	this->ui.tagsBiasMinusSpinBox->setValue(mw->App->config->get("random_tags_bias_minus").toDouble());
-
-	this->ui.bpmBiasMinusSlider->installEventFilter(filter);
-	connect(this->ui.bpmBiasMinusSlider, &QSlider::valueChanged, this, [this](int value) {
-		this->ui.bpmBiasMinusSpinBox->blockSignals(true);
-		this->ui.bpmBiasMinusSpinBox->setValue(value / 100.0);
-		this->ui.bpmBiasMinusSpinBox->blockSignals(false);
-	});
-	connect(this->ui.bpmBiasMinusSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-		this->ui.bpmBiasMinusSlider->blockSignals(true);
-		this->ui.bpmBiasMinusSlider->setValue(value * 100);
-		this->ui.bpmBiasMinusSlider->blockSignals(false);
-	});
-	this->ui.bpmBiasMinusSpinBox->setValue(mw->App->config->get("random_bpm_bias_minus").toDouble());
-
-	this->ui.noViewsMinusSlider->installEventFilter(filter);
-	connect(this->ui.noViewsMinusSlider, &QSlider::valueChanged, this, [this](int value) {
-		this->ui.noViewsMinusSpinBox->blockSignals(true);
-		this->ui.noViewsMinusSpinBox->setValue(value / 100.0);
-		this->ui.noViewsMinusSpinBox->blockSignals(false);
-	});
-	connect(this->ui.noViewsMinusSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-		this->ui.noViewsMinusSlider->blockSignals(true);
-		this->ui.noViewsMinusSlider->setValue(value * 100);
-		this->ui.noViewsMinusSlider->blockSignals(false);
-	});
-	this->ui.noViewsMinusSpinBox->setValue(mw->App->config->get("random_no_views_weight_minus").toDouble());
-
-	this->ui.noRatingMinusSlider->installEventFilter(filter);
-	connect(this->ui.noRatingMinusSlider, &QSlider::valueChanged, this, [this](int value) {
-		this->ui.noRatingMinusSpinBox->blockSignals(true);
-		this->ui.noRatingMinusSpinBox->setValue(value / 100.0);
-		this->ui.noRatingMinusSpinBox->blockSignals(false);
-	});
-	connect(this->ui.noRatingMinusSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-		this->ui.noRatingMinusSlider->blockSignals(true);
-		this->ui.noRatingMinusSlider->setValue(value * 100);
-		this->ui.noRatingMinusSlider->blockSignals(false);
-	});
-	this->ui.noRatingMinusSpinBox->setValue(mw->App->config->get("random_no_ratings_weight_minus").toDouble());
-
-	this->ui.noTagsMinusSlider->installEventFilter(filter);
-	connect(this->ui.noTagsMinusSlider, &QSlider::valueChanged, this, [this](int value) {
-		this->ui.noTagsMinusSpinBox->blockSignals(true);
-		this->ui.noTagsMinusSpinBox->setValue(value / 100.0);
-		this->ui.noTagsMinusSpinBox->blockSignals(false);
-	});
-	connect(this->ui.noTagsMinusSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-		this->ui.noTagsMinusSlider->blockSignals(true);
-		this->ui.noTagsMinusSlider->setValue(value * 100);
-		this->ui.noTagsMinusSlider->blockSignals(false);
-	});
-	this->ui.noTagsMinusSpinBox->setValue(mw->App->config->get("random_no_tags_weight_minus").toDouble());
-
-	//PLUS Weighted settings
-	this->ui.weightedRandPlusGroupBox->setChecked(mw->App->config->get_bool("weighted_random_plus"));
-	this->ui.generalBiasPlusSlider->installEventFilter(filter);
-	connect(this->ui.generalBiasPlusSlider, &QSlider::valueChanged, this, [this](int value) {
-		this->ui.generalBiasPlusSpinBox->blockSignals(true);
-		this->ui.generalBiasPlusSpinBox->setValue(value / 100.0);
-		this->ui.generalBiasPlusSpinBox->blockSignals(false);
-	});
-	connect(this->ui.generalBiasPlusSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-		this->ui.generalBiasPlusSlider->blockSignals(true);
-		this->ui.generalBiasPlusSlider->setValue(value * 100);
-		this->ui.generalBiasPlusSlider->blockSignals(false);
-	});
-	this->ui.generalBiasPlusSpinBox->setValue(mw->App->config->get("random_general_bias_plus").toDouble());
-
-	this->ui.viewsBiasPlusSlider->installEventFilter(filter);
-	connect(this->ui.viewsBiasPlusSlider, &QSlider::valueChanged, this, [this](int value) {
-		this->ui.viewsBiasPlusSpinBox->blockSignals(true);
-		this->ui.viewsBiasPlusSpinBox->setValue(value / 100.0);
-		this->ui.viewsBiasPlusSpinBox->blockSignals(false);
-	});
-	connect(this->ui.viewsBiasPlusSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-		this->ui.viewsBiasPlusSlider->blockSignals(true);
-		this->ui.viewsBiasPlusSlider->setValue(value * 100);
-		this->ui.viewsBiasPlusSlider->blockSignals(false);
-	});
-	this->ui.viewsBiasPlusSpinBox->setValue(mw->App->config->get("random_views_bias_plus").toDouble());
-
-	this->ui.ratingBiasPlusSlider->installEventFilter(filter);
-	connect(this->ui.ratingBiasPlusSlider, &QSlider::valueChanged, this, [this](int value) {
-		this->ui.ratingBiasPlusSpinBox->blockSignals(true);
-		this->ui.ratingBiasPlusSpinBox->setValue(value / 100.0);
-		this->ui.ratingBiasPlusSpinBox->blockSignals(false);
-	});
-	connect(this->ui.ratingBiasPlusSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-		this->ui.ratingBiasPlusSlider->blockSignals(true);
-		this->ui.ratingBiasPlusSlider->setValue(value * 100);
-		this->ui.ratingBiasPlusSlider->blockSignals(false);
-	});
-	this->ui.ratingBiasPlusSpinBox->setValue(mw->App->config->get("random_rating_bias_plus").toDouble());
-
-	this->ui.tagsBiasPlusSlider->installEventFilter(filter);
-	connect(this->ui.tagsBiasPlusSlider, &QSlider::valueChanged, this, [this](int value) {
-		this->ui.tagsBiasPlusSpinBox->blockSignals(true);
-		this->ui.tagsBiasPlusSpinBox->setValue(value / 100.0);
-		this->ui.tagsBiasPlusSpinBox->blockSignals(false);
-	});
-	connect(this->ui.tagsBiasPlusSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-		this->ui.tagsBiasPlusSlider->blockSignals(true);
-		this->ui.tagsBiasPlusSlider->setValue(value * 100);
-		this->ui.tagsBiasPlusSlider->blockSignals(false);
-	});
-	this->ui.tagsBiasPlusSpinBox->setValue(mw->App->config->get("random_tags_bias_plus").toDouble());
-
-	this->ui.bpmBiasPlusSlider->installEventFilter(filter);
-	connect(this->ui.bpmBiasPlusSlider, &QSlider::valueChanged, this, [this](int value) {
-		this->ui.bpmBiasPlusSpinBox->blockSignals(true);
-		this->ui.bpmBiasPlusSpinBox->setValue(value / 100.0);
-		this->ui.bpmBiasPlusSpinBox->blockSignals(false);
-	});
-	connect(this->ui.bpmBiasPlusSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-		this->ui.bpmBiasPlusSlider->blockSignals(true);
-		this->ui.bpmBiasPlusSlider->setValue(value * 100);
-		this->ui.bpmBiasPlusSlider->blockSignals(false);
-	});
-	this->ui.bpmBiasPlusSpinBox->setValue(mw->App->config->get("random_bpm_bias_plus").toDouble());
-
-	this->ui.noViewsPlusSlider->installEventFilter(filter);
-	connect(this->ui.noViewsPlusSlider, &QSlider::valueChanged, this, [this](int value) {
-		this->ui.noViewsPlusSpinBox->blockSignals(true);
-		this->ui.noViewsPlusSpinBox->setValue(value / 100.0);
-		this->ui.noViewsPlusSpinBox->blockSignals(false);
-	});
-	connect(this->ui.noViewsPlusSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-		this->ui.noViewsPlusSlider->blockSignals(true);
-		this->ui.noViewsPlusSlider->setValue(value * 100);
-		this->ui.noViewsPlusSlider->blockSignals(false);
-	});
-	this->ui.noViewsPlusSpinBox->setValue(mw->App->config->get("random_no_views_weight_plus").toDouble());
-
-	this->ui.noRatingPlusSlider->installEventFilter(filter);
-	connect(this->ui.noRatingPlusSlider, &QSlider::valueChanged, this, [this](int value) {
-		this->ui.noRatingPlusSpinBox->blockSignals(true);
-		this->ui.noRatingPlusSpinBox->setValue(value / 100.0);
-		this->ui.noRatingPlusSpinBox->blockSignals(false);
-	});
-	connect(this->ui.noRatingPlusSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-		this->ui.noRatingPlusSlider->blockSignals(true);
-		this->ui.noRatingPlusSlider->setValue(value * 100);
-		this->ui.noRatingPlusSlider->blockSignals(false);
-	});
-	this->ui.noRatingPlusSpinBox->setValue(mw->App->config->get("random_no_ratings_weight_plus").toDouble());
-
-	this->ui.noTagsPlusSlider->installEventFilter(filter);
-	connect(this->ui.noTagsPlusSlider, &QSlider::valueChanged, this, [this](int value) {
-		this->ui.noTagsPlusSpinBox->blockSignals(true);
-		this->ui.noTagsPlusSpinBox->setValue(value / 100.0);
-		this->ui.noTagsPlusSpinBox->blockSignals(false);
-	});
-	connect(this->ui.noTagsPlusSpinBox, &QDoubleSpinBox::valueChanged, this, [this](double value) {
-		this->ui.noTagsPlusSlider->blockSignals(true);
-		this->ui.noTagsPlusSlider->setValue(value * 100);
-		this->ui.noTagsPlusSlider->blockSignals(false);
-	});
-	this->ui.noTagsPlusSpinBox->setValue(mw->App->config->get("random_no_tags_weight_plus").toDouble());
-
-	//These need to be at the bottom
-	QList<QSpinBox*> spinboxes = this->findChildren<QSpinBox*>();
-	for (auto spinbox : spinboxes) {
-		spinbox->installEventFilter(filter);
-		connect(spinbox, &QSpinBox::valueChanged, this, [this] {this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(true); });
-	}
-	QList<QDoubleSpinBox*> doublespinboxes = this->findChildren<QDoubleSpinBox*>();
-	for (auto doublespinbox : doublespinboxes) {
-		doublespinbox->installEventFilter(filter);
-		connect(doublespinbox, &QDoubleSpinBox::valueChanged, this, [this] {this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(true); });
-	}
-	QList<QCheckBox*> checkboxes = this->findChildren<QCheckBox*>();
-	for (auto checkbox : checkboxes) {
-		connect(checkbox, &QCheckBox::checkStateChanged, this, [this] {this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(true); });
-	}
-	QList<QRadioButton*> radiobuttons = this->findChildren<QRadioButton*>();
-	for (auto radiobutton : radiobuttons) {
-		connect(radiobutton, &QRadioButton::toggled, this, [this] {this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(true); });
-	}
-	QList<QGroupBox*> groupboxes = this->findChildren<QGroupBox*>();
-	for (auto groupbox : groupboxes) {
-		connect(groupbox, &QGroupBox::toggled, this, [this] {this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(true); });
-	}
-	QList<QSlider*> sliders = this->findChildren<QSlider*>();
-	for (auto slider : sliders) {
-		connect(slider, &QSlider::valueChanged, this, [this] {this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(true); });
-	}
-	QList<QLineEdit*> lineedits = this->findChildren<QLineEdit*>();
-	for (auto lineedit : lineedits) {
-		connect(lineedit, &QLineEdit::textChanged, this, [this] {this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(true); });
-	}
+    this->ui.bpmTypesWidget->setLayout(bpmFlow);
 }
 
-bool SettingsDialog::eventFilter(QObject* o, QEvent* e)
+void SettingsDialog::setupRandomPage(MainWindow* mw)
 {
-	const QWidget* widget = static_cast<QWidget*>(o);
-	if (e->type() == QEvent::Wheel && widget && !widget->hasFocus())  
-	{
-		e->ignore();
-		return true;
-	}
+    Config* config = mw->App->config;
 
-	return QObject::eventFilter(o, e);
+    // --- Dynamic titles ---
+    this->ui.weightedRandMinusGroupBox->setTitle(
+        this->ui.weightedRandMinusGroupBox->title().replace("MINUS",
+            config->get("minus_category_name"), Qt::CaseSensitive));
+    this->ui.weightedRandPlusGroupBox->setTitle(
+        this->ui.weightedRandPlusGroupBox->title().replace("PLUS",
+            config->get("plus_category_name"), Qt::CaseSensitive));
+
+    // --- Weighted Random MINUS ---
+    this->ui.weightedRandMinusGroupBox->setChecked(config->get_bool("weighted_random_minus"));
+
+    bindSliderToSpinBox(this->ui.generalBiasMinusSlider, this->ui.generalBiasMinusSpinBox);
+    this->ui.generalBiasMinusSpinBox->setValue(config->get("random_general_bias_minus").toDouble());
+
+    bindSliderToSpinBox(this->ui.viewsBiasMinusSlider, this->ui.viewsBiasMinusSpinBox);
+    this->ui.viewsBiasMinusSpinBox->setValue(config->get("random_views_bias_minus").toDouble());
+
+    bindSliderToSpinBox(this->ui.ratingBiasMinusSlider, this->ui.ratingBiasMinusSpinBox);
+    this->ui.ratingBiasMinusSpinBox->setValue(config->get("random_rating_bias_minus").toDouble());
+
+    bindSliderToSpinBox(this->ui.tagsBiasMinusSlider, this->ui.tagsBiasMinusSpinBox);
+    this->ui.tagsBiasMinusSpinBox->setValue(config->get("random_tags_bias_minus").toDouble());
+
+    bindSliderToSpinBox(this->ui.bpmBiasMinusSlider, this->ui.bpmBiasMinusSpinBox);
+    this->ui.bpmBiasMinusSpinBox->setValue(config->get("random_bpm_bias_minus").toDouble());
+
+    bindSliderToSpinBox(this->ui.noViewsMinusSlider, this->ui.noViewsMinusSpinBox);
+    this->ui.noViewsMinusSpinBox->setValue(config->get("random_no_views_weight_minus").toDouble());
+
+    bindSliderToSpinBox(this->ui.noRatingMinusSlider, this->ui.noRatingMinusSpinBox);
+    this->ui.noRatingMinusSpinBox->setValue(config->get("random_no_ratings_weight_minus").toDouble());
+
+    bindSliderToSpinBox(this->ui.noTagsMinusSlider, this->ui.noTagsMinusSpinBox);
+    this->ui.noTagsMinusSpinBox->setValue(config->get("random_no_tags_weight_minus").toDouble());
+
+    // --- Weighted Random PLUS ---
+    this->ui.weightedRandPlusGroupBox->setChecked(config->get_bool("weighted_random_plus"));
+
+    bindSliderToSpinBox(this->ui.generalBiasPlusSlider, this->ui.generalBiasPlusSpinBox);
+    this->ui.generalBiasPlusSpinBox->setValue(config->get("random_general_bias_plus").toDouble());
+
+    bindSliderToSpinBox(this->ui.viewsBiasPlusSlider, this->ui.viewsBiasPlusSpinBox);
+    this->ui.viewsBiasPlusSpinBox->setValue(config->get("random_views_bias_plus").toDouble());
+
+    bindSliderToSpinBox(this->ui.ratingBiasPlusSlider, this->ui.ratingBiasPlusSpinBox);
+    this->ui.ratingBiasPlusSpinBox->setValue(config->get("random_rating_bias_plus").toDouble());
+
+    bindSliderToSpinBox(this->ui.tagsBiasPlusSlider, this->ui.tagsBiasPlusSpinBox);
+    this->ui.tagsBiasPlusSpinBox->setValue(config->get("random_tags_bias_plus").toDouble());
+
+    bindSliderToSpinBox(this->ui.bpmBiasPlusSlider, this->ui.bpmBiasPlusSpinBox);
+    this->ui.bpmBiasPlusSpinBox->setValue(config->get("random_bpm_bias_plus").toDouble());
+
+    bindSliderToSpinBox(this->ui.noViewsPlusSlider, this->ui.noViewsPlusSpinBox);
+    this->ui.noViewsPlusSpinBox->setValue(config->get("random_no_views_weight_plus").toDouble());
+
+    bindSliderToSpinBox(this->ui.noRatingPlusSlider, this->ui.noRatingPlusSpinBox);
+    this->ui.noRatingPlusSpinBox->setValue(config->get("random_no_ratings_weight_plus").toDouble());
+
+    bindSliderToSpinBox(this->ui.noTagsPlusSlider, this->ui.noTagsPlusSpinBox);
+    this->ui.noTagsPlusSpinBox->setValue(config->get("random_no_tags_weight_plus").toDouble());
+}
+
+// ---------------------------------------------------------------------------
+// Constructor
+// ---------------------------------------------------------------------------
+
+SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
+{
+    this->ui.setupUi(this);
+    this->setWindowModality(Qt::WindowModal);
+    MainWindow* mw = static_cast<MainWindow*>(parent);
+
+    // Sidebar navigation
+    connect(this->ui.categoryList, &QListWidget::currentRowChanged,
+            this->ui.settingsStack, &QStackedWidget::setCurrentIndex);
+    this->ui.categoryList->setCurrentRow(0);
+
+    // Setup all category pages
+    setupGeneralPage(mw);
+    setupPlaybackPage(mw);
+    setupAppearancePage(mw);
+    setupAudioPage(mw);
+    setupDatabasePage(mw);
+    setupRandomPage(mw);
+
+    // Wire Apply button for all changeable widgets + wheel filters
+    wireApplyEnable();
+    WheelStrongFocusEventFilter* wheelFilter = new WheelStrongFocusEventFilter(this);
+    installWheelFilters(wheelFilter);
+    this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(false);
 }
 
 SettingsDialog::~SettingsDialog()
 {
 }
-

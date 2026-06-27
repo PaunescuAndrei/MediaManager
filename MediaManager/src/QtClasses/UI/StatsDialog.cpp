@@ -487,7 +487,8 @@ void StatsDialog::refreshAuthors()
         }
     };
 
-    // Helper: remove only data rows (row >= 1) from a grid, leaving header row intact
+    // Helper: remove only data rows (row >= 1) from a grid, leaving header row intact.
+    // Deleting the widget triggers Qt to auto-remove and delete the layout item — don't double-free.
     auto clearGridDataRows = [](QGridLayout* grid) {
         for (int i = grid->count() - 1; i >= 0; --i) {
             QLayoutItem* item = grid->itemAt(i);
@@ -495,9 +496,12 @@ void StatsDialog::refreshAuthors()
             int row, col, rowSpan, colSpan;
             grid->getItemPosition(i, &row, &col, &rowSpan, &colSpan);
             if (row >= 1) {
-                if (item->widget()) delete item->widget();
-                grid->removeItem(item);
-                delete item;
+                if (QWidget* w = item->widget()) {
+                    delete w;
+                } else {
+                    grid->removeItem(item);
+                    delete item;
+                }
             }
         }
     };

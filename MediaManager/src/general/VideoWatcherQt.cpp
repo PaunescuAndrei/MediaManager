@@ -25,7 +25,7 @@ QSharedPointer<BasePlayer> VideoWatcherQt::newPlayer(QString path, int video_id)
     newVideo->category = this->App->currentDB;
     newVideo->video_type = this->db->getVideoType(video_id);
     newVideo->startProgress = this->db->getVideoProgress(video_id, "0").toDouble();
-    newVideo->lastKnownVideoPath = path;
+    newVideo->trackedVideoPath = path;
     newVideo->start();
 	return newVideo;
 }
@@ -172,6 +172,24 @@ void VideoWatcherQt::checkpointPlayer(QSharedPointer<BasePlayer> player, int int
 
 void VideoWatcherQt::handleExternalVideoChange(QSharedPointer<BasePlayer> player)
 {
+    // If MPC reports a path that matches what we told it to open (target_video_path),
+    // this is a programmatic change, not an external one. Syncing trackedVideoPath is
+    // all that's needed — changePlayerVideo / newPlayer already set video_id,
+    // startProgress, activeWatchHistoryRowId, and saved the previous video's watch
+    // history. The old code used to run the full external-change path here, which
+    // corrupted video_id (set to -1) and created watch-history rows with mismatched
+    // video_id/path combos (row 255 in the DB proved the race was real).
+    //
+    // The primary fix lives in MpcPlayer::run() — when CMD_NOWPLAYING confirms the
+    // file we asked for, it syncs trackedVideoPath there, so the watcher's run() loop
+    // never sees video_path != trackedVideoPath for programmatic changes. This guard
+    // is defense-in-depth: if handleExternalVideoChange is ever called from a code
+    // path that lacks the trackedVideoPath sync, the guard prevents state corruption.
+    if (player->video_path == player->target_video_path) {
+        player->trackedVideoPath = player->video_path;
+        return;
+    }
+
     double watchedTime = player->videoWatchedTime();
     double sessionTime = player->videoSessionTime();
     if ((watchedTime > 0 || sessionTime > 0) && player->video_id >= 0) {
@@ -188,7 +206,7 @@ void VideoWatcherQt::handleExternalVideoChange(QSharedPointer<BasePlayer> player
     if (!player->trackExternalVideo) {
         player->video_id = -1;
         player->video_type = QString();
-        player->lastKnownVideoPath = player->video_path;
+        player->trackedVideoPath = player->video_path;
         player->activeWatchHistoryRowId = -1;
         player->startProgress = 0;
         return;
@@ -203,7 +221,7 @@ void VideoWatcherQt::handleExternalVideoChange(QSharedPointer<BasePlayer> player
     }
     player->video_id = newVideoId;
     player->video_type = newVideoId >= 0 ? this->db->getVideoType(newVideoId) : QString();
-    player->lastKnownVideoPath = player->video_path;
+    player->trackedVideoPath = player->video_path;
     player->activeWatchHistoryRowId = -1;
     player->startProgress = 0;
     player->resetVideoTiming();
@@ -232,7 +250,7 @@ void VideoWatcherQt::run()
     while (this->running) {
         int saveInterval = this->App->config->get("session_save_interval_seconds").toInt();
         for (QSharedPointer<BasePlayer> player : this->Players) {
-            if (!player->video_path.isEmpty() && player->video_path != player->lastKnownVideoPath && !player->change_in_progress) {
+            if (!player->video_path.isEmpty() && player->video_path != player->trackedVideoPath && !player->change_in_progress) {
                 this->handleExternalVideoChange(player);
             }
             this->checkpointPlayer(player, saveInterval);

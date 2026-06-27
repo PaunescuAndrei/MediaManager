@@ -43,7 +43,7 @@ public:
     int activeWatchHistoryRowId = -1;
     QDateTime videoStartWallClock;
     QDateTime lastCheckpointTime;
-    QString lastKnownVideoPath;
+    QString trackedVideoPath;
     bool trackExternalVideo = false;
     BasePlayer(QString video_path, int video_id, int* CLASS_COUNT, QObject* parent = nullptr, MainApp* App = nullptr);  
     virtual ~BasePlayer();  

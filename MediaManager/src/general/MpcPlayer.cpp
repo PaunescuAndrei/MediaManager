@@ -100,6 +100,11 @@ LRESULT MpcPlayer::OnCopyData(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
                     QStringList items = nowplaying.split("|");
                     if (!items.isEmpty()) {
                         this->video_path = items.value(3);
+                        // Sync trackedVideoPath when MPC confirms the file we told it to open —
+                        // prevents the watcher from seeing a spurious mismatch and firing
+                        // handleExternalVideoChange with stale data during programmatic changes.
+                        if (this->video_path == this->target_video_path)
+                            this->trackedVideoPath = this->video_path;
                         QString val = items.value(4);
                         if (!val.isEmpty()) {
                             this->duration = val.toDouble(); // this doesnt work when changing video to the same video

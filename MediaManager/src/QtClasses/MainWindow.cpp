@@ -3694,7 +3694,7 @@ void MainWindow::watchCurrent() {
             seconds = this->duration - 0.1;
         }
         l->openPlayer(this->ui.currentVideo->path, seconds);
-        l->lastKnownVideoPath = this->ui.currentVideo->path;
+        l->trackedVideoPath = this->ui.currentVideo->path;
         l->startProgress = seconds;
         l->videoStartWallClock = QDateTime::currentDateTime();
         l->lastCheckpointTime = l->videoStartWallClock;
@@ -3722,7 +3722,7 @@ void MainWindow::watchSelected(int video_id, QString path) {
     if (seconds < 0.001)
         seconds = 0.001;
     l->openPlayer(path, seconds);
-    l->lastKnownVideoPath = path;
+    l->trackedVideoPath = path;
     l->startProgress = seconds;
     l->videoStartWallClock = QDateTime::currentDateTime();
     l->lastCheckpointTime = l->videoStartWallClock;
@@ -4890,7 +4890,7 @@ void MainWindow::changePlayerVideo(QSharedPointer<BasePlayer> player, QString pa
     player->video_id = video_id;
     player->category = this->App->currentDB;
     player->video_type = this->App->db->getVideoType(video_id);
-    player->lastKnownVideoPath = path;
+    player->trackedVideoPath = path;
     player->activeWatchHistoryRowId = -1;
     player->startProgress = this->App->db->getVideoProgress(video_id, "0").toDouble();
     player->changeVideo(path, video_id, position);

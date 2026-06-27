@@ -1675,6 +1675,10 @@ void sqliteDB::createTables() {
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('next_choice_refresh_counter', 'MINUS', '0')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('next_choice_roll_counter', 'PLUS', '0')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('next_choice_roll_counter', 'MINUS', '0')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('last_goal_notified_date', 'ALL', '')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('last_milestone_date', 'ALL', '')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('last_video_milestone', 'ALL', '0')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('last_time_milestone', 'ALL', '0')");
     this->db.commit();
 }
 

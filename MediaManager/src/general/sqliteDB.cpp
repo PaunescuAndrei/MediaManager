@@ -1183,7 +1183,8 @@ double sqliteDB::getTotalWatchedTime()
 double sqliteDB::getTotalWatchedTimeToday()
 {
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QStringLiteral("SELECT COALESCE(SUM(watched_time), 0) FROM watch_history WHERE date(session_start) = date('now')"));
+    query.prepare(QStringLiteral("SELECT COALESCE(SUM(watched_time), 0) FROM watch_history WHERE date(session_start) = ?"));
+    query.addBindValue(QDate::currentDate().toString(QStringLiteral("yyyy-MM-dd")));
     if (!query.exec()) { return 0.0; }
     return query.first() ? query.value(0).toDouble() : 0.0;
 }
@@ -1199,7 +1200,8 @@ double sqliteDB::getTotalSessionTime()
 double sqliteDB::getTotalSessionTimeToday()
 {
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QStringLiteral("SELECT COALESCE(SUM(session_time), 0) FROM watch_history WHERE date(session_start) = date('now')"));
+    query.prepare(QStringLiteral("SELECT COALESCE(SUM(session_time), 0) FROM watch_history WHERE date(session_start) = ?"));
+    query.addBindValue(QDate::currentDate().toString(QStringLiteral("yyyy-MM-dd")));
     if (!query.exec()) { return 0.0; }
     return query.first() ? query.value(0).toDouble() : 0.0;
 }
@@ -1207,11 +1209,14 @@ double sqliteDB::getTotalSessionTimeToday()
 int sqliteDB::getVideosWatchedToday(const QString& category)
 {
     QSqlQuery query = QSqlQuery(this->db);
+    const QString todayStr = QDate::currentDate().toString(QStringLiteral("yyyy-MM-dd"));
     if (category == QStringLiteral("ALL")) {
-        query.prepare(QStringLiteral("SELECT COUNT(*) FROM watch_history WHERE completed = 1 AND date(session_start) = date('now')"));
+        query.prepare(QStringLiteral("SELECT COUNT(*) FROM watch_history WHERE completed = 1 AND date(session_start) = ?"));
+        query.addBindValue(todayStr);
     } else {
-        query.prepare(QStringLiteral("SELECT COUNT(*) FROM watch_history WHERE category = ? AND completed = 1 AND date(session_start) = date('now')"));
+        query.prepare(QStringLiteral("SELECT COUNT(*) FROM watch_history WHERE category = ? AND completed = 1 AND date(session_start) = ?"));
         query.addBindValue(category);
+        query.addBindValue(todayStr);
     }
     if (!query.exec()) { return 0; }
     return query.first() ? query.value(0).toInt() : 0;
@@ -1223,9 +1228,9 @@ QVector<QPair<QDate, double>> sqliteDB::getDailyWatchedHistory(int days)
     query.prepare(QStringLiteral(
         "SELECT date(session_start) as day, SUM(watched_time) as total_time "
         "FROM watch_history "
-        "WHERE session_start >= date('now', ?) "
+        "WHERE session_start >= ? "
         "GROUP BY day ORDER BY day"));
-    query.addBindValue(QString("-%1 days").arg(days));
+    query.addBindValue(QDate::currentDate().addDays(-days).toString(QStringLiteral("yyyy-MM-dd")));
     QVector<QPair<QDate, double>> results;
     if (!query.exec()) { return results; }
     while (query.next()) {
@@ -1242,9 +1247,9 @@ QVector<QPair<int, double>> sqliteDB::getHourlyWatchedDistribution(int days)
         query.prepare(QStringLiteral(
             "SELECT CAST(strftime('%H', session_start) AS INTEGER) as hour, SUM(watched_time) as total_time "
             "FROM watch_history "
-            "WHERE session_start >= date('now', ?) "
+            "WHERE session_start >= ? "
             "GROUP BY hour ORDER BY hour"));
-        query.addBindValue(QString("-%1 days").arg(days));
+        query.addBindValue(QDate::currentDate().addDays(-days).toString(QStringLiteral("yyyy-MM-dd")));
     } else {
         query.prepare(QStringLiteral(
             "SELECT CAST(strftime('%H', session_start) AS INTEGER) as hour, SUM(watched_time) as total_time "
@@ -1265,9 +1270,9 @@ QVector<QPair<QDate, int>> sqliteDB::getDailyWatchedCount(int days)
     query.prepare(QStringLiteral(
         "SELECT date(session_start) as day, COUNT(*) as cnt "
         "FROM watch_history "
-        "WHERE completed = 1 AND session_start >= date('now', ?) "
+        "WHERE completed = 1 AND session_start >= ? "
         "GROUP BY day ORDER BY day"));
-    query.addBindValue(QString("-%1 days").arg(days));
+    query.addBindValue(QDate::currentDate().addDays(-days).toString(QStringLiteral("yyyy-MM-dd")));
     QVector<QPair<QDate, int>> results;
     if (!query.exec()) { return results; }
     while (query.next()) {
@@ -1284,9 +1289,9 @@ QVector<QPair<int, int>> sqliteDB::getHourlyWatchedCount(int days)
         query.prepare(QStringLiteral(
             "SELECT CAST(strftime('%H', session_start) AS INTEGER) as hour, COUNT(*) as cnt "
             "FROM watch_history "
-            "WHERE completed = 1 AND session_start >= date('now', ?) "
+            "WHERE completed = 1 AND session_start >= ? "
             "GROUP BY hour ORDER BY hour"));
-        query.addBindValue(QString("-%1 days").arg(days));
+        query.addBindValue(QDate::currentDate().addDays(-days).toString(QStringLiteral("yyyy-MM-dd")));
     } else {
         query.prepare(QStringLiteral(
             "SELECT CAST(strftime('%H', session_start) AS INTEGER) as hour, COUNT(*) as cnt "
@@ -1309,9 +1314,9 @@ QVector<QPair<int, double>> sqliteDB::getDayOfWeekDistribution(int days)
         query.prepare(QStringLiteral(
             "SELECT CAST(strftime('%w', session_start) AS INTEGER) as dow, SUM(watched_time) as total_time "
             "FROM watch_history "
-            "WHERE session_start >= date('now', ?) "
+            "WHERE session_start >= ? "
             "GROUP BY dow ORDER BY dow"));
-        query.addBindValue(QString("-%1 days").arg(days));
+        query.addBindValue(QDate::currentDate().addDays(-days).toString(QStringLiteral("yyyy-MM-dd")));
     } else {
         query.prepare(QStringLiteral(
             "SELECT CAST(strftime('%w', session_start) AS INTEGER) as dow, SUM(watched_time) as total_time "
@@ -1333,9 +1338,9 @@ QVector<QPair<int, int>> sqliteDB::getDayOfWeekCount(int days)
         query.prepare(QStringLiteral(
             "SELECT CAST(strftime('%w', session_start) AS INTEGER) as dow, COUNT(*) as cnt "
             "FROM watch_history "
-            "WHERE completed = 1 AND session_start >= date('now', ?) "
+            "WHERE completed = 1 AND session_start >= ? "
             "GROUP BY dow ORDER BY dow"));
-        query.addBindValue(QString("-%1 days").arg(days));
+        query.addBindValue(QDate::currentDate().addDays(-days).toString(QStringLiteral("yyyy-MM-dd")));
     } else {
         query.prepare(QStringLiteral(
             "SELECT CAST(strftime('%w', session_start) AS INTEGER) as dow, COUNT(*) as cnt "

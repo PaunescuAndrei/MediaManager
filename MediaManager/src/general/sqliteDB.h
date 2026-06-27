@@ -93,5 +93,6 @@ public:
 
     int getTotalWatchDays();
     QDateTime getFirstWatchDate();
+    qint64 vacuumDB();
 };
 

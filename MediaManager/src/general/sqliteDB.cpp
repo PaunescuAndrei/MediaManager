@@ -1777,3 +1777,32 @@ sqliteDB::~sqliteDB() {
 //BEGIN
 //UPDATE maininfo SET value = IFNULL(CAST(round(nonfh.c / CAST(fh.c AS FLOAT), 0) AS INTEGER), nonfh.c) FROM(SELECT COUNT(*) as c FROM videodetails WHERE category = "MINUS" AND watched = "No" AND type < > "FH") as nonfh, (SELECT COUNT(*) as c FROM videodetails WHERE category = "MINUS" AND watched = "No" AND type = "FH") as fh WHERE name = "sv_target_count";
 //END;
+
+// ---------------------------------------------------------------------------
+// vacuumDB
+// Runs VACUUM on the current database and returns the number of bytes freed.
+// Calculates freed space as: freelist_count * page_size (bytes before vacuum).
+// Returns -1 on error.
+// ---------------------------------------------------------------------------
+qint64 sqliteDB::vacuumDB()
+{
+    QSqlQuery q(db);
+
+    // Read page size
+    qint64 pageSize = 0;
+    if (q.exec("PRAGMA page_size") && q.next())
+        pageSize = q.value(0).toLongLong();
+
+    // Read free (unused) page count before vacuum
+    qint64 freelistCount = 0;
+    if (q.exec("PRAGMA freelist_count") && q.next())
+        freelistCount = q.value(0).toLongLong();
+
+    const qint64 bytesFreed = freelistCount * pageSize;
+
+    // Run VACUUM
+    if (!q.exec("VACUUM"))
+        return -1;
+
+    return bytesFreed;
+}

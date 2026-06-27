@@ -1375,6 +1375,12 @@
              </widget>
             </item>
             <item>
+             <widget class="QPushButton" name="vacuumBtn">
+              <property name="text"><string>Vacuum DB</string></property>
+              <property name="toolTip"><string>Compact the database file and reclaim unused space</string></property>
+             </widget>
+            </item>
+            <item>
              <widget class="QGroupBox" name="StartingDBGroupBox">
               <property name="sizePolicy">
                <sizepolicy hsizetype="Minimum" vsizetype="Preferred">

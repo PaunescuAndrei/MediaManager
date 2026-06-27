@@ -415,6 +415,24 @@ void SettingsDialog::setupDatabasePage(MainWindow* mw)
     });
     connect(this->ui.cleanMissingBtn, &QPushButton::clicked, this,
             [mw, this] { mw->cleanMissingFilesDialog(this); });
+    connect(this->ui.vacuumBtn, &QPushButton::clicked, this, [mw, this] {
+        qint64 freed = mw->App->db->vacuumDB();
+        QString msg;
+        if (freed < 0) {
+            msg = tr("Vacuum failed. Check the log for details.");
+        } else if (freed == 0) {
+            msg = tr("Vacuum complete.\nNo unused space was found.");
+        } else {
+            // Format freed bytes as KB or MB
+            QString sizeStr;
+            if (freed >= 1024 * 1024)
+                sizeStr = QString::number(freed / (1024.0 * 1024.0), 'f', 2) + " MB";
+            else
+                sizeStr = QString::number(freed / 1024.0, 'f', 1) + " KB";
+            msg = tr("Vacuum complete.\nSpace reclaimed: %1").arg(sizeStr);
+        }
+        QMessageBox::information(this, tr("Vacuum DB"), msg);
+    });
 
     // --- Cache Buttons ---
     connect(this->ui.cacheIconButton, &QPushButton::clicked, this,

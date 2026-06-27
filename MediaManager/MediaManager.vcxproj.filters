@@ -232,6 +232,9 @@
     <ClCompile Include="src\QtClasses\UI\NotificationDialog.cpp">
       <Filter>Source Files\QtClasses\UI</Filter>
     </ClCompile>
+    <ClCompile Include="src\QtClasses\UI\NotificationManager.cpp">
+      <Filter>Source Files\QtClasses\UI</Filter>
+    </ClCompile>
     <ClCompile Include="src\QtClasses\UI\FilterDialog.cpp">
       <Filter>Source Files\QtClasses\UI</Filter>
     </ClCompile>
@@ -489,9 +492,7 @@
     <QtUic Include="src\QtClasses\UI\Form Files\LogDialog.ui">
       <Filter>Form Files</Filter>
     </QtUic>
-    <QtUic Include="src\QtClasses\UI\Form Files\NotificationDialog.ui">
-      <Filter>Form Files</Filter>
-    </QtUic>
+
     <QtUic Include="src\QtClasses\UI\Form Files\FilterDialog.ui">
       <Filter>Form Files</Filter>
     </QtUic>
@@ -624,6 +625,9 @@
       <Filter>Header Files</Filter>
     </QtMoc>
     <QtMoc Include="src\QtClasses\UI\NotificationDialog.h">
+      <Filter>Header Files\QtClasses\UI</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\UI\NotificationManager.h">
       <Filter>Header Files\QtClasses\UI</Filter>
     </QtMoc>
     <QtMoc Include="src\QtClasses\UI\FilterDialog.h">

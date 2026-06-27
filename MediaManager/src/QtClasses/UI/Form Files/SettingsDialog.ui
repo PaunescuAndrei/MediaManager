@@ -96,6 +96,11 @@
          <string>Weighted Random</string>
         </property>
        </item>
+       <item>
+        <property name="text">
+         <string>Notifications</string>
+        </property>
+       </item>
       </widget>
      </item>
      <item>
@@ -251,32 +256,6 @@
               </layout>
              </item>
              <item>
-              <layout class="QHBoxLayout" name="horizontalLayout_notificationDuration">
-               <item>
-                <widget class="QLabel" name="notificationDurationLabel">
-                 <property name="text"><string>Notification Duration (ms):</string></property>
-                </widget>
-               </item>
-               <item>
-                <spacer name="horizontalSpacer_notificationDuration">
-                 <property name="orientation"><enum>Qt::Orientation::Horizontal</enum></property>
-                 <property name="sizeHint" stdset="0"><size><width>40</width><height>20</height></size></property>
-                </spacer>
-               </item>
-               <item>
-                <widget class="QSpinBox" name="notificationDurationSpinBox">
-                 <property name="focusPolicy"><enum>Qt::FocusPolicy::StrongFocus</enum></property>
-                 <property name="toolTip"><string>How long notification popups stay visible in milliseconds</string></property>
-                 <property name="alignment"><set>Qt::AlignmentFlag::AlignCenter</set></property>
-                 <property name="minimum"><number>1000</number></property>
-                 <property name="maximum"><number>60000</number></property>
-                 <property name="singleStep"><number>500</number></property>
-                 <property name="value"><number>10000</number></property>
-                </widget>
-               </item>
-              </layout>
-             </item>
-             <item>
               <layout class="QHBoxLayout" name="horizontalLayout_14">
                <item>
                 <widget class="QCheckBox" name="seedCheckBox">
@@ -394,12 +373,14 @@
              <item>
               <layout class="QHBoxLayout" name="dailyVideoGoalLayout">
                <item>
-                <widget class="QSpinBox" name="dailyVideoGoalSpinBox">
+                <widget class="QDoubleSpinBox" name="dailyVideoGoalSpinBox">
                  <property name="alignment"><set>Qt::AlignmentFlag::AlignCenter</set></property>
                  <property name="toolTip"><string>Target number of videos to watch per day (0 = disabled)</string></property>
-                 <property name="minimum"><number>0</number></property>
-                 <property name="maximum"><number>999</number></property>
-                 <property name="value"><number>5</number></property>
+                 <property name="decimals"><number>2</number></property>
+                 <property name="minimum"><double>0.00</double></property>
+                 <property name="maximum"><double>999.00</double></property>
+                 <property name="singleStep"><double>0.50</double></property>
+                 <property name="value"><double>5.00</double></property>
                 </widget>
                </item>
                <item>

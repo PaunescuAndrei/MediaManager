@@ -5,7 +5,6 @@
 #include <QEvent>
 #include <QToolTip>
 #include <QCursor>
-#include <QHelpEvent>
 #include <QAbstractItemView>
 
 TooltipEventFilter::TooltipEventFilter(MainApp* app)
@@ -38,10 +37,20 @@ bool TooltipEventFilter::eventFilter(QObject* obj, QEvent* event) {
                 return QObject::eventFilter(obj, event);
             return true;
         }
-        // Block native tooltip only for widgets we've claimed via Enter;
-        // everything else (viewports, comboboxes, menus, etc.) passes through
-        if (qobject_cast<QWidget*>(obj) == this->pendingTarget)
-            return true;
+        // Block native tooltip for widgets we've claimed (or their children)
+        // via Enter; everything else passes through
+        if (this->pendingTarget) {
+            QWidget* w = qobject_cast<QWidget*>(obj);
+            if (w == this->pendingTarget)
+                return true;
+            // Also block if w is a descendant of pendingTarget
+            QWidget* ancestor = w ? w->parentWidget() : nullptr;
+            while (ancestor) {
+                if (ancestor == this->pendingTarget)
+                    return true;
+                ancestor = ancestor->parentWidget();
+            }
+        }
         return QObject::eventFilter(obj, event);
     }
 
@@ -49,25 +58,33 @@ bool TooltipEventFilter::eventFilter(QObject* obj, QEvent* event) {
         return QObject::eventFilter(obj, event);
 
     QWidget* widget = qobject_cast<QWidget*>(obj);
-    if (!widget || widget->toolTip().isEmpty())
+    if (!widget)
+        return QObject::eventFilter(obj, event);
+
+    // Walk up the parent chain if the widget itself has no tooltip,
+    // so hovering over a child widget inherits the parent's tooltip.
+    QWidget* tooltipWidget = widget;
+    while (tooltipWidget && tooltipWidget->toolTip().isEmpty())
+        tooltipWidget = tooltipWidget->parentWidget();
+    if (!tooltipWidget || tooltipWidget->toolTip().isEmpty())
         return QObject::eventFilter(obj, event);
 
     switch (event->type()) {
         case QEvent::Enter:
             this->stopShowTimer();
-            this->pendingTarget = widget;
+            this->pendingTarget = tooltipWidget;
             this->pendingPos = QCursor::pos();
             this->startShowTimer();
             break;
 
         case QEvent::MouseMove:
-            if (this->pendingTarget == widget) {
+            if (this->pendingTarget == widget || this->pendingTarget == tooltipWidget) {
                 this->pendingPos = QCursor::pos();
             }
             break;
 
         case QEvent::Leave:
-            if (this->pendingTarget == widget) {
+            if (this->pendingTarget == widget || this->pendingTarget == tooltipWidget) {
                 this->stopShowTimer();
                 this->pendingTarget = nullptr;
                 QToolTip::hideText();

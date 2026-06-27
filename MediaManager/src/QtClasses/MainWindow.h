@@ -14,6 +14,7 @@
 #include "FilterSettings.h"
 #include <optional>
 #include "NotificationDialog.h"
+#include "NotificationManager.h"
 #include "finishDialog.h"
 #include "NonBlockingQueue.h"
 #include "VideosTagsDialog.h"
@@ -59,6 +60,10 @@ public:
     bool animatedIconFlag = false;
     bool toggleDatesFlag = false;
     bool intro_played = true;
+    QDate lastGoalNotifiedDate; // invalid (null) date until first goal notification fires
+    QDate lastMilestoneDate;    // tracks which day the milestone counters belong to
+    double lastVideoMilestone = 0.0;  // last milestone step reached for videos today
+    int lastTimeMilestoneMinutes = 0; // last milestone step reached for time today
     QList<QPair<QString, int>> lastScrolls = QList<QPair<QString, int>>();
     QString old_search = "";
     QString last_backup = "";
@@ -66,7 +71,7 @@ public:
     QIcon* active = new QIcon();
     QIcon* inactive = new QIcon();
     QIcon* halfactive = new QIcon();
-    QPointer<NotificationDialog> notification_dialog = nullptr;
+    NotificationManager* notificationManager = nullptr;
     QPointer<finishDialog> finish_dialog = nullptr;
     QList<QStringList> IconsStage = QList<QStringList>({ QStringList(),QStringList(),QStringList() });
     QMediaPlayer* special_effects_player = nullptr;
@@ -83,7 +88,7 @@ public:
     QString getCategoryName(QString currentdb);
     QString getCategoryName();
     void UpdateWindowTitle();
-    void VideoInfoNotification();
+    void VideoInfoNotification(QPointer<NotificationDialog> resumeFrom = nullptr);
     void resetPalette();
     void changePalette(QPalette palette);
     void initStyleSheets();
@@ -116,7 +121,7 @@ public:
     void updateWatchedProgressBar();
     void updateProgressBar(double position, double duration);
     void updateProgressBar(double position, double duration, QSharedPointer<BasePlayer> player, bool running = false);
-    void showEndOfVideoDialog(bool ignore_end_of_video = false, bool show_notification = false);
+    void showEndOfVideoDialog(bool ignore_end_of_video = false, bool show_notification = false, QPointer<NotificationDialog> resumeNotification = nullptr);
     void SkipVideo();
     void updateProgressBar(QString position, QString duration);
     void updateTotalListLabel(bool force_update = false);
@@ -172,6 +177,11 @@ public:
     void openEmptyVideoPlayer();
     void incrementtimeWatchedIncrement(double value);
     void checktimeWatchedIncrement();
+    void checkDailyProgress();
+    void loadDailyProgressState();
+    void saveDailyProgressState();
+    void GoalMetNotification(const QString& description);
+    void MilestoneNotification(const QString& description);
     void incrementCounterVar(int value = 1);
     bool applyPostWatchAdjustments(const QString& videoType, int videoId, bool increment, double watchedProgressOverride = 0.0, bool useOverrideProgress = false, bool suppressMinusCounter = false, double actualWatchTimeDelta = 0.0);
     void updateSvCountersAfterPlayback(bool playedSpecialType, bool suppressMinusIncrement);

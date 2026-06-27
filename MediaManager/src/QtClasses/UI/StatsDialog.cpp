@@ -194,12 +194,13 @@ void StatsDialog::setupAchievements(MainApp* app)
     QLabel* videoGoalLabel = new QLabel("Video Goal:");
     goalsLayout->addWidget(videoGoalLabel, goalRow, 0);
 
-    int dailyVideoGoal = app->config->get("daily_video_goal").toInt();
+    double dailyVideoGoal = app->config->get("daily_video_goal").toDouble();
     int videosToday = app->db->getVideosWatchedToday("PLUS") + app->db->getVideosWatchedToday("MINUS");
+    int goalCeil = std::max(static_cast<int>(std::ceil(dailyVideoGoal)), 1);
     QProgressBar* videoBar = new QProgressBar();
-    videoBar->setRange(0, std::max(dailyVideoGoal, 1));
-    videoBar->setValue(std::min(videosToday, dailyVideoGoal));
-    videoBar->setFormat(QString("%1 / %2").arg(videosToday).arg(dailyVideoGoal));
+    videoBar->setRange(0, goalCeil);
+    videoBar->setValue(std::min(videosToday, goalCeil));
+    videoBar->setFormat(QString("%1 / %2").arg(videosToday).arg(dailyVideoGoal, 0, 'f', 1));
     videoBar->setTextVisible(true);
     videoBar->setMinimumHeight(22);
     goalsLayout->addWidget(videoBar, goalRow++, 1);
@@ -354,19 +355,20 @@ void StatsDialog::setupStreaksTab(MainApp* app)
     QGridLayout* goalsGrid = ui.goalsGridLayout;
     int row = 0;
 
-    int dailyVideoGoal = m_cachedDailyVideoGoal >= 0
+    double dailyVideoGoal = m_cachedDailyVideoGoal >= 0.0
         ? m_cachedDailyVideoGoal
-        : app->config->get("daily_video_goal").toInt();
+        : app->config->get("daily_video_goal").toDouble();
     int videosToday = m_cachedVideosToday >= 0
         ? m_cachedVideosToday
         : app->db->getVideosWatchedToday("PLUS") + app->db->getVideosWatchedToday("MINUS");
 
-    QLabel* dailyVideoGoalLabel = new QLabel(QString("Videos: %1 / %2").arg(videosToday).arg(dailyVideoGoal));
+    QLabel* dailyVideoGoalLabel = new QLabel(QString("Videos: %1 / %2").arg(videosToday).arg(dailyVideoGoal, 0, 'f', 1));
     goalsGrid->addWidget(dailyVideoGoalLabel, row, 0);
 
     QProgressBar* dailyVideoGoalBar = new QProgressBar();
-    dailyVideoGoalBar->setRange(0, std::max(dailyVideoGoal, 1));
-    dailyVideoGoalBar->setValue(std::min(videosToday, dailyVideoGoal));
+    int goalCeil2 = std::max(static_cast<int>(std::ceil(dailyVideoGoal)), 1);
+    dailyVideoGoalBar->setRange(0, goalCeil2);
+    dailyVideoGoalBar->setValue(std::min(videosToday, goalCeil2));
     dailyVideoGoalBar->setTextVisible(true);
     dailyVideoGoalBar->setMinimumHeight(22);
     goalsGrid->addWidget(dailyVideoGoalBar, row++, 1);

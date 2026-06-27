@@ -163,6 +163,8 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     this->setIcon(QIcon(":/main/resources/icon.ico"));
     this->trayIcon->show();
 
+    this->notificationManager = new NotificationManager(this);
+
     this->intro_played = !this->App->config->get_bool("sound_effects_start");
     this->special_effects_player = this->App->soundPlayer->get_player();
     this->special_effects_player->audioOutput()->setVolume(utils::volume_convert(this->App->config->get("sound_effects_special_volume").toInt()));
@@ -414,6 +416,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         this->updateSaltSeedCache();
     });
 
+    this->loadDailyProgressState(); // must load BEFORE initListDetails so progress checks see persisted state
     this->initListDetails();
     this->refreshHeadersVisibility();
     this->populateList();
@@ -538,95 +541,12 @@ void MainWindow::UpdateWindowTitle() {
     this->setWindowTitle(main_title % thumb_work_count % bpm_work_count % session_time % watched_time);
 }
 
-void MainWindow::VideoInfoNotification() {
-    QScreen* screen = QGuiApplication::primaryScreen();
-    QRect screenGeometry = screen->geometry();
-    if (this->notification_dialog) {
-        this->notification_dialog->closeNotification();
+void MainWindow::VideoInfoNotification(QPointer<NotificationDialog> resumeFrom) {
+    if (resumeFrom) {
+        this->notificationManager->resumeVideoInfo(resumeFrom);
+    } else {
+        this->notificationManager->showVideoInfo();
     }
-    this->notification_dialog = new NotificationDialog();
-    this->notification_dialog->ui.mainWidget->setMaximumWidth((int)(screenGeometry.width() * 0.98));
-    this->notification_dialog->setMainWindow(this);
-    this->notification_dialog->timer->stop();
-    this->notification_dialog->timer2->stop();
-    this->notification_dialog->ui.totalLabel->copy(this->ui.totalListLabel);
-    this->notification_dialog->ui.counterLabel->copy(this->ui.counterLabel);
-    this->notification_dialog->ui.name->setText(this->ui.currentVideo->name);
-    this->notification_dialog->ui.author->setText(this->ui.currentVideo->author);
-    if (this->ui.currentVideo->tags.isEmpty())
-        this->notification_dialog->ui.tags->hide();
-    else
-        this->notification_dialog->ui.tags->setText(this->ui.currentVideo->tags);
-    StarRating starRating = StarRating(this->active, this->halfactive, this->inactive, 0, 5.0);
-    {
-        this->notification_dialog->ui.lastWatchedValueLabel->setText("Never");
-        this->notification_dialog->ui.lastWatchedValueLabel->setToolTip(QString());
-        // Use current video path to fetch rating/views
-        QString path = this->ui.currentVideo->path;
-        QPersistentModelIndex srcIdx = this->modelIndexByPath(path);
-        if (srcIdx.isValid()) {
-            const QPersistentModelIndex ratingIdx = srcIdx.sibling(srcIdx.row(), ListColumns["RATING_COLUMN"]);
-            const QPersistentModelIndex viewsIdx = srcIdx.sibling(srcIdx.row(), ListColumns["VIEWS_COLUMN"]);
-            const QPersistentModelIndex lastWatchedIdx = srcIdx.sibling(srcIdx.row(), ListColumns["LAST_WATCHED_COLUMN"]);
-            double stars = ratingIdx.data(CustomRoles::rating).toDouble();
-            starRating.setStarCount(stars);
-            this->notification_dialog->ui.starsLabel->setText(QStringLiteral(" %1 ").arg(stars));
-            this->notification_dialog->ui.viewsLabel->setText(QStringLiteral(" %1 Views ").arg(viewsIdx.data(Qt::DisplayRole).toString()));
-
-            const QPersistentModelIndex bpmIdx = srcIdx.sibling(srcIdx.row(), ListColumns["BPM_COLUMN"]);
-            double bpm = bpmIdx.data(CustomRoles::bpm).toDouble();
-            if (bpm > 0) {
-                 this->notification_dialog->ui.bpmContainer->show();
-                 this->notification_dialog->ui.bpmLabel->setText(QStringLiteral("%1 BPM ").arg(qRound(bpm)));
-            } else {
-                 this->notification_dialog->ui.bpmContainer->hide();
-            }
-
-
-            QString lastWatchedDisplay = "Never";
-            QString lastWatchedTooltip;
-            if (lastWatchedIdx.isValid()) {
-                const QVariant lastWatchedData = lastWatchedIdx.data(Qt::DisplayRole);
-                const QString lastWatchedRawText = lastWatchedData.toString();
-                if (!lastWatchedRawText.isEmpty()) {
-                    if (lastWatchedData.type() == QVariant::DateTime) {
-                        const QDateTime lastWatchedDateTime = lastWatchedData.toDateTime();
-                        if (lastWatchedDateTime.isValid()) {
-                            const QDateTime currentDateTime = QDateTime::currentDateTime();
-                            const qint64 secondsDiff = lastWatchedDateTime.secsTo(currentDateTime);
-                            if (secondsDiff < 0) {
-                                lastWatchedDisplay = lastWatchedRawText;
-                            } else {
-                                lastWatchedDisplay = utils::formatTimeAgo(secondsDiff);
-                                lastWatchedTooltip = lastWatchedRawText;
-                            }
-                        }
-                    } else {
-                        lastWatchedDisplay = lastWatchedRawText;
-                    }
-                }
-            }
-            this->notification_dialog->ui.lastWatchedValueLabel->setText(lastWatchedDisplay);
-            this->notification_dialog->ui.lastWatchedValueLabel->setToolTip(lastWatchedTooltip);
-        }
-    }
-    this->notification_dialog->ui.rating->setStarRating(starRating);
-
-    this->notification_dialog->setWindowModality(Qt::WindowModal);
-    this->notification_dialog->setAttribute(Qt::WA_ShowWithoutActivating, true);
-    this->notification_dialog->setWindowFlags(this->notification_dialog->windowFlags() | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint | Qt::X11BypassWindowManagerHint | Qt::Tool | Qt::WindowStaysOnTopHint | Qt::WindowDoesNotAcceptFocus);
-    
-    QRect newRect = QStyle::alignedRect(
-        Qt::LeftToRight,
-        Qt::AlignHCenter,
-        this->notification_dialog->sizeHint(),
-        screenGeometry
-    );
-    newRect.moveTop((int)(screenGeometry.height() * 0.03));
-    this->notification_dialog->setGeometry(newRect);
-
-    int configuredDuration = this->App->config->get("notification_duration_ms").toInt();
-    this->notification_dialog->showNotification(configuredDuration, 5);
 }
 
 void MainWindow::resetPalette() {
@@ -2206,6 +2126,7 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
 
         this->updateTotalListLabel();
         this->checktimeWatchedIncrement();
+        this->checkDailyProgress();
         this->updateWatchedProgressBar();
         this->App->db->db.commit();
     }
@@ -2463,6 +2384,7 @@ bool MainWindow::loadDB(QString path, QWidget* parent) {
                 this->App->VW->mainPlayer->activeWatchHistoryRowId = -1;
             }
             return_code = this->App->db->loadOrSaveDb(this->App->db->db, path.toStdString().c_str(), false);
+            this->loadDailyProgressState(); // restore tracking state from the loaded DB before initListDetails triggers progress checks
             this->initListDetails();
             this->refreshVideosWidget(false, true);
             this->refreshHeadersVisibility();
@@ -2879,7 +2801,20 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     config->set("rarity_sr_color", dialog->ui.raritySrColorBtn->text());
     config->set("rarity_r_color", dialog->ui.rarityRColorBtn->text());
     config->set("search_timer_interval", QString::number(dialog->ui.searchTimerInterval->value()));
-    config->set("notification_duration_ms", QString::number(dialog->ui.notificationDurationSpinBox->value()));
+    config->set("notification_video_info_duration_ms", QString::number(dialog->notificationVideoInfoDurationSpinBox->value()));
+    config->set("notification_video_info_enabled", dialog->notificationVideoInfoEnabled->isChecked() ? "True" : "False");
+    config->set("notification_general_message_enabled",
+        dialog->notificationGeneralMessageEnabled->isChecked() ? "True" : "False");
+    config->set("notification_general_message_duration_ms",
+        QString::number(dialog->notificationGeneralMessageDurationSpinBox->value()));
+    config->set("notification_goal_met_enabled",
+        dialog->notificationGoalMetEnabled->isChecked() ? "True" : "False");
+    config->set("notification_goal_met_duration_ms",
+        QString::number(dialog->notificationGoalMetDurationSpinBox->value()));
+    config->set("daily_milestone_video_step",
+        QString::number(dialog->milestoneVideoStepSpinBox->value()));
+    config->set("daily_milestone_time_step_minutes",
+        QString::number(dialog->milestoneTimeStepSpinBox->value()));
     if (this->search_timer->isActive()) {
         this->search_timer->stop();
         this->search_timer->start(this->App->config->get("search_timer_interval").toInt());
@@ -3083,9 +3018,22 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         config->set("empty_player_tracking", "True");
     else
         config->set("empty_player_tracking", "False");
-    config->set("tooltips_enabled", dialog->ui.tooltipsEnabled->isChecked() ? "True" : "False");
-    config->set("tooltip_delay_ms", QString::number(dialog->ui.tooltipDelaySpinBox->value()));
-    qMainApp->tooltipFilter->reloadConfig();
+    bool tooltipsChanged = false;
+    bool tooltipsEnabled = dialog->ui.tooltipsEnabled->isChecked();
+    if (tooltipsEnabled != dialog->oldTooltipsEnabled) {
+        config->set("tooltips_enabled", tooltipsEnabled ? "True" : "False");
+        dialog->oldTooltipsEnabled = tooltipsEnabled;
+        tooltipsChanged = true;
+    }
+    int tooltipDelay = dialog->ui.tooltipDelaySpinBox->value();
+    if (tooltipDelay != dialog->oldTooltipDelayMs) {
+        config->set("tooltip_delay_ms", QString::number(tooltipDelay));
+        dialog->oldTooltipDelayMs = tooltipDelay;
+        tooltipsChanged = true;
+    }
+    if (tooltipsChanged)
+        qMainApp->tooltipFilter->reloadConfig();
+    // These need to be at the bottom
     config->save_config();
 }
 
@@ -3154,6 +3102,8 @@ void MainWindow::settingsDialogButton()
         dialog.old_mascotsChanceSpinBox = dialog.ui.mascotsChanceSpinBox->value();
         dialog.old_mascotsFreqSpinBox = dialog.ui.mascotsFreqSpinBox->value();
         dialog.old_aicon_fps_modifier = dialog.ui.aicon_fps_modifier_spinBox->value();
+        dialog.oldTooltipsEnabled = dialog.ui.tooltipsEnabled->isChecked();
+        dialog.oldTooltipDelayMs = dialog.ui.tooltipDelaySpinBox->value();
     });
     int value = dialog.exec();
     if (value == QDialog::Accepted) {
@@ -3383,7 +3333,7 @@ void MainWindow::updateProgressBar(double position, double duration, QSharedPoin
     }
 }
 
-void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notification) {
+void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notification, QPointer<NotificationDialog> resumeNotification) {
     if (this->App->VW->mainPlayer
         && !this->App->VW->mainPlayer->video_path.isEmpty()
         && (ignore_end_of_video || this->App->VW->mainPlayer->end_of_video)
@@ -3396,7 +3346,7 @@ void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notifi
             this->finish_dialog->raise();
             this->finish_dialog->activateWindow();
             this->finish_dialog->open();
-            connect(this->finish_dialog, &finishDialog::finished, this, [this, show_notification](int result) mutable {
+            connect(this->finish_dialog, &finishDialog::finished, this, [this, show_notification, resumeNotification](int result) mutable {
                 if (result == finishDialog::Accepted) {
                     this->App->VW->mainPlayer->change_in_progress = true;
                     if (this->App->VW->mainPlayer && this->App->VW->mainPlayer->position != -1) {
@@ -3461,7 +3411,7 @@ void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notifi
                 }
                 this->finish_dialog = nullptr;
                 if (show_notification) {
-                    this->VideoInfoNotification();
+                    this->VideoInfoNotification(resumeNotification);
                 }
             });
         }
@@ -3939,6 +3889,140 @@ void MainWindow::checktimeWatchedIncrement() {
         this->incrementtimeWatchedIncrement(-(count * this->time_watched_limit));
         this->incrementCounterVar(count);
     }
+}
+
+void MainWindow::loadDailyProgressState()
+{
+    QDate today = QDate::currentDate();
+    QString goalDateStr = this->App->db->getMainInfoValue("last_goal_notified_date", "ALL");
+    this->lastGoalNotifiedDate = goalDateStr.isEmpty() ? QDate() : QDate::fromString(goalDateStr, "yyyy-MM-dd");
+    QString milestoneDateStr = this->App->db->getMainInfoValue("last_milestone_date", "ALL");
+    this->lastMilestoneDate = milestoneDateStr.isEmpty() ? QDate() : QDate::fromString(milestoneDateStr, "yyyy-MM-dd");
+
+    // Restore milestone counters if the stored date matches today
+    if (this->lastMilestoneDate == today) {
+        this->lastVideoMilestone = this->App->db->getMainInfoValue("last_video_milestone", "ALL", "0").toDouble();
+        this->lastTimeMilestoneMinutes = this->App->db->getMainInfoValue("last_time_milestone", "ALL", "0").toInt();
+
+        // Silently catch up to current progress so we don't re-fire on restart.
+        double milestoneVideoStep = this->App->config->get("daily_milestone_video_step").toDouble();
+        if (milestoneVideoStep > 0.0) {
+            int videosToday = this->App->db->getVideosWatchedToday("ALL");
+            double currentVideoMilestone = std::floor(videosToday / milestoneVideoStep) * milestoneVideoStep;
+            if (currentVideoMilestone > this->lastVideoMilestone)
+                this->lastVideoMilestone = currentVideoMilestone;
+        }
+
+        int milestoneTimeStepMin = this->App->config->get("daily_milestone_time_step_minutes").toInt();
+        if (milestoneTimeStepMin > 0) {
+            double watchedTodaySec = this->App->db->getTotalWatchedTimeToday();
+            int watchedTodayMin = static_cast<int>(watchedTodaySec / 60.0);
+            int currentTimeMilestone = (watchedTodayMin / milestoneTimeStepMin) * milestoneTimeStepMin;
+            if (currentTimeMilestone > this->lastTimeMilestoneMinutes)
+                this->lastTimeMilestoneMinutes = currentTimeMilestone;
+        }
+    } else {
+        this->lastVideoMilestone = 0;
+        this->lastTimeMilestoneMinutes = 0;
+    }
+}
+
+void MainWindow::saveDailyProgressState()
+{
+    this->App->db->setMainInfoValue("last_goal_notified_date", "ALL",
+        this->lastGoalNotifiedDate.isValid() ? this->lastGoalNotifiedDate.toString("yyyy-MM-dd") : "");
+    this->App->db->setMainInfoValue("last_milestone_date", "ALL",
+        this->lastMilestoneDate.isValid() ? this->lastMilestoneDate.toString("yyyy-MM-dd") : "");
+    this->App->db->setMainInfoValue("last_video_milestone", "ALL", QString::number(this->lastVideoMilestone));
+    this->App->db->setMainInfoValue("last_time_milestone", "ALL", QString::number(this->lastTimeMilestoneMinutes));
+}
+
+void MainWindow::checkDailyProgress()
+{
+    QDate today = QDate::currentDate();
+    bool goalAlreadyNotified = this->lastGoalNotifiedDate == today;
+
+    // Reset milestone trackers on day change (uses its own date, independent of goals)
+    if (this->lastMilestoneDate != today) {
+        this->lastMilestoneDate = today;
+        this->lastVideoMilestone = 0;
+        this->lastTimeMilestoneMinutes = 0;
+        // Clear persisted state for the old day too (milestone db keys will be updated on next milestone)
+    }
+
+    double dailyVideoGoal = this->App->config->get("daily_video_goal").toDouble();
+    int dailyTimeGoalMin = this->App->config->get("daily_time_goal_minutes").toInt();
+    double milestoneVideoStep = this->App->config->get("daily_milestone_video_step").toDouble();
+    int milestoneTimeStepMin = this->App->config->get("daily_milestone_time_step_minutes").toInt();
+
+    int videosToday = this->App->db->getVideosWatchedToday("ALL");
+    double watchedTodaySec = this->App->db->getTotalWatchedTimeToday();
+    int watchedTodayMin = static_cast<int>(watchedTodaySec / 60.0);
+
+    // --- Milestones (fire at step intervals, independent of goals) ---
+    if (milestoneVideoStep > 0.0) {
+        double currentMilestone = std::floor(videosToday / milestoneVideoStep) * milestoneVideoStep;
+        if (currentMilestone > this->lastVideoMilestone) {
+            this->lastVideoMilestone = currentMilestone;
+            this->MilestoneNotification(QString("%1 videos watched today").arg(videosToday));
+        }
+    }
+
+    if (milestoneTimeStepMin > 0) {
+        int currentMilestone = (watchedTodayMin / milestoneTimeStepMin) * milestoneTimeStepMin;
+        if (currentMilestone > this->lastTimeMilestoneMinutes) {
+            this->lastTimeMilestoneMinutes = currentMilestone;
+            this->MilestoneNotification(QString("%1 watched today").arg(QString::fromStdString(utils::convert_time_to_text(watchedTodaySec))));
+        }
+    }
+
+    // --- Final goal notification (once per day) ---
+    if (goalAlreadyNotified)
+        return;
+
+    // Helper to format a double without trailing zeros
+    auto fmtDouble = [](double v) -> QString {
+        QString s = QString::number(v, 'f', 1);
+        while (s.endsWith('0') && s.contains('.'))
+            s.chop(1);
+        if (s.endsWith('.'))
+            s.chop(1);
+        return s;
+    };
+
+    bool goalMet = false;
+    QString description;
+
+    if (dailyVideoGoal > 0.0 && videosToday >= dailyVideoGoal) {
+        goalMet = true;
+        int pct = dailyVideoGoal > 0.0 ? static_cast<int>(videosToday * 100.0 / dailyVideoGoal) : 100;
+        description = QString("Daily Video Goal Reached! %1 / %2 videos (%3%)")
+            .arg(videosToday).arg(fmtDouble(dailyVideoGoal)).arg(pct);
+    }
+
+    if (!goalMet && dailyTimeGoalMin > 0 && watchedTodayMin >= dailyTimeGoalMin) {
+        goalMet = true;
+        int pct = dailyTimeGoalMin > 0 ? (watchedTodayMin * 100 / dailyTimeGoalMin) : 100;
+        description = QString("Daily Time Goal Reached! %1 / %2 min (%3%)")
+            .arg(watchedTodayMin).arg(dailyTimeGoalMin).arg(pct);
+    }
+
+    if (goalMet) {
+        this->GoalMetNotification(description);
+    }
+}
+
+void MainWindow::GoalMetNotification(const QString& description)
+{
+    this->lastGoalNotifiedDate = QDate::currentDate();
+    this->saveDailyProgressState();
+    this->notificationManager->showGoalMet(description);
+}
+
+void MainWindow::MilestoneNotification(const QString& description)
+{
+    this->saveDailyProgressState();
+    this->notificationManager->showGeneralMessage("Daily Milestone", description);
 }
 
 void MainWindow::incrementCounterVar(int value) {
@@ -5160,6 +5244,7 @@ MainWindow::~MainWindow()
     this->animatedIcon->deleteLater();
     this->search_completer->deleteLater();
     this->thumbnailManager->deleteLater();
+    delete this->notificationManager;
     delete this->active;
     delete this->inactive;
     delete this->halfactive;

@@ -90,6 +90,6 @@ private:
     QVector<QPair<QDate, double>> m_heatmapCache;
     int m_cachedVideosToday = -1;
     double m_cachedWatchedTodaySec = -1.0;
-    int m_cachedDailyVideoGoal = -1;
+    double m_cachedDailyVideoGoal = -1.0;
     int m_cachedDailyTimeGoalSec = -1;
 };

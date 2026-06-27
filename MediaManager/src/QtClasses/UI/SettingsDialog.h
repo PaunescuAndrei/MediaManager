@@ -35,10 +35,22 @@ public:
     double old_mascotsChanceSpinBox = 0;
     double old_aicon_fps_modifier = 1.0;
     int old_mascotsFreqSpinBox = 400;
+    bool oldTooltipsEnabled = true;
+    int oldTooltipDelayMs = 700;
 
     SettingsDialog(QWidget* parent = nullptr);
     ~SettingsDialog();
     Ui::SettingsDialog ui;
+
+    // Notification page widgets (built programmatically)
+    QCheckBox* notificationVideoInfoEnabled = nullptr;
+    QSpinBox* notificationVideoInfoDurationSpinBox = nullptr;
+    QCheckBox* notificationGeneralMessageEnabled = nullptr;
+    QSpinBox* notificationGeneralMessageDurationSpinBox = nullptr;
+    QCheckBox* notificationGoalMetEnabled = nullptr;
+    QSpinBox* notificationGoalMetDurationSpinBox = nullptr;
+    QDoubleSpinBox* milestoneVideoStepSpinBox = nullptr;
+    QSpinBox* milestoneTimeStepSpinBox = nullptr;
 
 private:
     // Per-category setup methods
@@ -48,6 +60,7 @@ private:
     void setupAudioPage(class MainWindow* mw);
     void setupDatabasePage(class MainWindow* mw);
     void setupRandomPage(class MainWindow* mw);
+    void setupNotificationsPage(class MainWindow* mw);
 
     // Helper methods
     void setupCheckBox(QCheckBox* cb, const QString& configKey, class MainWindow* mw);

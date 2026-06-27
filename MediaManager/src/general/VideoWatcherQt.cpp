@@ -156,6 +156,7 @@ void VideoWatcherQt::checkpointPlayer(QSharedPointer<BasePlayer> player, int int
         now.addSecs(-static_cast<qint64>(session)).toString("yyyy-MM-dd HH:mm:ss"),
         now.toString("yyyy-MM-dd HH:mm:ss"), session,
         false);
+    emit dailyProgressCheckSignal();
     player->lastCheckpointTime = now;
     if (pos >= 0 && player->video_id >= 0) {
         this->db->updateVideoProgress(player->video_id, pos);

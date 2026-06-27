@@ -206,7 +206,7 @@ QSet<Tag> sqliteDB::getAllTags() {
     {
         int id = query.value(0).toInt();
         QString name = query.value(1).toString();
-        int display_priority = query.value(1).toInt();
+        int display_priority = query.value(2).toInt();
         tags.insert({ id,name,display_priority });
     }
     return tags;
@@ -230,7 +230,7 @@ QSet<Tag> sqliteDB::getTags(int video_id) {
     {
         int id = query.value(0).toInt();
         QString name = query.value(1).toString();
-        int display_priority = query.value(1).toInt();
+        int display_priority = query.value(2).toInt();
         tags.insert({ id,name,display_priority });
     }
     return tags;
@@ -505,13 +505,13 @@ double sqliteDB::getAverageRatingAuthor(QString author, QString category, double
 
 void sqliteDB::setMainInfoValue(QString name, QString category, QString value) {
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QStringLiteral("UPDATE maininfo SET value = ? WHERE name = ? AND category = ?"));
+    query.prepare(QStringLiteral("INSERT OR REPLACE INTO maininfo(name, category, value) VALUES(?, ?, ?)"));
+    query.addBindValue(name);
+    query.addBindValue(category);
     if (value.isEmpty())
         query.addBindValue(QVariant(QVariant::String));
     else
         query.addBindValue(value);
-    query.addBindValue(name);
-    query.addBindValue(category);
     if (!query.exec()) {
         if (qMainApp) {
             qMainApp->logger->log(QStringLiteral("Database Error at setMainInfoValue (%1, %2, %3): %4").arg(name, category, value, query.lastError().text()), "Database", query.lastError().text());
@@ -1207,8 +1207,12 @@ double sqliteDB::getTotalSessionTimeToday()
 int sqliteDB::getVideosWatchedToday(const QString& category)
 {
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QStringLiteral("SELECT COUNT(*) FROM watch_history WHERE category = ? AND completed = 1 AND date(session_start) = date('now')"));
-    query.addBindValue(category);
+    if (category == QStringLiteral("ALL")) {
+        query.prepare(QStringLiteral("SELECT COUNT(*) FROM watch_history WHERE completed = 1 AND date(session_start) = date('now')"));
+    } else {
+        query.prepare(QStringLiteral("SELECT COUNT(*) FROM watch_history WHERE category = ? AND completed = 1 AND date(session_start) = date('now')"));
+        query.addBindValue(category);
+    }
     if (!query.exec()) { return 0; }
     return query.first() ? query.value(0).toInt() : 0;
 }
@@ -1782,7 +1786,7 @@ sqliteDB::~sqliteDB() {
 // vacuumDB
 // Runs VACUUM on the current database and returns the number of bytes freed.
 // Calculates freed space as: freelist_count * page_size (bytes before vacuum).
-// Returns -1 on error.
+// Returns -1 on error, -2 if VACUUM succeeded but measurement failed.
 // ---------------------------------------------------------------------------
 qint64 sqliteDB::vacuumDB()
 {
@@ -1790,19 +1794,36 @@ qint64 sqliteDB::vacuumDB()
 
     // Read page size
     qint64 pageSize = 0;
-    if (q.exec("PRAGMA page_size") && q.next())
+    bool measured = true;
+    if (q.exec("PRAGMA page_size") && q.next()) {
         pageSize = q.value(0).toLongLong();
+    } else {
+        measured = false;
+        if (qMainApp)
+            qMainApp->logger->log(QStringLiteral("vacuumDB: PRAGMA page_size failed: %1")
+                .arg(q.lastError().text()), "Database", q.lastError().text());
+    }
 
     // Read free (unused) page count before vacuum
     qint64 freelistCount = 0;
-    if (q.exec("PRAGMA freelist_count") && q.next())
+    if (q.exec("PRAGMA freelist_count") && q.next()) {
         freelistCount = q.value(0).toLongLong();
+    } else if (measured) {
+        measured = false;
+        if (qMainApp)
+            qMainApp->logger->log(QStringLiteral("vacuumDB: PRAGMA freelist_count failed: %1")
+                .arg(q.lastError().text()), "Database", q.lastError().text());
+    }
 
     const qint64 bytesFreed = freelistCount * pageSize;
 
     // Run VACUUM
-    if (!q.exec("VACUUM"))
+    if (!q.exec("VACUUM")) {
+        if (qMainApp)
+            qMainApp->logger->log(QStringLiteral("vacuumDB: VACUUM failed: %1")
+                .arg(q.lastError().text()), "Database", q.lastError().text());
         return -1;
+    }
 
-    return bytesFreed;
+    return measured ? bytesFreed : -2;
 }

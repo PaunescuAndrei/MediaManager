@@ -127,6 +127,11 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 			else
 				this->musicPlayer->pause();
 		});
+	connect(this->VW, &VideoWatcherQt::dailyProgressCheckSignal, this, [this]() {
+		if (this->mainWindow) {
+			this->mainWindow->checkDailyProgress();
+		}
+	});
 	connect(this->VW, &VideoWatcherQt::timeWatchedIncrementSignal, this, [this](double delta) {
 		if (this->mainWindow) {
 			this->mainWindow->incrementtimeWatchedIncrement(delta);

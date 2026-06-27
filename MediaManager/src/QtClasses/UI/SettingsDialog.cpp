@@ -17,7 +17,7 @@
 // Shared style constants
 // ---------------------------------------------------------------------------
 
-static const char* kColorBtnStyle =
+static const char* COLOR_BTN_STYLE =
     "background-color: %1; color: %2; border: 1px solid #555; border-radius: 3px;";
 
 // ---------------------------------------------------------------------------
@@ -48,7 +48,7 @@ void SettingsDialog::bindSliderToSpinBox(QSlider* slider, QDoubleSpinBox* spinbo
 
 static void applyColorBtnStyle(QPushButton* btn, const QColor& c)
 {
-    btn->setStyleSheet(QString(kColorBtnStyle)
+    btn->setStyleSheet(QString(COLOR_BTN_STYLE)
         .arg(c.name())
         .arg(c.lightnessF() > 0.5 ? "#000" : "#fff"));
     btn->setText(c.name().toUpper());
@@ -127,10 +127,6 @@ void SettingsDialog::setupGeneralPage(MainWindow* mw)
     setupSpinStyle(this->ui.searchTimerInterval, "spinbox");
     this->ui.searchTimerInterval->setValue(config->get("search_timer_interval").toInt());
 
-    // --- Notification Duration ---
-    setupSpinStyle(this->ui.notificationDurationSpinBox, "spinbox");
-    this->ui.notificationDurationSpinBox->setValue(config->get("notification_duration_ms").toInt());
-
     // --- Random Seed ---
     setupCheckBox(this->ui.seedCheckBox, "random_use_seed", mw);
     this->ui.seedLineEdit->setText(config->get("random_seed"));
@@ -164,8 +160,8 @@ void SettingsDialog::setupGeneralPage(MainWindow* mw)
     // --- Daily Goals ---
     setupSpinStyle(this->ui.dailyVideoGoalSpinBox, "spinbox");
     setupSpinStyle(this->ui.dailyTimeGoalSpinBox, "spinbox");
-    int dailyVid = qBound(0, config->get("daily_video_goal").toInt(),
-                          this->ui.dailyVideoGoalSpinBox->maximum());
+    double dailyVid = qBound(0.0, config->get("daily_video_goal").toDouble(),
+                             this->ui.dailyVideoGoalSpinBox->maximum());
     int dailyTime = qBound(0, config->get("daily_time_goal_minutes").toInt(),
                            this->ui.dailyTimeGoalSpinBox->maximum());
     this->ui.dailyVideoGoalSpinBox->setValue(dailyVid);
@@ -175,6 +171,8 @@ void SettingsDialog::setupGeneralPage(MainWindow* mw)
     setupCheckBox(this->ui.tooltipsEnabled, "tooltips_enabled", mw);
     setupSpinStyle(this->ui.tooltipDelaySpinBox, "spinbox");
     this->ui.tooltipDelaySpinBox->setValue(config->get("tooltip_delay_ms").toInt());
+    this->oldTooltipsEnabled = this->ui.tooltipsEnabled->isChecked();
+    this->oldTooltipDelayMs = this->ui.tooltipDelaySpinBox->value();
 }
 
 void SettingsDialog::setupPlaybackPage(MainWindow* mw)
@@ -418,8 +416,10 @@ void SettingsDialog::setupDatabasePage(MainWindow* mw)
     connect(this->ui.vacuumBtn, &QPushButton::clicked, this, [mw, this] {
         qint64 freed = mw->App->db->vacuumDB();
         QString msg;
-        if (freed < 0) {
+        if (freed == -1) {
             msg = tr("Vacuum failed. Check the log for details.");
+        } else if (freed == -2) {
+            msg = tr("Vacuum complete.\nCould not estimate freed space (measurement query failed). Check the log for details.");
         } else if (freed == 0) {
             msg = tr("Vacuum complete.\nNo unused space was found.");
         } else {
@@ -534,6 +534,125 @@ void SettingsDialog::setupRandomPage(MainWindow* mw)
     this->ui.noTagsPlusSpinBox->setValue(config->get("random_no_tags_weight_plus").toDouble());
 }
 
+void SettingsDialog::setupNotificationsPage(MainWindow* mw)
+{
+    Config* config = mw->App->config;
+
+    // Build the page programmatically
+    QScrollArea* scrollArea = new QScrollArea();
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setWidgetResizable(true);
+
+    QWidget* pageContent = new QWidget();
+    QVBoxLayout* pageLayout = new QVBoxLayout(pageContent);
+    pageLayout->setContentsMargins(4, 4, 4, 4);
+    pageLayout->setSpacing(8);
+
+    // --- Presets Group ---
+    QGroupBox* presetsGroup = new QGroupBox("Notification Presets");
+    QVBoxLayout* presetsLayout = new QVBoxLayout(presetsGroup);
+    presetsLayout->setSpacing(4);
+
+    // Video Info row
+    QHBoxLayout* videoInfoRow = new QHBoxLayout();
+    notificationVideoInfoEnabled = new QCheckBox("Video Info");
+    notificationVideoInfoEnabled->setToolTip("Show notification popup when video changes, watching starts, etc.");
+    setupCheckBox(notificationVideoInfoEnabled, "notification_video_info_enabled", mw);
+    videoInfoRow->addWidget(notificationVideoInfoEnabled);
+    videoInfoRow->addStretch();
+    notificationVideoInfoDurationSpinBox = new QSpinBox();
+    notificationVideoInfoDurationSpinBox->setMinimum(1000);
+    notificationVideoInfoDurationSpinBox->setMaximum(60000);
+    notificationVideoInfoDurationSpinBox->setSingleStep(500);
+    notificationVideoInfoDurationSpinBox->setToolTip("Duration in milliseconds");
+    notificationVideoInfoDurationSpinBox->setValue(config->get("notification_video_info_duration_ms").toInt());
+    setupSpinStyle(notificationVideoInfoDurationSpinBox, "spinbox");
+    videoInfoRow->addWidget(notificationVideoInfoDurationSpinBox);
+    presetsLayout->addLayout(videoInfoRow);
+
+    // General Messages row
+    QHBoxLayout* generalMsgRow = new QHBoxLayout();
+    notificationGeneralMessageEnabled = new QCheckBox("General Messages");
+    notificationGeneralMessageEnabled->setToolTip("Show notification popups for general messages and status updates");
+    setupCheckBox(notificationGeneralMessageEnabled, "notification_general_message_enabled", mw);
+    generalMsgRow->addWidget(notificationGeneralMessageEnabled);
+    generalMsgRow->addStretch();
+    notificationGeneralMessageDurationSpinBox = new QSpinBox();
+    notificationGeneralMessageDurationSpinBox->setMinimum(1000);
+    notificationGeneralMessageDurationSpinBox->setMaximum(60000);
+    notificationGeneralMessageDurationSpinBox->setSingleStep(500);
+    notificationGeneralMessageDurationSpinBox->setToolTip("Duration in milliseconds");
+    notificationGeneralMessageDurationSpinBox->setValue(config->get("notification_general_message_duration_ms").toInt());
+    setupSpinStyle(notificationGeneralMessageDurationSpinBox, "spinbox");
+    generalMsgRow->addWidget(notificationGeneralMessageDurationSpinBox);
+    presetsLayout->addLayout(generalMsgRow);
+
+    // Goal Reached row
+    QHBoxLayout* goalRow = new QHBoxLayout();
+    notificationGoalMetEnabled = new QCheckBox("Goal Reached");
+    notificationGoalMetEnabled->setToolTip("Show notification popup when daily watch goals are reached");
+    setupCheckBox(notificationGoalMetEnabled, "notification_goal_met_enabled", mw);
+    goalRow->addWidget(notificationGoalMetEnabled);
+    goalRow->addStretch();
+    notificationGoalMetDurationSpinBox = new QSpinBox();
+    notificationGoalMetDurationSpinBox->setMinimum(1000);
+    notificationGoalMetDurationSpinBox->setMaximum(60000);
+    notificationGoalMetDurationSpinBox->setSingleStep(500);
+    notificationGoalMetDurationSpinBox->setToolTip("Duration in milliseconds");
+    notificationGoalMetDurationSpinBox->setValue(config->get("notification_goal_met_duration_ms").toInt());
+    setupSpinStyle(notificationGoalMetDurationSpinBox, "spinbox");
+    goalRow->addWidget(notificationGoalMetDurationSpinBox);
+    presetsLayout->addLayout(goalRow);
+
+    pageLayout->addWidget(presetsGroup);
+
+    // --- Daily Milestones Group ---
+    QGroupBox* milestonesGroup = new QGroupBox("Daily Milestones");
+    milestonesGroup->setToolTip("Show progress notifications at regular intervals throughout the day, independent of the final goal");
+    QVBoxLayout* milestonesLayout = new QVBoxLayout(milestonesGroup);
+    milestonesLayout->setSpacing(4);
+
+    // Video milestone step
+    QHBoxLayout* videoStepRow = new QHBoxLayout();
+    QLabel* videoStepLabel = new QLabel("Video Milestone Step:");
+    videoStepLabel->setToolTip("Show a milestone notification every N videos watched today (0 = disabled)");
+    videoStepRow->addWidget(videoStepLabel);
+    videoStepRow->addStretch();
+    milestoneVideoStepSpinBox = new QDoubleSpinBox();
+    milestoneVideoStepSpinBox->setDecimals(2);
+    milestoneVideoStepSpinBox->setMinimum(0.0);
+    milestoneVideoStepSpinBox->setMaximum(999.0);
+    milestoneVideoStepSpinBox->setSingleStep(0.5);
+    milestoneVideoStepSpinBox->setToolTip("0 = disabled. Example: 2.5 means notify at 3, 5, 8, 10... videos today.");
+    milestoneVideoStepSpinBox->setValue(config->get("daily_milestone_video_step").toDouble());
+    setupSpinStyle(milestoneVideoStepSpinBox, "spinbox");
+    videoStepRow->addWidget(milestoneVideoStepSpinBox);
+    milestonesLayout->addLayout(videoStepRow);
+
+    // Time milestone step
+    QHBoxLayout* timeStepRow = new QHBoxLayout();
+    QLabel* timeStepLabel = new QLabel("Time Milestone Step (min):");
+    timeStepLabel->setToolTip("Show a milestone notification every N minutes of watch time today (0 = disabled)");
+    timeStepRow->addWidget(timeStepLabel);
+    timeStepRow->addStretch();
+    milestoneTimeStepSpinBox = new QSpinBox();
+    milestoneTimeStepSpinBox->setMinimum(0);
+    milestoneTimeStepSpinBox->setMaximum(9999);
+    milestoneTimeStepSpinBox->setToolTip("0 = disabled. Example: 30 means notify at 30, 60, 90... minutes today.");
+    milestoneTimeStepSpinBox->setValue(config->get("daily_milestone_time_step_minutes").toInt());
+    setupSpinStyle(milestoneTimeStepSpinBox, "spinbox");
+    timeStepRow->addWidget(milestoneTimeStepSpinBox);
+    milestonesLayout->addLayout(timeStepRow);
+
+    pageLayout->addWidget(milestonesGroup);
+
+    // Spacer at bottom
+    pageLayout->addStretch();
+
+    scrollArea->setWidget(pageContent);
+    this->ui.settingsStack->addWidget(scrollArea);
+}
+
 // ---------------------------------------------------------------------------
 // Constructor
 // ---------------------------------------------------------------------------
@@ -556,7 +675,9 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
     setupAudioPage(mw);
     setupDatabasePage(mw);
     setupRandomPage(mw);
+    setupNotificationsPage(mw);
 
+    //These need to be at the bottom
     // Wire Apply button for all changeable widgets + wheel filters
     wireApplyEnable();
     WheelStrongFocusEventFilter* wheelFilter = new WheelStrongFocusEventFilter(this);

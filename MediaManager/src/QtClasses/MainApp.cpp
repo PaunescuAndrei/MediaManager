@@ -10,6 +10,7 @@
 #include <QFontDatabase>
 #include "timeapi.h"
 #include "generalEventFilter.h"
+#include "TooltipEventFilter.h"
 #include "LogDialog.h"
 #include <QErrorMessage>
 #include "shokoAPI.h"
@@ -155,6 +156,8 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 	this->genEventFilter = new generalEventFilter(this, this);
 	if(this->config->get_bool("sound_effects_clicks"))
 		this->installEventFilter(this->genEventFilter);
+	this->tooltipFilter = new TooltipEventFilter(this);
+	qApp->installEventFilter(this->tooltipFilter);
 	this->mainWindow->init_icons();
 
 	if (start_hidden) {

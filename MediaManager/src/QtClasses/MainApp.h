@@ -19,6 +19,7 @@
 
 class MainWindow;
 class generalEventFilter;
+class TooltipEventFilter;
 class LogDialog;
 class QErrorMessage;
 class shokoAPI;
@@ -42,6 +43,7 @@ public:
     mascotsAnimationsThread* MascotsAnimation = nullptr;
     QuitEater* quitEater = nullptr;
     generalEventFilter* genEventFilter = nullptr;
+    TooltipEventFilter* tooltipFilter = nullptr;
     RawInputKeyboard* keyboard_hook;
     bool exit_sound_called = false;
     bool ready_to_quit = false;

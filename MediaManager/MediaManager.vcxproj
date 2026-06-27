@@ -81,6 +81,7 @@
     <ClCompile Include="src\QtClasses\Widgets\currentVideoQLabel.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\customGraphicsView.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\generalEventFilter.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\TooltipEventFilter.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\videosTreeWidget.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\customQPushButton.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\customQToolButton.cpp" />
@@ -154,6 +155,7 @@
     <ClInclude Include="src\general\taskbar.h" />
     <QtMoc Include="src\QtClasses\UI\InsertSettingsDialog.h" />
     <QtMoc Include="src\QtClasses\Widgets\generalEventFilter.h" />
+    <QtMoc Include="src\QtClasses\Widgets\TooltipEventFilter.h" />
     <QtMoc Include="src\QtClasses\UI\starDelegate.h" />
     <QtMoc Include="src\QtClasses\UI\starEditorWidget.h" />
     <QtMoc Include="src\logger.h" />

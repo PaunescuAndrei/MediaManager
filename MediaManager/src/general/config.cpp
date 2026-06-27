@@ -147,6 +147,8 @@ void Config::init_defaults() {
         {"empty_player_tracking", "True"},
         {"daily_video_goal", "5"},
         {"daily_time_goal_minutes", "60"},
+        {"tooltips_enabled", "True"},
+        {"tooltip_delay_ms", "700"},
 	});
 }
 

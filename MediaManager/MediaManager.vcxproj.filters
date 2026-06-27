@@ -199,6 +199,9 @@
     <ClCompile Include="src\QtClasses\Widgets\generalEventFilter.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
+    <ClCompile Include="srcQtClassesWidgetsTooltipEventFilter.cpp">
+      <Filter>Source FilesQtClassesWidgets</Filter>
+    </ClCompile>
     <ClCompile Include="src\general\RawInputKeyboard.cpp">
       <Filter>Source Files\general</Filter>
     </ClCompile>
@@ -598,6 +601,9 @@
     </QtMoc>
     <QtMoc Include="src\QtClasses\Widgets\generalEventFilter.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="srcQtClassesWidgetsTooltipEventFilter.h">
+      <Filter>Header FilesQtClassesWidgets</Filter>
     </QtMoc>
     <QtMoc Include="src\QtClasses\UI\starDelegate.h">
       <Filter>Header Files\QtClasses\UI</Filter>

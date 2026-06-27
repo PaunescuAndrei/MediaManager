@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "MainWindow.h"
+#include "TooltipEventFilter.h"
 #include "MainApp.h"
 #include "version.h"
 #include <iostream>
@@ -3077,6 +3078,9 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         config->set("empty_player_tracking", "True");
     else
         config->set("empty_player_tracking", "False");
+    config->set("tooltips_enabled", dialog->ui.tooltipsEnabled->isChecked() ? "True" : "False");
+    config->set("tooltip_delay_ms", QString::number(dialog->ui.tooltipDelaySpinBox->value()));
+    qMainApp->tooltipFilter->reloadConfig();
     config->save_config();
 }
 

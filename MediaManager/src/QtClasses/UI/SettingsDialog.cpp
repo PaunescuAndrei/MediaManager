@@ -144,6 +144,11 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
 		this->ui.videoAutoplay->setCheckState(Qt::CheckState::Checked);
 	else
 		this->ui.videoAutoplay->setCheckState(Qt::CheckState::Unchecked);
+	if (mw->App->config->get_bool("tooltips_enabled"))
+		this->ui.tooltipsEnabled->setCheckState(Qt::CheckState::Checked);
+	else
+		this->ui.tooltipsEnabled->setCheckState(Qt::CheckState::Unchecked);
+	this->ui.tooltipDelaySpinBox->setValue(mw->App->config->get("tooltip_delay_ms").toInt());
 	int previewVolume = qBound(0, mw->App->config->get("preview_volume").toInt(), 100);
 	this->ui.previewVolumeSpinBox->setValue(previewVolume);
 	this->oldPreviewVolume = previewVolume;

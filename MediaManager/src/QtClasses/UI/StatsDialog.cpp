@@ -222,13 +222,10 @@ void StatsDialog::setupAchievements(MainApp* app)
     goalsLayout->addWidget(timeBar, goalRow++, 1);
 
     // Insert goals after the video stats
-    QVBoxLayout* overviewLayout = qobject_cast<QVBoxLayout*>(ui.overviewTab->layout());
-    if (overviewLayout) {
-        QFrame* line = new QFrame();
-        line->setFrameShape(QFrame::HLine);
-        overviewLayout->insertWidget(overviewLayout->count() - 1, line);
-        overviewLayout->insertWidget(overviewLayout->count() - 1, progressTitle);
-        overviewLayout->insertWidget(overviewLayout->count() - 1, goalsContainer);
+    QVBoxLayout* progressGoalsLayout = qobject_cast<QVBoxLayout*>(ui.progress_goals_container->layout());
+    if (progressGoalsLayout) {
+        progressGoalsLayout->insertWidget(progressGoalsLayout->count(), progressTitle);
+        progressGoalsLayout->insertWidget(progressGoalsLayout->count(), goalsContainer);
     }
 
     // Cache shared values so setupStreaksTab can reuse them

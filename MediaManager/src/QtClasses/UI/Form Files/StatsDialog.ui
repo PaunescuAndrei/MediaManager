@@ -67,6 +67,11 @@
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_2">
            <item>
+            <widget class="QWidget" name="progress_goals_container" native="true">
+             <layout class="QVBoxLayout" name="verticalLayout_3"/>
+            </widget>
+           </item>
+           <item>
             <widget class="QLabel" name="title_label">
              <property name="font">
               <font>

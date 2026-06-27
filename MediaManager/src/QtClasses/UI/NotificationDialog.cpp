@@ -155,7 +155,7 @@ void NotificationDialog::buildSimpleContent()
 {
 	QVBoxLayout* layout = new QVBoxLayout(contentWidget_);
 	layout->setContentsMargins(10, 8, 10, 8);
-	layout->setSpacing(4);
+	layout->setSpacing(2);
 
 	QHBoxLayout* headerRow = new QHBoxLayout();
 	headerRow->setSpacing(6);

@@ -162,7 +162,7 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 	if(this->config->get_bool("sound_effects_clicks"))
 		this->installEventFilter(this->genEventFilter);
 	this->tooltipFilter = new TooltipEventFilter(this);
-	qApp->installEventFilter(this->tooltipFilter);
+	this->installEventFilter(this->tooltipFilter);
 	this->mainWindow->init_icons();
 
 	if (start_hidden) {

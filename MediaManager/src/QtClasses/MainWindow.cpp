@@ -3990,33 +3990,33 @@ void MainWindow::checkDailyProgress()
         return s;
     };
 
-    bool goalMet = false;
-    QString description;
+    QString goalTitle;
+    QString goalMessage;
 
     if (dailyVideoGoal > 0.0 && videosToday >= dailyVideoGoal) {
-        goalMet = true;
+        goalTitle = "Daily Video Goal Reached!";
         int pct = dailyVideoGoal > 0.0 ? static_cast<int>(videosToday * 100.0 / dailyVideoGoal) : 100;
-        description = QString("Daily Video Goal Reached! %1 / %2 videos (%3%)")
+        goalMessage = QString("%1 / %2 videos (%3%)")
             .arg(videosToday).arg(fmtDouble(dailyVideoGoal)).arg(pct);
-    }
-
-    if (!goalMet && dailyTimeGoalMin > 0 && watchedTodayMin >= dailyTimeGoalMin) {
-        goalMet = true;
+    } else if (dailyTimeGoalMin > 0 && watchedTodayMin >= dailyTimeGoalMin) {
+        goalTitle = "Daily Time Goal Reached!";
         int pct = dailyTimeGoalMin > 0 ? (watchedTodayMin * 100 / dailyTimeGoalMin) : 100;
-        description = QString("Daily Time Goal Reached! %1 / %2 min (%3%)")
+        goalMessage = QString("%1 / %2 min (%3%)")
             .arg(watchedTodayMin).arg(dailyTimeGoalMin).arg(pct);
     }
 
-    if (goalMet) {
-        this->GoalMetNotification(description);
+    if (!goalTitle.isEmpty()) {
+        this->GoalMetNotification(goalTitle, goalMessage);
     }
 }
 
-void MainWindow::GoalMetNotification(const QString& description)
+void MainWindow::GoalMetNotification(const QString& title, const QString& message)
 {
+    if (!this->App->config->get_bool("notification_goal_met_enabled"))
+        return;
     this->lastGoalNotifiedDate = QDate::currentDate();
     this->saveDailyProgressState();
-    this->notificationManager->showGoalMet(description);
+    this->notificationManager->showGoalMet(title, message);
 }
 
 void MainWindow::MilestoneNotification(const QString& description)

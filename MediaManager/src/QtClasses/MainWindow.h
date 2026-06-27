@@ -180,7 +180,7 @@ public:
     void checkDailyProgress();
     void loadDailyProgressState();
     void saveDailyProgressState();
-    void GoalMetNotification(const QString& description);
+    void GoalMetNotification(const QString& title, const QString& message);
     void MilestoneNotification(const QString& description);
     void incrementCounterVar(int value = 1);
     bool applyPostWatchAdjustments(const QString& videoType, int videoId, bool increment, double watchedProgressOverride = 0.0, bool useOverrideProgress = false, bool suppressMinusCounter = false, double actualWatchTimeDelta = 0.0);

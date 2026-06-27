@@ -155,7 +155,7 @@ void NotificationDialog::buildSimpleContent()
 {
 	QVBoxLayout* layout = new QVBoxLayout(contentWidget_);
 	layout->setContentsMargins(10, 8, 10, 8);
-	layout->setSpacing(2);
+	layout->setSpacing(4);
 
 	QHBoxLayout* headerRow = new QHBoxLayout();
 	headerRow->setSpacing(6);
@@ -169,7 +169,6 @@ void NotificationDialog::buildSimpleContent()
 
 	titleLabel_ = new QLabel();
 	titleLabel_->setStyleSheet(TITLE_STYLE);
-	titleLabel_->setWordWrap(true);
 	titleLabel_->hide();
 	headerRow->addWidget(titleLabel_, 1);
 
@@ -177,7 +176,6 @@ void NotificationDialog::buildSimpleContent()
 
 	messageLabel_ = new QLabel();
 	messageLabel_->setStyleSheet(QString(BODY_STYLE) + QStringLiteral(" color: #AAAAAA;"));
-	messageLabel_->setWordWrap(true);
 	layout->addWidget(messageLabel_);
 }
 
@@ -280,13 +278,13 @@ void NotificationDialog::populateGeneralMessage(const QString& title, const QStr
 	messageLabel_->setText(message);
 }
 
-void NotificationDialog::populateGoalMet(const QString& description)
+void NotificationDialog::populateGoalMet(const QString& title, const QString& message)
 {
 	if (!titleLabel_ || !messageLabel_) return;
 
-	titleLabel_->setText("Goal Reached!");
+	titleLabel_->setText(title);
 	titleLabel_->show();
-	messageLabel_->setText(description);
+	messageLabel_->setText(message);
 }
 
 void NotificationDialog::closeNotification() {

@@ -86,14 +86,14 @@ void NotificationManager::showGeneralMessage(const QString& title, const QString
 	repositionAll(); // after show so adjustSize works correctly
 }
 
-void NotificationManager::showGoalMet(const QString& description)
+void NotificationManager::showGoalMet(const QString& title, const QString& message)
 {
 	if (!mw_->App->config->get_bool("notification_goal_met_enabled"))
 		return;
 
 	int durationMs = mw_->App->config->get("notification_goal_met_duration_ms").toInt();
 	NotificationDialog* dialog = createNotification(NotificationType::GoalMet);
-	dialog->populateGoalMet(description);
+	dialog->populateGoalMet(title, message);
 	insertNotification(dialog);
 	dialog->showNotification(durationMs, 5);
 	repositionAll(); // after show so adjustSize works correctly

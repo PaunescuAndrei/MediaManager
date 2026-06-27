@@ -41,7 +41,7 @@ public:
 	// Populate content based on preset type
 	void populateVideoInfo(MainWindow* mw);
 	void populateGeneralMessage(const QString& title, const QString& message);
-	void populateGoalMet(const QString& description);
+	void populateGoalMet(const QString& title, const QString& message);
 
 signals:
 	void showEventSignal();

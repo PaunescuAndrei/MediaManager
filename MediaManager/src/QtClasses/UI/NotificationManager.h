@@ -16,7 +16,7 @@ public:
 	void showVideoInfo();
 	void resumeVideoInfo(QPointer<NotificationDialog> dialog);
 	void showGeneralMessage(const QString& title, const QString& message);
-	void showGoalMet(const QString& description);
+	void showGoalMet(const QString& title, const QString& message);
 	void closeAll();
 
 private slots:

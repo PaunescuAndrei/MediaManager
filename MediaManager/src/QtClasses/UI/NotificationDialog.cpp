@@ -16,6 +16,7 @@ NotificationWidget::NotificationWidget(NotificationType type, QWidget* parent)
 	         | Qt::WindowDoesNotAcceptFocus | Qt::NoDropShadowWindowHint), type_(type)
 {
 	this->setAttribute(Qt::WA_ShowWithoutActivating, true);
+	this->setWindowTitle(QStringLiteral("MediaManager Notification"));
 
 	buildLayout();
 

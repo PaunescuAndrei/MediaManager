@@ -541,7 +541,7 @@ void MainWindow::UpdateWindowTitle() {
     this->setWindowTitle(main_title % thumb_work_count % bpm_work_count % session_time % watched_time);
 }
 
-void MainWindow::VideoInfoNotification(QPointer<NotificationDialog> resumeFrom) {
+void MainWindow::VideoInfoNotification(QPointer<NotificationWidget> resumeFrom) {
     if (resumeFrom) {
         this->notificationManager->resumeVideoInfo(resumeFrom);
     } else {
@@ -3333,7 +3333,7 @@ void MainWindow::updateProgressBar(double position, double duration, QSharedPoin
     }
 }
 
-void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notification, QPointer<NotificationDialog> resumeNotification) {
+void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notification, QPointer<NotificationWidget> resumeNotification) {
     if (this->App->VW->mainPlayer
         && !this->App->VW->mainPlayer->video_path.isEmpty()
         && (ignore_end_of_video || this->App->VW->mainPlayer->end_of_video)

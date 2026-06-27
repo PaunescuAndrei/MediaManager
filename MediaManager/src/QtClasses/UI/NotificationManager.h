@@ -14,7 +14,7 @@ public:
 	~NotificationManager();
 
 	void showVideoInfo();
-	void resumeVideoInfo(QPointer<NotificationDialog> dialog);
+	void resumeVideoInfo(QPointer<NotificationWidget> dialog);
 	void showGeneralMessage(const QString& title, const QString& message);
 	void showGoalMet(const QString& title, const QString& message);
 	void closeAll();
@@ -24,10 +24,10 @@ private slots:
 	void repositionAll();
 
 private:
-	NotificationDialog* createNotification(NotificationType type);
-	void insertNotification(NotificationDialog* dialog);
+	NotificationWidget* createNotification(NotificationType type);
+	void insertNotification(NotificationWidget* dialog);
 	QPoint calculateTopCenterPosition(int index) const;
 
 	MainWindow* mw_;
-	QList<QPointer<NotificationDialog>> activeNotifications_;
+	QList<QPointer<NotificationWidget>> activeNotifications_;
 };

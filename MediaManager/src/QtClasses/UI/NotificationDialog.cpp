@@ -11,11 +11,11 @@ static const char* BODY_STYLE = "QLabel { font-size: 12pt; }";
 static const char* DETAIL_STYLE = "QLabel { font-size: 11pt; color: #AAAAAA; }";
 static const int PROGRESS_BAR_HEIGHT = 5;
 
-NotificationDialog::NotificationDialog(NotificationType type, QWidget* parent) : QDialog(parent), type_(type)
+NotificationWidget::NotificationWidget(NotificationType type, QWidget* parent)
+	: QWidget(parent, Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint
+	         | Qt::WindowDoesNotAcceptFocus | Qt::NoDropShadowWindowHint), type_(type)
 {
-	this->setWindowModality(Qt::WindowModal);
 	this->setAttribute(Qt::WA_ShowWithoutActivating, true);
-	this->setWindowFlags(this->windowFlags() | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint | Qt::X11BypassWindowManagerHint | Qt::Tool | Qt::WindowStaysOnTopHint | Qt::WindowDoesNotAcceptFocus);
 
 	buildLayout();
 
@@ -38,7 +38,7 @@ NotificationDialog::NotificationDialog(NotificationType type, QWidget* parent) :
 	});
 }
 
-void NotificationDialog::buildLayout()
+void NotificationWidget::buildLayout()
 {
 	QVBoxLayout* rootLayout = new QVBoxLayout(this);
 	rootLayout->setContentsMargins(0, 0, 0, 0);
@@ -65,7 +65,7 @@ void NotificationDialog::buildLayout()
 	}
 }
 
-void NotificationDialog::buildVideoInfoContent()
+void NotificationWidget::buildVideoInfoContent()
 {
 	// Outer: side bars + center content, matching the original .ui layout
 	QHBoxLayout* outerLayout = new QHBoxLayout(contentWidget_);
@@ -151,7 +151,7 @@ void NotificationDialog::buildVideoInfoContent()
 	outerLayout->addWidget(counterLabel_);
 }
 
-void NotificationDialog::buildSimpleContent()
+void NotificationWidget::buildSimpleContent()
 {
 	QVBoxLayout* layout = new QVBoxLayout(contentWidget_);
 	layout->setContentsMargins(10, 8, 10, 8);
@@ -179,11 +179,11 @@ void NotificationDialog::buildSimpleContent()
 	layout->addWidget(messageLabel_);
 }
 
-void NotificationDialog::setMainWindow(MainWindow* MW) {
+void NotificationWidget::setMainWindow(MainWindow* MW) {
 	this->MW = MW;
 }
 
-void NotificationDialog::populateVideoInfo(MainWindow* mw)
+void NotificationWidget::populateVideoInfo(MainWindow* mw)
 {
 	if (!authorLabel_ || !nameLabel_) return;
 
@@ -265,7 +265,7 @@ void NotificationDialog::populateVideoInfo(MainWindow* mw)
 	}
 }
 
-void NotificationDialog::populateGeneralMessage(const QString& title, const QString& message)
+void NotificationWidget::populateGeneralMessage(const QString& title, const QString& message)
 {
 	if (!titleLabel_ || !messageLabel_) return;
 
@@ -278,7 +278,7 @@ void NotificationDialog::populateGeneralMessage(const QString& title, const QStr
 	messageLabel_->setText(message);
 }
 
-void NotificationDialog::populateGoalMet(const QString& title, const QString& message)
+void NotificationWidget::populateGoalMet(const QString& title, const QString& message)
 {
 	if (!titleLabel_ || !messageLabel_) return;
 
@@ -287,14 +287,14 @@ void NotificationDialog::populateGoalMet(const QString& title, const QString& me
 	messageLabel_->setText(message);
 }
 
-void NotificationDialog::closeNotification() {
+void NotificationWidget::closeNotification() {
 	this->timer->stop();
 	this->close();
 	this->paused = false;
 	this->deleteLater();
 }
 
-void NotificationDialog::showNotification()
+void NotificationWidget::showNotification()
 {
 	this->time_start = std::chrono::steady_clock::now();
 	this->paused = false;
@@ -305,25 +305,21 @@ void NotificationDialog::showNotification()
 	this->timer2->start(250);
 }
 
-void NotificationDialog::showNotification(int duration, int interval)
+void NotificationWidget::showNotification(int duration, int interval)
 {
 	this->time_duration = std::chrono::milliseconds(duration);
 	this->timerInterval = interval;
 	this->showNotification();
 }
 
-void NotificationDialog::resizeEvent(QResizeEvent* event)
-{
-	QDialog::resizeEvent(event);
-}
 
-NotificationDialog::~NotificationDialog()
+NotificationWidget::~NotificationWidget()
 {
 	this->timer->deleteLater();
 	this->timer2->deleteLater();
 }
 
-void NotificationDialog::mousePressEvent(QMouseEvent* event)
+void NotificationWidget::mousePressEvent(QMouseEvent* event)
 {
 	event->accept();
 	const bool isRightClick = event->button() == Qt::RightButton;
@@ -335,7 +331,7 @@ void NotificationDialog::mousePressEvent(QMouseEvent* event)
 	}
 }
 
-void NotificationDialog::pauseNotification()
+void NotificationWidget::pauseNotification()
 {
 	if (this->paused)
 		return;

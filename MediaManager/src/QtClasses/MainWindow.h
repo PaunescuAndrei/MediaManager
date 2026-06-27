@@ -88,7 +88,7 @@ public:
     QString getCategoryName(QString currentdb);
     QString getCategoryName();
     void UpdateWindowTitle();
-    void VideoInfoNotification(QPointer<NotificationDialog> resumeFrom = nullptr);
+    void VideoInfoNotification(QPointer<NotificationWidget> resumeFrom = nullptr);
     void resetPalette();
     void changePalette(QPalette palette);
     void initStyleSheets();
@@ -121,7 +121,7 @@ public:
     void updateWatchedProgressBar();
     void updateProgressBar(double position, double duration);
     void updateProgressBar(double position, double duration, QSharedPointer<BasePlayer> player, bool running = false);
-    void showEndOfVideoDialog(bool ignore_end_of_video = false, bool show_notification = false, QPointer<NotificationDialog> resumeNotification = nullptr);
+    void showEndOfVideoDialog(bool ignore_end_of_video = false, bool show_notification = false, QPointer<NotificationWidget> resumeNotification = nullptr);
     void SkipVideo();
     void updateProgressBar(QString position, QString duration);
     void updateTotalListLabel(bool force_update = false);

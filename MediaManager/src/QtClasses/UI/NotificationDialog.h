@@ -1,5 +1,5 @@
 #pragma once
-#include <QDialog>
+#include <QWidget>
 #include <chrono>
 #include <QTimer>
 
@@ -15,8 +15,8 @@ enum class NotificationType {
 	GoalMet
 };
 
-class NotificationDialog :
-	public QDialog
+class NotificationWidget :
+	public QWidget
 {
 	Q_OBJECT
 public:
@@ -26,14 +26,13 @@ public:
 	int timerInterval = 1000;
 	std::chrono::time_point<std::chrono::steady_clock> time_start = std::chrono::steady_clock::now();
 	std::chrono::milliseconds time_duration = std::chrono::milliseconds(10000);
-	NotificationDialog(NotificationType type, QWidget* parent = nullptr);
+	NotificationWidget(NotificationType type, QWidget* parent = nullptr);
 	void setMainWindow(MainWindow* MW);
 	void closeNotification();
 	void showNotification();
 	void showNotification(int duration, int interval);
 	void pauseNotification();
-	void resizeEvent(QResizeEvent*) override;
-	~NotificationDialog();
+	~NotificationWidget();
 	void mousePressEvent(QMouseEvent* event) override;
 
 	NotificationType type() const { return type_; }

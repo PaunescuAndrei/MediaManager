@@ -13,9 +13,9 @@ NotificationManager::~NotificationManager()
 	closeAll();
 }
 
-NotificationDialog* NotificationManager::createNotification(NotificationType type)
+NotificationWidget* NotificationManager::createNotification(NotificationType type)
 {
-	NotificationDialog* dialog = new NotificationDialog(type, nullptr);
+	NotificationWidget* dialog = new NotificationWidget(type, nullptr);
 	dialog->setMainWindow(mw_);
 
 	// Track this notification and reposition when it closes
@@ -36,12 +36,12 @@ NotificationDialog* NotificationManager::createNotification(NotificationType typ
 	return dialog;
 }
 
-void NotificationManager::insertNotification(NotificationDialog* dialog)
+void NotificationManager::insertNotification(NotificationWidget* dialog)
 {
 	// Clean up any nullptrs from destroyed dialogs
 	activeNotifications_.erase(
 		std::remove_if(activeNotifications_.begin(), activeNotifications_.end(),
-			[](const QPointer<NotificationDialog>& ptr) { return ptr.isNull(); }),
+			[](const QPointer<NotificationWidget>& ptr) { return ptr.isNull(); }),
 		activeNotifications_.end()
 	);
 
@@ -56,14 +56,14 @@ void NotificationManager::showVideoInfo()
 
 	int durationMs = mw_->App->config->get("notification_video_info_duration_ms").toInt();
 
-	NotificationDialog* dialog = createNotification(NotificationType::VideoInfo);
+	NotificationWidget* dialog = createNotification(NotificationType::VideoInfo);
 	dialog->populateVideoInfo(mw_);
 	insertNotification(dialog);
 	dialog->showNotification(durationMs, 5);
 	repositionAll();
 }
 
-void NotificationManager::resumeVideoInfo(QPointer<NotificationDialog> dialog)
+void NotificationManager::resumeVideoInfo(QPointer<NotificationWidget> dialog)
 {
 	if (!dialog)
 		return;
@@ -79,7 +79,7 @@ void NotificationManager::showGeneralMessage(const QString& title, const QString
 		return;
 
 	int durationMs = mw_->App->config->get("notification_general_message_duration_ms").toInt();
-	NotificationDialog* dialog = createNotification(NotificationType::GeneralMessage);
+	NotificationWidget* dialog = createNotification(NotificationType::GeneralMessage);
 	dialog->populateGeneralMessage(title, message);
 	insertNotification(dialog);
 	dialog->showNotification(durationMs, 5);
@@ -92,7 +92,7 @@ void NotificationManager::showGoalMet(const QString& title, const QString& messa
 		return;
 
 	int durationMs = mw_->App->config->get("notification_goal_met_duration_ms").toInt();
-	NotificationDialog* dialog = createNotification(NotificationType::GoalMet);
+	NotificationWidget* dialog = createNotification(NotificationType::GoalMet);
 	dialog->populateGoalMet(title, message);
 	insertNotification(dialog);
 	dialog->showNotification(durationMs, 5);
@@ -102,7 +102,7 @@ void NotificationManager::showGoalMet(const QString& title, const QString& messa
 void NotificationManager::closeAll()
 {
 	// Copy the list — closeNotification() triggers destroyed signal which modifies the list
-	QList<QPointer<NotificationDialog>> copy = activeNotifications_;
+	QList<QPointer<NotificationWidget>> copy = activeNotifications_;
 	for (auto& ptr : copy) {
 		if (ptr) {
 			ptr->closeNotification();
@@ -116,7 +116,7 @@ void NotificationManager::onNotificationDestroyed(QObject* obj)
 	// Remove the destroyed dialog from the active list
 	activeNotifications_.erase(
 		std::remove_if(activeNotifications_.begin(), activeNotifications_.end(),
-			[obj](const QPointer<NotificationDialog>& ptr) {
+			[obj](const QPointer<NotificationWidget>& ptr) {
 				return ptr.isNull() || ptr.data() == obj;
 			}),
 		activeNotifications_.end()
@@ -131,7 +131,7 @@ void NotificationManager::repositionAll()
 	// Remove nullptrs
 	activeNotifications_.erase(
 		std::remove_if(activeNotifications_.begin(), activeNotifications_.end(),
-			[](const QPointer<NotificationDialog>& ptr) { return ptr.isNull(); }),
+			[](const QPointer<NotificationWidget>& ptr) { return ptr.isNull(); }),
 		activeNotifications_.end()
 	);
 
@@ -148,7 +148,7 @@ void NotificationManager::repositionAll()
 
 	int currentY = topMargin;
 	for (int i = 0; i < activeNotifications_.size(); ++i) {
-		NotificationDialog* dialog = activeNotifications_[i];
+		NotificationWidget* dialog = activeNotifications_[i];
 		if (!dialog || !dialog->isVisible())
 			continue;
 

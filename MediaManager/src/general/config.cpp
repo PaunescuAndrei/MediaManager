@@ -168,7 +168,7 @@ void Config::init_defaults() {
         {"pb_videos_min_threshold", "1"},
         {"pb_time_min_threshold_minutes", "5"},
         {"stats_heatmap_months", "6"},
-        {"daily_progress_check_interval_seconds", "120"},
+        {"daily_progress_check_interval_seconds", "10"},
 	});
 }
 

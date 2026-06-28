@@ -1675,6 +1675,7 @@ bool MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool incre
             now.toString("yyyy-MM-dd HH:mm:ss"),
             oldSessionTime, true);
         if (player) player->activeWatchHistoryRowId = -1;
+        this->checkDailyProgress();
     }
 
     if (player) {
@@ -2126,7 +2127,6 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
 
         this->updateTotalListLabel();
         this->checktimeWatchedIncrement();
-        this->checkDailyProgress();
         this->updateWatchedProgressBar();
         this->App->db->db.commit();
     }
@@ -3402,6 +3402,7 @@ void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notifi
                     player->resetVideoTiming();
                     player->startProgress = 0;
                     this->App->db->db.commit();
+                    this->checkDailyProgress();
                     this->App->VW->mainPlayer->queue.push(std::make_shared<MpcDirectCommand>(CMD_SETPOSITION, "0"));
                     this->position = 0;
 					show_notification = true;

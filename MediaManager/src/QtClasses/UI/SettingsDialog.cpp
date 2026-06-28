@@ -570,23 +570,6 @@ void SettingsDialog::setupNotificationsPage(MainWindow* mw)
     videoInfoRow->addWidget(notificationVideoInfoDurationSpinBox);
     presetsLayout->addLayout(videoInfoRow);
 
-    // General Messages row
-    QHBoxLayout* generalMsgRow = new QHBoxLayout();
-    notificationGeneralMessageEnabled = new QCheckBox("General Messages");
-    notificationGeneralMessageEnabled->setToolTip("Show notification popups for general messages and status updates");
-    setupCheckBox(notificationGeneralMessageEnabled, "notification_general_message_enabled", mw);
-    generalMsgRow->addWidget(notificationGeneralMessageEnabled);
-    generalMsgRow->addStretch();
-    notificationGeneralMessageDurationSpinBox = new QSpinBox();
-    notificationGeneralMessageDurationSpinBox->setMinimum(1000);
-    notificationGeneralMessageDurationSpinBox->setMaximum(60000);
-    notificationGeneralMessageDurationSpinBox->setSingleStep(500);
-    notificationGeneralMessageDurationSpinBox->setToolTip("Duration in milliseconds");
-    notificationGeneralMessageDurationSpinBox->setValue(config->get("notification_general_message_duration_ms").toInt());
-    setupSpinStyle(notificationGeneralMessageDurationSpinBox, "spinbox");
-    generalMsgRow->addWidget(notificationGeneralMessageDurationSpinBox);
-    presetsLayout->addLayout(generalMsgRow);
-
     // Goal Reached row
     QHBoxLayout* goalRow = new QHBoxLayout();
     notificationGoalMetEnabled = new QCheckBox("Goal Reached");
@@ -611,6 +594,23 @@ void SettingsDialog::setupNotificationsPage(MainWindow* mw)
     milestonesGroup->setToolTip("Show progress notifications at regular intervals throughout the day, independent of the final goal");
     QVBoxLayout* milestonesLayout = new QVBoxLayout(milestonesGroup);
     milestonesLayout->setSpacing(4);
+
+    // Milestone Notifications enable + duration
+    QHBoxLayout* milestoneEnableRow = new QHBoxLayout();
+    notificationMilestoneEnabled = new QCheckBox("Milestone Notifications");
+    notificationMilestoneEnabled->setToolTip("Show milestone notification popups at regular progress intervals throughout the day");
+    setupCheckBox(notificationMilestoneEnabled, "notification_milestone_enabled", mw);
+    milestoneEnableRow->addWidget(notificationMilestoneEnabled);
+    milestoneEnableRow->addStretch();
+    notificationMilestoneDurationSpinBox = new QSpinBox();
+    notificationMilestoneDurationSpinBox->setMinimum(1000);
+    notificationMilestoneDurationSpinBox->setMaximum(60000);
+    notificationMilestoneDurationSpinBox->setSingleStep(500);
+    notificationMilestoneDurationSpinBox->setToolTip("Duration in milliseconds");
+    notificationMilestoneDurationSpinBox->setValue(config->get("notification_milestone_duration_ms").toInt());
+    setupSpinStyle(notificationMilestoneDurationSpinBox, "spinbox");
+    milestoneEnableRow->addWidget(notificationMilestoneDurationSpinBox);
+    milestonesLayout->addLayout(milestoneEnableRow);
 
     // Video milestone step
     QHBoxLayout* videoStepRow = new QHBoxLayout();

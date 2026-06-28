@@ -2803,10 +2803,10 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     config->set("search_timer_interval", QString::number(dialog->ui.searchTimerInterval->value()));
     config->set("notification_video_info_duration_ms", QString::number(dialog->notificationVideoInfoDurationSpinBox->value()));
     config->set("notification_video_info_enabled", dialog->notificationVideoInfoEnabled->isChecked() ? "True" : "False");
-    config->set("notification_general_message_enabled",
-        dialog->notificationGeneralMessageEnabled->isChecked() ? "True" : "False");
-    config->set("notification_general_message_duration_ms",
-        QString::number(dialog->notificationGeneralMessageDurationSpinBox->value()));
+    config->set("notification_milestone_enabled",
+        dialog->notificationMilestoneEnabled->isChecked() ? "True" : "False");
+    config->set("notification_milestone_duration_ms",
+        QString::number(dialog->notificationMilestoneDurationSpinBox->value()));
     config->set("notification_goal_met_enabled",
         dialog->notificationGoalMetEnabled->isChecked() ? "True" : "False");
     config->set("notification_goal_met_duration_ms",

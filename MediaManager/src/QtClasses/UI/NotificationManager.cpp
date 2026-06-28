@@ -75,10 +75,10 @@ void NotificationManager::resumeVideoInfo(QPointer<NotificationWidget> dialog)
 
 void NotificationManager::showGeneralMessage(const QString& title, const QString& message)
 {
-	if (!mw_->App->config->get_bool("notification_general_message_enabled"))
+	if (!mw_->App->config->get_bool("notification_milestone_enabled"))
 		return;
 
-	int durationMs = mw_->App->config->get("notification_general_message_duration_ms").toInt();
+	int durationMs = mw_->App->config->get("notification_milestone_duration_ms").toInt();
 	NotificationWidget* dialog = createNotification(NotificationType::GeneralMessage);
 	dialog->populateGeneralMessage(title, message);
 	insertNotification(dialog);

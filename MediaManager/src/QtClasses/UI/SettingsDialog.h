@@ -45,8 +45,8 @@ public:
     // Notification page widgets (built programmatically)
     QCheckBox* notificationVideoInfoEnabled = nullptr;
     QSpinBox* notificationVideoInfoDurationSpinBox = nullptr;
-    QCheckBox* notificationGeneralMessageEnabled = nullptr;
-    QSpinBox* notificationGeneralMessageDurationSpinBox = nullptr;
+    QCheckBox* notificationMilestoneEnabled = nullptr;
+    QSpinBox* notificationMilestoneDurationSpinBox = nullptr;
     QCheckBox* notificationGoalMetEnabled = nullptr;
     QSpinBox* notificationGoalMetDurationSpinBox = nullptr;
     QDoubleSpinBox* milestoneVideoStepSpinBox = nullptr;

@@ -1245,7 +1245,7 @@ void utils::computeRarities(QList<NextVideoChoice>& candidates,
 
 	// Extract all probability values from the full pool and sort descending.
 	// This gives us the true percentile distribution, not just the picked subset.
-	QList<long double> allProbs;
+	QVector<long double> allProbs;
 	allProbs.reserve(poolProbabilities.size());
 	for (auto it = poolProbabilities.constBegin(); it != poolProbabilities.constEnd(); ++it) {
 		allProbs.append(it.value());
@@ -1257,9 +1257,9 @@ void utils::computeRarities(QList<NextVideoChoice>& candidates,
 	// Find the probability value at the given percentile cutoff.
 	// Uses ceil(pct% * total) - 1 so that exactly pct% of the pool is at or above the threshold.
 	// E.g. with 100 items and pct=10: index 9, meaning the top 10 items (0-9) qualify.
-	auto thresholdAt = [&](int pct) -> long double {
-		if (pct <= 0 || total == 0) return allProbs.first() + 1.0L; // nothing reaches this → disabled
-		if (pct >= 100) return allProbs.last();                       // everything qualifies
+	auto thresholdAt = [&allProbs, total](int pct) -> long double {
+		if (pct <= 0) return allProbs.first() + 1.0L; // nothing reaches this → disabled
+		if (pct >= 100) return allProbs.last();         // everything qualifies
 		int idx = static_cast<int>(std::ceil(static_cast<double>(pct) / 100.0 * total)) - 1;
 		idx = std::clamp(idx, 0, total - 1);
 		return allProbs[idx];
@@ -1269,18 +1269,42 @@ void utils::computeRarities(QList<NextVideoChoice>& candidates,
 	const long double srThreshold  = thresholdAt(srPct);
 	const long double rThreshold   = thresholdAt(rPct);
 
-	for (auto& candidate : candidates) {
-		const long double prob = static_cast<long double>(candidate.probability);
-		candidate.rarityScore = candidate.probability;
+	// If all thresholds are identical, the probability distribution is flat
+	// (e.g. biasGeneral=0 gives every video the same probability).
+	// Rarity is meaningless in that case — mark all candidates as N tier.
+	if (ssrThreshold == srThreshold && srThreshold == rThreshold) {
+		for (auto& candidate : candidates) {
+			if (candidate.probability >= 0.0) {
+				candidate.rarity = 0;
+				candidate.rarityScore = candidate.probability;
+			} else {
+				candidate.rarity = -1;
+				candidate.rarityScore = 0.0;
+			}
+		}
+		return;
+	}
 
-		if (prob >= 0.0L && prob >= ssrThreshold) {
+	for (auto& candidate : candidates) {
+		// Skip candidates with invalid probability (not in the pool).
+		// Preserve the -1 sentinel meaning "disabled / not computed."
+		if (candidate.probability < 0.0) {
+			candidate.rarity = -1;
+			candidate.rarityScore = 0.0;
+			continue;
+		}
+
+		const double prob = candidate.probability;
+		candidate.rarityScore = prob;
+
+		if (prob >= ssrThreshold) {
 			candidate.rarity = 3; // SSR
-		} else if (prob >= 0.0L && prob >= srThreshold) {
+		} else if (prob >= srThreshold) {
 			candidate.rarity = 2; // SR
-		} else if (prob >= 0.0L && prob >= rThreshold) {
+		} else if (prob >= rThreshold) {
 			candidate.rarity = 1; // R
 		} else {
-			candidate.rarity = 0; // N (or disabled if probability was -1)
+			candidate.rarity = 0; // N
 		}
 	}
 }

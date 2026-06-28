@@ -623,8 +623,8 @@
                    <property name="focusPolicy"><enum>Qt::FocusPolicy::StrongFocus</enum></property>
                    <property name="toolTip"><string>Top percentage of videos classified as SSR rarity</string></property>
                    <property name="alignment"><set>Qt::AlignmentFlag::AlignCenter</set></property>
-                   <property name="minimum"><number>1</number></property>
-                   <property name="maximum"><number>30</number></property>
+                   <property name="minimum"><number>0</number></property>
+                   <property name="maximum"><number>100</number></property>
                    <property name="value"><number>10</number></property>
                   </widget>
                  </item>
@@ -634,10 +634,10 @@
                  <item>
                   <widget class="QSpinBox" name="raritySrPct">
                    <property name="focusPolicy"><enum>Qt::FocusPolicy::StrongFocus</enum></property>
-                   <property name="toolTip"><string>Top percentage of videos classified as SR rarity (must be greater than SSR %)</string></property>
+                   <property name="toolTip"><string>Top percentage of videos classified as SR rarity (must be greater than or equal to SSR %)</string></property>
                    <property name="alignment"><set>Qt::AlignmentFlag::AlignCenter</set></property>
-                   <property name="minimum"><number>2</number></property>
-                   <property name="maximum"><number>60</number></property>
+                   <property name="minimum"><number>0</number></property>
+                   <property name="maximum"><number>100</number></property>
                    <property name="value"><number>30</number></property>
                   </widget>
                  </item>
@@ -647,10 +647,10 @@
                  <item>
                   <widget class="QSpinBox" name="rarityRPct">
                    <property name="focusPolicy"><enum>Qt::FocusPolicy::StrongFocus</enum></property>
-                   <property name="toolTip"><string>Top percentage of videos classified as R rarity (must be greater than SR %)</string></property>
+                   <property name="toolTip"><string>Top percentage of videos classified as R rarity (must be greater than or equal to SR %)</string></property>
                    <property name="alignment"><set>Qt::AlignmentFlag::AlignCenter</set></property>
-                   <property name="minimum"><number>3</number></property>
-                   <property name="maximum"><number>99</number></property>
+                   <property name="minimum"><number>0</number></property>
+                   <property name="maximum"><number>100</number></property>
                    <property name="value"><number>65</number></property>
                   </widget>
                  </item>

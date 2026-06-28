@@ -1861,26 +1861,7 @@ QList<NextVideoChoice> MainWindow::buildRandomCandidates(const NextVideoSettings
         }
     }
 
-    if (this->App->config->get_bool("rarity_enabled")) {
-        // Compute rarity against the full category (all videos, unfiltered)
-        // so tiers are stable regardless of active filters or mode.
-        // candidate.probability is left untouched — rarity uses poolProbabilities directly.
-        QJsonObject fullPoolSettings = this->getRandomSettings(settings.random_mode, true,
-            settings.vid_type_include, settings.vid_type_exclude);
-        QList<VideoWeightedData> fullPool = this->App->db->getVideos(this->App->currentDB, fullPoolSettings);
-        if (!fullPool.isEmpty()) {
-            QMap<int, long double> fullProbabilities = utils::calculateProbabilities(fullPool,
-                weighted_settings.bias_views, weighted_settings.bias_rating,
-                weighted_settings.bias_tags, weighted_settings.bias_bpm,
-                weighted_settings.bias_general,
-                weighted_settings.no_views_weight, weighted_settings.no_rating_weight,
-                weighted_settings.no_tags_weight);
-            utils::computeRarities(choices, fullProbabilities,
-                this->App->config->get("rarity_ssr_pct").toInt(),
-                this->App->config->get("rarity_sr_pct").toInt(),
-                this->App->config->get("rarity_r_pct").toInt());
-        }
-    }
+    this->applyRarities(choices, settings, weighted_settings);
 
     return choices;
 }
@@ -1933,30 +1914,14 @@ QList<NextVideoChoice> MainWindow::buildSeriesRandomCandidates(const QPersistent
             choices.append(choice.value());
             // Deterministic series continuation is a guaranteed pick.
             // Set 100% so the "Chance: X%" label shows even when rarity is off.
-            // The rarity block below overrides this with the full-pool probability when enabled.
+            // applyRarities below sets the rarity tier from the full-pool probability.
             choices.last().probability = 100.0;
         }
         // Compute rarity against the full category so the deterministic
         // choice also gets a rarity tier.
-        if (this->App->config->get_bool("rarity_enabled") && !choices.isEmpty()) {
-            QJsonObject fullPoolSettings = this->getRandomSettings(settings.random_mode, true,
-                settings.vid_type_include, settings.vid_type_exclude);
-            QList<VideoWeightedData> fullPool = this->App->db->getVideos(this->App->currentDB, fullPoolSettings);
-            if (!fullPool.isEmpty()) {
-                WeightedBiasSettings det_weighted_settings = this->getWeightedBiasSettings();
-                if (!det_weighted_settings.weighted_random_enabled) det_weighted_settings.bias_general = 0;
-                QMap<int, long double> fullProbabilities = utils::calculateProbabilities(fullPool,
-                    det_weighted_settings.bias_views, det_weighted_settings.bias_rating,
-                    det_weighted_settings.bias_tags, det_weighted_settings.bias_bpm,
-                    det_weighted_settings.bias_general,
-                    det_weighted_settings.no_views_weight, det_weighted_settings.no_rating_weight,
-                    det_weighted_settings.no_tags_weight);
-                utils::computeRarities(choices, fullProbabilities,
-                    this->App->config->get("rarity_ssr_pct").toInt(),
-                    this->App->config->get("rarity_sr_pct").toInt(),
-                    this->App->config->get("rarity_r_pct").toInt());
-            }
-        }
+        WeightedBiasSettings detBias = this->getWeightedBiasSettings();
+        if (!detBias.weighted_random_enabled) detBias.bias_general = 0;
+        this->applyRarities(choices, settings, detBias);
         return choices;
     }
 
@@ -2005,30 +1970,33 @@ QList<NextVideoChoice> MainWindow::buildSeriesRandomCandidates(const QPersistent
         }
     }
 
-    if (this->App->config->get_bool("rarity_enabled")) {
-        // Compute rarity against the full category (all videos, unfiltered)
-        // so tiers are stable regardless of active filters or mode.
-        // Note: the author-weighted probabilities are used for picking only;
-        // rarity uses the full video-level pool for consistency across modes.
-        // candidate.probability is left untouched — rarity uses poolProbabilities directly.
-        QJsonObject fullPoolSettings = this->getRandomSettings(settings.random_mode, true,
-            settings.vid_type_include, settings.vid_type_exclude);
-        QList<VideoWeightedData> fullPool = this->App->db->getVideos(this->App->currentDB, fullPoolSettings);
-        if (!fullPool.isEmpty()) {
-            QMap<int, long double> fullProbabilities = utils::calculateProbabilities(fullPool,
-                weighted_settings.bias_views, weighted_settings.bias_rating,
-                weighted_settings.bias_tags, weighted_settings.bias_bpm,
-                weighted_settings.bias_general,
-                weighted_settings.no_views_weight, weighted_settings.no_rating_weight,
-                weighted_settings.no_tags_weight);
-            utils::computeRarities(choices, fullProbabilities,
-                this->App->config->get("rarity_ssr_pct").toInt(),
-                this->App->config->get("rarity_sr_pct").toInt(),
-                this->App->config->get("rarity_r_pct").toInt());
-        }
-    }
+    this->applyRarities(choices, settings, weighted_settings);
 
     return choices;
+}
+
+void MainWindow::applyRarities(QList<NextVideoChoice>& choices,
+                               const NextVideoSettings& settings,
+                               const WeightedBiasSettings& bias) const
+{
+    if (!this->App->config->get_bool("rarity_enabled")) return;
+    if (choices.isEmpty()) return;
+
+    QJsonObject fullPoolSettings = this->getRandomSettings(settings.random_mode, true,
+        settings.vid_type_include, settings.vid_type_exclude);
+    QList<VideoWeightedData> fullPool = this->App->db->getVideos(this->App->currentDB, fullPoolSettings);
+    if (fullPool.isEmpty()) return;
+
+    QMap<int, long double> fullProbabilities = utils::calculateProbabilities(fullPool,
+        bias.bias_views, bias.bias_rating,
+        bias.bias_tags, bias.bias_bpm,
+        bias.bias_general,
+        bias.no_views_weight, bias.no_rating_weight,
+        bias.no_tags_weight);
+    utils::computeRarities(choices, fullProbabilities,
+        this->App->config->get("rarity_ssr_pct").toInt(),
+        this->App->config->get("rarity_sr_pct").toInt(),
+        this->App->config->get("rarity_r_pct").toInt());
 }
 
 bool MainWindow::applyNextChoice(const std::optional<NextVideoChoice>& choice) {
@@ -2856,9 +2824,15 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     config->set("next_multichoice_count", QString::number(dialog->ui.nextMultiChoiceCount->value()));
     config->set("next_multichoice_append_on_refresh", dialog->ui.nextMultiChoiceAppendOnRefresh->isChecked() ? "True" : "False");
     config->set("rarity_enabled", dialog->ui.rarityEnabled->isChecked() ? "True" : "False");
-    config->set("rarity_ssr_pct", QString::number(dialog->ui.raritySsrPct->value()));
-    config->set("rarity_sr_pct", QString::number(dialog->ui.raritySrPct->value()));
-    config->set("rarity_r_pct", QString::number(dialog->ui.rarityRPct->value()));
+    // Enforce non-strict ascending: SSR ≤ SR ≤ R.
+    // Equality is allowed — it merges adjacent tiers (the lower one becomes
+    // unreachable, which is how you "disable" a single tier).
+    int ssrPct = dialog->ui.raritySsrPct->value();
+    int srPct  = std::max(dialog->ui.raritySrPct->value(), ssrPct);
+    int rPct   = std::max(dialog->ui.rarityRPct->value(),  srPct);
+    config->set("rarity_ssr_pct", QString::number(ssrPct));
+    config->set("rarity_sr_pct", QString::number(srPct));
+    config->set("rarity_r_pct",  QString::number(rPct));
     config->set("rarity_ssr_color", dialog->ui.raritySsrColorBtn->text());
     config->set("rarity_sr_color", dialog->ui.raritySrColorBtn->text());
     config->set("rarity_r_color", dialog->ui.rarityRColorBtn->text());

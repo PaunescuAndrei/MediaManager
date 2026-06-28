@@ -211,6 +211,54 @@ void SettingsDialog::setupPlaybackPage(MainWindow* mw)
     this->ui.raritySrPct->setValue(config->get("rarity_sr_pct").toInt());
     this->ui.rarityRPct->setValue(config->get("rarity_r_pct").toInt());
 
+    // Keep SSR ≤ SR ≤ R at all times. Equality is allowed (merges adjacent
+    // tiers — the lower one becomes unreachable, which is how you "disable"
+    // a single tier without touching all three). When the user moves a
+    // spinbox, its neighbors adjust in the same direction so the value the
+    // user set is always preserved.
+
+    // User changed SSR — push higher tiers up if they're now below SSR.
+    connect(this->ui.raritySsrPct, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, [this] {
+        const QSignalBlocker bSr(this->ui.raritySrPct);
+        const QSignalBlocker bR(this->ui.rarityRPct);
+
+        int ssr = this->ui.raritySsrPct->value();
+        int sr  = this->ui.raritySrPct->value();
+        int r   = this->ui.rarityRPct->value();
+
+        if (sr < ssr) { sr = ssr; this->ui.raritySrPct->setValue(sr); }
+        if (r  < sr)  { r  = sr;  this->ui.rarityRPct->setValue(r);  }
+    });
+
+    // User changed SR — pull SSR down or push R up to stay ordered.
+    connect(this->ui.raritySrPct, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, [this] {
+        const QSignalBlocker bSsr(this->ui.raritySsrPct);
+        const QSignalBlocker bR(this->ui.rarityRPct);
+
+        int ssr = this->ui.raritySsrPct->value();
+        int sr  = this->ui.raritySrPct->value();
+        int r   = this->ui.rarityRPct->value();
+
+        if (sr < ssr) { ssr = sr; this->ui.raritySsrPct->setValue(ssr); }
+        if (r  < sr)  { r   = sr; this->ui.rarityRPct->setValue(r);   }
+    });
+
+    // User changed R — pull lower tiers down if R fell below them.
+    connect(this->ui.rarityRPct, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, [this] {
+        const QSignalBlocker bSsr(this->ui.raritySsrPct);
+        const QSignalBlocker bSr(this->ui.raritySrPct);
+
+        int ssr = this->ui.raritySsrPct->value();
+        int sr  = this->ui.raritySrPct->value();
+        int r   = this->ui.rarityRPct->value();
+
+        if (r  < sr)  { sr  = r; this->ui.raritySrPct->setValue(sr);  }
+        if (sr < ssr) { ssr = sr; this->ui.raritySsrPct->setValue(ssr); }
+    });
+
     auto setupColorButton = [mw](QPushButton* btn, const QString& configKey) {
         applyColorBtnStyle(btn, QColor(mw->App->config->get(configKey)));
     };

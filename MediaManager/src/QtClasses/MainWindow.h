@@ -245,6 +245,7 @@ public:
     std::optional<NextVideoChoice> buildSequentialCandidate(const QPersistentModelIndex& current_source_index) const;
     QList<NextVideoChoice> buildRandomCandidates(const NextVideoSettings& settings, int maxCount, bool reset_progress = true) const;
     QList<NextVideoChoice> buildSeriesRandomCandidates(const QPersistentModelIndex& current_source_index, const NextVideoSettings& settings, int maxCount, bool& continuedSeries) const;
+    void applyRarities(QList<NextVideoChoice>& choices, const NextVideoSettings& settings, const WeightedBiasSettings& bias) const;
     bool applyNextChoice(const std::optional<NextVideoChoice>& choice);
     int nextChoiceCountFromConfig() const;
     int getNextChoiceRefreshCounter() const;

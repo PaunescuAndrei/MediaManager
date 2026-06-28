@@ -1243,6 +1243,11 @@ void utils::computeRarities(QList<NextVideoChoice>& candidates,
 {
 	if (candidates.isEmpty() || poolProbabilities.isEmpty()) return;
 
+	// Ensure ascending order: SSR is the most exclusive tier (smallest %).
+	if (ssrPct > srPct) std::swap(ssrPct, srPct);
+	if (srPct > rPct) std::swap(srPct, rPct);
+	if (ssrPct > srPct) std::swap(ssrPct, srPct);
+
 	// Extract all probability values from the full pool and sort descending.
 	// This gives us the true percentile distribution, not just the picked subset.
 	QVector<long double> allProbs;
@@ -1269,22 +1274,10 @@ void utils::computeRarities(QList<NextVideoChoice>& candidates,
 	const long double srThreshold  = thresholdAt(srPct);
 	const long double rThreshold   = thresholdAt(rPct);
 
-	// If all thresholds are identical, the probability distribution is flat
-	// (e.g. biasGeneral=0 gives every video the same probability).
-	// Rarity is meaningless in that case — mark all candidates as N tier.
-	if (ssrThreshold == srThreshold && srThreshold == rThreshold) {
-		for (auto& candidate : candidates) {
-			const long double poolProb = poolProbabilities.value(candidate.id, -1.0L);
-			if (poolProb >= 0.0L) {
-				candidate.rarity = 0;
-				candidate.rarityScore = static_cast<double>(poolProb);
-			} else {
-				candidate.rarity = -1;
-				candidate.rarityScore = 0.0;
-			}
-		}
-		return;
-	}
+	// If every video in the pool has the same probability (genuinely flat
+	// distribution, e.g. biasGeneral=0), rarity is meaningless — mark all
+	// candidates as N tier.
+	const bool isFlat = (allProbs.first() == allProbs.last());
 
 	for (auto& candidate : candidates) {
 		// Look up the candidate's probability in the full pool by ID.
@@ -1300,11 +1293,13 @@ void utils::computeRarities(QList<NextVideoChoice>& candidates,
 
 		candidate.rarityScore = static_cast<double>(poolProb);
 
-		if (poolProb >= ssrThreshold) {
+		if (isFlat) {
+			candidate.rarity = 0; // N
+		} else if (poolProb >= ssrThreshold) {
 			candidate.rarity = 3; // SSR
-		} else if (poolProb >= srThreshold) {
+		} else if (ssrThreshold > srThreshold && poolProb >= srThreshold) {
 			candidate.rarity = 2; // SR
-		} else if (poolProb >= rThreshold) {
+		} else if (srThreshold > rThreshold && poolProb >= rThreshold) {
 			candidate.rarity = 1; // R
 		} else {
 			candidate.rarity = 0; // N

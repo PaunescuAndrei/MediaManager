@@ -99,6 +99,32 @@ void NotificationManager::showGoalMet(const QString& title, const QString& messa
 	repositionAll(); // after show so adjustSize works correctly
 }
 
+void NotificationManager::showStreakAtRisk(const QString& title, const QString& message)
+{
+	if (!mw_->App->config->get_bool("notification_streak_at_risk_enabled"))
+		return;
+
+	int durationMs = mw_->App->config->get("notification_streak_at_risk_duration_ms").toInt();
+	NotificationWidget* dialog = createNotification(NotificationType::StreakAtRisk);
+	dialog->populateStreakAtRisk(title, message);
+	insertNotification(dialog);
+	dialog->showNotification(durationMs, 5);
+	repositionAll();
+}
+
+void NotificationManager::showPersonalBest(const QString& title, const QString& message)
+{
+	if (!mw_->App->config->get_bool("notification_personal_best_enabled"))
+		return;
+
+	int durationMs = mw_->App->config->get("notification_personal_best_duration_ms").toInt();
+	NotificationWidget* dialog = createNotification(NotificationType::PersonalBest);
+	dialog->populatePersonalBest(title, message);
+	insertNotification(dialog);
+	dialog->showNotification(durationMs, 5);
+	repositionAll();
+}
+
 void NotificationManager::closeAll()
 {
 	// Copy the list — closeNotification() triggers destroyed signal which modifies the list

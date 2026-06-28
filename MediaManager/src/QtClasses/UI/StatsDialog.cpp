@@ -3,6 +3,7 @@
 #include "MainApp.h"
 #include "utils.h"
 #include "ContributionHeatmapWidget.h"
+#include "AutoToolTipDelegate.h"
 #include <QtCharts>
 #include <QFont>
 #include <QSqlQuery>
@@ -31,6 +32,18 @@ void StatsDialog::setupTimeStats(MainApp* app) {
     
     double todaySessionTime = app->db->getTotalSessionTimeToday();
     addStatToGrid(layout, row++, "Session Time Today:", QString::fromStdString(utils::convert_time_to_text(todaySessionTime)));
+
+    int totalWatchDays = app->db->getTotalWatchDays();
+    if (totalWatchDays > 0) {
+        double avgDailyTime = totalWatchedTime / totalWatchDays;
+        addStatToGrid(layout, row++, "Avg Daily Watch Time:", QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(avgDailyTime))));
+    }
+    if (m_cachedAvgSessionTime < 0.0)
+        m_cachedAvgSessionTime = app->db->getAverageSessionTime();
+    addStatToGrid(layout, row++, "Avg Session Length:", QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(m_cachedAvgSessionTime))));
+    if (m_cachedAvgSessionTimePerDay < 0.0)
+        m_cachedAvgSessionTimePerDay = app->db->getAverageSessionTimePerDay();
+    addStatToGrid(layout, row++, "Avg Daily Session Time:", QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(m_cachedAvgSessionTimePerDay))));
 }
 
 void StatsDialog::setupVideoStats(MainApp* app) {
@@ -75,6 +88,17 @@ void StatsDialog::setupVideoStats(MainApp* app) {
         double minusPercent = (double)minusUniqueWatched / minusTotal * 100;
         addStatToGrid(layout, row++, QStringLiteral("%1 Completion:").arg(app->config->get("minus_category_name")), QString::number(minusPercent, 'f', 1) + "%");
     }
+
+    // Averages (from watch_history for accuracy)
+    if (m_cachedAvgCompletedPerDay < 0.0)
+        m_cachedAvgCompletedPerDay = app->db->getAverageCompletedPerDay();
+    addStatToGrid(layout, row++, "Avg Videos Per Day:", QString::number(m_cachedAvgCompletedPerDay, 'f', 1));
+    int totalVids = plusTotal + minusTotal;
+    if (totalVids > 0) {
+        int totalViews = app->db->getTotalViews("PLUS") + app->db->getTotalViews("MINUS");
+        double avgViewsPerVideo = (double)totalViews / totalVids;
+        addStatToGrid(layout, row++, "Avg Views Per Video:", QString::number(avgViewsPerVideo, 'f', 1));
+    }
 }
 
 void StatsDialog::setupRatingStats(MainApp* app) {
@@ -93,6 +117,9 @@ void StatsDialog::setupRatingStats(MainApp* app) {
     // Unrated videos
     int unratedCount = app->db->getUnratedVideoCount();
     addStatToGrid(layout, row++, "Unrated Videos:", QString::number(unratedCount));
+
+    int ratedCount = app->db->getRatedVideoCount();
+    addStatToGrid(layout, row++, "Ratings Given:", QString::number(ratedCount));
 
     // Rating distribution
     QMap<double, int> ratingCounts = app->db->getRatingDistribution();
@@ -167,7 +194,7 @@ void StatsDialog::setupAchievements(MainApp* app)
 {
     int totalWatchDays = app->db->getTotalWatchDays();
     QDateTime firstWatch = app->db->getFirstWatchDate();
-    QString firstWatchStr = firstWatch.isValid() ? firstWatch.toString("MMMM d, yyyy") : "N/A";
+    QString firstWatchStr = firstWatch.isValid() ? firstWatch.toString("d MMMM yyyy") : "N/A";
     int totalVideos = app->db->getVideoCount("PLUS") + app->db->getVideoCount("MINUS");
 
     QGridLayout* layout = qobject_cast<QGridLayout*>(ui.overviewTab->findChild<QGridLayout*>("video_grid_layout"));
@@ -240,6 +267,9 @@ void StatsDialog::setupStreaksTab(MainApp* app)
 {
     m_app = app;
 
+    // Initialize heatmap range from config
+    m_heatmapDays = qBound(1, app->config->get("stats_heatmap_months").toInt(), 24) * 31;
+
     // Streak display
     QGridLayout* streakLayout = ui.streakDisplayLayout;
     WatchStreak streak = app->db->getWatchStreak();
@@ -251,7 +281,7 @@ void StatsDialog::setupStreaksTab(MainApp* app)
         QDate today = QDate::currentDate();
         if (d == today) return QStringLiteral("Today");
         if (d == today.addDays(-1)) return QStringLiteral("Yesterday");
-        return d.toString(QStringLiteral("MMM d, yyyy"));
+        return d.toString(QStringLiteral("d MMM yyyy"));
     };
 
     // Current Streak - large prominent display
@@ -324,11 +354,11 @@ void StatsDialog::setupStreaksTab(MainApp* app)
     QString longestIntervalStr;
     if (streak.longestStreak > 0 && streak.longestStreakStartDate.isValid() && streak.longestStreakEndDate.isValid()) {
         if (streak.longestStreakStartDate == streak.longestStreakEndDate)
-            longestIntervalStr = streak.longestStreakStartDate.toString("MMM d, yyyy");
+            longestIntervalStr = streak.longestStreakStartDate.toString("d MMM yyyy");
         else
             longestIntervalStr = QString("%1 – %2")
-                .arg(streak.longestStreakStartDate.toString("MMM d, yyyy"))
-                .arg(streak.longestStreakEndDate.toString("MMM d, yyyy"));
+                .arg(streak.longestStreakStartDate.toString("d MMM yyyy"))
+                .arg(streak.longestStreakEndDate.toString("d MMM yyyy"));
     } else {
         longestIntervalStr = QStringLiteral("—");
     }
@@ -337,15 +367,16 @@ void StatsDialog::setupStreaksTab(MainApp* app)
     longestIntervalLabel->setFont(statFont);
     streakLayout->addWidget(longestIntervalLabel, 4, 1, Qt::AlignCenter);
 
-    // Streak calendar heatmap (last 6 months) — cache for reuse by setupContributionHeatmap
-    m_heatmapCache = app->db->getDailyWatchedHistory(186);
+    // Streak calendar heatmap — cache for reuse by setupContributionHeatmap
+    m_heatmapCache = app->db->getDailyWatchedHistory(m_heatmapDays);
     ContributionHeatmapWidget* streakCalendar = new ContributionHeatmapWidget();
+    streakCalendar->setDayRange(m_heatmapDays);
     streakCalendar->setData(m_heatmapCache);
     ui.streakCalendarLayout->addWidget(streakCalendar);
     ui.streakCalendarLayout->setAlignment(streakCalendar, Qt::AlignCenter);
 
     // Watching Since under the heatmap
-    QString firstStr = firstWatch.isValid() ? firstWatch.toString("MMMM d, yyyy") : "N/A";
+    QString firstStr = firstWatch.isValid() ? firstWatch.toString("d MMMM yyyy") : "N/A";
     QLabel* firstWatchLabel = new QLabel(QString("Watching Since: %1").arg(firstStr));
     firstWatchLabel->setAlignment(Qt::AlignCenter);
     firstWatchLabel->setFont(statFont);
@@ -394,6 +425,34 @@ void StatsDialog::setupStreaksTab(MainApp* app)
     dailyTimeGoalBar->setTextVisible(true);
     dailyTimeGoalBar->setMinimumHeight(22);
     goalsGrid->addWidget(dailyTimeGoalBar, row++, 1);
+
+    // Heatmap range combo — load default from config, save on change
+    int heatmapMonths = qBound(1, app->config->get("stats_heatmap_months").toInt(), 24);
+    ui.streaksHeatmapRangeCombo->setCurrentIndex(heatmapMonthsToComboIndex(heatmapMonths));
+    connect(ui.streaksHeatmapRangeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+        [this, app]() {
+            int idx = ui.streaksHeatmapRangeCombo->currentIndex();
+            m_heatmapDays = kHeatmapMonthOptions[idx] * 31;
+            app->config->set("stats_heatmap_months", QString::number(kHeatmapMonthOptions[idx]));
+            // Sync charts combo
+            ui.chartsHeatmapRangeCombo->blockSignals(true);
+            ui.chartsHeatmapRangeCombo->setCurrentIndex(idx);
+            ui.chartsHeatmapRangeCombo->blockSignals(false);
+            m_heatmapCache = app->db->getDailyWatchedHistory(m_heatmapDays);
+            // Update heatmap widgets in both tabs
+            auto updateHeatmap = [&](QLayout* layout) {
+                QLayoutItem* item = layout->itemAt(0);
+                if (item) {
+                    ContributionHeatmapWidget* heatmap = qobject_cast<ContributionHeatmapWidget*>(item->widget());
+                    if (heatmap) {
+                        heatmap->setDayRange(m_heatmapDays);
+                        heatmap->setData(m_heatmapCache);
+                    }
+                }
+            };
+            updateHeatmap(ui.streakCalendarLayout);
+            updateHeatmap(ui.heatmapLayout);
+        });
 }
 
 void StatsDialog::addAuthorRow(QGridLayout* layout, int row, int rank, const QString& author, const QString& value, const QColor& barColor)
@@ -738,9 +797,8 @@ StatsDialog::~StatsDialog()
 
 void StatsDialog::changeEvent(QEvent* event)
 {
-    if (event->type() == QEvent::PaletteChange) {
+    if (event->type() == QEvent::PaletteChange)
         applyChartsTheme();
-    }
     QDialog::changeEvent(event);
 }
 
@@ -796,11 +854,44 @@ void StatsDialog::setupContributionHeatmap(QLayout* layout)
 {
     // Reuse cached heatmap data if setupStreaksTab already fetched it
     if (m_heatmapCache.isEmpty())
-        m_heatmapCache = m_app->db->getDailyWatchedHistory(186);
+        m_heatmapCache = m_app->db->getDailyWatchedHistory(m_heatmapDays);
     auto* heatmap = new ContributionHeatmapWidget();
+    heatmap->setDayRange(m_heatmapDays);
     heatmap->setData(m_heatmapCache);
     layout->addWidget(heatmap);
     layout->setAlignment(heatmap, Qt::AlignCenter);
+
+    // Heatmap range combo — load default from config, save on change
+    int heatmapMonths = qBound(1, m_app->config->get("stats_heatmap_months").toInt(), 24);
+    ui.chartsHeatmapRangeCombo->setCurrentIndex(heatmapMonthsToComboIndex(heatmapMonths));
+    connect(ui.chartsHeatmapRangeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+        [this, layout]() {
+            int idx = ui.chartsHeatmapRangeCombo->currentIndex();
+            m_heatmapDays = kHeatmapMonthOptions[idx] * 31;
+            m_app->config->set("stats_heatmap_months", QString::number(kHeatmapMonthOptions[idx]));
+            // Sync streaks combo
+            ui.streaksHeatmapRangeCombo->blockSignals(true);
+            ui.streaksHeatmapRangeCombo->setCurrentIndex(idx);
+            ui.streaksHeatmapRangeCombo->blockSignals(false);
+            m_heatmapCache = m_app->db->getDailyWatchedHistory(m_heatmapDays);
+            // Update heatmap widgets in both tabs
+            QLayoutItem* item = layout->itemAt(0);
+            if (item) {
+                ContributionHeatmapWidget* hmap = qobject_cast<ContributionHeatmapWidget*>(item->widget());
+                if (hmap) {
+                    hmap->setDayRange(m_heatmapDays);
+                    hmap->setData(m_heatmapCache);
+                }
+            }
+            QLayoutItem* streakItem = ui.streakCalendarLayout->itemAt(0);
+            if (streakItem) {
+                ContributionHeatmapWidget* streakHmap = qobject_cast<ContributionHeatmapWidget*>(streakItem->widget());
+                if (streakHmap) {
+                    streakHmap->setDayRange(m_heatmapDays);
+                    streakHmap->setData(m_heatmapCache);
+                }
+            }
+        });
 }
 
 void StatsDialog::createDailyBars(QLayout* layout)
@@ -1151,4 +1242,530 @@ void StatsDialog::applyChartsTheme()
     if (m_dowBarSet) {
         m_dowBarSet->setColor(barColorAlpha);
     }
+}
+
+
+void StatsDialog::setupRecordsTab(MainApp* app)
+{
+    auto addSection = [](QGridLayout* layout, const QString& title) -> int {
+        QLabel* label = new QLabel(title);
+        QFont f = label->font();
+        f.setPointSize(14);
+        f.setBold(true);
+        label->setFont(f);
+        layout->addWidget(label, 0, 0, 1, 2, Qt::AlignLeft);
+        return 1; // start data at row 1
+    };
+
+    // Most videos in a day (all-time, including today)
+    {
+        QGridLayout* grid = ui.mostVideosGridLayout;
+        int row = addSection(grid, "Most Videos in a Day");
+        auto rec = app->db->getMostVideosInDay();
+        if (rec.date.isValid() && rec.count > 0) {
+            addStatToGrid(grid, row++, "Record:", QString("%1 videos").arg(rec.count));
+            addStatToGrid(grid, row++, "Date:", rec.date.toString("d MMMM yyyy"));
+        } else {
+            addStatToGrid(grid, row++, "Status:", "N/A");
+        }
+    }
+
+    // Most time in a day
+    {
+        QGridLayout* grid = ui.mostTimeGridLayout;
+        int row = addSection(grid, "Most Watch Time in a Day");
+        auto rec = app->db->getMostTimeInDay();
+        if (rec.date.isValid() && rec.seconds > 0) {
+            addStatToGrid(grid, row++, "Record:", QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(rec.seconds))));
+            addStatToGrid(grid, row++, "Date:", rec.date.toString("d MMMM yyyy"));
+        } else {
+            addStatToGrid(grid, row++, "Status:", "N/A");
+        }
+    }
+
+    // Longest session
+    {
+        QGridLayout* grid = ui.longestSessionGridLayout;
+        int row = addSection(grid, "Longest Single Session");
+        auto rec = app->db->getLongestSession();
+        if (rec.sessionTime > 0) {
+            addStatToGrid(grid, row++, "Duration:", QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(rec.sessionTime))));
+            addStatToGrid(grid, row++, "Date:", rec.date);
+            addStatToGrid(grid, row++, "Video:", rec.videoName);
+        } else {
+            addStatToGrid(grid, row++, "Status:", "N/A");
+        }
+    }
+
+    // Most viewed video
+    {
+        QGridLayout* grid = ui.mostViewedGridLayout;
+        int row = addSection(grid, "Most Viewed Video");
+        auto rec = app->db->getMostViewedVideo();
+        if (rec.views > 0) {
+            addStatToGrid(grid, row++, "Video:", rec.name);
+            addStatToGrid(grid, row++, "Author:", rec.author);
+            addStatToGrid(grid, row++, "Views:", QString::number(rec.views));
+        } else {
+            addStatToGrid(grid, row++, "Status:", "N/A");
+        }
+    }
+
+    // Most time spent on a video
+    {
+        QGridLayout* grid = ui.mostTimeVideoGridLayout;
+        int row = addSection(grid, "Most Time on a Single Video");
+        auto rec = app->db->getMostTimeSpentVideo();
+        if (rec.totalTime > 0) {
+            addStatToGrid(grid, row++, "Video:", rec.name);
+            addStatToGrid(grid, row++, "Author:", rec.author);
+            addStatToGrid(grid, row++, "Total Time:", QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(rec.totalTime))));
+        } else {
+            addStatToGrid(grid, row++, "Status:", "N/A");
+        }
+    }
+
+    // Most diverse day
+    {
+        QGridLayout* grid = ui.mostDiverseGridLayout;
+        int row = addSection(grid, "Most Diverse Day");
+        auto rec = app->db->getMostDiverseDay();
+        if (rec.date.isValid() && rec.authorCount > 0) {
+            addStatToGrid(grid, row++, "Authors:", QString::number(rec.authorCount));
+            addStatToGrid(grid, row++, "Date:", rec.date.toString("d MMMM yyyy"));
+        } else {
+            addStatToGrid(grid, row++, "Status:", "N/A");
+        }
+    }
+
+}
+
+void StatsDialog::setupLibraryTab(MainApp* app)
+{
+    // Shared values computed once, reused by Completion and Rating Coverage sections
+    int plusTotal = app->db->getVideoCount("PLUS");
+    int minusTotal = app->db->getVideoCount("MINUS");
+
+    // --- Completion section ---
+    {
+        QGridLayout* grid = ui.completionGridLayout;
+        QLabel* title = new QLabel("Library Completion");
+        QFont f = title->font();
+        f.setPointSize(14);
+        f.setBold(true);
+        title->setFont(f);
+        grid->addWidget(title, 0, 0, 1, 2, Qt::AlignLeft);
+        int row = 1;
+
+        int totalVids = plusTotal + minusTotal;
+        int plusWatched = app->db->getUniqueVideosWatched("PLUS");
+        int minusWatched = app->db->getUniqueVideosWatched("MINUS");
+        int totalWatched = plusWatched + minusWatched;
+
+        if (totalVids > 0) {
+            double overallPct = (double)totalWatched / totalVids * 100.0;
+            QProgressBar* bar = new QProgressBar();
+            bar->setRange(0, 100);
+            bar->setValue(static_cast<int>(overallPct));
+            bar->setFormat(QString("Overall: %1 / %2 (%3%)")
+                .arg(totalWatched).arg(totalVids).arg(overallPct, 0, 'f', 1));
+            bar->setTextVisible(true);
+            bar->setMinimumHeight(22);
+            grid->addWidget(new QLabel("Overall:"), row, 0);
+            grid->addWidget(bar, row++, 1);
+        }
+
+        auto addCatBar = [&](const QString& cat, int watched, int total) {
+            if (total > 0) {
+                double pct = (double)watched / total * 100.0;
+                QProgressBar* bar = new QProgressBar();
+                bar->setRange(0, 100);
+                bar->setValue(static_cast<int>(pct));
+                bar->setFormat(QString("%1 / %2 (%3%)").arg(watched).arg(total).arg(pct, 0, 'f', 1));
+                bar->setTextVisible(true);
+                bar->setMinimumHeight(22);
+                grid->addWidget(new QLabel(cat + ":"), row, 0);
+                grid->addWidget(bar, row++, 1);
+            }
+        };
+        addCatBar(app->config->get("plus_category_name"), plusWatched, plusTotal);
+        addCatBar(app->config->get("minus_category_name"), minusWatched, minusTotal);
+    }
+
+    // --- Rating coverage ---
+    {
+        QGridLayout* grid = ui.coverageGridLayout;
+        QLabel* title = new QLabel("Rating Coverage");
+        QFont f = title->font();
+        f.setPointSize(14);
+        f.setBold(true);
+        title->setFont(f);
+        grid->addWidget(title, 0, 0, 1, 2, Qt::AlignLeft);
+        int row = 1;
+
+        // Reuse plusTotal/minusTotal already computed above in the Completion section
+        int rated = app->db->getRatedVideoCount();
+        int totalVids = plusTotal + minusTotal;
+
+        if (totalVids > 0) {
+            double pct = (double)rated / totalVids * 100.0;
+            QProgressBar* bar = new QProgressBar();
+            bar->setRange(0, 100);
+            bar->setValue(static_cast<int>(pct));
+            bar->setFormat(QString("%1 / %2 (%3%)").arg(rated).arg(totalVids).arg(pct, 0, 'f', 1));
+            bar->setTextVisible(true);
+            bar->setMinimumHeight(22);
+            grid->addWidget(new QLabel("Rated:"), row, 0);
+            grid->addWidget(bar, row++, 1);
+        }
+        addStatToGrid(grid, row++, "Unrated:", QString::number(app->db->getUnratedVideoCount()));
+    }
+
+    // --- Diversity ---
+    {
+        QGridLayout* grid = ui.diversityGridLayout;
+        QLabel* title = new QLabel("Content Diversity");
+        QFont f = title->font();
+        f.setPointSize(14);
+        f.setBold(true);
+        title->setFont(f);
+        grid->addWidget(title, 0, 0, 1, 2, Qt::AlignLeft);
+        int row = 1;
+
+        addStatToGrid(grid, row++, "Distinct Authors:", QString::number(app->db->getDistinctAuthorCount("ALL")));
+        addStatToGrid(grid, row++, "Distinct Types:", QString::number(app->db->getDistinctTypeCount("ALL")));
+        addStatToGrid(grid, row++, "Distinct Tags:", QString::number(app->db->getDistinctTagCount()));
+    }
+
+    // --- Additions ---
+    {
+        QGridLayout* grid = ui.additionsGridLayout;
+        QLabel* title = new QLabel("New Additions");
+        QFont f = title->font();
+        f.setPointSize(14);
+        f.setBold(true);
+        title->setFont(f);
+        grid->addWidget(title, 0, 0, 1, 2, Qt::AlignLeft);
+        int row = 1;
+
+        addStatToGrid(grid, row++, "Added This Week (7d):", QString::number(app->db->getVideosAddedSince(7)));
+        addStatToGrid(grid, row++, "Added This Month (30d):", QString::number(app->db->getVideosAddedSince(30)));
+    }
+
+    // --- Most Neglected ---
+    {
+        QVBoxLayout* layout = ui.neglectedLayout;
+
+        auto makeTitle = [](const QString& text) {
+            QLabel* label = new QLabel(text);
+            QFont f = label->font();
+            f.setPointSize(12);
+            f.setBold(true);
+            label->setFont(f);
+            label->setAlignment(Qt::AlignCenter);
+            return label;
+        };
+
+        layout->addWidget(makeTitle("Most Neglected — Oldest Unwatched"));
+
+        QString cat = "ALL"; // Show all categories
+        auto oldest = app->db->getMostNeglectedOldest(10, cat);
+        QGridLayout* oldestGrid = new QGridLayout();
+        oldestGrid->addWidget(new QLabel("#"), 0, 0, Qt::AlignCenter);
+        oldestGrid->addWidget(new QLabel("Video"), 0, 1, Qt::AlignLeft);
+        oldestGrid->addWidget(new QLabel("Author"), 0, 2, Qt::AlignLeft);
+        oldestGrid->addWidget(new QLabel("Added"), 0, 3, Qt::AlignCenter);
+        oldestGrid->setColumnStretch(0, 0);
+        oldestGrid->setColumnStretch(1, 1);
+        oldestGrid->setColumnStretch(2, 1);
+        oldestGrid->setColumnStretch(3, 0);
+        int row = 1;
+        for (const auto& v : oldest) {
+            oldestGrid->addWidget(new QLabel(QString("#%1").arg(row)), row, 0, Qt::AlignCenter);
+            oldestGrid->addWidget(new QLabel(v.name), row, 1, Qt::AlignLeft);
+            oldestGrid->addWidget(new QLabel(v.author), row, 2, Qt::AlignLeft);
+            oldestGrid->addWidget(new QLabel(v.dateCreated.toString("d MMM yyyy")), row, 3, Qt::AlignCenter);
+            row++;
+        }
+        if (oldest.isEmpty()) {
+            oldestGrid->addWidget(new QLabel("No neglected videos found"), 1, 0, 1, 4, Qt::AlignCenter);
+        }
+        layout->addLayout(oldestGrid);
+    }
+}
+
+void StatsDialog::setupTagsTab(MainApp* app)
+{
+    m_app = app;
+    ui.tagsCategoryCombo->setItemText(1, app->config->get("plus_category_name"));
+    ui.tagsCategoryCombo->setItemText(2, app->config->get("minus_category_name"));
+    connect(ui.tagsRefreshBtn, &QPushButton::clicked, this, &StatsDialog::refreshTags);
+    refreshTags();
+}
+
+void StatsDialog::refreshTags()
+{
+    if (!m_app) return;
+
+    QString category = "ALL";
+    int comboIdx = ui.tagsCategoryCombo->currentIndex();
+    if (comboIdx == 1) category = "PLUS";
+    else if (comboIdx == 2) category = "MINUS";
+
+    std::function<void(QLayout*)> clearLayout = [&](QLayout* layout) {
+        if (!layout) return;
+        QLayoutItem* item;
+        while ((item = layout->takeAt(0)) != nullptr) {
+            if (item->widget()) { item->widget()->deleteLater(); }
+            if (item->layout()) { clearLayout(item->layout()); }
+            delete item;
+        }
+    };
+
+    auto clearGridDataRows = [](QGridLayout* grid) {
+        if (!grid) return;
+        // Remove all widgets from row 1 onwards, keep row 0 (header)
+        for (int r = grid->rowCount() - 1; r >= 1; --r) {
+            for (int c = 0; c < grid->columnCount(); ++c) {
+                QLayoutItem* item = grid->itemAtPosition(r, c);
+                if (item && item->widget()) {
+                    item->widget()->deleteLater();
+                }
+            }
+        }
+    };
+
+    auto makeTitle = [](const QString& text) {
+        QLabel* label = new QLabel(text);
+        QFont f = label->font();
+        f.setPointSize(12);
+        f.setBold(true);
+        label->setFont(f);
+        label->setAlignment(Qt::AlignCenter);
+        return label;
+    };
+
+    int limit = 10;
+
+    // Top Tags by Views
+    {
+        QVBoxLayout* layout = ui.topTagsByViewsLayout;
+        if (!m_topTagsByViewsGrid) {
+            clearLayout(layout);
+            layout->addWidget(makeTitle("Top Tags by Views"));
+            QGridLayout* grid = new QGridLayout();
+            grid->addWidget(new QLabel("#"), 0, 0, Qt::AlignCenter);
+            grid->addWidget(new QLabel("Tag"), 0, 1, Qt::AlignLeft);
+            grid->addWidget(new QLabel("Views"), 0, 2, Qt::AlignCenter);
+            grid->setColumnStretch(0, 0);
+            grid->setColumnStretch(1, 1);
+            grid->setColumnStretch(2, 0);
+            layout->addLayout(grid);
+            m_topTagsByViewsGrid = grid;
+        } else {
+            clearGridDataRows(m_topTagsByViewsGrid);
+        }
+
+        auto tags = m_app->db->getTopTagsByViews(limit, category);
+        int row = 1;
+        for (const auto& pair : tags) {
+            addAuthorRow(m_topTagsByViewsGrid, row, row, pair.first, QString::number(pair.second));
+            row++;
+        }
+        if (tags.isEmpty())
+            m_topTagsByViewsGrid->addWidget(new QLabel("No data available"), 1, 0, 1, 3, Qt::AlignCenter);
+    }
+
+    // Top Tags by Watch Time
+    {
+        QVBoxLayout* layout = ui.topTagsByWatchTimeLayout;
+        if (!m_topTagsByWatchTimeGrid) {
+            clearLayout(layout);
+            layout->addWidget(makeTitle("Top Tags by Watch Time"));
+            QGridLayout* grid = new QGridLayout();
+            grid->addWidget(new QLabel("#"), 0, 0, Qt::AlignCenter);
+            grid->addWidget(new QLabel("Tag"), 0, 1, Qt::AlignLeft);
+            grid->addWidget(new QLabel("Time"), 0, 2, Qt::AlignCenter);
+            grid->setColumnStretch(0, 0);
+            grid->setColumnStretch(1, 1);
+            grid->setColumnStretch(2, 0);
+            layout->addLayout(grid);
+            m_topTagsByWatchTimeGrid = grid;
+        } else {
+            clearGridDataRows(m_topTagsByWatchTimeGrid);
+        }
+
+        auto tags = m_app->db->getTopTagsByWatchTime(limit, category);
+        int row = 1;
+        for (const auto& pair : tags) {
+            addAuthorRow(m_topTagsByWatchTimeGrid, row, row, pair.first,
+                QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(pair.second))));
+            row++;
+        }
+        if (tags.isEmpty())
+            m_topTagsByWatchTimeGrid->addWidget(new QLabel("No data available"), 1, 0, 1, 3, Qt::AlignCenter);
+    }
+
+    // Tag Completion Rates
+    {
+        QVBoxLayout* layout = ui.tagCompletionLayout;
+        if (!m_tagCompletionGrid) {
+            clearLayout(layout);
+            layout->addWidget(makeTitle("Tag Completion Rates"));
+            QGridLayout* grid = new QGridLayout();
+            grid->addWidget(new QLabel("#"), 0, 0, Qt::AlignCenter);
+            grid->addWidget(new QLabel("Tag"), 0, 1, Qt::AlignLeft);
+            grid->addWidget(new QLabel("Completion"), 0, 2, Qt::AlignCenter);
+            grid->setColumnStretch(0, 0);
+            grid->setColumnStretch(1, 1);
+            grid->setColumnStretch(2, 0);
+            layout->addLayout(grid);
+            m_tagCompletionGrid = grid;
+        } else {
+            clearGridDataRows(m_tagCompletionGrid);
+        }
+
+        auto tags = m_app->db->getTagCompletion(category);
+        int row = 1;
+        for (const auto& pair : tags) {
+            int barVal = static_cast<int>(pair.second);
+            QColor barColor = barVal >= 75 ? QColor("#4CAF50") : barVal >= 50 ? QColor("#FF9800") : QColor("#F44336");
+            addAuthorRow(m_tagCompletionGrid, row, row, pair.first,
+                QString("%1%").arg(pair.second, 0, 'f', 1), barColor);
+            row++;
+        }
+        if (tags.isEmpty())
+            m_tagCompletionGrid->addWidget(new QLabel("No data available"), 1, 0, 1, 3, Qt::AlignCenter);
+    }
+
+    // Average Rating by Tag
+    {
+        QVBoxLayout* layout = ui.avgRatingByTagLayout;
+        if (!m_avgRatingByTagGrid) {
+            clearLayout(layout);
+            layout->addWidget(makeTitle("Average Rating by Tag"));
+            QGridLayout* grid = new QGridLayout();
+            grid->addWidget(new QLabel("#"), 0, 0, Qt::AlignCenter);
+            grid->addWidget(new QLabel("Tag"), 0, 1, Qt::AlignLeft);
+            grid->addWidget(new QLabel("Avg Rating"), 0, 2, Qt::AlignCenter);
+            grid->setColumnStretch(0, 0);
+            grid->setColumnStretch(1, 1);
+            grid->setColumnStretch(2, 0);
+            layout->addLayout(grid);
+            m_avgRatingByTagGrid = grid;
+        } else {
+            clearGridDataRows(m_avgRatingByTagGrid);
+        }
+
+        auto tags = m_app->db->getAverageRatingByTag(limit, category);
+        int row = 1;
+        for (const auto& pair : tags) {
+            addAuthorRow(m_avgRatingByTagGrid, row, row, pair.first,
+                QString::number(pair.second, 'f', 2));
+            row++;
+        }
+        if (tags.isEmpty())
+            m_avgRatingByTagGrid->addWidget(new QLabel("No data available"), 1, 0, 1, 3, Qt::AlignCenter);
+    }
+
+    // Untapped Tags
+    {
+        QVBoxLayout* layout = ui.untappedTagsLayout;
+        // Clear and rebuild each time (simple text list)
+        QLayoutItem* item;
+        while ((item = layout->takeAt(0)) != nullptr) {
+            if (item->widget()) item->widget()->deleteLater();
+            delete item;
+        }
+        layout->addWidget(makeTitle("Untapped Tags (No Watched Videos)"));
+        QStringList untapped = m_app->db->getUntappedTags(category);
+        QString text = untapped.isEmpty() ? "All tags have been explored!" : untapped.join(", ");
+        QLabel* label = new QLabel(text);
+        label->setWordWrap(true);
+        label->setStyleSheet("padding: 4px;");
+        layout->addWidget(label);
+    }
+}
+
+void StatsDialog::setupSessionsTab(MainApp* app)
+{
+    // --- Summary stats ---
+    {
+        QGridLayout* grid = ui.sessionSummaryGridLayout;
+        QLabel* title = new QLabel("Session Summary");
+        QFont f = title->font();
+        f.setPointSize(14);
+        f.setBold(true);
+        title->setFont(f);
+        grid->addWidget(title, 0, 0, 1, 2, Qt::AlignLeft);
+        int row = 1;
+
+        // Reuse cached averages when available to avoid redundant DB queries
+        if (m_cachedAvgSessionTime < 0.0)
+            m_cachedAvgSessionTime = app->db->getAverageSessionTime();
+        addStatToGrid(grid, row++, "Avg Session Length:",
+            QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(m_cachedAvgSessionTime))));
+
+        double avgWatchedTime = app->db->getAverageWatchedTime();
+        addStatToGrid(grid, row++, "Avg Watched Time:",
+            QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(avgWatchedTime))));
+
+        double avgSessionsPerDay = app->db->getAverageSessionsPerDay();
+        addStatToGrid(grid, row++, "Avg Sessions Per Day:", QString::number(avgSessionsPerDay, 'f', 1));
+
+        double avgWatchTimePerDay = app->db->getAverageWatchTimePerDay();
+        addStatToGrid(grid, row++, "Avg Watch Time Per Day:",
+            QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(avgWatchTimePerDay))));
+
+        if (m_cachedAvgSessionTimePerDay < 0.0)
+            m_cachedAvgSessionTimePerDay = app->db->getAverageSessionTimePerDay();
+        addStatToGrid(grid, row++, "Avg Session Time Per Day:",
+            QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(m_cachedAvgSessionTimePerDay))));
+
+        if (m_cachedAvgCompletedPerDay < 0.0)
+            m_cachedAvgCompletedPerDay = app->db->getAverageCompletedPerDay();
+        addStatToGrid(grid, row++, "Avg Completed Per Day:", QString::number(m_cachedAvgCompletedPerDay, 'f', 1));
+    }
+
+    // --- Recent sessions table ---
+    QTableWidget* table = ui.sessionsTableWidget;
+    table->setItemDelegate(new AutoToolTipDelegate(table));
+    auto sessions = app->db->getRecentSessions(50);
+    table->setRowCount(sessions.size());
+
+    for (int i = 0; i < sessions.size(); ++i) {
+        const auto& s = sessions[i];
+
+        QTableWidgetItem* dateItem = new QTableWidgetItem(s.date.toString("yyyy-MM-dd"));
+        dateItem->setTextAlignment(Qt::AlignCenter);
+        table->setItem(i, 0, dateItem);
+
+        table->setItem(i, 1, new QTableWidgetItem(s.videoName));
+        table->setItem(i, 2, new QTableWidgetItem(s.author));
+
+        QTableWidgetItem* watchedItem = new QTableWidgetItem(
+            QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(s.watchedTime))));
+        watchedItem->setTextAlignment(Qt::AlignCenter);
+        table->setItem(i, 3, watchedItem);
+
+        QTableWidgetItem* sessionItem = new QTableWidgetItem(
+            QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(s.sessionTime))));
+        sessionItem->setTextAlignment(Qt::AlignCenter);
+        table->setItem(i, 4, sessionItem);
+
+        QTableWidgetItem* completedItem = new QTableWidgetItem(s.completed ? "Yes" : "No");
+        completedItem->setTextAlignment(Qt::AlignCenter);
+        table->setItem(i, 5, completedItem);
+    }
+
+    table->resizeColumnsToContents();
+    // Ensure reasonable minimum column widths
+    if (table->columnWidth(1) < 150) table->setColumnWidth(1, 150);
+    if (table->columnWidth(2) < 100) table->setColumnWidth(2, 100);
+    // Video column stretches to fill remaining width; others take minimal space
+    table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    // Let the table expand vertically to fill the remaining space
+    QSpacerItem* spacer = ui.sessionsMainLayout->itemAt(ui.sessionsMainLayout->count() - 1)->spacerItem();
+    if (spacer) spacer->changeSize(0, 0, QSizePolicy::Minimum, QSizePolicy::Minimum);
+    table->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 }

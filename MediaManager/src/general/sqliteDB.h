@@ -91,6 +91,38 @@ public:
     };
     QVector<TopRatedUnwatched> getTopRatedUnwatched(int limit, const QString& category);
 
+    // Personal Records
+    DayRecord getMostVideosInDay();
+    DayTimeRecord getMostTimeInDay();
+    SessionRecord getLongestSession();
+    VideoRecord getMostViewedVideo();
+    VideoTimeRecord getMostTimeSpentVideo();
+    DiverseDayRecord getMostDiverseDay();
+
+    // Library Health
+    int getVideosAddedSince(int days);
+    int getRatedVideoCount();
+    int getDistinctAuthorCount(const QString& category);
+    int getDistinctTypeCount(const QString& category);
+    int getDistinctTagCount();
+    QVector<NeglectedVideo> getMostNeglectedOldest(int limit, const QString& category);
+
+    // Tags
+    QVector<QPair<QString, int>> getTopTagsByViews(int limit, const QString& category);
+    QVector<QPair<QString, double>> getTopTagsByWatchTime(int limit, const QString& category);
+    QVector<QPair<QString, double>> getTagCompletion(const QString& category);
+    QVector<QPair<QString, double>> getAverageRatingByTag(int limit, const QString& category);
+    QStringList getUntappedTags(const QString& category);
+
+    // Session History
+    QVector<SessionEntry> getRecentSessions(int limit = 50);
+    double getAverageSessionTime();
+    double getAverageWatchedTime();
+    double getAverageSessionsPerDay();
+    double getAverageWatchTimePerDay();
+    double getAverageSessionTimePerDay();
+    double getAverageCompletedPerDay();
+
     int getTotalWatchDays();
     QDateTime getFirstWatchDate();
     qint64 vacuumDB();

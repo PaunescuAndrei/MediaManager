@@ -14,6 +14,11 @@ ContributionHeatmapWidget::ContributionHeatmapWidget(QWidget* parent)
     setAttribute(Qt::WA_OpaquePaintEvent, false);
 }
 
+void ContributionHeatmapWidget::setDayRange(int totalDays)
+{
+    m_requestedDays = totalDays;
+}
+
 void ContributionHeatmapWidget::setData(const QVector<QPair<QDate, double>>& data)
 {
     m_dayMap.clear();
@@ -22,7 +27,7 @@ void ContributionHeatmapWidget::setData(const QVector<QPair<QDate, double>>& dat
     }
 
     m_today = QDate::currentDate();
-    m_start = m_today.addDays(-185);
+    m_start = m_today.addDays(-m_requestedDays + 1);
     int startDow = m_start.dayOfWeek();
     m_start = m_start.addDays(-((startDow + 6) % 7));
     m_totalDays = m_start.daysTo(m_today) + 1;

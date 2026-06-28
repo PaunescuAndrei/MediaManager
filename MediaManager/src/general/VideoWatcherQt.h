@@ -40,7 +40,6 @@ signals:
     void updateTaskbarIconSignal(bool watching);
     void updateMusicPlayerSignal(bool flag);
     void timeWatchedIncrementSignal(double delta);
-    void dailyProgressCheckSignal();
 };
 
 //#include <iostream>

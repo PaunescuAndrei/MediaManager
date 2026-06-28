@@ -17,6 +17,8 @@ public:
 	void resumeVideoInfo(QPointer<NotificationWidget> dialog);
 	void showGeneralMessage(const QString& title, const QString& message);
 	void showGoalMet(const QString& title, const QString& message);
+	void showStreakAtRisk(const QString& title, const QString& message);
+	void showPersonalBest(const QString& title, const QString& message);
 	void closeAll();
 
 private slots:

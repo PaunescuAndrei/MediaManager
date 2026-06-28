@@ -12,7 +12,9 @@ class ProgressBarQLabel;
 enum class NotificationType {
 	VideoInfo,
 	GeneralMessage,
-	GoalMet
+	GoalMet,
+	StreakAtRisk,
+	PersonalBest
 };
 
 class NotificationWidget :
@@ -41,6 +43,8 @@ public:
 	void populateVideoInfo(MainWindow* mw);
 	void populateGeneralMessage(const QString& title, const QString& message);
 	void populateGoalMet(const QString& title, const QString& message);
+	void populateStreakAtRisk(const QString& title, const QString& message);
+	void populatePersonalBest(const QString& title, const QString& message);
 
 signals:
 	void showEventSignal();

@@ -32,6 +32,10 @@ public:
     void setupAchievements(MainApp* app);
     void setupStreaksTab(MainApp* app);
     void setupAuthorsTab(MainApp* app);
+    void setupRecordsTab(MainApp* app);
+    void setupLibraryTab(MainApp* app);
+    void setupTagsTab(MainApp* app);
+    void setupSessionsTab(MainApp* app);
 
 protected:
     void changeEvent(QEvent* event) override;
@@ -39,6 +43,7 @@ protected:
 private slots:
     void refreshCharts();
     void refreshAuthors();
+    void refreshTags();
 
 private:
     QLabel* createStatLabel(const QString& text, const QString& value, bool isValue = false);
@@ -86,10 +91,22 @@ private:
     QGridLayout* m_completionGrid = nullptr;
     QGridLayout* m_hiddenGemsGrid = nullptr;
 
+    // Tags tab — reusable grid layouts
+    QGridLayout* m_topTagsByViewsGrid = nullptr;
+    QGridLayout* m_topTagsByWatchTimeGrid = nullptr;
+    QGridLayout* m_tagCompletionGrid = nullptr;
+    QGridLayout* m_avgRatingByTagGrid = nullptr;
+
+    // Configurable heatmap days
+    int m_heatmapDays = 186;
+
     // Shared caches to avoid redundant DB queries between setup methods
     QVector<QPair<QDate, double>> m_heatmapCache;
     int m_cachedVideosToday = -1;
     double m_cachedWatchedTodaySec = -1.0;
     double m_cachedDailyVideoGoal = -1.0;
     int m_cachedDailyTimeGoalSec = -1;
+    double m_cachedAvgSessionTime = -1.0;
+    double m_cachedAvgSessionTimePerDay = -1.0;
+    double m_cachedAvgCompletedPerDay = -1.0;
 };

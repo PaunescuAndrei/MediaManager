@@ -156,6 +156,19 @@ void Config::init_defaults() {
         {"daily_time_goal_minutes", "60"},
         {"tooltips_enabled", "True"},
         {"tooltip_delay_ms", "700"},
+        {"streak_at_risk_min_days", "3"},
+        {"streak_at_risk_cutoff_hour", "20"},
+        {"streak_at_risk_refire_minutes", "0"},
+        {"notification_streak_at_risk_enabled", "True"},
+        {"notification_streak_at_risk_duration_ms", "8000"},
+        {"notification_personal_best_enabled", "True"},
+        {"notification_personal_best_duration_ms", "10000"},
+        {"pb_videos_step", "1"},
+        {"pb_time_step_minutes", "5"},
+        {"pb_videos_min_threshold", "1"},
+        {"pb_time_min_threshold_minutes", "5"},
+        {"stats_heatmap_months", "6"},
+        {"daily_progress_check_interval_seconds", "120"},
 	});
 }
 

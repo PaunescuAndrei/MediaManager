@@ -51,6 +51,17 @@ public:
     QSpinBox* notificationGoalMetDurationSpinBox = nullptr;
     QDoubleSpinBox* milestoneVideoStepSpinBox = nullptr;
     QSpinBox* milestoneTimeStepSpinBox = nullptr;
+    QCheckBox* notificationStreakAtRiskEnabled = nullptr;
+    QSpinBox* notificationStreakAtRiskDurationSpinBox = nullptr;
+    QSpinBox* streakAtRiskMinDaysSpinBox = nullptr;
+    QSpinBox* streakAtRiskCutoffHourSpinBox = nullptr;
+    QSpinBox* streakAtRiskRefireSpinBox = nullptr;
+    QCheckBox* notificationPersonalBestEnabled = nullptr;
+    QSpinBox* notificationPersonalBestDurationSpinBox = nullptr;
+    QSpinBox* pbVideosStepSpinBox = nullptr;
+    QSpinBox* pbTimeStepSpinBox = nullptr;
+    QSpinBox* pbVideosMinThresholdSpinBox = nullptr;
+    QSpinBox* pbTimeMinThresholdSpinBox = nullptr;
 
 private:
     // Per-category setup methods

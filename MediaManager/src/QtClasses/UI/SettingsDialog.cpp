@@ -84,6 +84,7 @@ void SettingsDialog::installWheelFilters(WheelStrongFocusEventFilter* filter)
     for (QWidget* w : widgets) {
         if (qobject_cast<QSpinBox*>(w) || qobject_cast<QDoubleSpinBox*>(w)
             || qobject_cast<QSlider*>(w)) {
+            w->setFocusPolicy(Qt::FocusPolicy::StrongFocus);
             w->installEventFilter(filter);
         }
     }
@@ -173,6 +174,14 @@ void SettingsDialog::setupGeneralPage(MainWindow* mw)
     this->ui.tooltipDelaySpinBox->setValue(config->get("tooltip_delay_ms").toInt());
     this->oldTooltipsEnabled = this->ui.tooltipsEnabled->isChecked();
     this->oldTooltipDelayMs = this->ui.tooltipDelaySpinBox->value();
+
+    // --- Stats Heatmap ---
+    int months = qBound(1, config->get("stats_heatmap_months").toInt(), 24);
+    this->ui.statsHeatmapMonthsCombo->setCurrentIndex(heatmapMonthsToComboIndex(months));
+
+    // --- Daily Progress Check ---
+    setupSpinStyle(this->ui.dailyProgressIntervalSpinBox, "spinbox");
+    this->ui.dailyProgressIntervalSpinBox->setValue(config->get("daily_progress_check_interval_seconds").toInt());
 }
 
 void SettingsDialog::setupPlaybackPage(MainWindow* mw)
@@ -645,6 +654,165 @@ void SettingsDialog::setupNotificationsPage(MainWindow* mw)
     milestonesLayout->addLayout(timeStepRow);
 
     pageLayout->addWidget(milestonesGroup);
+
+    // ── Streak at Risk ──────────────────────────────────────────────
+    QGroupBox* streakRiskGroup = new QGroupBox("Streak at Risk");
+    QVBoxLayout* streakRiskLayout = new QVBoxLayout(streakRiskGroup);
+    streakRiskLayout->setSpacing(4);
+
+    // Enable + duration row
+    QHBoxLayout* streakEnableRow = new QHBoxLayout();
+    notificationStreakAtRiskEnabled = new QCheckBox("Enable streak at risk notifications");
+    notificationStreakAtRiskEnabled->setToolTip("Show notification popup when your watch streak is at risk of ending");
+    notificationStreakAtRiskEnabled->setChecked(config->get_bool("notification_streak_at_risk_enabled"));
+    streakEnableRow->addWidget(notificationStreakAtRiskEnabled);
+    streakEnableRow->addStretch();
+    notificationStreakAtRiskDurationSpinBox = new QSpinBox();
+    notificationStreakAtRiskDurationSpinBox->setMinimum(1000);
+    notificationStreakAtRiskDurationSpinBox->setMaximum(60000);
+    notificationStreakAtRiskDurationSpinBox->setSingleStep(500);
+    notificationStreakAtRiskDurationSpinBox->setToolTip("Duration in milliseconds");
+    notificationStreakAtRiskDurationSpinBox->setValue(config->get("notification_streak_at_risk_duration_ms").toInt());
+    setupSpinStyle(notificationStreakAtRiskDurationSpinBox, "spinbox");
+    connect(notificationStreakAtRiskEnabled, &QCheckBox::toggled, notificationStreakAtRiskDurationSpinBox, &QSpinBox::setEnabled);
+    notificationStreakAtRiskDurationSpinBox->setEnabled(notificationStreakAtRiskEnabled->isChecked());
+    streakEnableRow->addWidget(notificationStreakAtRiskDurationSpinBox);
+    streakRiskLayout->addLayout(streakEnableRow);
+
+    // Min streak days
+    QHBoxLayout* streakMinDaysRow = new QHBoxLayout();
+    QLabel* streakMinDaysLabel = new QLabel("Min streak days:");
+    streakMinDaysLabel->setToolTip("Only warn if the current streak is at least this long");
+    streakMinDaysRow->addWidget(streakMinDaysLabel);
+    streakMinDaysRow->addStretch();
+    streakAtRiskMinDaysSpinBox = new QSpinBox();
+    streakAtRiskMinDaysSpinBox->setMinimum(1);
+    streakAtRiskMinDaysSpinBox->setMaximum(365);
+    streakAtRiskMinDaysSpinBox->setToolTip("Only warn if the current streak is at least this long");
+    streakAtRiskMinDaysSpinBox->setValue(config->get("streak_at_risk_min_days").toInt());
+    setupSpinStyle(streakAtRiskMinDaysSpinBox, "spinbox");
+    streakMinDaysRow->addWidget(streakAtRiskMinDaysSpinBox);
+    streakRiskLayout->addLayout(streakMinDaysRow);
+
+    // Cutoff hour
+    QHBoxLayout* streakCutoffRow = new QHBoxLayout();
+    QLabel* streakCutoffLabel = new QLabel("Cutoff hour (0-23):");
+    streakCutoffLabel->setToolTip("Warn if no watch by this hour (e.g. 20 = 8 PM)");
+    streakCutoffRow->addWidget(streakCutoffLabel);
+    streakCutoffRow->addStretch();
+    streakAtRiskCutoffHourSpinBox = new QSpinBox();
+    streakAtRiskCutoffHourSpinBox->setMinimum(0);
+    streakAtRiskCutoffHourSpinBox->setMaximum(23);
+    streakAtRiskCutoffHourSpinBox->setToolTip("Warn if no watch by this hour (e.g. 20 = 8 PM)");
+    streakAtRiskCutoffHourSpinBox->setValue(config->get("streak_at_risk_cutoff_hour").toInt());
+    setupSpinStyle(streakAtRiskCutoffHourSpinBox, "spinbox");
+    streakCutoffRow->addWidget(streakAtRiskCutoffHourSpinBox);
+    streakRiskLayout->addLayout(streakCutoffRow);
+
+    // Re-fire interval
+    QHBoxLayout* streakRefireRow = new QHBoxLayout();
+    QLabel* streakRefireLabel = new QLabel("Re-fire interval (min):");
+    streakRefireLabel->setToolTip("Re-fire notification every N minutes after cutoff (0 = notify once per day)");
+    streakRefireRow->addWidget(streakRefireLabel);
+    streakRefireRow->addStretch();
+    streakAtRiskRefireSpinBox = new QSpinBox();
+    streakAtRiskRefireSpinBox->setMinimum(0);
+    streakAtRiskRefireSpinBox->setMaximum(480);
+    streakAtRiskRefireSpinBox->setSingleStep(15);
+    streakAtRiskRefireSpinBox->setValue(config->get("streak_at_risk_refire_minutes").toInt());
+    setupSpinStyle(streakAtRiskRefireSpinBox, "spinbox");
+    streakRefireRow->addWidget(streakAtRiskRefireSpinBox);
+    streakRiskLayout->addLayout(streakRefireRow);
+
+    pageLayout->addWidget(streakRiskGroup);
+
+    // ── Personal Best ───────────────────────────────────────────────
+    QGroupBox* personalBestGroup = new QGroupBox("Personal Best");
+    QVBoxLayout* personalBestLayout = new QVBoxLayout(personalBestGroup);
+    personalBestLayout->setSpacing(4);
+
+    // Enable + duration row
+    QHBoxLayout* pbEnableRow = new QHBoxLayout();
+    notificationPersonalBestEnabled = new QCheckBox("Enable personal best notifications");
+    notificationPersonalBestEnabled->setToolTip("Show notification popups when you break an all-time daily record");
+    notificationPersonalBestEnabled->setChecked(config->get_bool("notification_personal_best_enabled"));
+    pbEnableRow->addWidget(notificationPersonalBestEnabled);
+    pbEnableRow->addStretch();
+    notificationPersonalBestDurationSpinBox = new QSpinBox();
+    notificationPersonalBestDurationSpinBox->setMinimum(1000);
+    notificationPersonalBestDurationSpinBox->setMaximum(60000);
+    notificationPersonalBestDurationSpinBox->setSingleStep(500);
+    notificationPersonalBestDurationSpinBox->setToolTip("Duration in milliseconds");
+    notificationPersonalBestDurationSpinBox->setValue(config->get("notification_personal_best_duration_ms").toInt());
+    setupSpinStyle(notificationPersonalBestDurationSpinBox, "spinbox");
+    connect(notificationPersonalBestEnabled, &QCheckBox::toggled, notificationPersonalBestDurationSpinBox, &QSpinBox::setEnabled);
+    notificationPersonalBestDurationSpinBox->setEnabled(notificationPersonalBestEnabled->isChecked());
+    pbEnableRow->addWidget(notificationPersonalBestDurationSpinBox);
+    personalBestLayout->addLayout(pbEnableRow);
+
+    // Videos step
+    QHBoxLayout* pbVideoStepRow = new QHBoxLayout();
+    QLabel* pbVideoStepLabel = new QLabel("Videos step:");
+    pbVideoStepLabel->setToolTip("Notify every N videos above your all-time daily record (1 = every video)");
+    pbVideoStepRow->addWidget(pbVideoStepLabel);
+    pbVideoStepRow->addStretch();
+    pbVideosStepSpinBox = new QSpinBox();
+    pbVideosStepSpinBox->setMinimum(1);
+    pbVideosStepSpinBox->setMaximum(999);
+    pbVideosStepSpinBox->setToolTip("Notify every N videos above your all-time daily record (1 = every video)");
+    pbVideosStepSpinBox->setValue(config->get("pb_videos_step").toInt());
+    setupSpinStyle(pbVideosStepSpinBox, "spinbox");
+    pbVideoStepRow->addWidget(pbVideosStepSpinBox);
+    personalBestLayout->addLayout(pbVideoStepRow);
+
+    // Videos min threshold
+    QHBoxLayout* pbVideoThreshRow = new QHBoxLayout();
+    QLabel* pbVideoThreshLabel = new QLabel("Videos min. threshold:");
+    pbVideoThreshLabel->setToolTip("Only notify if your old daily record was at least this many videos");
+    pbVideoThreshRow->addWidget(pbVideoThreshLabel);
+    pbVideoThreshRow->addStretch();
+    pbVideosMinThresholdSpinBox = new QSpinBox();
+    pbVideosMinThresholdSpinBox->setMinimum(1);
+    pbVideosMinThresholdSpinBox->setMaximum(999);
+    pbVideosMinThresholdSpinBox->setToolTip("Only notify if your old daily record was at least this many videos");
+    pbVideosMinThresholdSpinBox->setValue(config->get("pb_videos_min_threshold").toInt());
+    setupSpinStyle(pbVideosMinThresholdSpinBox, "spinbox");
+    pbVideoThreshRow->addWidget(pbVideosMinThresholdSpinBox);
+    personalBestLayout->addLayout(pbVideoThreshRow);
+
+    // Watch time step
+    QHBoxLayout* pbTimeStepRow = new QHBoxLayout();
+    QLabel* pbTimeStepLabel = new QLabel("Watch time step (min):");
+    pbTimeStepLabel->setToolTip("Notify every N minutes above your all-time daily record (5 = every 5 minutes)");
+    pbTimeStepRow->addWidget(pbTimeStepLabel);
+    pbTimeStepRow->addStretch();
+    pbTimeStepSpinBox = new QSpinBox();
+    pbTimeStepSpinBox->setMinimum(1);
+    pbTimeStepSpinBox->setMaximum(9999);
+    pbTimeStepSpinBox->setSingleStep(5);
+    pbTimeStepSpinBox->setToolTip("Notify every N minutes above your all-time daily record (5 = every 5 minutes)");
+    pbTimeStepSpinBox->setValue(config->get("pb_time_step_minutes").toInt());
+    setupSpinStyle(pbTimeStepSpinBox, "spinbox");
+    pbTimeStepRow->addWidget(pbTimeStepSpinBox);
+    personalBestLayout->addLayout(pbTimeStepRow);
+
+    // Watch time min threshold
+    QHBoxLayout* pbTimeThreshRow = new QHBoxLayout();
+    QLabel* pbTimeThreshLabel = new QLabel("Watch time min. threshold (min):");
+    pbTimeThreshLabel->setToolTip("Only notify if your old daily record was at least this many minutes");
+    pbTimeThreshRow->addWidget(pbTimeThreshLabel);
+    pbTimeThreshRow->addStretch();
+    pbTimeMinThresholdSpinBox = new QSpinBox();
+    pbTimeMinThresholdSpinBox->setMinimum(1);
+    pbTimeMinThresholdSpinBox->setMaximum(9999);
+    pbTimeMinThresholdSpinBox->setSingleStep(5);
+    pbTimeMinThresholdSpinBox->setToolTip("Only notify if your old daily record was at least this many minutes");
+    pbTimeMinThresholdSpinBox->setValue(config->get("pb_time_min_threshold_minutes").toInt());
+    setupSpinStyle(pbTimeMinThresholdSpinBox, "spinbox");
+    pbTimeThreshRow->addWidget(pbTimeMinThresholdSpinBox);
+    personalBestLayout->addLayout(pbTimeThreshRow);
+
+    pageLayout->addWidget(personalBestGroup);
 
     // Spacer at bottom
     pageLayout->addStretch();

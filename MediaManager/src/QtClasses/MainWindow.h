@@ -49,6 +49,7 @@ public:
     IconChanger* animatedIcon = nullptr;
     QSystemTrayIcon* trayIcon;
     QTimer* search_timer = nullptr;
+    QTimer* dailyProgressTimer = nullptr;
     QTimer update_title_timer = QTimer();
     double position = 0;
     double duration = 0;
@@ -62,6 +63,12 @@ public:
     bool intro_played = true;
     QDate lastGoalNotifiedDate; // invalid (null) date until first goal notification fires
     QDate lastMilestoneDate;    // tracks which day the milestone counters belong to
+    QDate lastStreakRiskNotifiedDate; // which day streak-at-risk was last notified
+    QTime lastStreakRiskNotifiedTime; // exact time streak-at-risk was last notified
+    int previousBestVideos = 0;      // best videos-in-a-day count (cached at startup, updated as records are broken)
+    QDate previousBestVideosDate;    // date of the previous best videos record
+    double previousBestTimeSec = 0.0; // best watch-time-in-a-day (cached at startup, updated as records are broken)
+    QDate previousBestTimeDate;      // date of the previous best time record
     double lastVideoMilestone = 0.0;  // last milestone step reached for videos today
     int lastTimeMilestoneMinutes = 0; // last milestone step reached for time today
     QList<QPair<QString, int>> lastScrolls = QList<QPair<QString, int>>();
@@ -180,8 +187,11 @@ public:
     void checkDailyProgress();
     void loadDailyProgressState();
     void saveDailyProgressState();
+    void startDailyProgressTimer();
     void GoalMetNotification(const QString& title, const QString& message);
     void MilestoneNotification(const QString& description);
+    void checkStreakAtRisk(int videosToday);
+    void checkPersonalBests(int videosToday, double watchedTodaySec);
     void incrementCounterVar(int value = 1);
     bool applyPostWatchAdjustments(const QString& videoType, int videoId, bool increment, double watchedProgressOverride = 0.0, bool useOverrideProgress = false, bool suppressMinusCounter = false, double actualWatchTimeDelta = 0.0);
     void updateSvCountersAfterPlayback(bool playedSpecialType, bool suppressMinusIncrement);

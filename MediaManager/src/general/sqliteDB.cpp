@@ -1560,6 +1560,466 @@ QVector<sqliteDB::TopRatedUnwatched> sqliteDB::getTopRatedUnwatched(int limit, c
 }
 
 
+// ===========================================================================
+// Personal Records
+// ===========================================================================
+
+DayRecord sqliteDB::getMostVideosInDay()
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT date(session_start) as day, COUNT(*) "
+        "FROM watch_history WHERE completed = 1 "
+        "GROUP BY day ORDER BY COUNT(*) DESC LIMIT 1"));
+    DayRecord result;
+    if (!query.exec()) return result;
+    if (query.first()) {
+        result.date = QDate::fromString(query.value(0).toString(), "yyyy-MM-dd");
+        result.count = query.value(1).toInt();
+    }
+    return result;
+}
+
+DayTimeRecord sqliteDB::getMostTimeInDay()
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT date(session_start) as day, SUM(watched_time) "
+        "FROM watch_history "
+        "GROUP BY day ORDER BY SUM(watched_time) DESC LIMIT 1"));
+    DayTimeRecord result;
+    if (!query.exec()) return result;
+    if (query.first()) {
+        result.date = QDate::fromString(query.value(0).toString(), "yyyy-MM-dd");
+        result.seconds = query.value(1).toDouble();
+    }
+    return result;
+}
+
+SessionRecord sqliteDB::getLongestSession()
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT wh.session_time, date(wh.session_start) as day, "
+        "COALESCE((SELECT name FROM videodetails WHERE id = wh.video_id), wh.video_path) "
+        "FROM watch_history wh ORDER BY wh.session_time DESC LIMIT 1"));
+    SessionRecord result;
+    if (!query.exec()) return result;
+    if (query.first()) {
+        result.sessionTime = query.value(0).toDouble();
+        result.date = query.value(1).toString();
+        result.videoName = query.value(2).toString();
+    }
+    return result;
+}
+
+VideoRecord sqliteDB::getMostViewedVideo()
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT name, author, views FROM videodetails ORDER BY views DESC LIMIT 1"));
+    VideoRecord result;
+    if (!query.exec()) return result;
+    if (query.first()) {
+        result.name = query.value(0).toString();
+        result.author = query.value(1).toString();
+        result.views = query.value(2).toInt();
+    }
+    return result;
+}
+
+VideoTimeRecord sqliteDB::getMostTimeSpentVideo()
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT v.name, v.author, COALESCE(SUM(wh.watched_time), 0) "
+        "FROM videodetails v "
+        "JOIN watch_history wh ON v.id = wh.video_id "
+        "GROUP BY v.id ORDER BY SUM(wh.watched_time) DESC LIMIT 1"));
+    VideoTimeRecord result;
+    if (!query.exec()) return result;
+    if (query.first()) {
+        result.name = query.value(0).toString();
+        result.author = query.value(1).toString();
+        result.totalTime = query.value(2).toDouble();
+    }
+    return result;
+}
+
+DiverseDayRecord sqliteDB::getMostDiverseDay()
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT date(wh.session_start) as day, COUNT(DISTINCT v.author) "
+        "FROM watch_history wh "
+        "JOIN videodetails v ON wh.video_id = v.id "
+        "WHERE v.author != '' "
+        "GROUP BY day ORDER BY COUNT(DISTINCT v.author) DESC LIMIT 1"));
+    DiverseDayRecord result;
+    if (!query.exec()) return result;
+    if (query.first()) {
+        result.date = QDate::fromString(query.value(0).toString(), "yyyy-MM-dd");
+        result.authorCount = query.value(1).toInt();
+    }
+    return result;
+}
+
+// ===========================================================================
+// Library Health
+// ===========================================================================
+
+int sqliteDB::getVideosAddedSince(int days)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT COUNT(*) FROM videodetails "
+        "WHERE date_created >= date('now', '-' || ? || ' days')"));
+    query.addBindValue(days);
+    if (!query.exec()) return 0;
+    if (query.first())
+        return query.value(0).toInt();
+    return 0;
+}
+
+int sqliteDB::getRatedVideoCount()
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT COUNT(*) FROM videodetails WHERE rating > 0"));
+    if (!query.exec()) return 0;
+    if (query.first())
+        return query.value(0).toInt();
+    return 0;
+}
+
+int sqliteDB::getDistinctAuthorCount(const QString& category)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    if (category == "ALL") {
+        query.prepare(QStringLiteral(
+            "SELECT COUNT(DISTINCT author) FROM videodetails WHERE author != ''"));
+    } else {
+        query.prepare(QStringLiteral(
+            "SELECT COUNT(DISTINCT author) FROM videodetails WHERE author != '' AND category = ?"));
+        query.addBindValue(category);
+    }
+    if (!query.exec()) return 0;
+    if (query.first())
+        return query.value(0).toInt();
+    return 0;
+}
+
+int sqliteDB::getDistinctTypeCount(const QString& category)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    if (category == "ALL") {
+        query.prepare(QStringLiteral(
+            "SELECT COUNT(DISTINCT type) FROM videodetails WHERE type != ''"));
+    } else {
+        query.prepare(QStringLiteral(
+            "SELECT COUNT(DISTINCT type) FROM videodetails WHERE type != '' AND category = ?"));
+        query.addBindValue(category);
+    }
+    if (!query.exec()) return 0;
+    if (query.first())
+        return query.value(0).toInt();
+    return 0;
+}
+
+int sqliteDB::getDistinctTagCount()
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT COUNT(*) FROM (SELECT DISTINCT tag_id FROM tags_relations)"));
+    if (!query.exec()) return 0;
+    if (query.first())
+        return query.value(0).toInt();
+    return 0;
+}
+
+QVector<NeglectedVideo> sqliteDB::getMostNeglectedOldest(int limit, const QString& category)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    if (category == "ALL") {
+        query.prepare(QStringLiteral(
+            "SELECT name, author, datetime(date_created, 'localtime') "
+            "FROM videodetails WHERE views = 0 "
+            "ORDER BY date_created ASC LIMIT ?"));
+    } else {
+        query.prepare(QStringLiteral(
+            "SELECT name, author, datetime(date_created, 'localtime') "
+            "FROM videodetails WHERE views = 0 AND category = ? "
+            "ORDER BY date_created ASC LIMIT ?"));
+        query.addBindValue(category);
+    }
+    query.addBindValue(limit);
+    QVector<NeglectedVideo> results;
+    if (!query.exec()) return results;
+    while (query.next()) {
+        NeglectedVideo item;
+        item.name = query.value(0).toString();
+        item.author = query.value(1).toString();
+        item.dateCreated = QDateTime::fromString(query.value(2).toString(), "yyyy-MM-dd HH:mm:ss");
+        item.views = 0;
+        results.append(item);
+    }
+    return results;
+}
+
+// ===========================================================================
+// Tags
+// ===========================================================================
+
+QVector<QPair<QString, int>> sqliteDB::getTopTagsByViews(int limit, const QString& category)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    if (category == "ALL") {
+        query.prepare(QStringLiteral(
+            "SELECT t.name, SUM(v.views) "
+            "FROM tags t "
+            "JOIN tags_relations tr ON t.id = tr.tag_id "
+            "JOIN videodetails v ON tr.video_id = v.id "
+            "GROUP BY t.id ORDER BY SUM(v.views) DESC LIMIT ?"));
+    } else {
+        query.prepare(QStringLiteral(
+            "SELECT t.name, SUM(v.views) "
+            "FROM tags t "
+            "JOIN tags_relations tr ON t.id = tr.tag_id "
+            "JOIN videodetails v ON tr.video_id = v.id "
+            "WHERE v.category = ? "
+            "GROUP BY t.id ORDER BY SUM(v.views) DESC LIMIT ?"));
+        query.addBindValue(category);
+    }
+    query.addBindValue(limit);
+    QVector<QPair<QString, int>> results;
+    if (!query.exec()) return results;
+    while (query.next()) {
+        results.append({query.value(0).toString(), query.value(1).toInt()});
+    }
+    return results;
+}
+
+QVector<QPair<QString, double>> sqliteDB::getTopTagsByWatchTime(int limit, const QString& category)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    if (category == "ALL") {
+        query.prepare(QStringLiteral(
+            "SELECT t.name, COALESCE(SUM(wh.watched_time), 0) "
+            "FROM tags t "
+            "JOIN tags_relations tr ON t.id = tr.tag_id "
+            "JOIN watch_history wh ON tr.video_id = wh.video_id "
+            "GROUP BY t.id ORDER BY SUM(wh.watched_time) DESC LIMIT ?"));
+    } else {
+        query.prepare(QStringLiteral(
+            "SELECT t.name, COALESCE(SUM(wh.watched_time), 0) "
+            "FROM tags t "
+            "JOIN tags_relations tr ON t.id = tr.tag_id "
+            "JOIN videodetails v ON tr.video_id = v.id "
+            "JOIN watch_history wh ON tr.video_id = wh.video_id "
+            "WHERE v.category = ? "
+            "GROUP BY t.id ORDER BY SUM(wh.watched_time) DESC LIMIT ?"));
+        query.addBindValue(category);
+    }
+    query.addBindValue(limit);
+    QVector<QPair<QString, double>> results;
+    if (!query.exec()) return results;
+    while (query.next()) {
+        results.append({query.value(0).toString(), query.value(1).toDouble()});
+    }
+    return results;
+}
+
+QVector<QPair<QString, double>> sqliteDB::getTagCompletion(const QString& category)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    if (category == "ALL") {
+        query.prepare(QStringLiteral(
+            "SELECT t.name, "
+            "CAST(SUM(CASE WHEN v.views > 0 THEN 1 ELSE 0 END) AS REAL) / COUNT(*) * 100.0 "
+            "FROM tags t "
+            "JOIN tags_relations tr ON t.id = tr.tag_id "
+            "JOIN videodetails v ON tr.video_id = v.id "
+            "GROUP BY t.id HAVING COUNT(*) >= 1 "
+            "ORDER BY CAST(SUM(CASE WHEN v.views > 0 THEN 1 ELSE 0 END) AS REAL) / COUNT(*) * 100.0 ASC"));
+    } else {
+        query.prepare(QStringLiteral(
+            "SELECT t.name, "
+            "CAST(SUM(CASE WHEN v.views > 0 THEN 1 ELSE 0 END) AS REAL) / COUNT(*) * 100.0 "
+            "FROM tags t "
+            "JOIN tags_relations tr ON t.id = tr.tag_id "
+            "JOIN videodetails v ON tr.video_id = v.id "
+            "WHERE v.category = ? "
+            "GROUP BY t.id HAVING COUNT(*) >= 1 "
+            "ORDER BY CAST(SUM(CASE WHEN v.views > 0 THEN 1 ELSE 0 END) AS REAL) / COUNT(*) * 100.0 ASC"));
+        query.addBindValue(category);
+    }
+    QVector<QPair<QString, double>> results;
+    if (!query.exec()) return results;
+    while (query.next()) {
+        results.append({query.value(0).toString(), query.value(1).toDouble()});
+    }
+    return results;
+}
+
+QVector<QPair<QString, double>> sqliteDB::getAverageRatingByTag(int limit, const QString& category)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    if (category == "ALL") {
+        query.prepare(QStringLiteral(
+            "SELECT t.name, AVG(NULLIF(v.rating, 0)) "
+            "FROM tags t "
+            "JOIN tags_relations tr ON t.id = tr.tag_id "
+            "JOIN videodetails v ON tr.video_id = v.id "
+            "WHERE v.rating > 0 "
+            "GROUP BY t.id ORDER BY AVG(v.rating) DESC LIMIT ?"));
+    } else {
+        query.prepare(QStringLiteral(
+            "SELECT t.name, AVG(NULLIF(v.rating, 0)) "
+            "FROM tags t "
+            "JOIN tags_relations tr ON t.id = tr.tag_id "
+            "JOIN videodetails v ON tr.video_id = v.id "
+            "WHERE v.category = ? AND v.rating > 0 "
+            "GROUP BY t.id ORDER BY AVG(v.rating) DESC LIMIT ?"));
+        query.addBindValue(category);
+    }
+    query.addBindValue(limit);
+    QVector<QPair<QString, double>> results;
+    if (!query.exec()) return results;
+    while (query.next()) {
+        results.append({query.value(0).toString(), query.value(1).toDouble()});
+    }
+    return results;
+}
+
+QStringList sqliteDB::getUntappedTags(const QString& category)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    if (category == "ALL") {
+        query.prepare(QStringLiteral(
+            "SELECT DISTINCT t.name FROM tags t "
+            "WHERE t.id NOT IN ("
+            "SELECT tr.tag_id FROM tags_relations tr "
+            "JOIN videodetails v ON tr.video_id = v.id "
+            "WHERE v.views > 0)"));
+    } else {
+        query.prepare(QStringLiteral(
+            "SELECT DISTINCT t.name FROM tags t "
+            "WHERE t.id NOT IN ("
+            "SELECT tr.tag_id FROM tags_relations tr "
+            "JOIN videodetails v ON tr.video_id = v.id "
+            "WHERE v.category = ? AND v.views > 0)"));
+        query.addBindValue(category);
+    }
+    QStringList results;
+    if (!query.exec()) return results;
+    while (query.next()) {
+        results.append(query.value(0).toString());
+    }
+    return results;
+}
+
+
+// ===========================================================================
+// Session History
+// ===========================================================================
+
+QVector<SessionEntry> sqliteDB::getRecentSessions(int limit)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT date(wh.session_start) as day, "
+        "COALESCE(v.name, wh.video_path), "
+        "v.author, wh.watched_time, wh.session_time, wh.completed "
+        "FROM watch_history wh "
+        "LEFT JOIN videodetails v ON wh.video_id = v.id "
+        "ORDER BY wh.session_start DESC LIMIT ?"));
+    query.addBindValue(limit);
+    QVector<SessionEntry> results;
+    if (!query.exec()) return results;
+    while (query.next()) {
+        SessionEntry entry;
+        entry.date = QDate::fromString(query.value(0).toString(), "yyyy-MM-dd");
+        entry.videoName = query.value(1).toString();
+        entry.author = query.value(2).toString();
+        entry.watchedTime = query.value(3).toDouble();
+        entry.sessionTime = query.value(4).toDouble();
+        entry.completed = query.value(5).toBool();
+        results.append(entry);
+    }
+    return results;
+}
+
+double sqliteDB::getAverageSessionTime()
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT COALESCE(AVG(session_time), 0) FROM watch_history"));
+    if (!query.exec()) return 0.0;
+    if (query.first())
+        return query.value(0).toDouble();
+    return 0.0;
+}
+
+double sqliteDB::getAverageSessionsPerDay()
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT CAST(COUNT(*) AS REAL) / NULLIF(COUNT(DISTINCT date(session_start)), 0) "
+        "FROM watch_history"));
+    if (!query.exec()) return 0.0;
+    if (query.first())
+        return query.value(0).toDouble();
+    return 0.0;
+}
+
+double sqliteDB::getAverageWatchedTime()
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT COALESCE(AVG(watched_time), 0) FROM watch_history"));
+    if (!query.exec()) return 0.0;
+    if (query.first())
+        return query.value(0).toDouble();
+    return 0.0;
+}
+
+double sqliteDB::getAverageWatchTimePerDay()
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT COALESCE(SUM(watched_time), 0) / NULLIF(COUNT(DISTINCT date(session_start)), 0) "
+        "FROM watch_history WHERE completed = 1"));
+    if (!query.exec()) return 0.0;
+    if (query.first())
+        return query.value(0).toDouble();
+    return 0.0;
+}
+
+double sqliteDB::getAverageSessionTimePerDay()
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT COALESCE(SUM(session_time), 0) / NULLIF(COUNT(DISTINCT date(session_start)), 0) "
+        "FROM watch_history WHERE completed = 1"));
+    if (!query.exec()) return 0.0;
+    if (query.first())
+        return query.value(0).toDouble();
+    return 0.0;
+}
+
+double sqliteDB::getAverageCompletedPerDay()
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT CAST(COUNT(*) AS REAL) / NULLIF(COUNT(DISTINCT date(session_start)), 0) "
+        "FROM watch_history WHERE completed = 1"));
+    if (!query.exec()) return 0.0;
+    if (query.first())
+        return query.value(0).toDouble();
+    return 0.0;
+}
+
+
 int sqliteDB::getTotalWatchDays()
 {
     QSqlQuery query = QSqlQuery(this->db);
@@ -1679,6 +2139,8 @@ void sqliteDB::createTables() {
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('last_milestone_date', 'ALL', '')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('last_video_milestone', 'ALL', '0')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('last_time_milestone', 'ALL', '0')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('last_streak_risk_notified_date', 'ALL', '')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('last_streak_risk_notified_time', 'ALL', '')");
     this->db.commit();
 }
 

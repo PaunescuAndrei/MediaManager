@@ -11,6 +11,7 @@ public:
     explicit ContributionHeatmapWidget(QWidget* parent = nullptr);
 
     void setData(const QVector<QPair<QDate, double>>& data);
+    void setDayRange(int totalDays);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -21,6 +22,7 @@ private:
     QDate m_start;
     int m_totalDays = 0;
     int m_totalWeeks = 0;
+    int m_requestedDays = 186;
     double m_maxTime = 1.0;
 
     static constexpr int cellSize = 14;

@@ -54,6 +54,64 @@ struct WatchStreak {
     QDate longestStreakEndDate;    // latest date of the longest streak
 };
 
+// Personal Records
+struct DayRecord {
+    QDate date;
+    int count = 0;
+};
+struct DayTimeRecord {
+    QDate date;
+    double seconds = 0.0;
+};
+struct SessionRecord {
+    double sessionTime = 0.0;
+    QString date;
+    QString videoName;
+};
+struct VideoRecord {
+    QString name;
+    QString author;
+    int views = 0;
+};
+struct VideoTimeRecord {
+    QString name;
+    QString author;
+    double totalTime = 0.0;
+};
+struct DiverseDayRecord {
+    QDate date;
+    int authorCount = 0;
+};
+// Library Health
+struct NeglectedVideo {
+    QString name;
+    QString author;
+    QDateTime dateCreated;
+    int views = 0;
+};
+
+// Session History
+struct SessionEntry {
+    QDate date;
+    QString videoName;
+    QString author;
+    double watchedTime = 0.0;
+    double sessionTime = 0.0;
+    bool completed = false;
+};
+
+// Heatmap configuration — single source of truth for month options
+constexpr int kHeatmapMonthOptions[] = {3, 6, 12, 18, 24};
+constexpr int kHeatmapMonthOptionCount = sizeof(kHeatmapMonthOptions) / sizeof(kHeatmapMonthOptions[0]);
+
+inline int heatmapMonthsToComboIndex(int months) {
+    int idx = 1; // default to 6 months
+    for (int i = 0; i < kHeatmapMonthOptionCount; ++i) {
+        if (kHeatmapMonthOptions[i] >= months) { idx = i; break; }
+    }
+    return idx;
+}
+
 struct WeightedBiasSettings {
 	bool weighted_random_enabled = false;
 	double bias_general = 0;

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>900</width>
-    <height>1071</height>
+    <width>950</width>
+    <height>1200</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -61,8 +61,8 @@
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>894</width>
-            <height>1039</height>
+            <width>944</width>
+            <height>1168</height>
            </rect>
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_2">
@@ -231,8 +231,8 @@
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>894</width>
-            <height>1039</height>
+            <width>944</width>
+            <height>1068</height>
            </rect>
           </property>
           <layout class="QVBoxLayout" name="streaksMainLayout">
@@ -262,6 +262,67 @@
              <property name="orientation">
               <enum>Qt::Orientation::Horizontal</enum>
              </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="streaksHeatmapFilterRow" native="true">
+             <layout class="QHBoxLayout" name="streaksHeatmapFilterLayout">
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="rightMargin">
+               <number>0</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="streaksHeatmapRangeLabel">
+                <property name="text">
+                 <string>Heatmap range:</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QComboBox" name="streaksHeatmapRangeCombo">
+                <item>
+                 <property name="text">
+                  <string>3 months</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>6 months</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>12 months</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>18 months</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>24 months</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item>
+               <spacer name="streaksHeatmapFilterSpacer">
+                <property name="orientation">
+                 <enum>Qt::Orientation::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
             </widget>
            </item>
            <item>
@@ -346,8 +407,8 @@
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>894</width>
-            <height>1039</height>
+            <width>944</width>
+            <height>1068</height>
            </rect>
           </property>
           <layout class="QVBoxLayout" name="authorsMainLayout">
@@ -572,8 +633,8 @@
            <rect>
             <x>0</x>
             <y>0</y>
-            <width>894</width>
-            <height>1039</height>
+            <width>944</width>
+            <height>1068</height>
            </rect>
           </property>
           <layout class="QVBoxLayout" name="chartsLayout">
@@ -695,6 +756,42 @@
                </widget>
               </item>
               <item>
+               <widget class="QLabel" name="chartsHeatmapRangeLabel">
+                <property name="text">
+                 <string>Heatmap:</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QComboBox" name="chartsHeatmapRangeCombo">
+                <item>
+                 <property name="text">
+                  <string>3 months</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>6 months</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>12 months</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>18 months</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>24 months</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item>
                <widget class="QPushButton" name="refreshChartsButton">
                 <property name="toolTip">
                  <string>Refresh all chart data</string>
@@ -742,6 +839,510 @@
            </item>
            <item>
             <spacer name="chartsSpacer">
+             <property name="orientation">
+              <enum>Qt::Orientation::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="recordsTab">
+      <attribute name="title">
+       <string>Records</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="recordsTabLayout">
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QScrollArea" name="recordsScrollArea">
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="recordsScrollContent">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>944</width>
+            <height>1068</height>
+           </rect>
+          </property>
+          <layout class="QVBoxLayout" name="recordsMainLayout">
+           <item>
+            <widget class="QLabel" name="recordsTitleLabel">
+             <property name="font">
+              <font>
+               <pointsize>18</pointsize>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>Personal Records</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignmentFlag::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="Line" name="recordsLine">
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="mostVideosContainer" native="true">
+             <layout class="QGridLayout" name="mostVideosGridLayout"/>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="mostTimeContainer" native="true">
+             <layout class="QGridLayout" name="mostTimeGridLayout"/>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="longestSessionContainer" native="true">
+             <layout class="QGridLayout" name="longestSessionGridLayout"/>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="mostViewedContainer" native="true">
+             <layout class="QGridLayout" name="mostViewedGridLayout"/>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="mostTimeVideoContainer" native="true">
+             <layout class="QGridLayout" name="mostTimeVideoGridLayout"/>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="mostDiverseContainer" native="true">
+             <layout class="QGridLayout" name="mostDiverseGridLayout"/>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="highestRatedContainer" native="true">
+             <layout class="QGridLayout" name="highestRatedGridLayout"/>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="watchTimesContainer" native="true">
+             <layout class="QGridLayout" name="watchTimesGridLayout"/>
+            </widget>
+           </item>
+           <item>
+            <spacer name="recordsSpacer">
+             <property name="orientation">
+              <enum>Qt::Orientation::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="libraryTab">
+      <attribute name="title">
+       <string>Library</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="libraryTabLayout">
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QScrollArea" name="libraryScrollArea">
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="libraryScrollContent">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>944</width>
+            <height>1068</height>
+           </rect>
+          </property>
+          <layout class="QVBoxLayout" name="libraryMainLayout">
+           <item>
+            <widget class="QLabel" name="libraryTitleLabel">
+             <property name="font">
+              <font>
+               <pointsize>18</pointsize>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>Library Health</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignmentFlag::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="Line" name="libraryLine">
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="completionContainer" native="true">
+             <layout class="QGridLayout" name="completionGridLayout"/>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="coverageContainer" native="true">
+             <layout class="QGridLayout" name="coverageGridLayout"/>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="diversityContainer" native="true">
+             <layout class="QGridLayout" name="diversityGridLayout"/>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="additionsContainer" native="true">
+             <layout class="QGridLayout" name="additionsGridLayout"/>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="neglectedContainer" native="true">
+             <layout class="QVBoxLayout" name="neglectedLayout"/>
+            </widget>
+           </item>
+           <item>
+            <spacer name="librarySpacer">
+             <property name="orientation">
+              <enum>Qt::Orientation::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="tagsTab">
+      <attribute name="title">
+       <string>Tags</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="tagsTabLayout">
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QScrollArea" name="tagsScrollArea">
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="tagsScrollContent">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>944</width>
+            <height>1068</height>
+           </rect>
+          </property>
+          <layout class="QVBoxLayout" name="tagsMainLayout">
+           <item>
+            <widget class="QLabel" name="tagsTitleLabel">
+             <property name="font">
+              <font>
+               <pointsize>18</pointsize>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>Tag Statistics</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignmentFlag::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="Line" name="tagsLine">
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="tagsFilterRow" native="true">
+             <layout class="QHBoxLayout" name="tagsFilterLayout">
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="rightMargin">
+               <number>0</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="tagsCategoryLabel">
+                <property name="text">
+                 <string>Category:</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QComboBox" name="tagsCategoryCombo">
+                <item>
+                 <property name="text">
+                  <string>ALL</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>PLUS</string>
+                 </property>
+                </item>
+                <item>
+                 <property name="text">
+                  <string>MINUS</string>
+                 </property>
+                </item>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="tagsRefreshBtn">
+                <property name="text">
+                 <string>Refresh</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <spacer name="tagsFilterSpacer">
+                <property name="orientation">
+                 <enum>Qt::Orientation::Horizontal</enum>
+                </property>
+                <property name="sizeHint" stdset="0">
+                 <size>
+                  <width>40</width>
+                  <height>20</height>
+                 </size>
+                </property>
+               </spacer>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="topTagsByViewsContainer" native="true">
+             <layout class="QVBoxLayout" name="topTagsByViewsLayout"/>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="topTagsByWatchTimeContainer" native="true">
+             <layout class="QVBoxLayout" name="topTagsByWatchTimeLayout"/>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="tagCompletionContainer" native="true">
+             <layout class="QVBoxLayout" name="tagCompletionLayout"/>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="avgRatingByTagContainer" native="true">
+             <layout class="QVBoxLayout" name="avgRatingByTagLayout"/>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="untappedTagsContainer" native="true">
+             <layout class="QVBoxLayout" name="untappedTagsLayout"/>
+            </widget>
+           </item>
+           <item>
+            <spacer name="tagsSpacer">
+             <property name="orientation">
+              <enum>Qt::Orientation::Vertical</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>20</width>
+               <height>40</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </widget>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="sessionsTab">
+      <attribute name="title">
+       <string>Sessions</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="sessionsTabLayout">
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QScrollArea" name="sessionsScrollArea">
+         <property name="widgetResizable">
+          <bool>true</bool>
+         </property>
+         <widget class="QWidget" name="sessionsScrollContent">
+          <property name="geometry">
+           <rect>
+            <x>0</x>
+            <y>0</y>
+            <width>944</width>
+            <height>1068</height>
+           </rect>
+          </property>
+          <layout class="QVBoxLayout" name="sessionsMainLayout">
+           <item>
+            <widget class="QLabel" name="sessionsTitleLabel">
+             <property name="font">
+              <font>
+               <pointsize>18</pointsize>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>Session History</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignmentFlag::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="Line" name="sessionsLine">
+             <property name="orientation">
+              <enum>Qt::Orientation::Horizontal</enum>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QWidget" name="sessionSummaryContainer" native="true">
+             <layout class="QGridLayout" name="sessionSummaryGridLayout"/>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTableWidget" name="sessionsTableWidget">
+             <property name="editTriggers">
+              <set>QAbstractItemView::EditTrigger::NoEditTriggers</set>
+             </property>
+             <property name="alternatingRowColors">
+              <bool>true</bool>
+             </property>
+             <property name="selectionBehavior">
+              <enum>QAbstractItemView::SelectionBehavior::SelectRows</enum>
+             </property>
+             <property name="showGrid">
+              <bool>true</bool>
+             </property>
+             <property name="columnCount">
+              <number>6</number>
+             </property>
+             <attribute name="horizontalHeaderVisible">
+              <bool>true</bool>
+             </attribute>
+             <attribute name="verticalHeaderVisible">
+              <bool>false</bool>
+             </attribute>
+             <column>
+              <property name="text">
+               <string>Date</string>
+              </property>
+             </column>
+             <column>
+              <property name="text">
+               <string>Video</string>
+              </property>
+             </column>
+             <column>
+              <property name="text">
+               <string>Author</string>
+              </property>
+             </column>
+             <column>
+              <property name="text">
+               <string>Watched Time</string>
+              </property>
+             </column>
+             <column>
+              <property name="text">
+               <string>Session Time</string>
+              </property>
+             </column>
+             <column>
+              <property name="text">
+               <string>Completed</string>
+              </property>
+             </column>
+            </widget>
+           </item>
+           <item>
+            <spacer name="sessionsSpacer">
              <property name="orientation">
               <enum>Qt::Orientation::Vertical</enum>
              </property>

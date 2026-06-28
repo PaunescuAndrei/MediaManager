@@ -61,6 +61,8 @@ void NotificationWidget::buildLayout()
 		break;
 	case NotificationType::GeneralMessage:
 	case NotificationType::GoalMet:
+	case NotificationType::StreakAtRisk:
+	case NotificationType::PersonalBest:
 		buildSimpleContent();
 		break;
 	}
@@ -286,6 +288,15 @@ void NotificationWidget::populateGoalMet(const QString& title, const QString& me
 	titleLabel_->setText(title);
 	titleLabel_->show();
 	messageLabel_->setText(message);
+}
+void NotificationWidget::populateStreakAtRisk(const QString& title, const QString& message)
+{
+	populateGoalMet(title, message);
+}
+
+void NotificationWidget::populatePersonalBest(const QString& title, const QString& message)
+{
+	populateGoalMet(title, message);
 }
 
 void NotificationWidget::closeNotification() {

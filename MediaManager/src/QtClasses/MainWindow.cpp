@@ -474,6 +474,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         if(this->ui.searchBar->text() != this->old_search)
             this->refreshVisibility(this->ui.searchBar->text());
     });
+    this->startDailyProgressTimer();
 
     this->ui.videosWidget->setItemDelegate(new AutoToolTipDelegate(this->ui.videosWidget));
     
@@ -1067,7 +1068,11 @@ void MainWindow::openStats() {
     dialog->setupStreaksTab(this->App);
     dialog->setupAuthorsTab(this->App);
     dialog->setupChartsTab(this->App);
-    
+    dialog->setupRecordsTab(this->App);
+    dialog->setupLibraryTab(this->App);
+    dialog->setupTagsTab(this->App);
+    dialog->setupSessionsTab(this->App);
+
     // Play sound effects
     this->App->soundPlayer->playSoundEffectChain(1.1);
     this->App->soundPlayer->playSoundEffectChain(1.1);
@@ -1231,6 +1236,9 @@ void MainWindow::closeEvent(QCloseEvent* event)
 }
 
 void MainWindow::quit() {
+    if (this->dailyProgressTimer)
+        this->dailyProgressTimer->stop();
+    this->saveDailyProgressState();
     this->App->stop_handle();
     QCoreApplication::quit();
 }
@@ -2815,6 +2823,34 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         QString::number(dialog->milestoneVideoStepSpinBox->value()));
     config->set("daily_milestone_time_step_minutes",
         QString::number(dialog->milestoneTimeStepSpinBox->value()));
+    config->set("notification_streak_at_risk_enabled",
+        dialog->notificationStreakAtRiskEnabled->isChecked() ? "True" : "False");
+    config->set("notification_streak_at_risk_duration_ms",
+        QString::number(dialog->notificationStreakAtRiskDurationSpinBox->value()));
+    config->set("streak_at_risk_min_days",
+        QString::number(dialog->streakAtRiskMinDaysSpinBox->value()));
+    config->set("streak_at_risk_cutoff_hour",
+        QString::number(dialog->streakAtRiskCutoffHourSpinBox->value()));
+    config->set("streak_at_risk_refire_minutes",
+        QString::number(dialog->streakAtRiskRefireSpinBox->value()));
+    config->set("notification_personal_best_enabled",
+        dialog->notificationPersonalBestEnabled->isChecked() ? "True" : "False");
+    config->set("notification_personal_best_duration_ms",
+        QString::number(dialog->notificationPersonalBestDurationSpinBox->value()));
+    config->set("pb_videos_step",
+        QString::number(dialog->pbVideosStepSpinBox->value()));
+    config->set("pb_time_step_minutes",
+        QString::number(dialog->pbTimeStepSpinBox->value()));
+    config->set("pb_videos_min_threshold",
+        QString::number(dialog->pbVideosMinThresholdSpinBox->value()));
+    config->set("pb_time_min_threshold_minutes",
+        QString::number(dialog->pbTimeMinThresholdSpinBox->value()));
+    int heatmapMonths = kHeatmapMonthOptions[dialog->ui.statsHeatmapMonthsCombo->currentIndex()];
+    if (heatmapMonths != qBound(1, config->get("stats_heatmap_months").toInt(), 24))
+        config->set("stats_heatmap_months", QString::number(heatmapMonths));
+    config->set("daily_progress_check_interval_seconds",
+        QString::number(dialog->ui.dailyProgressIntervalSpinBox->value()));
+    this->startDailyProgressTimer();
     if (this->search_timer->isActive()) {
         this->search_timer->stop();
         this->search_timer->start(this->App->config->get("search_timer_interval").toInt());
@@ -3899,6 +3935,21 @@ void MainWindow::loadDailyProgressState()
     this->lastGoalNotifiedDate = goalDateStr.isEmpty() ? QDate() : QDate::fromString(goalDateStr, "yyyy-MM-dd");
     QString milestoneDateStr = this->App->db->getMainInfoValue("last_milestone_date", "ALL");
     this->lastMilestoneDate = milestoneDateStr.isEmpty() ? QDate() : QDate::fromString(milestoneDateStr, "yyyy-MM-dd");
+    QString streakRiskDateStr = this->App->db->getMainInfoValue("last_streak_risk_notified_date", "ALL");
+    this->lastStreakRiskNotifiedDate = streakRiskDateStr.isEmpty() ? QDate() : QDate::fromString(streakRiskDateStr, "yyyy-MM-dd");
+    QString streakRiskTimeStr = this->App->db->getMainInfoValue("last_streak_risk_notified_time", "ALL");
+    this->lastStreakRiskNotifiedTime = streakRiskTimeStr.isEmpty() ? QTime() : QTime::fromString(streakRiskTimeStr, "HH:mm");
+
+    // Cache the previous record as a baseline so checkPersonalBests can detect a new record
+    // even when today is already the record holder (the query would otherwise return today's count)
+    auto prevBestVideos = this->App->db->getMostVideosInDay();
+    this->previousBestVideos = prevBestVideos.count;
+    if (prevBestVideos.date.isValid())
+        this->previousBestVideosDate = prevBestVideos.date;
+    auto prevBestTime = this->App->db->getMostTimeInDay();
+    this->previousBestTimeSec = prevBestTime.seconds;
+    if (prevBestTime.date.isValid())
+        this->previousBestTimeDate = prevBestTime.date;
 
     // Restore milestone counters if the stored date matches today
     if (this->lastMilestoneDate == today) {
@@ -3936,6 +3987,10 @@ void MainWindow::saveDailyProgressState()
         this->lastMilestoneDate.isValid() ? this->lastMilestoneDate.toString("yyyy-MM-dd") : "");
     this->App->db->setMainInfoValue("last_video_milestone", "ALL", QString::number(this->lastVideoMilestone));
     this->App->db->setMainInfoValue("last_time_milestone", "ALL", QString::number(this->lastTimeMilestoneMinutes));
+    this->App->db->setMainInfoValue("last_streak_risk_notified_date", "ALL",
+        this->lastStreakRiskNotifiedDate.isValid() ? this->lastStreakRiskNotifiedDate.toString("yyyy-MM-dd") : "");
+    this->App->db->setMainInfoValue("last_streak_risk_notified_time", "ALL",
+        this->lastStreakRiskNotifiedTime.isValid() ? this->lastStreakRiskNotifiedTime.toString("HH:mm") : "");
 }
 
 void MainWindow::checkDailyProgress()
@@ -3977,6 +4032,15 @@ void MainWindow::checkDailyProgress()
         }
     }
 
+    // Streak-at-risk check (runs every invocation, independent of goal)
+    this->checkStreakAtRisk(videosToday);
+
+    // Personal best checks (runs every invocation, independent of goal)
+    this->checkPersonalBests(videosToday, watchedTodaySec);
+
+    // Persist all daily-progress state once per tick (was scattered across individual notifiers)
+    this->saveDailyProgressState();
+
     // --- Final goal notification (once per day) ---
     if (goalAlreadyNotified)
         return;
@@ -4016,14 +4080,125 @@ void MainWindow::GoalMetNotification(const QString& title, const QString& messag
     if (!this->App->config->get_bool("notification_goal_met_enabled"))
         return;
     this->lastGoalNotifiedDate = QDate::currentDate();
-    this->saveDailyProgressState();
     this->notificationManager->showGoalMet(title, message);
 }
 
 void MainWindow::MilestoneNotification(const QString& description)
 {
-    this->saveDailyProgressState();
     this->notificationManager->showGeneralMessage("Daily Milestone", description);
+}
+
+void MainWindow::checkStreakAtRisk(int videosToday)
+{
+    QDate today = QDate::currentDate();
+    QTime now = QTime::currentTime();
+
+    // Already notified today — check re-fire interval
+    if (this->lastStreakRiskNotifiedDate == today) {
+        int refireMin = this->App->config->get("streak_at_risk_refire_minutes").toInt();
+        if (refireMin <= 0 || !this->lastStreakRiskNotifiedTime.isValid())
+            return; // once-per-day mode, or no time recorded
+        int elapsedMin = this->lastStreakRiskNotifiedTime.secsTo(now) / 60;
+        if (elapsedMin < refireMin)
+            return; // not time to re-fire yet
+    }
+
+    // Already watched today — streak is safe
+    if (videosToday > 0)
+        return;
+
+    int minDays = this->App->config->get("streak_at_risk_min_days").toInt();
+    int cutoffHour = this->App->config->get("streak_at_risk_cutoff_hour").toInt();
+
+    if (now.hour() < cutoffHour)
+        return; // not late enough yet
+
+    WatchStreak streak = this->App->db->getWatchStreak();
+    if (streak.currentStreak < minDays)
+        return; // streak not significant enough
+
+    this->lastStreakRiskNotifiedDate = today;
+    this->lastStreakRiskNotifiedTime = now;
+    this->notificationManager->showStreakAtRisk(
+        QString("Streak At Risk!"),
+        QString("Your %1-day watch streak is at risk today! Watch a video to keep it alive.")
+            .arg(streak.currentStreak));
+}
+
+void MainWindow::checkPersonalBests(int videosToday, double watchedTodaySec)
+{
+    // Personal Best: Videos
+    int videoStep = qMax(1, this->App->config->get("pb_videos_step").toInt());
+    int videoMinThreshold = qMax(1, this->App->config->get("pb_videos_min_threshold").toInt());
+
+    // Always keep the cache up to date — step only controls notification frequency
+    if (videosToday > this->previousBestVideos) {
+        if (this->previousBestVideos >= videoMinThreshold) {
+            int nextMilestone = ((this->previousBestVideos / videoStep) + 1) * videoStep;
+            if (videosToday >= nextMilestone) {
+                int oldBest = this->previousBestVideos;
+                QDate oldDate = this->previousBestVideosDate;
+                this->previousBestVideos = videosToday;
+                this->previousBestVideosDate = QDate::currentDate();
+                QString oldDateStr = oldDate.isValid() ? oldDate.toString("d MMM yyyy") : QStringLiteral("N/A");
+                this->notificationManager->showPersonalBest(
+                    QString("New Personal Best: Videos!"),
+                    QString("You completed %1 videos today — a new record! (Previous best: %2 on %3)")
+                        .arg(videosToday)
+                        .arg(oldBest)
+                        .arg(oldDateStr));
+                // No return — continue to check time personal best as well
+            }
+        }
+        this->previousBestVideos = videosToday;
+        this->previousBestVideosDate = QDate::currentDate();
+    }
+
+    // Personal Best: Time
+    int timeStepMin = qMax(1, this->App->config->get("pb_time_step_minutes").toInt());
+    int timeMinThresholdMin = qMax(1, this->App->config->get("pb_time_min_threshold_minutes").toInt());
+    const int timeMinThresholdSec = timeMinThresholdMin * 60;
+
+    if (watchedTodaySec > this->previousBestTimeSec) {
+        if (this->previousBestTimeSec >= timeMinThresholdSec) {
+            int stepSec = timeStepMin * 60;
+            int nextMilestone = ((static_cast<int>(this->previousBestTimeSec) / stepSec) + 1) * stepSec;
+            if (static_cast<int>(watchedTodaySec) >= nextMilestone) {
+                double oldBest = this->previousBestTimeSec;
+                QDate oldDate = this->previousBestTimeDate;
+                this->previousBestTimeSec = watchedTodaySec;
+                this->previousBestTimeDate = QDate::currentDate();
+                unsigned long todaySecUL = static_cast<unsigned long>(watchedTodaySec);
+                QString oldDateStr = oldDate.isValid() ? oldDate.toString("d MMM yyyy") : QStringLiteral("N/A");
+                this->notificationManager->showPersonalBest(
+                    QString("New Personal Best: Watch Time!"),
+                    QString("You watched %1 today — a new record! (Previous best: %2 on %3)")
+                        .arg(QString::fromStdString(utils::convert_time_to_text(todaySecUL)))
+                        .arg(QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(oldBest))))
+                        .arg(oldDateStr));
+                return;
+            }
+        }
+        this->previousBestTimeSec = watchedTodaySec;
+        this->previousBestTimeDate = QDate::currentDate();
+    }
+}
+
+void MainWindow::startDailyProgressTimer()
+{
+    int intervalSec = this->App->config->get("daily_progress_check_interval_seconds").toInt();
+    if (intervalSec <= 0) {
+        if (this->dailyProgressTimer)
+            this->dailyProgressTimer->stop();
+        return;
+    }
+
+    if (!this->dailyProgressTimer) {
+        this->dailyProgressTimer = new QTimer(this);
+        connect(this->dailyProgressTimer, &QTimer::timeout, this, &MainWindow::checkDailyProgress);
+    }
+
+    this->dailyProgressTimer->start(intervalSec * 1000);
 }
 
 void MainWindow::incrementCounterVar(int value) {
@@ -5240,6 +5415,8 @@ int MainWindow::nextAuthorRow(const QVector<int>& rows, int currentRow) const {
 
 MainWindow::~MainWindow()
 {
+    if (this->dailyProgressTimer)
+        this->dailyProgressTimer->stop();
     this->animatedIcon->running = false;
     this->animatedIcon->quit();
     this->animatedIcon->deleteLater();

@@ -1274,9 +1274,10 @@ void utils::computeRarities(QList<NextVideoChoice>& candidates,
 	// Rarity is meaningless in that case — mark all candidates as N tier.
 	if (ssrThreshold == srThreshold && srThreshold == rThreshold) {
 		for (auto& candidate : candidates) {
-			if (candidate.probability >= 0.0) {
+			const long double poolProb = poolProbabilities.value(candidate.id, -1.0L);
+			if (poolProb >= 0.0L) {
 				candidate.rarity = 0;
-				candidate.rarityScore = candidate.probability;
+				candidate.rarityScore = static_cast<double>(poolProb);
 			} else {
 				candidate.rarity = -1;
 				candidate.rarityScore = 0.0;
@@ -1286,22 +1287,24 @@ void utils::computeRarities(QList<NextVideoChoice>& candidates,
 	}
 
 	for (auto& candidate : candidates) {
-		// Skip candidates with invalid probability (not in the pool).
-		// Preserve the -1 sentinel meaning "disabled / not computed."
-		if (candidate.probability < 0.0) {
+		// Look up the candidate's probability in the full pool by ID.
+		// We use the pool map rather than candidate.probability so that
+		// the display probability (from the filtered/weighted pool) and
+		// the rarity tier (from the full category) are independent.
+		const long double poolProb = poolProbabilities.value(candidate.id, -1.0L);
+		if (poolProb < 0.0L) {
 			candidate.rarity = -1;
 			candidate.rarityScore = 0.0;
 			continue;
 		}
 
-		const double prob = candidate.probability;
-		candidate.rarityScore = prob;
+		candidate.rarityScore = static_cast<double>(poolProb);
 
-		if (prob >= ssrThreshold) {
+		if (poolProb >= ssrThreshold) {
 			candidate.rarity = 3; // SSR
-		} else if (prob >= srThreshold) {
+		} else if (poolProb >= srThreshold) {
 			candidate.rarity = 2; // SR
-		} else if (prob >= rThreshold) {
+		} else if (poolProb >= rThreshold) {
 			candidate.rarity = 1; // R
 		} else {
 			candidate.rarity = 0; // N

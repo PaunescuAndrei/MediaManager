@@ -238,4 +238,7 @@ void finishDialog::updateWindowTitle() {
 finishDialog::~finishDialog()
 {
     titleUpdateTimer.stop();
+    timer.stop();
+    countdownTimer.stop();
+    QToolTip::hideText();
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include <QObject>
+#include <QPointer>
 #include <QPoint>
 #include <QTimer>
 
@@ -21,7 +22,7 @@ private:
 
     MainApp* mApp = nullptr;
     QTimer* showTimer = nullptr;
-    QWidget* pendingTarget = nullptr;
+    QPointer<QWidget> pendingTarget = nullptr;
     QPoint pendingPos;
     bool enabled = true;
     int delayMs = 700;

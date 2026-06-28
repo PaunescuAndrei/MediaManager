@@ -1862,10 +1862,28 @@ QList<NextVideoChoice> MainWindow::buildRandomCandidates(const NextVideoSettings
     }
 
     if (this->App->config->get_bool("rarity_enabled")) {
-        utils::computeRarities(choices, probabilities,
-            this->App->config->get("rarity_ssr_pct").toInt(),
-            this->App->config->get("rarity_sr_pct").toInt(),
-            this->App->config->get("rarity_r_pct").toInt());
+        // Compute rarity against the full category (all videos, unfiltered)
+        // so tiers are stable regardless of active filters or mode.
+        QJsonObject fullPoolSettings = this->getRandomSettings(settings.random_mode, true,
+            settings.vid_type_include, settings.vid_type_exclude);
+        QList<VideoWeightedData> fullPool = this->App->db->getVideos(this->App->currentDB, fullPoolSettings);
+        if (!fullPool.isEmpty()) {
+            QMap<int, long double> fullProbabilities = utils::calculateProbabilities(fullPool,
+                weighted_settings.bias_views, weighted_settings.bias_rating,
+                weighted_settings.bias_tags, weighted_settings.bias_bpm,
+                weighted_settings.bias_general,
+                weighted_settings.no_views_weight, weighted_settings.no_rating_weight,
+                weighted_settings.no_tags_weight);
+            // Reassign candidate probabilities from the full pool so probability
+            // and rarity are consistent (both reflect full-category standing).
+            for (auto& choice : choices) {
+                choice.probability = static_cast<double>(fullProbabilities.value(choice.id, -1.0));
+            }
+            utils::computeRarities(choices, fullProbabilities,
+                this->App->config->get("rarity_ssr_pct").toInt(),
+                this->App->config->get("rarity_sr_pct").toInt(),
+                this->App->config->get("rarity_r_pct").toInt());
+        }
     }
 
     return choices;
@@ -1916,8 +1934,31 @@ QList<NextVideoChoice> MainWindow::buildSeriesRandomCandidates(const QPersistent
         continuedSeries = true;
         auto choice = this->buildChoiceFromPath(deterministic_path, true);
         if (choice.has_value()) {
-            choice->probability = 100.0;
             choices.append(choice.value());
+        }
+        // Compute rarity against the full category so the deterministic
+        // choice also gets a rarity tier.
+        if (this->App->config->get_bool("rarity_enabled") && !choices.isEmpty()) {
+            QJsonObject fullPoolSettings = this->getRandomSettings(settings.random_mode, true,
+                settings.vid_type_include, settings.vid_type_exclude);
+            QList<VideoWeightedData> fullPool = this->App->db->getVideos(this->App->currentDB, fullPoolSettings);
+            if (!fullPool.isEmpty()) {
+                WeightedBiasSettings det_weighted_settings = this->getWeightedBiasSettings();
+                if (!det_weighted_settings.weighted_random_enabled) det_weighted_settings.bias_general = 0;
+                QMap<int, long double> fullProbabilities = utils::calculateProbabilities(fullPool,
+                    det_weighted_settings.bias_views, det_weighted_settings.bias_rating,
+                    det_weighted_settings.bias_tags, det_weighted_settings.bias_bpm,
+                    det_weighted_settings.bias_general,
+                    det_weighted_settings.no_views_weight, det_weighted_settings.no_rating_weight,
+                    det_weighted_settings.no_tags_weight);
+                for (auto& choice : choices) {
+                    choice.probability = static_cast<double>(fullProbabilities.value(choice.id, -1.0));
+                }
+                utils::computeRarities(choices, fullProbabilities,
+                    this->App->config->get("rarity_ssr_pct").toInt(),
+                    this->App->config->get("rarity_sr_pct").toInt(),
+                    this->App->config->get("rarity_r_pct").toInt());
+            }
         }
         return choices;
     }
@@ -1968,10 +2009,30 @@ QList<NextVideoChoice> MainWindow::buildSeriesRandomCandidates(const QPersistent
     }
 
     if (this->App->config->get_bool("rarity_enabled")) {
-        utils::computeRarities(choices, probabilities,
-            this->App->config->get("rarity_ssr_pct").toInt(),
-            this->App->config->get("rarity_sr_pct").toInt(),
-            this->App->config->get("rarity_r_pct").toInt());
+        // Compute rarity against the full category (all videos, unfiltered)
+        // so tiers are stable regardless of active filters or mode.
+        // Note: the author-weighted probabilities are used for picking only;
+        // rarity uses the full video-level pool for consistency across modes.
+        QJsonObject fullPoolSettings = this->getRandomSettings(settings.random_mode, true,
+            settings.vid_type_include, settings.vid_type_exclude);
+        QList<VideoWeightedData> fullPool = this->App->db->getVideos(this->App->currentDB, fullPoolSettings);
+        if (!fullPool.isEmpty()) {
+            QMap<int, long double> fullProbabilities = utils::calculateProbabilities(fullPool,
+                weighted_settings.bias_views, weighted_settings.bias_rating,
+                weighted_settings.bias_tags, weighted_settings.bias_bpm,
+                weighted_settings.bias_general,
+                weighted_settings.no_views_weight, weighted_settings.no_rating_weight,
+                weighted_settings.no_tags_weight);
+            // Reassign candidate probabilities from the full pool so probability
+            // and rarity are consistent (both reflect full-category standing).
+            for (auto& choice : choices) {
+                choice.probability = static_cast<double>(fullProbabilities.value(choice.id, -1.0));
+            }
+            utils::computeRarities(choices, fullProbabilities,
+                this->App->config->get("rarity_ssr_pct").toInt(),
+                this->App->config->get("rarity_sr_pct").toInt(),
+                this->App->config->get("rarity_r_pct").toInt());
+        }
     }
 
     return choices;

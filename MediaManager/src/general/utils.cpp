@@ -1238,46 +1238,50 @@ QMap<int, long double> utils::calculateProbabilities(const QList<VideoWeightedDa
 }
 
 void utils::computeRarities(QList<NextVideoChoice>& candidates,
+                            const QMap<int, long double>& poolProbabilities,
                             int ssrPct, int srPct, int rPct)
 {
-	if (candidates.isEmpty()) return;
+	if (candidates.isEmpty() || poolProbabilities.isEmpty()) return;
 
-	QList<int> sortedIndices;
-	sortedIndices.reserve(candidates.size());
-	for (int i = 0; i < candidates.size(); ++i) {
-		if (candidates[i].probability >= 0.0) {
-			sortedIndices.append(i);
-		}
+	// Extract all probability values from the full pool and sort descending.
+	// This gives us the true percentile distribution, not just the picked subset.
+	QList<long double> allProbs;
+	allProbs.reserve(poolProbabilities.size());
+	for (auto it = poolProbabilities.constBegin(); it != poolProbabilities.constEnd(); ++it) {
+		allProbs.append(it.value());
 	}
-	if (sortedIndices.isEmpty()) return;
+	std::sort(allProbs.begin(), allProbs.end(), std::greater<long double>());
 
-	std::sort(sortedIndices.begin(), sortedIndices.end(), [&](int a, int b) {
-		return candidates[a].probability > candidates[b].probability;
-	});
+	const int total = allProbs.size();
 
-	const int total = sortedIndices.size();
+	// Find the probability value at the given percentile cutoff.
+	// Uses ceil(pct% * total) - 1 so that exactly pct% of the pool is at or above the threshold.
+	// E.g. with 100 items and pct=10: index 9, meaning the top 10 items (0-9) qualify.
+	auto thresholdAt = [&](int pct) -> long double {
+		if (pct <= 0 || total == 0) return allProbs.first() + 1.0L; // nothing reaches this → disabled
+		if (pct >= 100) return allProbs.last();                       // everything qualifies
+		int idx = static_cast<int>(std::ceil(static_cast<double>(pct) / 100.0 * total)) - 1;
+		idx = std::clamp(idx, 0, total - 1);
+		return allProbs[idx];
+	};
 
-	int rank = 0;
-	while (rank < total) {
-		int groupEnd = rank + 1;
-		while (groupEnd < total && candidates[sortedIndices[groupEnd]].probability == candidates[sortedIndices[rank]].probability) {
-			groupEnd++;
+	const long double ssrThreshold = thresholdAt(ssrPct);
+	const long double srThreshold  = thresholdAt(srPct);
+	const long double rThreshold   = thresholdAt(rPct);
+
+	for (auto& candidate : candidates) {
+		const long double prob = static_cast<long double>(candidate.probability);
+		candidate.rarityScore = candidate.probability;
+
+		if (prob >= 0.0L && prob >= ssrThreshold) {
+			candidate.rarity = 3; // SSR
+		} else if (prob >= 0.0L && prob >= srThreshold) {
+			candidate.rarity = 2; // SR
+		} else if (prob >= 0.0L && prob >= rThreshold) {
+			candidate.rarity = 1; // R
+		} else {
+			candidate.rarity = 0; // N (or disabled if probability was -1)
 		}
-		const double percentile = (static_cast<double>(rank) / total) * 100.0;
-		int tier = 0;
-		if (percentile < ssrPct) {
-			tier = 3;
-		} else if (percentile < srPct) {
-			tier = 2;
-		} else if (percentile < rPct) {
-			tier = 1;
-		}
-		for (int i = rank; i < groupEnd; ++i) {
-			const int idx = sortedIndices[i];
-			candidates[idx].rarity = tier;
-			candidates[idx].rarityScore = candidates[idx].probability;
-		}
-		rank = groupEnd;
 	}
 }
 

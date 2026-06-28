@@ -1862,7 +1862,7 @@ QList<NextVideoChoice> MainWindow::buildRandomCandidates(const NextVideoSettings
     }
 
     if (this->App->config->get_bool("rarity_enabled")) {
-        utils::computeRarities(choices,
+        utils::computeRarities(choices, probabilities,
             this->App->config->get("rarity_ssr_pct").toInt(),
             this->App->config->get("rarity_sr_pct").toInt(),
             this->App->config->get("rarity_r_pct").toInt());
@@ -1968,7 +1968,7 @@ QList<NextVideoChoice> MainWindow::buildSeriesRandomCandidates(const QPersistent
     }
 
     if (this->App->config->get_bool("rarity_enabled")) {
-        utils::computeRarities(choices,
+        utils::computeRarities(choices, probabilities,
             this->App->config->get("rarity_ssr_pct").toInt(),
             this->App->config->get("rarity_sr_pct").toInt(),
             this->App->config->get("rarity_r_pct").toInt());

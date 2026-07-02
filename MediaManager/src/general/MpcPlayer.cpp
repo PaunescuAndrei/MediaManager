@@ -99,7 +99,16 @@ LRESULT MpcPlayer::OnCopyData(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
                 if (nowplaying != this->nowplaying) {
                     QStringList items = nowplaying.split("|");
                     if (!items.isEmpty()) {
-                        this->video_path = items.value(3);
+                        QString newPath = items.value(3);
+                        if (this->video_path != newPath) {
+                            this->video_path = newPath;
+                            // If MPC loaded a file we no longer want (target changed
+                            // mid-flight via a new changeVideo call), allow the state
+                            // machine to send CMD_OPENFILE for the correct target.
+                            if (this->change_in_progress_video && this->video_path != this->target_video_path) {
+                                this->change_in_progress_video = false;
+                            }
+                        }
                         // Sync trackedVideoPath when MPC confirms the file we told it to open —
                         // prevents the watcher from seeing a spurious mismatch and firing
                         // handleExternalVideoChange with stale data during programmatic changes.
@@ -292,10 +301,17 @@ void MpcPlayer::run() {
                     continue;
                 }
                 if (command->change_in_progress == false) {
+                    if (!this->change_in_progress) {
+                        // Only reset sub-state when starting a fresh change.
+                        // When replacing a mid-processing command, let in-flight
+                        // operations complete to avoid sending duplicate CMD_OPENFILE
+                        // while MPC-HC is still processing the previous one (which can
+                        // hang MPC-HC permanently).
+                        this->change_in_progress_video = false;
+                        this->change_in_progress_pause = false;
+                        this->change_in_progress_seek = false;
+                    }
                     this->change_in_progress = true;
-                    this->change_in_progress_video = false;
-                    this->change_in_progress_pause = false;
-                    this->change_in_progress_seek = false;
                     command->change_in_progress = true;
                     this->target_video_path = command->video_path;
                     this->video_id = command->video_id;

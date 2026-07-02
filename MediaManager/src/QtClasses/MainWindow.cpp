@@ -5122,6 +5122,7 @@ void MainWindow::changePlayerVideo(QSharedPointer<BasePlayer> player, QString pa
                 now.toString("yyyy-MM-dd HH:mm:ss"), session,
                 false);
         }
+        player->trackCurrentWatchHistoryRow();
     }
     player->video_id = video_id;
     player->category = this->App->currentDB;

@@ -23,11 +23,11 @@ NotificationWidget::NotificationWidget(NotificationType type, QWidget* parent)
 
 	buildLayout();
 
-	// Content opacity effect on the overlay container (all child widgets)
-	if (overlayContainer_) {
-		contentOpacityEffect_ = new QGraphicsOpacityEffect(overlayContainer_);
+	// Content opacity effect on the content widget (text, stars — not counter bars)
+	if (contentWidget_) {
+		contentOpacityEffect_ = new QGraphicsOpacityEffect(contentWidget_);
 		contentOpacityEffect_->setOpacity(1.0);
-		overlayContainer_->setGraphicsEffect(contentOpacityEffect_);
+		contentWidget_->setGraphicsEffect(contentOpacityEffect_);
 	}
 
 	this->timer = new QTimer(this);
@@ -55,54 +55,55 @@ void NotificationWidget::buildLayout()
 	rootLayout->setContentsMargins(0, 0, 0, 0);
 	rootLayout->setSpacing(0);
 
-	// Single overlay container — content opacity applied here so ALL child
-	// widgets (text, stars, progress bar, future additions) get it automatically
-	overlayContainer_ = new QWidget(this);
-	rootLayout->addWidget(overlayContainer_);
+	switch (type_) {
+	case NotificationType::VideoInfo: {
+		// Side bars outside content opacity effect, center gets the effect
+		QHBoxLayout* row = new QHBoxLayout();
+		row->setContentsMargins(0, 0, 0, 0);
+		row->setSpacing(0);
 
-	QVBoxLayout* overlayLayout = new QVBoxLayout(overlayContainer_);
-	overlayLayout->setContentsMargins(0, 0, 0, 0);
-	overlayLayout->setSpacing(0);
+		totalLabel_ = new ProgressBarQLabel(this);
+		totalLabel_->setText("");
+		row->addWidget(totalLabel_);
 
-	contentWidget_ = new QWidget(overlayContainer_);
-	overlayLayout->addWidget(contentWidget_);
+		contentWidget_ = new QWidget(this);
+		buildVideoInfoContent();
+		row->addWidget(contentWidget_, 1);
 
-	durationProgressBar_ = new ProgressBarQLabel(overlayContainer_);
+		counterLabel_ = new ProgressBarQLabel(this);
+		counterLabel_->setText("");
+		row->addWidget(counterLabel_);
+
+		rootLayout->addLayout(row);
+		break;
+	}
+	case NotificationType::GeneralMessage:
+	case NotificationType::GoalMet:
+	case NotificationType::StreakAtRisk:
+	case NotificationType::PersonalBest:
+		contentWidget_ = new QWidget(this);
+		buildSimpleContent();
+		rootLayout->addWidget(contentWidget_);
+		break;
+	}
+
+	durationProgressBar_ = new ProgressBarQLabel(this);
 	durationProgressBar_->setText(QString());
 	durationProgressBar_->setMinMax(0, static_cast<int>(this->time_duration.count()), false);
 	durationProgressBar_->setProgress(0);
 	durationProgressBar_->setFixedHeight(PROGRESS_BAR_HEIGHT);
 	durationProgressBar_->vertical_orientation = false; // horizontal bar for timer
-	overlayLayout->addWidget(durationProgressBar_);
-
-	switch (type_) {
-	case NotificationType::VideoInfo:
-		buildVideoInfoContent();
-		break;
-	case NotificationType::GeneralMessage:
-	case NotificationType::GoalMet:
-	case NotificationType::StreakAtRisk:
-	case NotificationType::PersonalBest:
-		buildSimpleContent();
-		break;
-	}
+	rootLayout->addWidget(durationProgressBar_);
 }
 
 void NotificationWidget::buildVideoInfoContent()
 {
-	// Outer: side bars + center content, matching the original .ui layout
-	QHBoxLayout* outerLayout = new QHBoxLayout(contentWidget_);
-	outerLayout->setContentsMargins(0, 0, 0, 0);
-	outerLayout->setSpacing(0);
+	// Center content widget — side bars (totalLabel_, counterLabel_) are
+	// created in buildLayout() and sit outside the content opacity effect,
+	// so their bar fills get independent counterOpacity while the text gets
+	// contentOpacity via setTextOpacity().
 
-	// Left side — total video count
-	totalLabel_ = new ProgressBarQLabel();
-	totalLabel_->setText("");
-	outerLayout->addWidget(totalLabel_);
-
-	// Center — all the video metadata
-	QWidget* centerWidget = new QWidget();
-	QVBoxLayout* centerLayout = new QVBoxLayout(centerWidget);
+	QVBoxLayout* centerLayout = new QVBoxLayout(contentWidget_);
 	centerLayout->setContentsMargins(6, 4, 6, 4);
 	centerLayout->setSpacing(1);
 
@@ -166,12 +167,8 @@ void NotificationWidget::buildVideoInfoContent()
 
 	centerLayout->addLayout(statsRow);
 
-	outerLayout->addWidget(centerWidget, 1);
-
-	// Right side — counter
-	counterLabel_ = new ProgressBarQLabel();
-	counterLabel_->setText("");
-	outerLayout->addWidget(counterLabel_);
+	// Side bars (totalLabel_ / counterLabel_) are wired up by buildLayout()
+	// and sit outside the content opacity effect for independent bar-fill opacity.
 }
 
 void NotificationWidget::buildSimpleContent()
@@ -353,13 +350,18 @@ void NotificationWidget::showNotification()
 	if (contentOpacityEffect_)
 		contentOpacityEffect_->setOpacity(contentOpacity);
 
-	// Timer bar and counter labels use painter opacity (text stays crisp)
+	// Timer bar and counter labels use painter opacity: bar fills are
+	// independently controlled, text stays crisp via textOpacity
 	if (durationProgressBar_)
 		durationProgressBar_->setBarBackgroundOpacity(timerBarOpacity);
-	if (totalLabel_)
+	if (totalLabel_) {
 		totalLabel_->setBarBackgroundOpacity(counterOpacity);
-	if (counterLabel_)
+		totalLabel_->setTextOpacity(contentOpacity);
+	}
+	if (counterLabel_) {
 		counterLabel_->setBarBackgroundOpacity(counterOpacity);
+		counterLabel_->setTextOpacity(contentOpacity);
+	}
 
 	this->show();
 	this->timer->start(this->timerInterval);

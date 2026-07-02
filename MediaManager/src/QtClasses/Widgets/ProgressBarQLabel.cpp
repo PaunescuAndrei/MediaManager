@@ -29,6 +29,7 @@ void ProgressBarQLabel::copy(ProgressBarQLabel* other) {
 	this->setText(other->text());
 	this->setAlignment(other->alignment());
 	this->m_barBgOpacity = other->m_barBgOpacity;
+	this->m_textOpacity = other->m_textOpacity;
 	this->applyFontSize(this->highlight_check());
 	this->update();
 }
@@ -68,6 +69,15 @@ void ProgressBarQLabel::setBarBackgroundOpacity(double opacity) {
 }
 double ProgressBarQLabel::barBackgroundOpacity() const {
 	return this->m_barBgOpacity;
+}
+void ProgressBarQLabel::setTextOpacity(double opacity) {
+	double clamped = qBound(0.0, opacity, 1.0);
+	if (qFuzzyCompare(this->m_textOpacity, clamped)) return;
+	this->m_textOpacity = clamped;
+	this->update();
+}
+double ProgressBarQLabel::textOpacity() const {
+	return this->m_textOpacity;
 }
 void ProgressBarQLabel::setBrush(Qt::GlobalColor color) {
 	this->brush_ = QBrush(color);
@@ -215,6 +225,11 @@ void ProgressBarQLabel::paintEvent(QPaintEvent* e)
 	else
 		y = (rect.height() + metrics.ascent() - metrics.descent()) / 2.0;
 
+	if (this->m_textOpacity < 1.0) {
+		painter.save();
+		painter.setOpacity(this->m_textOpacity);
+	}
+
 	QPainterPath path = QPainterPath();
 	path.addText(x, y, font_, this->text());
 	this->pen_.setWidthF(w * 2);
@@ -222,6 +237,10 @@ void ProgressBarQLabel::paintEvent(QPaintEvent* e)
 	if (1 < brush.style() and brush.style() < 15)
 		painter.fillPath(path, this->palette().window());
 	painter.fillPath(path, brush);
+
+	if (this->m_textOpacity < 1.0) {
+		painter.restore();
+	}
 }
 ProgressBarQLabel::~ProgressBarQLabel() {
 

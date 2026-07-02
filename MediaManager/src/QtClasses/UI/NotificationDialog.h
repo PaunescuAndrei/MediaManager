@@ -58,7 +58,6 @@ private:
 	bool paused = false;
 
 	// Shared widgets
-	QWidget* overlayContainer_ = nullptr;
 	QWidget* contentWidget_ = nullptr;
 	ProgressBarQLabel* durationProgressBar_ = nullptr;
 

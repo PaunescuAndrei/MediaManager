@@ -3418,7 +3418,7 @@ void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notifi
             this->finish_dialog->raise();
             this->finish_dialog->activateWindow();
             this->finish_dialog->open();
-            connect(this->finish_dialog, &finishDialog::finished, this, [this, show_notification, resumeNotification](int result) mutable {
+            connect(this->finish_dialog, &finishDialog::finished, this, [this, resumeNotification](int result) mutable {
                 if (result == finishDialog::Accepted) {
                     this->App->VW->mainPlayer->change_in_progress = true;
                     if (this->App->VW->mainPlayer && this->App->VW->mainPlayer->position != -1) {
@@ -3427,6 +3427,7 @@ void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notifi
                     this->App->VW->mainPlayer->position = -1;
                     this->NextButtonClicked(this->App->VW->mainPlayer, true, this->getCheckedUpdateWatchedToggleButton());
                     this->position = 0;
+                    // changePlayerVideo already shows a new notification
                 }
                 else if (result == finishDialog::Replay) {
                     //Replay button
@@ -3477,22 +3478,28 @@ void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notifi
                     this->checkDailyProgress();
                     this->App->VW->mainPlayer->queue.push(std::make_shared<MpcDirectCommand>(CMD_SETPOSITION, "0"));
                     this->position = 0;
-					show_notification = true;
                 }
                 else if (result == finishDialog::Skip) {
                     this->SkipVideo();
+                    // SkipVideo → changePlayerVideo already calls VideoInfoNotification
+                }
+                // Resume the original notification that was paused by the
+                // right-click — after all result handling completes (which may
+                // open sub-dialogs like NextChoiceDialog). Restart the timer
+                // without repopulating, so content stays as originally shown.
+                if (resumeNotification) {
+                    resumeNotification->showNotification();
                 }
                 this->finish_dialog = nullptr;
-                if (show_notification) {
-                    this->VideoInfoNotification(resumeNotification);
-                }
             });
         }
     } else if (resumeNotification) {
         // Dialog couldn't open (e.g. change_in_progress is true, player closed,
         // or any future condition that blocks the dialog). Resume the notification
         // that was paused by the right-click handler so it doesn't stay stuck.
-        this->VideoInfoNotification(resumeNotification);
+        // Use showNotification() rather than VideoInfoNotification() to avoid
+        // repopulating with potentially stale/incorrect current-video data.
+        resumeNotification->showNotification();
     }
 }
 

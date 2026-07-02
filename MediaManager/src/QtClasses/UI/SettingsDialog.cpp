@@ -595,12 +595,6 @@ void SettingsDialog::setupNotificationsPage(MainWindow* mw)
 {
     Config* config = mw->App->config;
 
-    auto defaultOpacity = [](const QString& val) -> double {
-        if (val.isEmpty()) return 1.00;
-        double d = val.toDouble();
-        return qBound(0.00, d, 1.00);
-    };
-
     // Build the page programmatically
     QScrollArea* scrollArea = new QScrollArea();
     scrollArea->setFrameShape(QFrame::NoFrame);
@@ -873,73 +867,37 @@ void SettingsDialog::setupNotificationsPage(MainWindow* mw)
     QVBoxLayout* notifAppearanceLayout = new QVBoxLayout(notifAppearanceGroup);
     notifAppearanceLayout->setSpacing(4);
 
-    // Background opacity
-    QHBoxLayout* bgOpacityRow = new QHBoxLayout();
-    QLabel* bgOpacityLabel = new QLabel("Background Opacity:");
-    bgOpacityLabel->setToolTip("Transparency of the notification background (0.00 = fully transparent, 1.00 = fully opaque)");
-    bgOpacityRow->addWidget(bgOpacityLabel);
-    bgOpacityRow->addStretch();
-    notificationBgOpacitySpinBox = new QDoubleSpinBox();
-    notificationBgOpacitySpinBox->setMinimum(0.00);
-    notificationBgOpacitySpinBox->setMaximum(1.00);
-    notificationBgOpacitySpinBox->setSingleStep(0.05);
-    notificationBgOpacitySpinBox->setDecimals(2);
-    notificationBgOpacitySpinBox->setToolTip("Transparency of the notification background (0.00 = fully transparent, 1.00 = fully opaque)");
-    notificationBgOpacitySpinBox->setValue(defaultOpacity(config->get("notification_bg_opacity")));
-    setupSpinStyle(notificationBgOpacitySpinBox, "doublespinbox");
-    bgOpacityRow->addWidget(notificationBgOpacitySpinBox);
-    notifAppearanceLayout->addLayout(bgOpacityRow);
+    auto addOpacityRow = [&](const QString& labelText, const QString& tooltip, const QString& configKey) -> QDoubleSpinBox* {
+        QHBoxLayout* row = new QHBoxLayout();
+        QLabel* label = new QLabel(labelText);
+        label->setToolTip(tooltip);
+        row->addWidget(label);
+        row->addStretch();
+        QDoubleSpinBox* spinBox = new QDoubleSpinBox();
+        spinBox->setMinimum(0.00);
+        spinBox->setMaximum(1.00);
+        spinBox->setSingleStep(0.05);
+        spinBox->setDecimals(2);
+        spinBox->setToolTip(tooltip);
+        spinBox->setValue(config->get_double(configKey, 1.0));
+        setupSpinStyle(spinBox, "doublespinbox");
+        row->addWidget(spinBox);
+        notifAppearanceLayout->addLayout(row);
+        return spinBox;
+    };
 
-    // Content opacity
-    QHBoxLayout* contentOpacityRow = new QHBoxLayout();
-    QLabel* contentOpacityLabel = new QLabel("Content Opacity:");
-    contentOpacityLabel->setToolTip("Transparency of text, stars, and progress bar inside notifications (0.00 = fully transparent, 1.00 = fully opaque)");
-    contentOpacityRow->addWidget(contentOpacityLabel);
-    contentOpacityRow->addStretch();
-    notificationContentOpacitySpinBox = new QDoubleSpinBox();
-    notificationContentOpacitySpinBox->setMinimum(0.00);
-    notificationContentOpacitySpinBox->setMaximum(1.00);
-    notificationContentOpacitySpinBox->setSingleStep(0.05);
-    notificationContentOpacitySpinBox->setDecimals(2);
-    notificationContentOpacitySpinBox->setToolTip("Transparency of text, stars, and progress bar inside notifications (0.00 = fully transparent, 1.00 = fully opaque)");
-    notificationContentOpacitySpinBox->setValue(defaultOpacity(config->get("notification_content_opacity")));
-    setupSpinStyle(notificationContentOpacitySpinBox, "doublespinbox");
-    contentOpacityRow->addWidget(notificationContentOpacitySpinBox);
-    notifAppearanceLayout->addLayout(contentOpacityRow);
-
-    // Timer bar opacity
-    QHBoxLayout* timerBarOpacityRow = new QHBoxLayout();
-    QLabel* timerBarOpacityLabel = new QLabel("Timer Bar Opacity:");
-    timerBarOpacityLabel->setToolTip("Transparency of the duration progress bar (0.00 = fully transparent, 1.00 = fully opaque)");
-    timerBarOpacityRow->addWidget(timerBarOpacityLabel);
-    timerBarOpacityRow->addStretch();
-    notificationTimerBarOpacitySpinBox = new QDoubleSpinBox();
-    notificationTimerBarOpacitySpinBox->setMinimum(0.00);
-    notificationTimerBarOpacitySpinBox->setMaximum(1.00);
-    notificationTimerBarOpacitySpinBox->setSingleStep(0.05);
-    notificationTimerBarOpacitySpinBox->setDecimals(2);
-    notificationTimerBarOpacitySpinBox->setToolTip("Transparency of the duration progress bar (0.00 = fully transparent, 1.00 = fully opaque)");
-    notificationTimerBarOpacitySpinBox->setValue(defaultOpacity(config->get("notification_timerbar_opacity")));
-    setupSpinStyle(notificationTimerBarOpacitySpinBox, "doublespinbox");
-    timerBarOpacityRow->addWidget(notificationTimerBarOpacitySpinBox);
-    notifAppearanceLayout->addLayout(timerBarOpacityRow);
-
-    // Counter opacity
-    QHBoxLayout* counterOpacityRow = new QHBoxLayout();
-    QLabel* counterOpacityLabel = new QLabel("Counter Opacity:");
-    counterOpacityLabel->setToolTip("Transparency of the counter label backgrounds — text on them is controlled by Content Opacity (0.00 = fully transparent, 1.00 = fully opaque)");
-    counterOpacityRow->addWidget(counterOpacityLabel);
-    counterOpacityRow->addStretch();
-    notificationCounterOpacitySpinBox = new QDoubleSpinBox();
-    notificationCounterOpacitySpinBox->setMinimum(0.00);
-    notificationCounterOpacitySpinBox->setMaximum(1.00);
-    notificationCounterOpacitySpinBox->setSingleStep(0.05);
-    notificationCounterOpacitySpinBox->setDecimals(2);
-    notificationCounterOpacitySpinBox->setToolTip("Transparency of the counter label backgrounds — text on them is controlled by Content Opacity (0.00 = fully transparent, 1.00 = fully opaque)");
-    notificationCounterOpacitySpinBox->setValue(defaultOpacity(config->get("notification_counter_opacity")));
-    setupSpinStyle(notificationCounterOpacitySpinBox, "doublespinbox");
-    counterOpacityRow->addWidget(notificationCounterOpacitySpinBox);
-    notifAppearanceLayout->addLayout(counterOpacityRow);
+    notificationBgOpacitySpinBox = addOpacityRow("Background Opacity:",
+        "Transparency of the notification background (0.00 = fully transparent, 1.00 = fully opaque)",
+        "notification_bg_opacity");
+    notificationContentOpacitySpinBox = addOpacityRow("Content Opacity:",
+        "Transparency of text, stars, and progress bar inside notifications (0.00 = fully transparent, 1.00 = fully opaque)",
+        "notification_content_opacity");
+    notificationTimerBarOpacitySpinBox = addOpacityRow("Timer Bar Opacity:",
+        "Transparency of the duration progress bar (0.00 = fully transparent, 1.00 = fully opaque)",
+        "notification_timerbar_opacity");
+    notificationCounterOpacitySpinBox = addOpacityRow("Counter Opacity:",
+        "Transparency of the counter label backgrounds — text on them is controlled by Content Opacity (0.00 = fully transparent, 1.00 = fully opaque)",
+        "notification_counter_opacity");
 
     pageLayout->addWidget(notifAppearanceGroup);
 

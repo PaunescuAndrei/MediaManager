@@ -28,6 +28,7 @@ void ProgressBarQLabel::copy(ProgressBarQLabel* other) {
 	this->setFont(other->font());
 	this->setText(other->text());
 	this->setAlignment(other->alignment());
+	this->m_barBgOpacity = other->m_barBgOpacity;
 	this->applyFontSize(this->highlight_check());
 	this->update();
 }
@@ -60,7 +61,9 @@ void ProgressBarQLabel::setBrush(QColor color) {
 	this->brush_ = QBrush(color);
 }
 void ProgressBarQLabel::setBarBackgroundOpacity(double opacity) {
-	this->m_barBgOpacity = qBound(0.0, opacity, 1.0);
+	double clamped = qBound(0.0, opacity, 1.0);
+	if (qFuzzyCompare(this->m_barBgOpacity, clamped)) return;
+	this->m_barBgOpacity = clamped;
 	this->update();
 }
 double ProgressBarQLabel::barBackgroundOpacity() const {
@@ -154,10 +157,9 @@ void ProgressBarQLabel::paintEvent(QPaintEvent* e)
 	QRect rect = this->rect();
 
 	QStyleOptionProgressBar progress_bar_option = QStyleOptionProgressBar();
-	if(vertical_orientation)
-		progress_bar_option.state = QStyle::StateFlag::State_Enabled;
-	else
-		progress_bar_option.state = QStyle::StateFlag::State_Horizontal;
+	progress_bar_option.state = QStyle::StateFlag::State_Enabled;
+	if (!vertical_orientation)
+		progress_bar_option.state |= QStyle::StateFlag::State_Horizontal;
 	progress_bar_option.minimum = this->minimum();
 	progress_bar_option.maximum = this->maximum();
 	progress_bar_option.progress = this->progress();

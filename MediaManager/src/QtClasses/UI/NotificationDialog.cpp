@@ -2,6 +2,7 @@
 #include "NotificationDialog.h"
 #include "MainWindow.h"
 #include "MainApp.h"
+#include <QPainter>
 #include "utils.h"
 #include "starEditorWidget.h"
 #include "ProgressBarQLabel.h"
@@ -338,15 +339,11 @@ void NotificationWidget::showNotification()
 	double timerBarOpacity = 1.0;
 	double counterOpacity = 1.0;
 	if (this->MW && this->MW->App && this->MW->App->config) {
-		auto readOpacity = [this](const QString& key) -> double {
-			QString val = this->MW->App->config->get(key);
-			if (val.isEmpty()) return 1.0;
-			return qBound(0.0, val.toDouble(), 1.0);
-		};
-		bgOpacity = readOpacity("notification_bg_opacity");
-		contentOpacity = readOpacity("notification_content_opacity");
-		timerBarOpacity = readOpacity("notification_timerbar_opacity");
-		counterOpacity = readOpacity("notification_counter_opacity");
+		Config* cfg = this->MW->App->config;
+		bgOpacity = cfg->get_double("notification_bg_opacity", 1.0);
+		contentOpacity = cfg->get_double("notification_content_opacity", 1.0);
+		timerBarOpacity = cfg->get_double("notification_timerbar_opacity", 1.0);
+		counterOpacity = cfg->get_double("notification_counter_opacity", 1.0);
 	}
 
 	// Paint background manually (WA_TranslucentBackground skips system fill)

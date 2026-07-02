@@ -204,6 +204,14 @@ void Config::set(QString key, QString value) {
 	this->ini["Settings"][key.toStdString()] = value.toStdString();
 }
 
+double Config::get_double(QString item, double defaultValue) {
+	QString val = this->get(item);
+	if (val.isEmpty()) return defaultValue;
+	bool ok = false;
+	double d = val.toDouble(&ok);
+	return ok ? d : defaultValue;
+}
+
 bool Config::get_bool(QString item) {
 	if (this->ini.has("Settings"))
 	{

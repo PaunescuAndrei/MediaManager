@@ -23,3 +23,4 @@ MediaManager/src/thirdparty/onnxruntime/
 docs/superpowers/
 .superpowers/
 CLAUDE.md
+/reasonix.toml

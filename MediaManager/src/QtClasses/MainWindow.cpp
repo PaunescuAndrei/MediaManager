@@ -3488,6 +3488,11 @@ void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notifi
                 }
             });
         }
+    } else if (resumeNotification) {
+        // Dialog couldn't open (e.g. change_in_progress is true, player closed,
+        // or any future condition that blocks the dialog). Resume the notification
+        // that was paused by the right-click handler so it doesn't stay stuck.
+        this->VideoInfoNotification(resumeNotification);
     }
 }
 

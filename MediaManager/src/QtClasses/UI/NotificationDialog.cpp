@@ -388,6 +388,12 @@ void NotificationWidget::mousePressEvent(QMouseEvent* event)
 	const bool isRightClick = event->button() == Qt::RightButton;
 	if (isRightClick && this->MW && type_ == NotificationType::VideoInfo) {
 		this->pauseNotification();
+		// NOTE: showEndOfVideoDialog opens the finish dialog immediately without
+		// the 500 ms seek guard used by the normal end-of-video path. If MPC-HC
+		// is processing a seek at this moment (e.g. the end-position clamping
+		// loop), the dialog stealing focus can trigger the known MPC-HC hang:
+		// "finish dialog steals mpc-hc window focus while seeking it will hang."
+		// If this causes freezes in practice, add a seek-delay guard here.
 		this->MW->showEndOfVideoDialog(true, true, this);
 	} else {
 		this->closeNotification();

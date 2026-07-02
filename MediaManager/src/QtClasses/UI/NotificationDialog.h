@@ -6,7 +6,6 @@
 
 class MainWindow;
 class QLabel;
-class QProgressBar;
 class starEditorWidget;
 class ProgressBarQLabel;
 
@@ -62,7 +61,7 @@ private:
 	// Shared widgets
 	QWidget* overlayContainer_ = nullptr;
 	QWidget* contentWidget_ = nullptr;
-	QProgressBar* durationProgressBar_ = nullptr;
+	ProgressBarQLabel* durationProgressBar_ = nullptr;
 
 	// Video info widgets (matching original rich layout)
 	ProgressBarQLabel* totalLabel_ = nullptr;

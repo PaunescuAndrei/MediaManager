@@ -32,7 +32,7 @@ NotificationWidget::NotificationWidget(NotificationType type, QWidget* parent)
 	this->timer = new QTimer(this);
 	connect(this->timer, &QTimer::timeout, this, [this] {
 		auto elapsed = std::chrono::steady_clock::now() - this->time_start;
-		this->durationProgressBar_->setValue(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count());
+		this->durationProgressBar_->setProgress(static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count()));
 		this->durationProgressBar_->update();
 		if (elapsed >= this->time_duration) {
 			this->timer2->stop();
@@ -66,11 +66,12 @@ void NotificationWidget::buildLayout()
 	contentWidget_ = new QWidget(overlayContainer_);
 	overlayLayout->addWidget(contentWidget_);
 
-	durationProgressBar_ = new QProgressBar(overlayContainer_);
-	durationProgressBar_->setMaximumSize(16777215, PROGRESS_BAR_HEIGHT);
-	durationProgressBar_->setTextVisible(false);
-	durationProgressBar_->setMaximum(static_cast<int>(this->time_duration.count()));
-	durationProgressBar_->setValue(0);
+	durationProgressBar_ = new ProgressBarQLabel(overlayContainer_);
+	durationProgressBar_->setText(QString());
+	durationProgressBar_->setMinMax(0, static_cast<int>(this->time_duration.count()), false);
+	durationProgressBar_->setProgress(0);
+	durationProgressBar_->setFixedHeight(PROGRESS_BAR_HEIGHT);
+	durationProgressBar_->vertical_orientation = false; // horizontal bar for timer
 	overlayLayout->addWidget(durationProgressBar_);
 
 	switch (type_) {
@@ -328,19 +329,24 @@ void NotificationWidget::showNotification()
 {
 	this->time_start = std::chrono::steady_clock::now();
 	this->paused = false;
-	this->durationProgressBar_->setMaximum(static_cast<int>(this->time_duration.count()));
-	this->durationProgressBar_->setValue(0);
+	this->durationProgressBar_->setMinMax(0, static_cast<int>(this->time_duration.count()));
+	this->durationProgressBar_->setProgress(0);
 
 	// Apply configured opacities
 	double bgOpacity = 1.0;
 	double contentOpacity = 1.0;
+	double timerBarOpacity = 1.0;
+	double counterOpacity = 1.0;
 	if (this->MW && this->MW->App && this->MW->App->config) {
-		bgOpacity = this->MW->App->config->get("notification_bg_opacity").toDouble();
-		if (bgOpacity < 0.10 || bgOpacity > 1.0)
-			bgOpacity = 1.0;
-		contentOpacity = this->MW->App->config->get("notification_content_opacity").toDouble();
-		if (contentOpacity < 0.10 || contentOpacity > 1.0)
-			contentOpacity = 1.0;
+		auto readOpacity = [this](const QString& key) -> double {
+			QString val = this->MW->App->config->get(key);
+			if (val.isEmpty()) return 1.0;
+			return qBound(0.0, val.toDouble(), 1.0);
+		};
+		bgOpacity = readOpacity("notification_bg_opacity");
+		contentOpacity = readOpacity("notification_content_opacity");
+		timerBarOpacity = readOpacity("notification_timerbar_opacity");
+		counterOpacity = readOpacity("notification_counter_opacity");
 	}
 
 	// Paint background manually (WA_TranslucentBackground skips system fill)
@@ -349,6 +355,14 @@ void NotificationWidget::showNotification()
 
 	if (contentOpacityEffect_)
 		contentOpacityEffect_->setOpacity(contentOpacity);
+
+	// Timer bar and counter labels use painter opacity (text stays crisp)
+	if (durationProgressBar_)
+		durationProgressBar_->setBarBackgroundOpacity(timerBarOpacity);
+	if (totalLabel_)
+		totalLabel_->setBarBackgroundOpacity(counterOpacity);
+	if (counterLabel_)
+		counterLabel_->setBarBackgroundOpacity(counterOpacity);
 
 	this->show();
 	this->timer->start(this->timerInterval);

@@ -21,6 +21,7 @@ public:
     bool vertical_orientation = true;
     QBrush brush_ = QBrush();
     QPen pen_ = QPen();
+    double m_barBgOpacity = 1.0;
     qreal normalFontSize_ = 18.0;
     qreal highlightFontSize_ = 28.0;
     ProgressBarQLabel(QWidget* parent = nullptr);
@@ -33,6 +34,8 @@ public:
     void setBrush(QBrush brush);
     void setBrush(QColor color);
     void setBrush(Qt::GlobalColor color);
+    void setBarBackgroundOpacity(double opacity);
+    double barBackgroundOpacity() const;
     void setPen(QPen pen);
     void setPen(QColor color);
     void setPen(Qt::GlobalColor color);

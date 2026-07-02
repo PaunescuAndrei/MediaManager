@@ -59,6 +59,13 @@ void ProgressBarQLabel::setBrush(QBrush brush) {
 void ProgressBarQLabel::setBrush(QColor color) {
 	this->brush_ = QBrush(color);
 }
+void ProgressBarQLabel::setBarBackgroundOpacity(double opacity) {
+	this->m_barBgOpacity = qBound(0.0, opacity, 1.0);
+	this->update();
+}
+double ProgressBarQLabel::barBackgroundOpacity() const {
+	return this->m_barBgOpacity;
+}
 void ProgressBarQLabel::setBrush(Qt::GlobalColor color) {
 	this->brush_ = QBrush(color);
 }
@@ -170,7 +177,14 @@ void ProgressBarQLabel::paintEvent(QPaintEvent* e)
 	else {
 		font_.setPointSizeF(this->normalFontSize_);
 	}
+	if (this->m_barBgOpacity < 1.0) {
+		painter.save();
+		painter.setOpacity(this->m_barBgOpacity);
+	}
 	style->drawControl(QStyle::CE_ProgressBar, &progress_bar_option, &painter);
+	if (this->m_barBgOpacity < 1.0) {
+		painter.restore();
+	}
 
 	//https://stackoverflow.com/questions/64290561/qlabel-correct-positioning-for-text-outline
 	double w = this->outlineThickness(font_);

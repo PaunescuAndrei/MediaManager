@@ -2877,6 +2877,10 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         QString::number(dialog->notificationBgOpacitySpinBox->value(), 'f', 2));
     config->set("notification_content_opacity",
         QString::number(dialog->notificationContentOpacitySpinBox->value(), 'f', 2));
+    config->set("notification_timerbar_opacity",
+        QString::number(dialog->notificationTimerBarOpacitySpinBox->value(), 'f', 2));
+    config->set("notification_counter_opacity",
+        QString::number(dialog->notificationCounterOpacitySpinBox->value(), 'f', 2));
     int heatmapMonths = kHeatmapMonthOptions[dialog->ui.statsHeatmapMonthsCombo->currentIndex()];
     if (heatmapMonths != qBound(1, config->get("stats_heatmap_months").toInt(), 24))
         config->set("stats_heatmap_months", QString::number(heatmapMonths));

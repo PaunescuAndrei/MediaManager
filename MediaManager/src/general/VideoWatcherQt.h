@@ -40,6 +40,7 @@ signals:
     void updateTaskbarIconSignal(bool watching);
     void updateMusicPlayerSignal(bool flag);
     void timeWatchedIncrementSignal(double delta);
+    void sessionEndedSignal(QString category, int videoCount, int completedCount, double watchTimeSec, double sessionTimeSec);
 };
 
 //#include <iostream>

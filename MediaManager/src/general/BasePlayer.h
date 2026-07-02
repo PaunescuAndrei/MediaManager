@@ -41,6 +41,8 @@ public:
     double lastCheckpointWatchedTime = 0.0;
     double m_videoSessionBaseline = 0.0;
     int activeWatchHistoryRowId = -1;
+    QVector<int> m_sessionRowIds;
+    void trackCurrentWatchHistoryRow(int rowId = -1);
     QDateTime videoStartWallClock;
     QDateTime lastCheckpointTime;
     QString trackedVideoPath;

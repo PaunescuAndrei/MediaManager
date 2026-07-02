@@ -2,6 +2,7 @@
 #include "NotificationManager.h"
 #include "MainWindow.h"
 #include "MainApp.h"
+#include "utils.h"
 
 NotificationManager::NotificationManager(MainWindow* mw)
 	: QObject(mw), mw_(mw)
@@ -120,6 +121,42 @@ void NotificationManager::showPersonalBest(const QString& title, const QString& 
 	int durationMs = mw_->App->config->get("notification_personal_best_duration_ms").toInt();
 	NotificationWidget* dialog = createNotification(NotificationType::PersonalBest);
 	dialog->populatePersonalBest(title, message);
+	insertNotification(dialog);
+	dialog->showNotification(durationMs, 5);
+	repositionAll();
+}
+
+void NotificationManager::showSessionSummary(const QString& category, int videoCount, int completedCount, double watchTimeSec, double sessionTimeSec)
+{
+	Q_UNUSED(category)
+
+	if (!mw_->App->config->get_bool("notification_session_summary_enabled"))
+		return;
+
+	int durationMs = mw_->App->config->get("notification_session_summary_duration_ms").toInt();
+
+	QString watchStr = utils::formatDurationHuman(watchTimeSec);
+	QString sessionStr = utils::formatDurationHuman(sessionTimeSec);
+
+	// Active percentage
+	double activePct = (sessionTimeSec > 0.0)
+		? qBound(0.0, (watchTimeSec / sessionTimeSec) * 100.0, 100.0)
+		: 100.0;
+	QString activeStr = QStringLiteral("%1%").arg(qRound(activePct));
+
+	// Average per video
+	double avgSec = (videoCount > 0) ? (watchTimeSec / videoCount) : 0.0;
+	QString avgStr = QStringLiteral("~%1").arg(utils::formatDurationHuman(avgSec));
+
+	// Summary line
+	QString videoWord = (videoCount == 1) ? QStringLiteral("video") : QStringLiteral("videos");
+	QString summaryLine = QStringLiteral("%1 %2 watched (%3 completed)")
+		.arg(videoCount)
+		.arg(videoWord)
+		.arg(completedCount);
+
+	NotificationWidget* dialog = createNotification(NotificationType::SessionSummary);
+	dialog->populateSessionSummary(summaryLine, watchStr, sessionStr, activeStr, avgStr);
 	insertNotification(dialog);
 	dialog->showNotification(durationMs, 5);
 	repositionAll();

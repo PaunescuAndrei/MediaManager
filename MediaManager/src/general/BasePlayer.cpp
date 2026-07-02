@@ -120,6 +120,14 @@ void BasePlayer::recordVideoStart() {
     lastCheckpointTime = videoStartWallClock;
 }
 
+void BasePlayer::trackCurrentWatchHistoryRow(int rowId)
+{
+    int id = (rowId > 0) ? rowId : activeWatchHistoryRowId;
+    if (id > 0 && !m_sessionRowIds.contains(id)) {
+        m_sessionRowIds.append(id);
+    }
+}
+
 bool BasePlayer::shouldCheckpoint(const QDateTime& now, int intervalSeconds) {
     return intervalSeconds > 0
         && lastCheckpointTime.isValid()

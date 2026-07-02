@@ -39,6 +39,7 @@ namespace utils {
 	QString formatSecondsQt(double total_seconds, bool showHours = true);
 	std::string formatSecondsCompact(double total_seconds);
 	QString formatSecondsCompactQt(double total_seconds);
+	QString formatDurationHuman(double total_seconds);
 	bool hiddenCheck(QStringList &settings);
 	int randint(int start,int stop, quint32 seed = 0);
 	double randfloat(double start, double stop, quint32 seed = 0);

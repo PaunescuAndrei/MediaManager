@@ -122,6 +122,7 @@ public:
     double getAverageWatchTimePerDay();
     double getAverageSessionTimePerDay();
     double getAverageCompletedPerDay();
+    std::tuple<int, int, double, double> getSessionSummaryStats(const QVector<int>& rowIds);
 
     int getTotalWatchDays();
     QDateTime getFirstWatchDate();

@@ -134,6 +134,11 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 			this->mainWindow->updateWatchedProgressBar();
 		}
 	});
+	connect(this->VW, &VideoWatcherQt::sessionEndedSignal, this, [this](QString category, int videoCount, int completedCount, double watchTimeSec, double sessionTimeSec) {
+		if (this->mainWindow && this->mainWindow->notificationManager) {
+			this->mainWindow->notificationManager->showSessionSummary(category, videoCount, completedCount, watchTimeSec, sessionTimeSec);
+		}
+	});
 
 	this->VW->start();
 

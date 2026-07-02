@@ -85,6 +85,11 @@ void NotificationWidget::buildLayout()
 		buildSimpleContent();
 		rootLayout->addWidget(contentWidget_);
 		break;
+	case NotificationType::SessionSummary:
+		contentWidget_ = new QWidget(this);
+		buildSessionSummaryContent();
+		rootLayout->addWidget(contentWidget_);
+		break;
 	}
 
 	durationProgressBar_ = new ProgressBarQLabel(this);
@@ -197,6 +202,70 @@ void NotificationWidget::buildSimpleContent()
 	messageLabel_ = new QLabel();
 	messageLabel_->setStyleSheet(QString(BODY_STYLE) + QStringLiteral(" color: #AAAAAA;"));
 	layout->addWidget(messageLabel_);
+}
+
+void NotificationWidget::buildSessionSummaryContent()
+{
+	QVBoxLayout* layout = new QVBoxLayout(contentWidget_);
+	layout->setContentsMargins(10, 8, 10, 8);
+	layout->setSpacing(4);
+
+	// Title: "Session Ended"
+	titleLabel_ = new QLabel(QStringLiteral("Session Ended"));
+	titleLabel_->setStyleSheet(TITLE_STYLE);
+	layout->addWidget(titleLabel_);
+
+	// Flow-text summary line: "3 videos watched (2 completed)"
+	sessionSummaryLine_ = new QLabel();
+	sessionSummaryLine_->setStyleSheet(BODY_STYLE);
+	sessionSummaryLine_->setWordWrap(true);
+	layout->addWidget(sessionSummaryLine_);
+
+	// Thin separator
+	sessionSeparator_ = new QFrame();
+	sessionSeparator_->setFrameShape(QFrame::HLine);
+	sessionSeparator_->setFrameShadow(QFrame::Sunken);
+	sessionSeparator_->setStyleSheet(QStringLiteral("QFrame { color: #555555; }"));
+	sessionSeparator_->setFixedHeight(1);
+	layout->addWidget(sessionSeparator_);
+
+	// Helper: build a [value  label] pair widget
+	auto makePair = [](const QString& labelSuffix, QLabel*& valueLabel) -> QWidget* {
+		QWidget* w = new QWidget();
+		QHBoxLayout* row = new QHBoxLayout(w);
+		row->setContentsMargins(0, 0, 0, 0);
+		row->setSpacing(4);
+
+		valueLabel = new QLabel();
+		valueLabel->setStyleSheet(BODY_STYLE);
+		row->addWidget(valueLabel);
+
+		QLabel* label = new QLabel(labelSuffix);
+		label->setStyleSheet(QString(BODY_STYLE) + QStringLiteral(" color: #AAAAAA;"));
+		row->addWidget(label);
+		return w;
+	};
+
+	// Stats: two rows, left pair — wide gap — right pair
+	auto addStatsRow = [&](const QString& leftLabel, QLabel*& leftValue,
+	                       const QString& rightLabel, QLabel*& rightValue) {
+		QHBoxLayout* row = new QHBoxLayout();
+		row->setContentsMargins(0, 0, 0, 0);
+
+		QWidget* left = makePair(leftLabel, leftValue);
+		QWidget* right = makePair(rightLabel, rightValue);
+
+		row->addWidget(left);
+		row->addSpacing(32);
+		row->addStretch();
+		row->addWidget(right);
+		layout->addLayout(row);
+	};
+
+	addStatsRow(QStringLiteral(" watch"), sessionWatchValue_,
+	            QStringLiteral(" session"), sessionSessionValue_);
+	addStatsRow(QStringLiteral(" active"), sessionActiveValue_,
+	            QStringLiteral(" per video"), sessionPerVideoValue_);
 }
 
 void NotificationWidget::setMainWindow(MainWindow* MW) {
@@ -314,6 +383,18 @@ void NotificationWidget::populateStreakAtRisk(const QString& title, const QStrin
 void NotificationWidget::populatePersonalBest(const QString& title, const QString& message)
 {
 	populateGoalMet(title, message);
+}
+
+void NotificationWidget::populateSessionSummary(const QString& summaryLine, const QString& watchTime, const QString& sessionTime, const QString& active, const QString& perVideo)
+{
+	if (!titleLabel_ || !sessionSummaryLine_ || !sessionWatchValue_) return;
+
+	titleLabel_->show();
+	sessionSummaryLine_->setText(summaryLine);
+	sessionWatchValue_->setText(watchTime);
+	sessionSessionValue_->setText(sessionTime);
+	sessionActiveValue_->setText(active);
+	sessionPerVideoValue_->setText(perVideo);
 }
 
 void NotificationWidget::closeNotification() {

@@ -58,6 +58,9 @@ public:
     QSpinBox* streakAtRiskRefireSpinBox = nullptr;
     QCheckBox* notificationPersonalBestEnabled = nullptr;
     QSpinBox* notificationPersonalBestDurationSpinBox = nullptr;
+    QCheckBox* notificationSessionSummaryEnabled = nullptr;
+    QSpinBox* notificationSessionSummaryDurationSpinBox = nullptr;
+    QSpinBox* notificationSessionSummaryMinSessionSpinBox = nullptr;
     QSpinBox* pbVideosStepSpinBox = nullptr;
     QSpinBox* pbTimeStepSpinBox = nullptr;
     QSpinBox* pbVideosMinThresholdSpinBox = nullptr;

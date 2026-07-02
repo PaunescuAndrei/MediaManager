@@ -157,6 +157,7 @@ void VideoWatcherQt::checkpointPlayer(QSharedPointer<BasePlayer> player, int int
         now.toString("yyyy-MM-dd HH:mm:ss"), session,
         false);
     player->lastCheckpointTime = now;
+    player->trackCurrentWatchHistoryRow();
     if (pos >= 0 && player->video_id >= 0) {
         this->db->updateVideoProgress(player->video_id, pos);
     }
@@ -201,6 +202,7 @@ void VideoWatcherQt::handleExternalVideoChange(QSharedPointer<BasePlayer> player
             now.addSecs(-static_cast<qint64>(sessionTime)).toString("yyyy-MM-dd HH:mm:ss"),
             now.toString("yyyy-MM-dd HH:mm:ss"), sessionTime,
             false);
+        player->trackCurrentWatchHistoryRow();
     }
     if (!player->trackExternalVideo) {
         player->video_id = -1;
@@ -232,6 +234,7 @@ void VideoWatcherQt::handleExternalVideoChange(QSharedPointer<BasePlayer> player
         now.toString("yyyy-MM-dd HH:mm:ss"),
         now.toString("yyyy-MM-dd HH:mm:ss"),
         0, false);
+    player->trackCurrentWatchHistoryRow();
 }
 
 bool VideoWatcherQt::shouldCountWatchTime(QSharedPointer<BasePlayer> player)
@@ -277,11 +280,22 @@ void VideoWatcherQt::run()
                         sessionStart, sessionEnd, sessionTime,
                         false);
                 }
+                player->trackCurrentWatchHistoryRow();
                 if (this->App->config->get_bool("counter_use_actual_watch_time") && shouldCountWatchTime(player)) {
                     double delta = watchedTime - player->lastCheckpointWatchedTime;
                     if (delta > 0.0) {
                         player->lastCheckpointWatchedTime = watchedTime;
                         emit timeWatchedIncrementSignal(delta);
+                    }
+                }
+                // Session summary notification
+                double playerSessionTime = player->getSessionTime();
+                int minSessionSec = this->App->config->get("notification_session_summary_min_session_seconds").toInt();
+                if (playerSessionTime >= static_cast<double>(minSessionSec)) {
+                    auto [videosWatched, videosCompleted, totalWatch, totalSession] =
+                        this->db->getSessionSummaryStats(player->m_sessionRowIds);
+                    if (videosWatched > 0) {
+                        emit sessionEndedSignal(player->category, videosWatched, videosCompleted, totalWatch, playerSessionTime);
                     }
                 }
                 if (player == this->mainPlayer) {

@@ -830,6 +830,23 @@ QString utils::formatSecondsCompactQt(double total_seconds)
 	return QString::fromStdString(formatSecondsCompact(total_seconds));
 }
 
+QString utils::formatDurationHuman(double total_seconds)
+{
+	int totalSec = qMax(0, static_cast<int>(std::round(total_seconds)));
+	int hrs = totalSec / 3600;
+	int mins = (totalSec % 3600) / 60;
+	int secs = totalSec % 60;
+
+	if (hrs > 0) {
+		if (mins > 0)
+			return QStringLiteral("%1h %2m").arg(hrs).arg(mins);
+		return QStringLiteral("%1h").arg(hrs);
+	}
+	if (mins > 0)
+		return QStringLiteral("%1 min").arg(mins);
+	return QStringLiteral("%1s").arg(secs);
+}
+
 bool utils::hiddenCheck(QStringList &settings) {
 	return settings.length() > 1;
 }

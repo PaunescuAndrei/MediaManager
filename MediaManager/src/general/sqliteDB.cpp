@@ -2019,6 +2019,38 @@ double sqliteDB::getAverageCompletedPerDay()
     return 0.0;
 }
 
+std::tuple<int, int, double, double> sqliteDB::getSessionSummaryStats(const QVector<int>& rowIds)
+{
+    if (rowIds.isEmpty())
+        return {0, 0, 0.0, 0.0};
+
+    // Build "IN (?, ?, ...)" clause
+    QStringList placeholders;
+    for (int i = 0; i < rowIds.size(); ++i)
+        placeholders << "?";
+    QString sql = QStringLiteral(
+        "SELECT COUNT(*), "
+        "       COALESCE(SUM(CASE WHEN completed THEN 1 ELSE 0 END), 0), "
+        "       COALESCE(SUM(watched_time), 0), "
+        "       COALESCE(SUM(session_time), 0) "
+        "FROM watch_history WHERE id IN (%1)")
+        .arg(placeholders.join(", "));
+
+    QSqlQuery query(this->db);
+    query.prepare(sql);
+    for (int id : rowIds)
+        query.addBindValue(id);
+
+    if (query.exec() && query.next()) {
+        return {
+            query.value(0).toInt(),
+            query.value(1).toInt(),
+            query.value(2).toDouble(),
+            query.value(3).toDouble()
+        };
+    }
+    return {0, 0, 0.0, 0.0};
+}
 
 int sqliteDB::getTotalWatchDays()
 {

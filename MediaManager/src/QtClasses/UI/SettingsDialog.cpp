@@ -862,6 +862,48 @@ void SettingsDialog::setupNotificationsPage(MainWindow* mw)
 
     pageLayout->addWidget(personalBestGroup);
 
+    // --- Session Summary Group ---
+    QGroupBox* sessionSummaryGroup = new QGroupBox("Session Summary");
+    sessionSummaryGroup->setToolTip("Show a summary notification when a watching session ends (MPC-HC closes)");
+    QVBoxLayout* sessionSummaryLayout = new QVBoxLayout(sessionSummaryGroup);
+    sessionSummaryLayout->setSpacing(4);
+
+    // Enable + duration row
+    QHBoxLayout* ssEnableRow = new QHBoxLayout();
+    notificationSessionSummaryEnabled = new QCheckBox("Enable session summary notifications");
+    notificationSessionSummaryEnabled->setToolTip("Show a summary notification popup when you close the player after watching");
+    notificationSessionSummaryEnabled->setChecked(config->get_bool("notification_session_summary_enabled"));
+    ssEnableRow->addWidget(notificationSessionSummaryEnabled);
+    ssEnableRow->addStretch();
+    notificationSessionSummaryDurationSpinBox = new QSpinBox();
+    notificationSessionSummaryDurationSpinBox->setMinimum(1000);
+    notificationSessionSummaryDurationSpinBox->setMaximum(60000);
+    notificationSessionSummaryDurationSpinBox->setSingleStep(500);
+    notificationSessionSummaryDurationSpinBox->setToolTip("Duration in milliseconds");
+    notificationSessionSummaryDurationSpinBox->setValue(config->get("notification_session_summary_duration_ms").toInt());
+    setupSpinStyle(notificationSessionSummaryDurationSpinBox, "spinbox");
+    connect(notificationSessionSummaryEnabled, &QCheckBox::toggled, notificationSessionSummaryDurationSpinBox, &QSpinBox::setEnabled);
+    notificationSessionSummaryDurationSpinBox->setEnabled(notificationSessionSummaryEnabled->isChecked());
+    ssEnableRow->addWidget(notificationSessionSummaryDurationSpinBox);
+    sessionSummaryLayout->addLayout(ssEnableRow);
+
+    // Min session time row
+    QHBoxLayout* ssMinSessionRow = new QHBoxLayout();
+    QLabel* ssMinSessionLabel = new QLabel("Minimum session time (seconds):");
+    ssMinSessionLabel->setToolTip("Only show the summary if the session lasted at least this long");
+    ssMinSessionRow->addWidget(ssMinSessionLabel);
+    ssMinSessionRow->addStretch();
+    notificationSessionSummaryMinSessionSpinBox = new QSpinBox();
+    notificationSessionSummaryMinSessionSpinBox->setMinimum(1);
+    notificationSessionSummaryMinSessionSpinBox->setMaximum(3600);
+    notificationSessionSummaryMinSessionSpinBox->setToolTip("Only show the summary if the session lasted at least this many seconds");
+    notificationSessionSummaryMinSessionSpinBox->setValue(config->get("notification_session_summary_min_session_seconds").toInt());
+    setupSpinStyle(notificationSessionSummaryMinSessionSpinBox, "spinbox");
+    ssMinSessionRow->addWidget(notificationSessionSummaryMinSessionSpinBox);
+    sessionSummaryLayout->addLayout(ssMinSessionRow);
+
+    pageLayout->addWidget(sessionSummaryGroup);
+
     // --- Appearance Group ---
     QGroupBox* notifAppearanceGroup = new QGroupBox("Appearance");
     QVBoxLayout* notifAppearanceLayout = new QVBoxLayout(notifAppearanceGroup);

@@ -1682,6 +1682,10 @@ bool MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool incre
             now.addSecs(-static_cast<qint64>(oldSessionTime)).toString("yyyy-MM-dd HH:mm:ss"),
             now.toString("yyyy-MM-dd HH:mm:ss"),
             oldSessionTime, true);
+        // upsertWatchHistory may have INSERTed a new row (changing the local
+        // oldWatchHistoryRowId). Pass it explicitly so we never need to
+        // temporarily mutate activeWatchHistoryRowId.
+        if (player) player->trackCurrentWatchHistoryRow(oldWatchHistoryRowId);
         if (player) player->activeWatchHistoryRowId = -1;
         this->checkDailyProgress();
     }
@@ -2881,6 +2885,12 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         QString::number(dialog->notificationTimerBarOpacitySpinBox->value(), 'f', 2));
     config->set("notification_counter_opacity",
         QString::number(dialog->notificationCounterOpacitySpinBox->value(), 'f', 2));
+    config->set("notification_session_summary_enabled",
+        dialog->notificationSessionSummaryEnabled->isChecked() ? "True" : "False");
+    config->set("notification_session_summary_duration_ms",
+        QString::number(dialog->notificationSessionSummaryDurationSpinBox->value()));
+    config->set("notification_session_summary_min_session_seconds",
+        QString::number(dialog->notificationSessionSummaryMinSessionSpinBox->value()));
     int heatmapMonths = kHeatmapMonthOptions[dialog->ui.statsHeatmapMonthsCombo->currentIndex()];
     if (heatmapMonths != qBound(1, config->get("stats_heatmap_months").toInt(), 24))
         config->set("stats_heatmap_months", QString::number(heatmapMonths));
@@ -3470,6 +3480,7 @@ void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notifi
                             now.addSecs(-static_cast<qint64>(rsession)).toString("yyyy-MM-dd HH:mm:ss"),
                             now.toString("yyyy-MM-dd HH:mm:ss"),
                             rsession, true);
+                        player->trackCurrentWatchHistoryRow();
                         player->activeWatchHistoryRowId = -1;
                     }
                     player->resetVideoTiming();
@@ -3520,6 +3531,7 @@ void MainWindow::SkipVideo() {
                 now.addSecs(-static_cast<qint64>(session)).toString("yyyy-MM-dd HH:mm:ss"),
                 now.toString("yyyy-MM-dd HH:mm:ss"), session,
                 true);
+            this->App->VW->mainPlayer->trackCurrentWatchHistoryRow();
             this->App->VW->mainPlayer->activeWatchHistoryRowId = -1;
         }
         this->App->VW->mainPlayer->change_in_progress = true;

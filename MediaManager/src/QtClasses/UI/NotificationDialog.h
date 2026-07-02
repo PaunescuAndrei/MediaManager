@@ -13,7 +13,8 @@ enum class NotificationType {
 	GeneralMessage,
 	GoalMet,
 	StreakAtRisk,
-	PersonalBest
+	PersonalBest,
+	SessionSummary
 };
 
 class QGraphicsOpacityEffect;
@@ -49,6 +50,7 @@ public:
 	void populateGoalMet(const QString& title, const QString& message);
 	void populateStreakAtRisk(const QString& title, const QString& message);
 	void populatePersonalBest(const QString& title, const QString& message);
+	void populateSessionSummary(const QString& summaryLine, const QString& watchStr, const QString& sessionStr, const QString& activeStr, const QString& perVideoStr);
 
 signals:
 	void showEventSignal();
@@ -79,7 +81,16 @@ private:
 	QLabel* titleLabel_ = nullptr;
 	QLabel* messageLabel_ = nullptr;
 
+	// Session summary widgets
+	QLabel* sessionSummaryLine_ = nullptr;
+	QFrame* sessionSeparator_ = nullptr;
+	QLabel* sessionWatchValue_ = nullptr;
+	QLabel* sessionSessionValue_ = nullptr;
+	QLabel* sessionActiveValue_ = nullptr;
+	QLabel* sessionPerVideoValue_ = nullptr;
+
 	void buildLayout();
 	void buildVideoInfoContent();
 	void buildSimpleContent();
+	void buildSessionSummaryContent();
 };

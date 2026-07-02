@@ -337,10 +337,10 @@ void NotificationWidget::showNotification()
 	double counterOpacity = 1.0;
 	if (this->MW && this->MW->App && this->MW->App->config) {
 		Config* cfg = this->MW->App->config;
-		bgOpacity = cfg->get_double("notification_bg_opacity", 1.0);
-		contentOpacity = cfg->get_double("notification_content_opacity", 1.0);
-		timerBarOpacity = cfg->get_double("notification_timerbar_opacity", 1.0);
-		counterOpacity = cfg->get_double("notification_counter_opacity", 1.0);
+		bgOpacity = qBound(0.0, cfg->get_double("notification_bg_opacity", 1.0), 1.0);
+		contentOpacity = qBound(0.0, cfg->get_double("notification_content_opacity", 1.0), 1.0);
+		timerBarOpacity = qBound(0.0, cfg->get_double("notification_timerbar_opacity", 1.0), 1.0);
+		counterOpacity = qBound(0.0, cfg->get_double("notification_counter_opacity", 1.0), 1.0);
 	}
 
 	// Paint background manually (WA_TranslucentBackground skips system fill)
@@ -386,7 +386,7 @@ void NotificationWidget::mousePressEvent(QMouseEvent* event)
 {
 	event->accept();
 	const bool isRightClick = event->button() == Qt::RightButton;
-	if (isRightClick && this->MW) {
+	if (isRightClick && this->MW && type_ == NotificationType::VideoInfo) {
 		this->pauseNotification();
 		this->MW->showEndOfVideoDialog(true, true, this);
 	} else {

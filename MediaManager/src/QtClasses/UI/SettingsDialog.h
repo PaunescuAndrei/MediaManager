@@ -62,6 +62,8 @@ public:
     QSpinBox* pbTimeStepSpinBox = nullptr;
     QSpinBox* pbVideosMinThresholdSpinBox = nullptr;
     QSpinBox* pbTimeMinThresholdSpinBox = nullptr;
+    QDoubleSpinBox* notificationBgOpacitySpinBox = nullptr;
+    QDoubleSpinBox* notificationContentOpacitySpinBox = nullptr;
 
 private:
     // Per-category setup methods

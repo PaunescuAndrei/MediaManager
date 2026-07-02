@@ -1,5 +1,6 @@
 #pragma once
 #include <QWidget>
+#include <QPainter>
 #include <chrono>
 #include <QTimer>
 
@@ -17,6 +18,8 @@ enum class NotificationType {
 	PersonalBest
 };
 
+class QGraphicsOpacityEffect;
+
 class NotificationWidget :
 	public QWidget
 {
@@ -24,6 +27,8 @@ class NotificationWidget :
 public:
 	QTimer* timer;
 	QTimer* timer2;
+	QGraphicsOpacityEffect* contentOpacityEffect_ = nullptr;
+	int m_bgAlpha = 255;
 	MainWindow *MW = nullptr;
 	int timerInterval = 1000;
 	std::chrono::time_point<std::chrono::steady_clock> time_start = std::chrono::steady_clock::now();
@@ -36,6 +41,7 @@ public:
 	void pauseNotification();
 	~NotificationWidget();
 	void mousePressEvent(QMouseEvent* event) override;
+	void paintEvent(QPaintEvent* event) override;
 
 	NotificationType type() const { return type_; }
 
@@ -54,6 +60,7 @@ private:
 	bool paused = false;
 
 	// Shared widgets
+	QWidget* overlayContainer_ = nullptr;
 	QWidget* contentWidget_ = nullptr;
 	QProgressBar* durationProgressBar_ = nullptr;
 

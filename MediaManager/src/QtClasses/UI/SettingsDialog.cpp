@@ -862,6 +862,51 @@ void SettingsDialog::setupNotificationsPage(MainWindow* mw)
 
     pageLayout->addWidget(personalBestGroup);
 
+    // --- Appearance Group ---
+    QGroupBox* notifAppearanceGroup = new QGroupBox("Appearance");
+    QVBoxLayout* notifAppearanceLayout = new QVBoxLayout(notifAppearanceGroup);
+    notifAppearanceLayout->setSpacing(4);
+
+    // Background opacity
+    QHBoxLayout* bgOpacityRow = new QHBoxLayout();
+    QLabel* bgOpacityLabel = new QLabel("Background Opacity:");
+    bgOpacityLabel->setToolTip("Transparency of the notification background (0.10 = mostly transparent, 1.00 = fully opaque)");
+    bgOpacityRow->addWidget(bgOpacityLabel);
+    bgOpacityRow->addStretch();
+    notificationBgOpacitySpinBox = new QDoubleSpinBox();
+    notificationBgOpacitySpinBox->setMinimum(0.10);
+    notificationBgOpacitySpinBox->setMaximum(1.00);
+    notificationBgOpacitySpinBox->setSingleStep(0.05);
+    notificationBgOpacitySpinBox->setDecimals(2);
+    notificationBgOpacitySpinBox->setToolTip("Transparency of the notification background (0.10 = mostly transparent, 1.00 = fully opaque)");
+    notificationBgOpacitySpinBox->setValue(config->get("notification_bg_opacity").toDouble());
+    if (notificationBgOpacitySpinBox->value() < 0.10)
+        notificationBgOpacitySpinBox->setValue(1.00);
+    setupSpinStyle(notificationBgOpacitySpinBox, "doublespinbox");
+    bgOpacityRow->addWidget(notificationBgOpacitySpinBox);
+    notifAppearanceLayout->addLayout(bgOpacityRow);
+
+    // Content opacity
+    QHBoxLayout* contentOpacityRow = new QHBoxLayout();
+    QLabel* contentOpacityLabel = new QLabel("Content Opacity:");
+    contentOpacityLabel->setToolTip("Transparency of text, stars, and progress bar inside notifications (0.10 = mostly transparent, 1.00 = fully opaque)");
+    contentOpacityRow->addWidget(contentOpacityLabel);
+    contentOpacityRow->addStretch();
+    notificationContentOpacitySpinBox = new QDoubleSpinBox();
+    notificationContentOpacitySpinBox->setMinimum(0.10);
+    notificationContentOpacitySpinBox->setMaximum(1.00);
+    notificationContentOpacitySpinBox->setSingleStep(0.05);
+    notificationContentOpacitySpinBox->setDecimals(2);
+    notificationContentOpacitySpinBox->setToolTip("Transparency of text, stars, and progress bar inside notifications (0.10 = mostly transparent, 1.00 = fully opaque)");
+    notificationContentOpacitySpinBox->setValue(config->get("notification_content_opacity").toDouble());
+    if (notificationContentOpacitySpinBox->value() < 0.10)
+        notificationContentOpacitySpinBox->setValue(1.00);
+    setupSpinStyle(notificationContentOpacitySpinBox, "doublespinbox");
+    contentOpacityRow->addWidget(notificationContentOpacitySpinBox);
+    notifAppearanceLayout->addLayout(contentOpacityRow);
+
+    pageLayout->addWidget(notifAppearanceGroup);
+
     // Spacer at bottom
     pageLayout->addStretch();
 

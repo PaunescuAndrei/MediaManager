@@ -2873,6 +2873,10 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         QString::number(dialog->pbVideosMinThresholdSpinBox->value()));
     config->set("pb_time_min_threshold_minutes",
         QString::number(dialog->pbTimeMinThresholdSpinBox->value()));
+    config->set("notification_bg_opacity",
+        QString::number(dialog->notificationBgOpacitySpinBox->value(), 'f', 2));
+    config->set("notification_content_opacity",
+        QString::number(dialog->notificationContentOpacitySpinBox->value(), 'f', 2));
     int heatmapMonths = kHeatmapMonthOptions[dialog->ui.statsHeatmapMonthsCombo->currentIndex()];
     if (heatmapMonths != qBound(1, config->get("stats_heatmap_months").toInt(), 24))
         config->set("stats_heatmap_months", QString::number(heatmapMonths));

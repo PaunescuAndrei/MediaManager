@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "NotificationDialog.h"
 #include "MainWindow.h"
+#include "MainApp.h"
 #include "utils.h"
 #include "starEditorWidget.h"
 #include "ProgressBarQLabel.h"
@@ -16,9 +17,17 @@ NotificationWidget::NotificationWidget(NotificationType type, QWidget* parent)
 	         | Qt::WindowDoesNotAcceptFocus | Qt::NoDropShadowWindowHint), type_(type)
 {
 	this->setAttribute(Qt::WA_ShowWithoutActivating, true);
+	this->setAttribute(Qt::WA_TranslucentBackground, true);
 	this->setWindowTitle(QStringLiteral("MediaManager Notification"));
 
 	buildLayout();
+
+	// Content opacity effect on the overlay container (all child widgets)
+	if (overlayContainer_) {
+		contentOpacityEffect_ = new QGraphicsOpacityEffect(overlayContainer_);
+		contentOpacityEffect_->setOpacity(1.0);
+		overlayContainer_->setGraphicsEffect(contentOpacityEffect_);
+	}
 
 	this->timer = new QTimer(this);
 	connect(this->timer, &QTimer::timeout, this, [this] {
@@ -45,15 +54,24 @@ void NotificationWidget::buildLayout()
 	rootLayout->setContentsMargins(0, 0, 0, 0);
 	rootLayout->setSpacing(0);
 
-	contentWidget_ = new QWidget(this);
-	rootLayout->addWidget(contentWidget_);
+	// Single overlay container — content opacity applied here so ALL child
+	// widgets (text, stars, progress bar, future additions) get it automatically
+	overlayContainer_ = new QWidget(this);
+	rootLayout->addWidget(overlayContainer_);
 
-	durationProgressBar_ = new QProgressBar(this);
+	QVBoxLayout* overlayLayout = new QVBoxLayout(overlayContainer_);
+	overlayLayout->setContentsMargins(0, 0, 0, 0);
+	overlayLayout->setSpacing(0);
+
+	contentWidget_ = new QWidget(overlayContainer_);
+	overlayLayout->addWidget(contentWidget_);
+
+	durationProgressBar_ = new QProgressBar(overlayContainer_);
 	durationProgressBar_->setMaximumSize(16777215, PROGRESS_BAR_HEIGHT);
 	durationProgressBar_->setTextVisible(false);
 	durationProgressBar_->setMaximum(static_cast<int>(this->time_duration.count()));
 	durationProgressBar_->setValue(0);
-	rootLayout->addWidget(durationProgressBar_);
+	overlayLayout->addWidget(durationProgressBar_);
 
 	switch (type_) {
 	case NotificationType::VideoInfo:
@@ -312,6 +330,26 @@ void NotificationWidget::showNotification()
 	this->paused = false;
 	this->durationProgressBar_->setMaximum(static_cast<int>(this->time_duration.count()));
 	this->durationProgressBar_->setValue(0);
+
+	// Apply configured opacities
+	double bgOpacity = 1.0;
+	double contentOpacity = 1.0;
+	if (this->MW && this->MW->App && this->MW->App->config) {
+		bgOpacity = this->MW->App->config->get("notification_bg_opacity").toDouble();
+		if (bgOpacity < 0.10 || bgOpacity > 1.0)
+			bgOpacity = 1.0;
+		contentOpacity = this->MW->App->config->get("notification_content_opacity").toDouble();
+		if (contentOpacity < 0.10 || contentOpacity > 1.0)
+			contentOpacity = 1.0;
+	}
+
+	// Paint background manually (WA_TranslucentBackground skips system fill)
+	m_bgAlpha = static_cast<int>(bgOpacity * 255.0);
+	this->update();
+
+	if (contentOpacityEffect_)
+		contentOpacityEffect_->setOpacity(contentOpacity);
+
 	this->show();
 	this->timer->start(this->timerInterval);
 	this->timer2->start(250);
@@ -350,4 +388,13 @@ void NotificationWidget::pauseNotification()
 	this->timer->stop();
 	this->timer2->stop();
 	this->paused = true;
+}
+
+void NotificationWidget::paintEvent(QPaintEvent* event)
+{
+	Q_UNUSED(event);
+	QPainter painter(this);
+	QColor bgColor = this->palette().color(QPalette::Window);
+	bgColor.setAlpha(m_bgAlpha);
+	painter.fillRect(this->rect(), bgColor);
 }

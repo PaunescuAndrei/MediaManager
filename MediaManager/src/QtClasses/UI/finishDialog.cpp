@@ -223,7 +223,7 @@ void finishDialog::updateWindowTitle() {
 	QString session_time = "";
 	QString watched_time = "";
 	if (this->MW and this->MW->App->VW and this->MW->App->VW->mainPlayer) {
-		int sessionSeconds = this->MW->App->VW->mainPlayer->getSessionTime();
+		int sessionSeconds = static_cast<int>(this->MW->App->VW->currentSessionTime());
 		int watchedSeconds = this->MW->App->VW->mainPlayer->getTotalWatchedTime();
 		if (sessionSeconds > 0) {
 			session_time = QStringLiteral(" [Session: %1]").arg(utils::formatSecondsCompactQt(sessionSeconds));

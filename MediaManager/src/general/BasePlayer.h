@@ -33,16 +33,12 @@ public:
     bool end_of_video = false;  
     HWND player_hwnd = HWND();  
     QProcess* process;  
-    std::shared_ptr<std::chrono::microseconds> sessionTimeStart = nullptr;  
-    std::shared_ptr<std::chrono::microseconds> watchedTimeStart = nullptr;  
+    std::shared_ptr<std::chrono::microseconds> watchedTimeStart = nullptr;
     double totalWatchedTimeSeconds = 0.0;
     bool wasPlayingLastCheck = false;
     double m_videoWatchedBaseline = 0.0;
     double lastCheckpointWatchedTime = 0.0;
-    double m_videoSessionBaseline = 0.0;
     int activeWatchHistoryRowId = -1;
-    QVector<int> m_sessionRowIds;
-    void trackCurrentWatchHistoryRow(int rowId = -1);
     QDateTime videoStartWallClock;
     QDateTime lastCheckpointTime;
     QString trackedVideoPath;
@@ -58,17 +54,13 @@ public:
     virtual void displayOsdMessage(QString message, int duration, bool direct = false) = 0;  
     virtual void drop() = 0;  
     virtual void changeVideo(QString path, int video_id, double position = 0) = 0;  
-    void startSessionTiming();  
-    void stopSessionTiming();  
-    void startWatchedTiming();  
-    void stopWatchedTiming();  
-    double getSessionTime();  
-    double getTotalWatchedTime();  
+    void startWatchedTiming();
+    void stopWatchedTiming();
+    double getTotalWatchedTime();
     void updateWatchedTiming();
     void start();
     void resetVideoTiming();
     double videoWatchedTime();
-    double videoSessionTime();
     bool shouldCheckpoint(const QDateTime& now, int intervalSeconds);
     void recordVideoStart();
 signals:  

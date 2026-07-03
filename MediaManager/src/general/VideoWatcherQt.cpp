@@ -9,6 +9,7 @@
 #include <QMutexLocker>
 #include <QSqlQuery>
 #include <QFileInfo>
+#include <QMessageBox>
 
 VideoWatcherQt::VideoWatcherQt(MainApp* App, QObject* parent) : QThread(parent)
 {
@@ -19,55 +20,82 @@ VideoWatcherQt::VideoWatcherQt(MainApp* App, QObject* parent) : QThread(parent)
 QSharedPointer<BasePlayer> VideoWatcherQt::newPlayer(QString path, int video_id)
 {
 	QMutexLocker lock(&this->data_lock);
+
+	// Start a new session if none is active
+	if (m_currentSessionId < 0) {
+		m_sessionStartTime = QDateTime::currentDateTime();
+		m_sessionStartMonotonic = utils::QueryUnbiasedInterruptTimeChrono();
+		m_currentSessionId = this->db->insertSession(
+			m_sessionStartTime.toString("yyyy-MM-dd HH:mm:ss"));
+		if (m_currentSessionId <= 0) {
+			m_sessionStartMonotonic = std::chrono::microseconds{};
+			if (qMainApp) {
+				qMainApp->logger->log(
+					QStringLiteral("Failed to create new session — watch history will not be linked to a session"),
+					"VideoWatcherQt");
+				QMessageBox* mb = new QMessageBox(QMessageBox::Warning,
+					QStringLiteral("Session Error"),
+					QStringLiteral("Failed to create a new watch session.\n\n"
+						"Watch history will not be tracked until the application is restarted.\n"
+						"Check that the database is not full or locked."),
+					QMessageBox::Ok, this->App->mainWindow);
+				mb->setAttribute(Qt::WA_DeleteOnClose);
+				mb->show();
+			}
+		}
+	}
+
 	QSharedPointer<BasePlayer> newVideo = QSharedPointer<MpcPlayer>::create(path, video_id,&this->CLASS_COUNT,this->App,this->App);
-    this->Players.append(newVideo);
-    this->CLASS_COUNT++;
-    newVideo->category = this->App->currentDB;
-    newVideo->video_type = this->db->getVideoType(video_id);
-    newVideo->startProgress = this->db->getVideoProgress(video_id, "0").toDouble();
-    newVideo->trackedVideoPath = path;
-    newVideo->start();
+	this->Players.append(newVideo);
+	this->CLASS_COUNT++;
+	newVideo->category = this->App->currentDB;
+	newVideo->video_type = this->db->getVideoType(video_id);
+	newVideo->startProgress = this->db->getVideoProgress(video_id, "0").toDouble();
+	newVideo->trackedVideoPath = path;
+	newVideo->start();
 	return newVideo;
 }
 
 void VideoWatcherQt::clearData(bool include_mainplayer) {
-    QList<QSharedPointer<BasePlayer>>::iterator it = this->Players.begin();
-    while (it != this->Players.end()) {
-        if (!include_mainplayer && (*it) != nullptr && (*it) == this->mainPlayer) {
-            ++it;
-            continue;
-        }
-        if (*it) {
-            if ((*it)->position != -1) {
-                this->db->updateVideoProgress((*it)->video_id, (*it)->position);
-            }
-            double watchedTime = (*it)->videoWatchedTime();
-            double sessionTime = (*it)->videoSessionTime();
-            if ((watchedTime > 0 || sessionTime > 0) && ((*it)->video_id >= 0 || (*it)->trackExternalVideo)) {
-                QDateTime now = QDateTime::currentDateTime();
-                double endPos = (*it)->position;
-                if (endPos < 0) endPos = ((*it)->duration > 0) ? (*it)->duration : (*it)->startProgress;
-                this->db->upsertWatchHistory((*it)->activeWatchHistoryRowId,
-                    (*it)->video_id, (*it)->category, (*it)->video_path,
-                    (*it)->startProgress, endPos, watchedTime,
-                    now.addSecs(-static_cast<qint64>(sessionTime)).toString("yyyy-MM-dd HH:mm:ss"),
-                    now.toString("yyyy-MM-dd HH:mm:ss"), sessionTime,
-                    false);
-            }
-            if (this->App->config->get_bool("counter_use_actual_watch_time") && shouldCountWatchTime(*it)) {
-                double delta = watchedTime - (*it)->lastCheckpointWatchedTime;
-                if (delta > 0.0) {
-                    (*it)->lastCheckpointWatchedTime = watchedTime;
-                    emit timeWatchedIncrementSignal(delta);
-                }
-            }
-        }
-        (*it)->drop();
-        (*it).reset();
-        it = this->Players.erase(it);
-    }
-    if(include_mainplayer)
-        this->clearAfterMainVideoEnd();
+	QList<QSharedPointer<BasePlayer>>::iterator it = this->Players.begin();
+	while (it != this->Players.end()) {
+		if (!include_mainplayer && (*it) != nullptr && (*it) == this->mainPlayer) {
+			++it;
+			continue;
+		}
+		if (*it) {
+			if ((*it)->position != -1) {
+				this->db->updateVideoProgress((*it)->video_id, (*it)->position);
+			}
+			double watchedTime = (*it)->videoWatchedTime();
+			if ((watchedTime > 0 || (*it)->activeWatchHistoryRowId > 0) && ((*it)->video_id >= 0 || (*it)->trackExternalVideo)) {
+				double endPos = (*it)->position;
+				if (endPos < 0) endPos = ((*it)->duration > 0) ? (*it)->duration : (*it)->startProgress;
+				this->db->upsertWatchHistory((*it)->activeWatchHistoryRowId,
+					(*it)->video_id, (*it)->category, (*it)->video_path,
+					(*it)->startProgress, endPos, watchedTime,
+					m_currentSessionId, false);
+			}
+			if (this->App->config->get_bool("counter_use_actual_watch_time") && shouldCountWatchTime(*it)) {
+				double delta = watchedTime - (*it)->lastCheckpointWatchedTime;
+				if (delta > 0.0) {
+					(*it)->lastCheckpointWatchedTime = watchedTime;
+					emit timeWatchedIncrementSignal(delta);
+				}
+			}
+		}
+		(*it)->drop();
+		(*it).reset();
+		it = this->Players.erase(it);
+	}
+
+	// End session if all players are gone
+	if (m_currentSessionId > 0 && this->Players.isEmpty()) {
+		endCurrentSession();
+	}
+
+	if(include_mainplayer)
+		this->clearAfterMainVideoEnd();
 }
 
 void VideoWatcherQt::setMainPlayer(QSharedPointer<BasePlayer> player) {
@@ -139,242 +167,266 @@ void VideoWatcherQt::toggle_window()
 
 void VideoWatcherQt::checkpointPlayer(QSharedPointer<BasePlayer> player, int intervalSeconds)
 {
-    QDateTime now = QDateTime::currentDateTime();
-    if (!player->shouldCheckpoint(now, intervalSeconds))
-        return;
-    if (player->video_path.isEmpty())
-        return;
-    if (!player->trackExternalVideo && player->video_id < 0)
-        return;
-    double watched = player->videoWatchedTime();
-    double session = player->videoSessionTime();
-    double pos = player->position;
-    if (pos < 0) pos = player->startProgress;
-    this->db->upsertWatchHistory(player->activeWatchHistoryRowId,
-        player->video_id, player->category, player->video_path,
-        player->startProgress, pos, watched,
-        now.addSecs(-static_cast<qint64>(session)).toString("yyyy-MM-dd HH:mm:ss"),
-        now.toString("yyyy-MM-dd HH:mm:ss"), session,
-        false);
-    player->lastCheckpointTime = now;
-    player->trackCurrentWatchHistoryRow();
-    if (pos >= 0 && player->video_id >= 0) {
-        this->db->updateVideoProgress(player->video_id, pos);
-    }
-    if (this->App->config->get_bool("counter_use_actual_watch_time") && shouldCountWatchTime(player)) {
-        double delta = player->videoWatchedTime() - player->lastCheckpointWatchedTime;
-        if (delta > 0.0) {
-            player->lastCheckpointWatchedTime = player->videoWatchedTime();
-            emit timeWatchedIncrementSignal(delta);
-        }
-    }
+	QDateTime now = QDateTime::currentDateTime();
+	if (!player->shouldCheckpoint(now, intervalSeconds))
+		return;
+	if (player->video_path.isEmpty())
+		return;
+	if (!player->trackExternalVideo && player->video_id < 0)
+		return;
+	double watched = player->videoWatchedTime();
+	double pos = player->position;
+	if (pos < 0) pos = player->startProgress;
+	// Bump session_time first so that if we crash after upsertWatchHistory
+	// the session duration on recovery is at worst slightly longer than the
+	// last persisted row, not shorter (closeOrphanedSessions derives
+	// session_end from session_time).
+	if (m_currentSessionId > 0) {
+		this->db->bumpSessionTime(m_currentSessionId, currentSessionTime());
+	}
+	this->db->upsertWatchHistory(player->activeWatchHistoryRowId,
+		player->video_id, player->category, player->video_path,
+		player->startProgress, pos, watched,
+		m_currentSessionId, false);
+	player->lastCheckpointTime = now;
+	if (pos >= 0 && player->video_id >= 0) {
+		this->db->updateVideoProgress(player->video_id, pos);
+	}
+	if (this->App->config->get_bool("counter_use_actual_watch_time") && shouldCountWatchTime(player)) {
+		double delta = player->videoWatchedTime() - player->lastCheckpointWatchedTime;
+		if (delta > 0.0) {
+			player->lastCheckpointWatchedTime = player->videoWatchedTime();
+			emit timeWatchedIncrementSignal(delta);
+		}
+	}
 }
 
 void VideoWatcherQt::handleExternalVideoChange(QSharedPointer<BasePlayer> player)
 {
-    // If MPC reports a path that matches what we told it to open (target_video_path),
-    // this is a programmatic change, not an external one. Syncing trackedVideoPath is
-    // all that's needed — changePlayerVideo / newPlayer already set video_id,
-    // startProgress, activeWatchHistoryRowId, and saved the previous video's watch
-    // history. The old code used to run the full external-change path here, which
-    // corrupted video_id (set to -1) and created watch-history rows with mismatched
-    // video_id/path combos (row 255 in the DB proved the race was real).
-    //
-    // The primary fix lives in MpcPlayer::run() — when CMD_NOWPLAYING confirms the
-    // file we asked for, it syncs trackedVideoPath there, so the watcher's run() loop
-    // never sees video_path != trackedVideoPath for programmatic changes. This guard
-    // is defense-in-depth: if handleExternalVideoChange is ever called from a code
-    // path that lacks the trackedVideoPath sync, the guard prevents state corruption.
-    if (player->video_path == player->target_video_path) {
-        player->trackedVideoPath = player->video_path;
-        return;
-    }
+	// If MPC reports a path that matches what we told it to open (target_video_path),
+	// this is a programmatic change, not an external one. Syncing trackedVideoPath is
+	// all that's needed — changePlayerVideo / newPlayer already set video_id,
+	// startProgress, activeWatchHistoryRowId, and saved the previous video's watch
+	// history. The old code used to run the full external-change path here, which
+	// corrupted video_id (set to -1) and created watch-history rows with mismatched
+	// video_id/path combos (row 255 in the DB proved the race was real).
+	//
+	// The primary fix lives in MpcPlayer::run() — when CMD_NOWPLAYING confirms the
+	// file we asked for, it syncs trackedVideoPath there, so the watcher's run() loop
+	// never sees video_path != trackedVideoPath for programmatic changes. This guard
+	// is defense-in-depth: if handleExternalVideoChange is ever called from a code
+	// path that lacks the trackedVideoPath sync, the guard prevents state corruption.
+	if (player->video_path == player->target_video_path) {
+		player->trackedVideoPath = player->video_path;
+		return;
+	}
 
-    double watchedTime = player->videoWatchedTime();
-    double sessionTime = player->videoSessionTime();
-    if ((watchedTime > 0 || sessionTime > 0) && player->video_id >= 0) {
-        QDateTime now = QDateTime::currentDateTime();
-        double endPos = player->position;
-        if (endPos < 0) endPos = (player->duration > 0) ? player->duration : player->startProgress;
-        this->db->upsertWatchHistory(player->activeWatchHistoryRowId,
-            player->video_id, player->category, player->video_path,
-            player->startProgress, endPos, watchedTime,
-            now.addSecs(-static_cast<qint64>(sessionTime)).toString("yyyy-MM-dd HH:mm:ss"),
-            now.toString("yyyy-MM-dd HH:mm:ss"), sessionTime,
-            false);
-        player->trackCurrentWatchHistoryRow();
-    }
-    if (!player->trackExternalVideo) {
-        player->video_id = -1;
-        player->video_type = QString();
-        player->trackedVideoPath = player->video_path;
-        player->activeWatchHistoryRowId = -1;
-        player->startProgress = 0;
-        return;
-    }
-    int newVideoId = -1;
-    QSqlQuery query(this->db->db);
-    query.prepare("SELECT id FROM videodetails WHERE path = ? AND category = ?");
-    query.addBindValue(player->video_path);
-    query.addBindValue(player->category);
-    if (query.exec() && query.next()) {
-        newVideoId = query.value(0).toInt();
-    }
-    player->video_id = newVideoId;
-    player->video_type = newVideoId >= 0 ? this->db->getVideoType(newVideoId) : QString();
-    player->trackedVideoPath = player->video_path;
-    player->activeWatchHistoryRowId = -1;
-    player->startProgress = 0;
-    player->resetVideoTiming();
-    QDateTime now = QDateTime::currentDateTime();
-    player->activeWatchHistoryRowId = this->db->upsertWatchHistory(
-        player->activeWatchHistoryRowId,
-        newVideoId, player->category, player->video_path,
-        0, 0, 0,
-        now.toString("yyyy-MM-dd HH:mm:ss"),
-        now.toString("yyyy-MM-dd HH:mm:ss"),
-        0, false);
-    player->trackCurrentWatchHistoryRow();
+	double watchedTime = player->videoWatchedTime();
+	if ((watchedTime > 0 || player->activeWatchHistoryRowId > 0) && player->video_id >= 0) {
+		double endPos = player->position;
+		if (endPos < 0) endPos = (player->duration > 0) ? player->duration : player->startProgress;
+		this->db->upsertWatchHistory(player->activeWatchHistoryRowId,
+			player->video_id, player->category, player->video_path,
+			player->startProgress, endPos, watchedTime,
+			m_currentSessionId, false);
+	}
+	if (!player->trackExternalVideo) {
+		player->video_id = -1;
+		player->video_type = QString();
+		player->trackedVideoPath = player->video_path;
+		player->activeWatchHistoryRowId = -1;
+		player->startProgress = 0;
+		return;
+	}
+	int newVideoId = -1;
+	QSqlQuery query(this->db->db);
+	query.prepare("SELECT id FROM videodetails WHERE path = ? AND category = ?");
+	query.addBindValue(player->video_path);
+	query.addBindValue(player->category);
+	if (query.exec() && query.next()) {
+		newVideoId = query.value(0).toInt();
+	}
+	player->video_id = newVideoId;
+	player->video_type = newVideoId >= 0 ? this->db->getVideoType(newVideoId) : QString();
+	player->trackedVideoPath = player->video_path;
+	player->activeWatchHistoryRowId = -1;
+	player->startProgress = 0;
+	player->resetVideoTiming();
+	player->activeWatchHistoryRowId = this->db->upsertWatchHistory(
+		player->activeWatchHistoryRowId,
+		newVideoId, player->category, player->video_path,
+		0, 0, 0,
+		m_currentSessionId, false);
 }
 
 bool VideoWatcherQt::shouldCountWatchTime(QSharedPointer<BasePlayer> player)
 {
-    if (player->trackExternalVideo)
-        return true;
-    if (this->App->currentDB != "MINUS")
-        return true;
-    const bool isMinusPlus = this->App->config->get("sv_mode").compare("PLUS", Qt::CaseInsensitive) == 0;
-    return isMinusPlus && svTypes.contains(player->video_type, Qt::CaseInsensitive);
+	if (player->trackExternalVideo)
+		return true;
+	if (this->App->currentDB != "MINUS")
+		return true;
+	const bool isMinusPlus = this->App->config->get("sv_mode").compare("PLUS", Qt::CaseInsensitive) == 0;
+	return isMinusPlus && svTypes.contains(player->video_type, Qt::CaseInsensitive);
+}
+
+double VideoWatcherQt::currentSessionTime() const
+{
+	if (m_currentSessionId < 0) return 0.0;
+	return std::chrono::duration_cast<std::chrono::duration<double>>(
+		utils::QueryUnbiasedInterruptTimeChrono() - m_sessionStartMonotonic).count();
+}
+
+void VideoWatcherQt::resetSession()
+{
+	m_currentSessionId = -1;
+}
+
+double VideoWatcherQt::endCurrentSession()
+{
+	if (m_currentSessionId <= 0) return -1.0;
+
+	QDateTime now = QDateTime::currentDateTime();
+	double sessionTime = currentSessionTime();
+
+	this->db->updateSessionEnd(m_currentSessionId,
+		now.toString("yyyy-MM-dd HH:mm:ss"), sessionTime);
+
+	m_currentSessionId = -1;
+	return sessionTime;
 }
 
 void VideoWatcherQt::run()
 {
-    while (this->running) {
-        int saveInterval = this->App->config->get("session_save_interval_seconds").toInt();
-        for (QSharedPointer<BasePlayer> player : this->Players) {
-            if (!player->video_path.isEmpty() && player->video_path != player->trackedVideoPath && !player->change_in_progress) {
-                this->handleExternalVideoChange(player);
-            }
-            this->checkpointPlayer(player, saveInterval);
-            if (player->video_path == this->App->mainWindow->ui.currentVideo->path) {
-                emit updateProgressBarSignal(player->position,player->duration, player, true);
-            }
-            player->updateWatchedTiming();
-            if (!player->isProcessAlive()) {
-                if (player->position != -1) {
-                    this->db->updateVideoProgress(player->video_id, player->position);
-                }
-                double watchedTime = player->videoWatchedTime();
-                double sessionTime = player->videoSessionTime();
-                if ((watchedTime > 0 || sessionTime > 0) && (player->video_id >= 0 || player->trackExternalVideo)) {
-                    QDateTime now = QDateTime::currentDateTime();
-                    QString sessionEnd = now.toString("yyyy-MM-dd HH:mm:ss");
-                    qint64 sessionSecs = static_cast<qint64>(sessionTime);
-                    QString sessionStart = now.addSecs(-sessionSecs).toString("yyyy-MM-dd HH:mm:ss");
-                    double watched_end = player->position;
-                    if (watched_end < 0)
-                        watched_end = (player->duration > 0) ? player->duration : player->startProgress;
-                    this->db->upsertWatchHistory(player->activeWatchHistoryRowId,
-                        player->video_id, player->category, player->video_path,
-                        player->startProgress, watched_end, watchedTime,
-                        sessionStart, sessionEnd, sessionTime,
-                        false);
-                }
-                player->trackCurrentWatchHistoryRow();
-                if (this->App->config->get_bool("counter_use_actual_watch_time") && shouldCountWatchTime(player)) {
-                    double delta = watchedTime - player->lastCheckpointWatchedTime;
-                    if (delta > 0.0) {
-                        player->lastCheckpointWatchedTime = watchedTime;
-                        emit timeWatchedIncrementSignal(delta);
-                    }
-                }
-                // Session summary notification
-                double playerSessionTime = player->getSessionTime();
-                int minSessionSec = this->App->config->get("notification_session_summary_min_session_seconds").toInt();
-                if (playerSessionTime >= static_cast<double>(minSessionSec)) {
-                    auto [videosWatched, videosCompleted, totalWatch, totalSession] =
-                        this->db->getSessionSummaryStats(player->m_sessionRowIds);
-                    if (videosWatched > 0) {
-                        emit sessionEndedSignal(player->category, videosWatched, videosCompleted, totalWatch, playerSessionTime);
-                    }
-                }
-                if (player == this->mainPlayer) {
-                    this->clearAfterMainVideoEnd();
-                }
-                player->drop();
-                this->Players.removeOne(player);
-                player.reset();
-            }
-        }
-        if (!this->Players.isEmpty()) {
-            this->watching = true;
-            if (this->App->musicPlayer && this->App->musicPlayer->player->playbackState() == QMediaPlayer::PlayingState)
-                emit updateMusicPlayerSignal(false);
-        }
-        else {
-            this->watching = false;
-            if (this->App->musicPlayer && (this->App->musicPlayer->player->playbackState() == QMediaPlayer::StoppedState || this->App->musicPlayer->player->playbackState() == QMediaPlayer::PausedState))
-                emit updateMusicPlayerSignal(true);
-        }
-        if(this->watching){
-            if (this->App->debug_mode == false && this->App->mainWindow->iconWatchingState == false) {
-                emit this->updateTaskbarIconSignal(true);
-            }
-            if (this->App->taskbar)
-                this->App->taskbar->setPause(this->App->taskbar->hwnd,false);
-        }
-        else if(!this->watching) {
-            if (this->App->debug_mode == false && this->App->mainWindow->iconWatchingState == true) {
-                emit this->updateTaskbarIconSignal(false);
-            }
-            if(this->App->taskbar)
-                this->App->taskbar->setPause(this->App->taskbar->hwnd, true);
-        }
-        this->msleep(100);
-    }
-    for (QSharedPointer<BasePlayer> player : this->Players) {
-        if (player->position != -1) {
-            this->db->updateVideoProgress(player->video_id, player->position);
-        }
-        double watchedTime = player->videoWatchedTime();
-        double sessionTime = player->videoSessionTime();
-        if ((watchedTime > 0 || sessionTime > 0) && (player->video_id >= 0 || player->trackExternalVideo)) {
-            QDateTime now = QDateTime::currentDateTime();
-            double endPos = player->position;
-            if (endPos < 0) endPos = (player->duration > 0) ? player->duration : player->startProgress;
-            this->db->upsertWatchHistory(player->activeWatchHistoryRowId,
-                player->video_id, player->category, player->video_path,
-                player->startProgress, endPos, watchedTime,
-                now.addSecs(-static_cast<qint64>(sessionTime)).toString("yyyy-MM-dd HH:mm:ss"),
-                now.toString("yyyy-MM-dd HH:mm:ss"), sessionTime,
-                false);
-        }
-        player->process->terminate();
-    }
-    this->clearAfterMainVideoEnd();
+	while (this->running) {
+		int saveInterval = this->App->config->get("session_save_interval_seconds").toInt();
+		for (QSharedPointer<BasePlayer> player : this->Players) {
+			if (!player->video_path.isEmpty() && player->video_path != player->trackedVideoPath && !player->change_in_progress) {
+				this->handleExternalVideoChange(player);
+			}
+			this->checkpointPlayer(player, saveInterval);
+			if (player->video_path == this->App->mainWindow->ui.currentVideo->path) {
+				emit updateProgressBarSignal(player->position,player->duration, player, true);
+			}
+			player->updateWatchedTiming();
+			if (!player->isProcessAlive()) {
+				if (player->position != -1) {
+					this->db->updateVideoProgress(player->video_id, player->position);
+				}
+				double watchedTime = player->videoWatchedTime();
+				if ((watchedTime > 0 || player->activeWatchHistoryRowId > 0) && (player->video_id >= 0 || player->trackExternalVideo)) {
+					double watched_end = player->position;
+					if (watched_end < 0)
+						watched_end = (player->duration > 0) ? player->duration : player->startProgress;
+					this->db->upsertWatchHistory(player->activeWatchHistoryRowId,
+						player->video_id, player->category, player->video_path,
+						player->startProgress, watched_end, watchedTime,
+						m_currentSessionId, false);
+				}
+				if (this->App->config->get_bool("counter_use_actual_watch_time") && shouldCountWatchTime(player)) {
+					double delta = watchedTime - player->lastCheckpointWatchedTime;
+					if (delta > 0.0) {
+						player->lastCheckpointWatchedTime = watchedTime;
+						emit timeWatchedIncrementSignal(delta);
+					}
+				}
+				if (player == this->mainPlayer) {
+					this->clearAfterMainVideoEnd();
+				}
+				player->drop();
+				this->Players.removeOne(player);
+				player.reset();
+			}
+		}
+		if (!this->Players.isEmpty()) {
+			this->watching = true;
+			if (this->App->musicPlayer && this->App->musicPlayer->player->playbackState() == QMediaPlayer::PlayingState)
+				emit updateMusicPlayerSignal(false);
+		}
+		else {
+			// Session ended — all players gone
+			if (m_currentSessionId > 0) {
+				int closingSessionId = m_currentSessionId;
+				double sessionTime = endCurrentSession();
+
+				// Emit session summary notification
+				int minSessionSec = this->App->config->get("notification_session_summary_min_session_seconds").toInt();
+				if (sessionTime >= static_cast<double>(minSessionSec)) {
+					auto [videosWatched, videosCompleted, totalWatch, _] =
+						this->db->getSessionSummaryStats(closingSessionId);
+					if (videosWatched > 0) {
+						QStringList cats = this->db->getSessionCategories(closingSessionId);
+						QString category = cats.isEmpty() ? this->App->currentDB : cats.join(", ");
+						emit sessionEndedSignal(category, videosWatched, videosCompleted, totalWatch, sessionTime);
+					}
+				}
+			}
+			this->watching = false;
+			if (this->App->musicPlayer && (this->App->musicPlayer->player->playbackState() == QMediaPlayer::StoppedState || this->App->musicPlayer->player->playbackState() == QMediaPlayer::PausedState))
+				emit updateMusicPlayerSignal(true);
+		}
+		if(this->watching){
+			if (this->App->debug_mode == false && this->App->mainWindow->iconWatchingState == false) {
+				emit this->updateTaskbarIconSignal(true);
+			}
+			if (this->App->taskbar)
+				this->App->taskbar->setPause(this->App->taskbar->hwnd,false);
+		}
+		else if(!this->watching) {
+			if (this->App->debug_mode == false && this->App->mainWindow->iconWatchingState == true) {
+				emit this->updateTaskbarIconSignal(false);
+			}
+			if(this->App->taskbar)
+				this->App->taskbar->setPause(this->App->taskbar->hwnd, true);
+		}
+		this->msleep(100);
+	}
+	for (QSharedPointer<BasePlayer> player : this->Players) {
+		if (player->position != -1) {
+			this->db->updateVideoProgress(player->video_id, player->position);
+		}
+		double watchedTime = player->videoWatchedTime();
+		if ((watchedTime > 0 || player->activeWatchHistoryRowId > 0) && (player->video_id >= 0 || player->trackExternalVideo)) {
+			double endPos = player->position;
+			if (endPos < 0) endPos = (player->duration > 0) ? player->duration : player->startProgress;
+			this->db->upsertWatchHistory(player->activeWatchHistoryRowId,
+				player->video_id, player->category, player->video_path,
+				player->startProgress, endPos, watchedTime,
+				m_currentSessionId, false);
+		}
+		player->process->terminate();
+	}
+
+	// End session on shutdown
+	if (m_currentSessionId > 0) {
+		endCurrentSession();
+	}
+
+	this->clearAfterMainVideoEnd();
 }
 
 VideoWatcherQt::~VideoWatcherQt()
 {
-    QDateTime now = QDateTime::currentDateTime();
-    for (QSharedPointer<BasePlayer> item : this->Players) {
-        if (item->position != -1 && item->video_id >= 0) {
-            this->db->updateVideoProgress(item->video_id, item->position);
-        }
-        double w = item->videoWatchedTime();
-        double s = item->videoSessionTime();
-        if ((w > 0 || s > 0) && (item->video_id >= 0 || item->trackExternalVideo)) {
-            double endPos = item->position;
-            if (endPos < 0) endPos = (item->duration > 0) ? item->duration : item->startProgress;
-            this->db->upsertWatchHistory(item->activeWatchHistoryRowId,
-                item->video_id, item->category, item->video_path,
-                item->startProgress, endPos, w,
-                now.addSecs(-static_cast<qint64>(s)).toString("yyyy-MM-dd HH:mm:ss"),
-                now.toString("yyyy-MM-dd HH:mm:ss"), s,
-                false);
-        }
-        item->process->terminate();
-        item.reset();
-    }
-    delete this->db;
+	for (QSharedPointer<BasePlayer> item : this->Players) {
+		if (item->position != -1 && item->video_id >= 0) {
+			this->db->updateVideoProgress(item->video_id, item->position);
+		}
+		double w = item->videoWatchedTime();
+		if ((w > 0 || item->activeWatchHistoryRowId > 0) && (item->video_id >= 0 || item->trackExternalVideo)) {
+			double endPos = item->position;
+			if (endPos < 0) endPos = (item->duration > 0) ? item->duration : item->startProgress;
+			this->db->upsertWatchHistory(item->activeWatchHistoryRowId,
+				item->video_id, item->category, item->video_path,
+				item->startProgress, endPos, w,
+				m_currentSessionId, false);
+		}
+		item->process->terminate();
+		item.reset();
+	}
+
+	// End session on destruction
+	if (m_currentSessionId > 0) {
+		endCurrentSession();
+	}
+
+	delete this->db;
 }

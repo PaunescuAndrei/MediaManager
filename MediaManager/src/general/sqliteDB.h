@@ -63,12 +63,10 @@ public:
     int getUniqueVideosWatched(QString category);
     int insertWatchHistory(int video_id, const QString& category, const QString& video_path,
         double watched_start, double watched_end, double watched_time,
-        const QString& session_start, const QString& session_end, double session_time,
-        bool completed = false);
+        int session_id, bool completed = false);
     int upsertWatchHistory(int& ioRowId, int video_id, const QString& category, const QString& video_path,
         double watched_start, double watched_end, double watched_time,
-        const QString& session_start, const QString& session_end, double session_time,
-        bool completed = false);
+        int session_id, bool completed = false);
     double getTotalWatchedTime();
     double getTotalWatchedTimeToday();
     double getTotalSessionTime();
@@ -114,6 +112,12 @@ public:
     QVector<QPair<QString, double>> getAverageRatingByTag(int limit, const QString& category);
     QStringList getUntappedTags(const QString& category);
 
+    // Session management
+    int insertSession(const QString& sessionStart);
+    bool updateSessionEnd(int sessionId, const QString& sessionEnd, double sessionTime);
+    void bumpSessionTime(int sessionId, double sessionTime);  // update session_time mid-session (checkpoint)
+    void closeOrphanedSessions();  // close sessions left open by ungraceful exit
+
     // Session History
     QVector<SessionEntry> getRecentSessions(int limit = 50);
     double getAverageSessionTime();
@@ -122,7 +126,8 @@ public:
     double getAverageWatchTimePerDay();
     double getAverageSessionTimePerDay();
     double getAverageCompletedPerDay();
-    std::tuple<int, int, double, double> getSessionSummaryStats(const QVector<int>& rowIds);
+    std::tuple<int, int, double, double> getSessionSummaryStats(int sessionId);
+    QStringList getSessionCategories(int sessionId);  // distinct categories watched in this session
 
     int getTotalWatchDays();
     QDateTime getFirstWatchDate();

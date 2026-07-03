@@ -66,7 +66,7 @@ struct DayTimeRecord {
 struct SessionRecord {
     double sessionTime = 0.0;
     QString date;
-    QString videoName;
+    int videoCount = 0;
 };
 struct VideoRecord {
     QString name;

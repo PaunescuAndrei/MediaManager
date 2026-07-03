@@ -2,6 +2,7 @@
 #include <QThread>
 #include <QMutex>
 #include <QDate>
+#include <chrono>
 #include "sqliteDB.h"
 #include "BasePlayer.h"
 #include "MpcPlayer.h"
@@ -23,6 +24,15 @@ public:
     HWND old_foreground_window = nullptr;
     QSharedPointer<BasePlayer> mainPlayer = nullptr;
     QList<QSharedPointer<BasePlayer>> Players = QList<QSharedPointer<BasePlayer>>();
+
+    // Session tracking (one session from first player start to last player stop)
+    int m_currentSessionId = -1;
+    QDateTime m_sessionStartTime;                          // wall clock for DB string
+    std::chrono::microseconds m_sessionStartMonotonic{};   // monotonic for duration
+    int currentSessionId() const { return m_currentSessionId; }
+    double currentSessionTime() const;
+    void resetSession();  // invalidate the current session ID (e.g. after a DB restore)
+
     VideoWatcherQt(MainApp* App, QObject* parent = nullptr);
     QSharedPointer<BasePlayer> newPlayer(QString path, int video_id);
     void clearData(bool include_mainplayer);
@@ -35,6 +45,11 @@ public:
     bool shouldCountWatchTime(QSharedPointer<BasePlayer> player);
     void run() override;
     ~VideoWatcherQt();
+
+private:
+    // Close the current session (update session_history), return session duration in seconds.
+    // Returns -1 if no session was active. Resets m_currentSessionId to -1.
+    double endCurrentSession();
 signals:
     void updateProgressBarSignal(double position,double duration, QSharedPointer<BasePlayer> player, bool running);
     void updateTaskbarIconSignal(bool watching);

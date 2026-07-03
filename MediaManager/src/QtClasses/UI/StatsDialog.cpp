@@ -1286,12 +1286,12 @@ void StatsDialog::setupRecordsTab(MainApp* app)
     // Longest session
     {
         QGridLayout* grid = ui.longestSessionGridLayout;
-        int row = addSection(grid, "Longest Single Session");
+        int row = addSection(grid, "Longest Session");
         auto rec = app->db->getLongestSession();
         if (rec.sessionTime > 0) {
             addStatToGrid(grid, row++, "Duration:", QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(rec.sessionTime))));
             addStatToGrid(grid, row++, "Date:", rec.date);
-            addStatToGrid(grid, row++, "Video:", rec.videoName);
+            addStatToGrid(grid, row++, "Videos watched:", QString::number(rec.videoCount));
         } else {
             addStatToGrid(grid, row++, "Status:", "N/A");
         }

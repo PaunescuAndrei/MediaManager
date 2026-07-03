@@ -27,22 +27,8 @@ bool BasePlayer::isProcessAlive()
 }
 
 void BasePlayer::start() {
-    this->startSessionTiming();
     this->resetVideoTiming();
     QThread::start();
-}
-
-void BasePlayer::startSessionTiming() {
-    if (this->sessionTimeStart != nullptr) {
-        this->sessionTimeStart.reset();
-    }
-    this->sessionTimeStart = std::make_shared<std::chrono::microseconds>(utils::QueryUnbiasedInterruptTimeChrono());
-}
-
-void BasePlayer::stopSessionTiming() {
-    if (this->sessionTimeStart != nullptr) {
-        this->sessionTimeStart.reset();
-    }
 }
 
 void BasePlayer::startWatchedTiming() {
@@ -58,13 +44,6 @@ void BasePlayer::stopWatchedTiming() {
         this->totalWatchedTimeSeconds += elapsed;
         this->watchedTimeStart.reset();
     }
-}
-
-double BasePlayer::getSessionTime() {
-    if (this->sessionTimeStart != nullptr) {
-        return std::chrono::duration_cast<std::chrono::duration<double>>(utils::QueryUnbiasedInterruptTimeChrono() - *this->sessionTimeStart).count();
-    }
-    return 0.0;
 }
 
 double BasePlayer::getTotalWatchedTime() {
@@ -100,7 +79,6 @@ void BasePlayer::onPausedChanged(bool paused) {
 void BasePlayer::resetVideoTiming()
 {
     m_videoWatchedBaseline = getTotalWatchedTime();
-    m_videoSessionBaseline = getSessionTime();
     lastCheckpointWatchedTime = 0.0;
     recordVideoStart();
 }
@@ -110,22 +88,9 @@ double BasePlayer::videoWatchedTime()
     return getTotalWatchedTime() - m_videoWatchedBaseline;
 }
 
-double BasePlayer::videoSessionTime()
-{
-    return getSessionTime() - m_videoSessionBaseline;
-}
-
 void BasePlayer::recordVideoStart() {
     videoStartWallClock = QDateTime::currentDateTime();
     lastCheckpointTime = videoStartWallClock;
-}
-
-void BasePlayer::trackCurrentWatchHistoryRow(int rowId)
-{
-    int id = (rowId > 0) ? rowId : activeWatchHistoryRowId;
-    if (id > 0 && !m_sessionRowIds.contains(id)) {
-        m_sessionRowIds.append(id);
-    }
 }
 
 bool BasePlayer::shouldCheckpoint(const QDateTime& now, int intervalSeconds) {

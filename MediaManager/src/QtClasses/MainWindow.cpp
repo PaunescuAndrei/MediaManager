@@ -524,7 +524,7 @@ void MainWindow::UpdateWindowTitle() {
     QString bpm_work_count;
     QString main_title = QStringLiteral("Media Manager %1 %2").arg(this->getCategoryName()).arg(VERSION_TEXT);
     if (this->App->VW and this->App->VW->mainPlayer) {
-        int sessionSeconds = this->App->VW->mainPlayer->getSessionTime();
+        int sessionSeconds = static_cast<int>(this->App->VW->currentSessionTime());
         int watchedSeconds = this->App->VW->mainPlayer->getTotalWatchedTime();
         if (sessionSeconds > 0) {
             session_time = QStringLiteral(" [Session: %1]").arg(utils::formatSecondsCompactQt(sessionSeconds));
@@ -1007,17 +1007,13 @@ void MainWindow::DeleteDialogButton(const QList<int>& ids) {
         if (!ids.isEmpty()) {
             if (this->App->VW->mainPlayer && ids.contains(this->App->VW->mainPlayer->video_id)) {
                 double watched = this->App->VW->mainPlayer->videoWatchedTime();
-                double session = this->App->VW->mainPlayer->videoSessionTime();
-                if ((watched > 0 || session > 0) && this->App->VW->mainPlayer->video_id >= 0) {
-                    QDateTime now = QDateTime::currentDateTime();
+                if ((watched > 0 || this->App->VW->mainPlayer->activeWatchHistoryRowId > 0) && this->App->VW->mainPlayer->video_id >= 0) {
                     double endPos = this->App->VW->mainPlayer->position;
                     if (endPos < 0) endPos = this->App->VW->mainPlayer->startProgress;
                     this->App->db->upsertWatchHistory(this->App->VW->mainPlayer->activeWatchHistoryRowId,
                         this->App->VW->mainPlayer->video_id, this->App->VW->mainPlayer->category, this->App->VW->mainPlayer->video_path,
                         this->App->VW->mainPlayer->startProgress, endPos, watched,
-                        now.addSecs(-static_cast<qint64>(session)).toString("yyyy-MM-dd HH:mm:ss"),
-                        now.toString("yyyy-MM-dd HH:mm:ss"), session,
-                        false);
+                        this->App->VW->currentSessionId(), false);
                     this->App->VW->mainPlayer->activeWatchHistoryRowId = -1;
                 }
             }
@@ -1645,7 +1641,7 @@ bool MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool incre
     NextVideoModes::Mode mode = this->getNextVideoMode();
 
     int oldVideoId = -1;
-    double oldWatchedTime = 0.0, oldSessionTime = 0.0, oldPos = -1, oldStartProgress = 0;
+    double oldWatchedTime = 0.0, oldPos = -1, oldStartProgress = 0;
     QString oldCategory, oldVideoPath;
     if (increment && player) {
         oldVideoId = player->video_id;
@@ -1654,7 +1650,6 @@ bool MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool incre
         oldStartProgress = player->startProgress;
         oldPos = player->position;
         oldWatchedTime = player->videoWatchedTime();
-        oldSessionTime = player->videoSessionTime();
     } else if (increment) {
         oldVideoId = this->ui.currentVideo->id;
         oldCategory = this->App->currentDB;
@@ -1672,20 +1667,16 @@ bool MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool incre
     bool video_changed = this->NextVideo(mode, increment, update_watched_state, skipped, actualDelta);
 
     if (increment && video_changed && oldVideoId >= 0) {
-        QDateTime now = QDateTime::currentDateTime();
         double watched_end = oldPos;
         if (watched_end < 0)
             watched_end = (player && player->duration > 0) ? player->duration : oldStartProgress;
         this->App->db->upsertWatchHistory(oldWatchHistoryRowId, oldVideoId, oldCategory, oldVideoPath,
             oldStartProgress, watched_end,
             oldWatchedTime,
-            now.addSecs(-static_cast<qint64>(oldSessionTime)).toString("yyyy-MM-dd HH:mm:ss"),
-            now.toString("yyyy-MM-dd HH:mm:ss"),
-            oldSessionTime, true);
+            this->App->VW->currentSessionId(), true);
         // upsertWatchHistory may have INSERTed a new row (changing the local
         // oldWatchHistoryRowId). Pass it explicitly so we never need to
         // temporarily mutate activeWatchHistoryRowId.
-        if (player) player->trackCurrentWatchHistoryRow(oldWatchHistoryRowId);
         if (player) player->activeWatchHistoryRowId = -1;
         this->checkDailyProgress();
     }
@@ -2403,21 +2394,18 @@ bool MainWindow::loadDB(QString path, QWidget* parent) {
         if (file.exists() and file.isFile()) {
             if (this->App->VW->mainPlayer && this->App->VW->mainPlayer->video_id >= 0) {
                 double watched = this->App->VW->mainPlayer->videoWatchedTime();
-                double session = this->App->VW->mainPlayer->videoSessionTime();
-                if (watched > 0 || session > 0) {
-                    QDateTime now = QDateTime::currentDateTime();
+                if (watched > 0 || this->App->VW->mainPlayer->activeWatchHistoryRowId > 0) {
                     double endPos = this->App->VW->mainPlayer->position;
                     if (endPos < 0) endPos = this->App->VW->mainPlayer->startProgress;
                     this->App->db->upsertWatchHistory(this->App->VW->mainPlayer->activeWatchHistoryRowId,
                         this->App->VW->mainPlayer->video_id, this->App->VW->mainPlayer->category, this->App->VW->mainPlayer->video_path,
                         this->App->VW->mainPlayer->startProgress, endPos, watched,
-                        now.addSecs(-static_cast<qint64>(session)).toString("yyyy-MM-dd HH:mm:ss"),
-                        now.toString("yyyy-MM-dd HH:mm:ss"), session,
-                        false);
+                        this->App->VW->currentSessionId(), false);
                 }
                 this->App->VW->mainPlayer->activeWatchHistoryRowId = -1;
             }
             return_code = this->App->db->loadOrSaveDb(this->App->db->db, path.toStdString().c_str(), false);
+            this->App->VW->resetSession(); // restored DB has a different session_history — invalidate stale session ID
             this->loadDailyProgressState(); // restore tracking state from the loaded DB before initListDetails triggers progress checks
             this->initListDetails();
             this->refreshVideosWidget(false, true);
@@ -3468,19 +3456,14 @@ void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notifi
 
                     auto player = this->App->VW->mainPlayer;
                     double rwatched = player->videoWatchedTime();
-                    double rsession = player->videoSessionTime();
-                    if (rwatched > 0 || rsession > 0) {
-                        QDateTime now = QDateTime::currentDateTime();
+                    if (rwatched > 0 || player->activeWatchHistoryRowId > 0) {
                         double watched_end = player->position;
                         if (watched_end < 0)
                             watched_end = (player->duration > 0) ? player->duration : player->startProgress;
                         this->App->db->upsertWatchHistory(player->activeWatchHistoryRowId, player->video_id, player->category, player->video_path,
                             player->startProgress, watched_end,
                             rwatched,
-                            now.addSecs(-static_cast<qint64>(rsession)).toString("yyyy-MM-dd HH:mm:ss"),
-                            now.toString("yyyy-MM-dd HH:mm:ss"),
-                            rsession, true);
-                        player->trackCurrentWatchHistoryRow();
+                            this->App->VW->currentSessionId(), true);
                         player->activeWatchHistoryRowId = -1;
                     }
                     player->resetVideoTiming();
@@ -3520,18 +3503,13 @@ void MainWindow::SkipVideo() {
     if (this->App->VW->mainPlayer) {
         previousPlayerPosition = this->App->VW->mainPlayer->position;
         double watched = this->App->VW->mainPlayer->videoWatchedTime();
-        double session = this->App->VW->mainPlayer->videoSessionTime();
-        if ((watched > 0 || session > 0) && this->App->VW->mainPlayer->video_id >= 0) {
-            QDateTime now = QDateTime::currentDateTime();
+        if ((watched > 0 || this->App->VW->mainPlayer->activeWatchHistoryRowId > 0) && this->App->VW->mainPlayer->video_id >= 0) {
             double endPos = this->App->VW->mainPlayer->position;
             if (endPos < 0) endPos = this->App->VW->mainPlayer->startProgress;
             this->App->db->upsertWatchHistory(this->App->VW->mainPlayer->activeWatchHistoryRowId,
                 this->App->VW->mainPlayer->video_id, this->App->VW->mainPlayer->category, this->App->VW->mainPlayer->video_path,
                 this->App->VW->mainPlayer->startProgress, endPos, watched,
-                now.addSecs(-static_cast<qint64>(session)).toString("yyyy-MM-dd HH:mm:ss"),
-                now.toString("yyyy-MM-dd HH:mm:ss"), session,
-                true);
-            this->App->VW->mainPlayer->trackCurrentWatchHistoryRow();
+                this->App->VW->currentSessionId(), true);
             this->App->VW->mainPlayer->activeWatchHistoryRowId = -1;
         }
         this->App->VW->mainPlayer->change_in_progress = true;
@@ -3799,9 +3777,7 @@ void MainWindow::watchCurrent() {
             l->activeWatchHistoryRowId,
             l->video_id, l->category, l->video_path,
             seconds, seconds, 0.0,
-            l->videoStartWallClock.toString("yyyy-MM-dd HH:mm:ss"),
-            l->videoStartWallClock.toString("yyyy-MM-dd HH:mm:ss"),
-            0.0, false);
+            this->App->VW->currentSessionId(), false);
         connect(l.data(), &BasePlayer::endOfVideoSignal, this, [this]() {
             this->showEndOfVideoDialog();
         });
@@ -3827,9 +3803,7 @@ void MainWindow::watchSelected(int video_id, QString path) {
         l->activeWatchHistoryRowId,
         video_id, l->category, path,
         seconds, seconds, 0.0,
-        l->videoStartWallClock.toString("yyyy-MM-dd HH:mm:ss"),
-        l->videoStartWallClock.toString("yyyy-MM-dd HH:mm:ss"),
-        0.0, false);
+        this->App->VW->currentSessionId(), false);
     qMainApp->logger->log(QStringLiteral("Playing Video \"%1\" from %2").arg(path).arg(utils::formatSecondsCompactQt(seconds)), "Video", path);
 }
 
@@ -5110,19 +5084,14 @@ void MainWindow::updateTotalListLabel(bool force_update) {
 void MainWindow::changePlayerVideo(QSharedPointer<BasePlayer> player, QString path, int video_id, double position) {
     if (player && player->video_id >= 0 && player->video_path != path && player->activeWatchHistoryRowId > 0) {
         double watched = player->videoWatchedTime();
-        double session = player->videoSessionTime();
-        if (watched > 0 || session > 0) {
-            QDateTime now = QDateTime::currentDateTime();
+        if (watched > 0 || player->activeWatchHistoryRowId > 0) {
             double endPos = player->position;
             if (endPos < 0) endPos = (player->duration > 0) ? player->duration : player->startProgress;
             this->App->db->upsertWatchHistory(player->activeWatchHistoryRowId,
                 player->video_id, player->category, player->video_path,
                 player->startProgress, endPos, watched,
-                now.addSecs(-static_cast<qint64>(session)).toString("yyyy-MM-dd HH:mm:ss"),
-                now.toString("yyyy-MM-dd HH:mm:ss"), session,
-                false);
+                this->App->VW->currentSessionId(), false);
         }
-        player->trackCurrentWatchHistoryRow();
     }
     player->video_id = video_id;
     player->category = this->App->currentDB;

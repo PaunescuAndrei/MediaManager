@@ -100,6 +100,9 @@ private:
     // Configurable heatmap days
     int m_heatmapDays = 186;
 
+    // Sessions tab — reusable table widget
+    QTableWidget* m_sessionsListTable = nullptr;
+
     // Shared caches to avoid redundant DB queries between setup methods
     QVector<QPair<QDate, double>> m_heatmapCache;
     int m_cachedVideosToday = -1;

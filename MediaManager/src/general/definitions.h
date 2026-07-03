@@ -100,6 +100,15 @@ struct SessionEntry {
     bool completed = false;
 };
 
+// Session-level aggregate for two-level sessions table
+struct SessionSummary {
+    QDate date;
+    double sessionTime = 0.0;
+    int videoCount = 0;
+    int sessionId = 0;
+    QStringList categories;
+};
+
 // Heatmap configuration — single source of truth for month options
 constexpr int kHeatmapMonthOptions[] = {3, 6, 12, 18, 24};
 constexpr int kHeatmapMonthOptionCount = sizeof(kHeatmapMonthOptions) / sizeof(kHeatmapMonthOptions[0]);

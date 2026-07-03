@@ -1689,6 +1689,16 @@ void StatsDialog::refreshTags()
 
 void StatsDialog::setupSessionsTab(MainApp* app)
 {
+    // --- Clear summary grid (fixes widget accumulation on re-entry) ---
+    auto clearGrid = [](QGridLayout* grid) {
+        QLayoutItem* item;
+        while ((item = grid->takeAt(0)) != nullptr) {
+            if (item->widget()) delete item->widget();
+            delete item;
+        }
+    };
+    clearGrid(ui.sessionSummaryGridLayout);
+
     // --- Summary stats ---
     {
         QGridLayout* grid = ui.sessionSummaryGridLayout;
@@ -1727,45 +1737,100 @@ void StatsDialog::setupSessionsTab(MainApp* app)
         addStatToGrid(grid, row++, "Avg Completed Per Day:", QString::number(m_cachedAvgCompletedPerDay, 'f', 1));
     }
 
-    // --- Recent sessions table ---
-    QTableWidget* table = ui.sessionsTableWidget;
-    table->setItemDelegate(new AutoToolTipDelegate(table));
-    auto sessions = app->db->getRecentSessions(50);
-    table->setRowCount(sessions.size());
+    // --- Recent Sessions list (NEW top table — one row per session) ---
+    if (!m_sessionsListTable) {
+        m_sessionsListTable = new QTableWidget();
+        m_sessionsListTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        m_sessionsListTable->setAlternatingRowColors(true);
+        m_sessionsListTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+        m_sessionsListTable->setShowGrid(true);
+        m_sessionsListTable->setColumnCount(4);
+        m_sessionsListTable->setHorizontalHeaderLabels({"Date", "Duration", "Videos", "Categories"});
+        m_sessionsListTable->verticalHeader()->setVisible(false);
+        m_sessionsListTable->horizontalHeader()->setVisible(true);
+        m_sessionsListTable->setMaximumHeight(250);
+        m_sessionsListTable->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
+        // Insert before the existing detail table widget
+        int tableIdx = ui.sessionsMainLayout->indexOf(ui.sessionsTableWidget);
+        if (tableIdx >= 0)
+            ui.sessionsMainLayout->insertWidget(tableIdx, m_sessionsListTable);
+
+        // Click a session row → load its videos in the detail table below
+        connect(m_sessionsListTable, &QTableWidget::currentCellChanged, this,
+            [this, app](int row, int, int, int) {
+                if (row < 0 || !app || !app->db) return;
+                QTableWidgetItem* item = m_sessionsListTable->item(row, 0);
+                if (!item) return;
+                int sessionId = item->data(Qt::UserRole).toInt();
+                auto videos = app->db->getSessionVideos(sessionId);
+
+                QTableWidget* detail = ui.sessionsTableWidget;
+                detail->setRowCount(videos.size());
+                for (int i = 0; i < videos.size(); ++i) {
+                    const auto& s = videos[i];
+                    detail->setItem(i, 0, new QTableWidgetItem(s.videoName));
+                    detail->setItem(i, 1, new QTableWidgetItem(s.author));
+
+                    QTableWidgetItem* watchedItem = new QTableWidgetItem(
+                        QString::fromStdString(utils::convert_time_to_text(
+                            static_cast<unsigned long>(s.watchedTime))));
+                    watchedItem->setTextAlignment(Qt::AlignCenter);
+                    detail->setItem(i, 2, watchedItem);
+
+                    QTableWidgetItem* completedItem = new QTableWidgetItem(s.completed ? "Yes" : "No");
+                    completedItem->setTextAlignment(Qt::AlignCenter);
+                    detail->setItem(i, 3, completedItem);
+                }
+                detail->resizeColumnsToContents();
+                if (detail->columnWidth(0) < 150) detail->setColumnWidth(0, 150);
+                if (detail->columnWidth(1) < 100) detail->setColumnWidth(1, 100);
+            });
+    }
+
+    // Populate sessions list
+    auto sessions = app->db->getRecentSessions(50);
+    m_sessionsListTable->setRowCount(sessions.size());
     for (int i = 0; i < sessions.size(); ++i) {
         const auto& s = sessions[i];
 
         QTableWidgetItem* dateItem = new QTableWidgetItem(s.date.toString("yyyy-MM-dd"));
         dateItem->setTextAlignment(Qt::AlignCenter);
-        table->setItem(i, 0, dateItem);
+        dateItem->setData(Qt::UserRole, s.sessionId);  // store for click lookup
+        m_sessionsListTable->setItem(i, 0, dateItem);
 
-        table->setItem(i, 1, new QTableWidgetItem(s.videoName));
-        table->setItem(i, 2, new QTableWidgetItem(s.author));
-
-        QTableWidgetItem* watchedItem = new QTableWidgetItem(
-            QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(s.watchedTime))));
-        watchedItem->setTextAlignment(Qt::AlignCenter);
-        table->setItem(i, 3, watchedItem);
-
-        QTableWidgetItem* sessionItem = new QTableWidgetItem(
+        QTableWidgetItem* durItem = new QTableWidgetItem(
             QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(s.sessionTime))));
-        sessionItem->setTextAlignment(Qt::AlignCenter);
-        table->setItem(i, 4, sessionItem);
+        durItem->setTextAlignment(Qt::AlignCenter);
+        m_sessionsListTable->setItem(i, 1, durItem);
 
-        QTableWidgetItem* completedItem = new QTableWidgetItem(s.completed ? "Yes" : "No");
-        completedItem->setTextAlignment(Qt::AlignCenter);
-        table->setItem(i, 5, completedItem);
+        QTableWidgetItem* cntItem = new QTableWidgetItem(QString::number(s.videoCount));
+        cntItem->setTextAlignment(Qt::AlignCenter);
+        m_sessionsListTable->setItem(i, 2, cntItem);
+
+        m_sessionsListTable->setItem(i, 3, new QTableWidgetItem(s.categories.join(", ")));
     }
+    m_sessionsListTable->resizeColumnsToContents();
+    if (m_sessionsListTable->columnWidth(0) < 100) m_sessionsListTable->setColumnWidth(0, 100);
+    if (m_sessionsListTable->columnWidth(3) < 200) m_sessionsListTable->setColumnWidth(3, 200);
+    // All columns stretch equally — no single main column
+    m_sessionsListTable->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
 
-    table->resizeColumnsToContents();
-    // Ensure reasonable minimum column widths
-    if (table->columnWidth(1) < 150) table->setColumnWidth(1, 150);
-    if (table->columnWidth(2) < 100) table->setColumnWidth(2, 100);
-    // Video column stretches to fill remaining width; others take minimal space
-    table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
-    // Let the table expand vertically to fill the remaining space
+    // --- Session Detail table (repurposed bottom table — videos in selected session) ---
+    QTableWidget* detail = ui.sessionsTableWidget;
+    detail->clear();
+    detail->setRowCount(0);
+    detail->setColumnCount(4);
+    detail->setHorizontalHeaderLabels({"Video", "Author", "Watched Time", "Completed"});
+    detail->setItemDelegate(new AutoToolTipDelegate(detail));
+    detail->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+
+    // Show first session's videos by default
+    if (!sessions.isEmpty())
+        m_sessionsListTable->setCurrentCell(0, 0);
+
+    // Let the detail table expand vertically to fill remaining space
     QSpacerItem* spacer = ui.sessionsMainLayout->itemAt(ui.sessionsMainLayout->count() - 1)->spacerItem();
     if (spacer) spacer->changeSize(0, 0, QSizePolicy::Minimum, QSizePolicy::Minimum);
-    table->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    detail->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 }

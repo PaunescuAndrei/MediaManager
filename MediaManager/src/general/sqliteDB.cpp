@@ -1091,8 +1091,8 @@ int sqliteDB::insertWatchHistory(int video_id, const QString& category, const QS
 {
     QSqlQuery query = QSqlQuery(this->db);
     query.prepare(QStringLiteral(
-        "INSERT INTO watch_history (video_id, category, video_path, watched_start, watched_end, watched_time, session_id, completed) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"));
+        "INSERT INTO watch_history (video_id, category, video_path, watched_start, watched_end, watched_time, session_id, completed, watched_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))"));
     query.addBindValue(video_id);
     query.addBindValue(category);
     query.addBindValue(video_path);
@@ -1143,8 +1143,8 @@ int sqliteDB::upsertWatchHistory(int& ioRowId, int video_id, const QString& cate
     }
 
     query.prepare(QStringLiteral(
-        "INSERT INTO watch_history (video_id, category, video_path, watched_start, watched_end, watched_time, session_id, completed) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"));
+        "INSERT INTO watch_history (video_id, category, video_path, watched_start, watched_end, watched_time, session_id, completed, watched_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))"));
     if (video_id >= 0)
         query.addBindValue(video_id);
     else
@@ -1248,15 +1248,15 @@ QVector<QPair<int, double>> sqliteDB::getHourlyWatchedDistribution(int days)
     QSqlQuery query = QSqlQuery(this->db);
     if (days > 0) {
         query.prepare(QStringLiteral(
-            "SELECT CAST(strftime('%H', sh.session_start) AS INTEGER) as hour, SUM(wh.watched_time) as total_time "
+            "SELECT CAST(strftime('%H', wh.watched_at) AS INTEGER) as hour, SUM(wh.watched_time) as total_time "
             "FROM watch_history wh "
             "JOIN session_history sh ON wh.session_id = sh.id "
-            "WHERE sh.session_start >= ? "
+            "WHERE wh.watched_at >= ? "
             "GROUP BY hour ORDER BY hour"));
         query.addBindValue(QDate::currentDate().addDays(-days).toString(QStringLiteral("yyyy-MM-dd")));
     } else {
         query.prepare(QStringLiteral(
-            "SELECT CAST(strftime('%H', sh.session_start) AS INTEGER) as hour, SUM(wh.watched_time) as total_time "
+            "SELECT CAST(strftime('%H', wh.watched_at) AS INTEGER) as hour, SUM(wh.watched_time) as total_time "
             "FROM watch_history wh "
             "JOIN session_history sh ON wh.session_id = sh.id "
             "GROUP BY hour ORDER BY hour"));
@@ -1293,15 +1293,15 @@ QVector<QPair<int, int>> sqliteDB::getHourlyWatchedCount(int days)
     QSqlQuery query = QSqlQuery(this->db);
     if (days > 0) {
         query.prepare(QStringLiteral(
-            "SELECT CAST(strftime('%H', sh.session_start) AS INTEGER) as hour, COUNT(*) as cnt "
+            "SELECT CAST(strftime('%H', wh.watched_at) AS INTEGER) as hour, COUNT(*) as cnt "
             "FROM watch_history wh "
             "JOIN session_history sh ON wh.session_id = sh.id "
-            "WHERE wh.completed = 1 AND sh.session_start >= ? "
+            "WHERE wh.completed = 1 AND wh.watched_at >= ? "
             "GROUP BY hour ORDER BY hour"));
         query.addBindValue(QDate::currentDate().addDays(-days).toString(QStringLiteral("yyyy-MM-dd")));
     } else {
         query.prepare(QStringLiteral(
-            "SELECT CAST(strftime('%H', sh.session_start) AS INTEGER) as hour, COUNT(*) as cnt "
+            "SELECT CAST(strftime('%H', wh.watched_at) AS INTEGER) as hour, COUNT(*) as cnt "
             "FROM watch_history wh "
             "JOIN session_history sh ON wh.session_id = sh.id "
             "WHERE wh.completed = 1 "
@@ -1320,15 +1320,15 @@ QVector<QPair<int, double>> sqliteDB::getDayOfWeekDistribution(int days)
     QSqlQuery query = QSqlQuery(this->db);
     if (days > 0) {
         query.prepare(QStringLiteral(
-            "SELECT CAST(strftime('%w', sh.session_start) AS INTEGER) as dow, SUM(wh.watched_time) as total_time "
+            "SELECT CAST(strftime('%w', wh.watched_at) AS INTEGER) as dow, SUM(wh.watched_time) as total_time "
             "FROM watch_history wh "
             "JOIN session_history sh ON wh.session_id = sh.id "
-            "WHERE sh.session_start >= ? "
+            "WHERE wh.watched_at >= ? "
             "GROUP BY dow ORDER BY dow"));
         query.addBindValue(QDate::currentDate().addDays(-days).toString(QStringLiteral("yyyy-MM-dd")));
     } else {
         query.prepare(QStringLiteral(
-            "SELECT CAST(strftime('%w', sh.session_start) AS INTEGER) as dow, SUM(wh.watched_time) as total_time "
+            "SELECT CAST(strftime('%w', wh.watched_at) AS INTEGER) as dow, SUM(wh.watched_time) as total_time "
             "FROM watch_history wh "
             "JOIN session_history sh ON wh.session_id = sh.id "
             "GROUP BY dow ORDER BY dow"));
@@ -1346,15 +1346,15 @@ QVector<QPair<int, int>> sqliteDB::getDayOfWeekCount(int days)
     QSqlQuery query = QSqlQuery(this->db);
     if (days > 0) {
         query.prepare(QStringLiteral(
-            "SELECT CAST(strftime('%w', sh.session_start) AS INTEGER) as dow, COUNT(*) as cnt "
+            "SELECT CAST(strftime('%w', wh.watched_at) AS INTEGER) as dow, COUNT(*) as cnt "
             "FROM watch_history wh "
             "JOIN session_history sh ON wh.session_id = sh.id "
-            "WHERE wh.completed = 1 AND sh.session_start >= ? "
+            "WHERE wh.completed = 1 AND wh.watched_at >= ? "
             "GROUP BY dow ORDER BY dow"));
         query.addBindValue(QDate::currentDate().addDays(-days).toString(QStringLiteral("yyyy-MM-dd")));
     } else {
         query.prepare(QStringLiteral(
-            "SELECT CAST(strftime('%w', sh.session_start) AS INTEGER) as dow, COUNT(*) as cnt "
+            "SELECT CAST(strftime('%w', wh.watched_at) AS INTEGER) as dow, COUNT(*) as cnt "
             "FROM watch_history wh "
             "JOIN session_history sh ON wh.session_id = sh.id "
             "WHERE wh.completed = 1 "
@@ -1940,7 +1940,7 @@ QStringList sqliteDB::getUntappedTags(const QString& category)
 // Session History
 // ===========================================================================
 
-QVector<SessionEntry> sqliteDB::getRecentSessions(int limit)
+QVector<SessionEntry> sqliteDB::getRecentWatchHistory(int limit)
 {
     QSqlQuery query = QSqlQuery(this->db);
     query.prepare(QStringLiteral(
@@ -1952,6 +1952,60 @@ QVector<SessionEntry> sqliteDB::getRecentSessions(int limit)
         "LEFT JOIN videodetails v ON wh.video_id = v.id "
         "ORDER BY sh.session_start DESC LIMIT ?"));
     query.addBindValue(limit);
+    QVector<SessionEntry> results;
+    if (!query.exec()) return results;
+    while (query.next()) {
+        SessionEntry entry;
+        entry.date = QDate::fromString(query.value(0).toString(), "yyyy-MM-dd");
+        entry.videoName = query.value(1).toString();
+        entry.author = query.value(2).toString();
+        entry.watchedTime = query.value(3).toDouble();
+        entry.sessionTime = query.value(4).toDouble();
+        entry.completed = query.value(5).toBool();
+        results.append(entry);
+    }
+    return results;
+}
+
+QVector<SessionSummary> sqliteDB::getRecentSessions(int limit)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT sh.id, date(sh.session_start) as day, sh.session_time, "
+        "COUNT(wh.id) as video_count, "
+        "COALESCE(GROUP_CONCAT(DISTINCT wh.category), '') as categories "
+        "FROM session_history sh "
+        "JOIN watch_history wh ON sh.id = wh.session_id "
+        "GROUP BY sh.id "
+        "ORDER BY sh.session_start DESC LIMIT ?"));
+    query.addBindValue(limit);
+    QVector<SessionSummary> results;
+    if (!query.exec()) return results;
+    while (query.next()) {
+        SessionSummary s;
+        s.sessionId = query.value(0).toInt();
+        s.date = QDate::fromString(query.value(1).toString(), "yyyy-MM-dd");
+        s.sessionTime = query.value(2).toDouble();
+        s.videoCount = query.value(3).toInt();
+        s.categories = query.value(4).toString().split(", ", Qt::SkipEmptyParts);
+        results.append(s);
+    }
+    return results;
+}
+
+QVector<SessionEntry> sqliteDB::getSessionVideos(int sessionId)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT date(sh.session_start) as day, "
+        "COALESCE(v.name, wh.video_path), "
+        "v.author, wh.watched_time, sh.session_time, wh.completed "
+        "FROM watch_history wh "
+        "JOIN session_history sh ON wh.session_id = sh.id "
+        "LEFT JOIN videodetails v ON wh.video_id = v.id "
+        "WHERE wh.session_id = ? "
+        "ORDER BY wh.id"));
+    query.addBindValue(sessionId);
     QVector<SessionEntry> results;
     if (!query.exec()) return results;
     while (query.next()) {
@@ -2019,10 +2073,9 @@ double sqliteDB::getAverageSessionTimePerDay()
 {
     QSqlQuery query = QSqlQuery(this->db);
     query.prepare(QStringLiteral(
-        "SELECT COALESCE(SUM(sh.session_time), 0) / NULLIF(COUNT(DISTINCT date(sh.session_start)), 0) "
-        "FROM session_history sh "
-        "JOIN watch_history wh ON sh.id = wh.session_id "
-        "WHERE wh.completed = 1"));
+        "SELECT COALESCE(SUM(session_time), 0) / NULLIF(COUNT(DISTINCT date(session_start)), 0) "
+        "FROM session_history "
+        "WHERE id IN (SELECT DISTINCT session_id FROM watch_history WHERE completed = 1)"));
     if (!query.exec()) return 0.0;
     if (query.first())
         return query.value(0).toDouble();
@@ -2232,12 +2285,14 @@ void sqliteDB::createTables() {
         "\"watched_end\"     REAL NOT NULL DEFAULT 0,"
         "\"watched_time\"    REAL NOT NULL DEFAULT 0,"
         "\"completed\"       BOOLEAN NOT NULL DEFAULT 0,"
+        "\"watched_at\"      TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),"
         "FOREIGN KEY(\"video_id\") REFERENCES videodetails(\"id\") ON DELETE SET NULL,"
         "FOREIGN KEY(\"session_id\") REFERENCES session_history(\"id\") ON DELETE SET NULL,"
         "PRIMARY KEY(\"id\" AUTOINCREMENT));";
-    QString idx_wh_video    = "CREATE INDEX IF NOT EXISTS idx_watch_history_video ON watch_history(video_id);";
-    QString idx_wh_category = "CREATE INDEX IF NOT EXISTS idx_watch_history_category ON watch_history(category);";
-    QString idx_wh_session  = "CREATE INDEX IF NOT EXISTS idx_watch_history_session ON watch_history(session_id);";
+    QString idx_wh_video      = "CREATE INDEX IF NOT EXISTS idx_watch_history_video ON watch_history(video_id);";
+    QString idx_wh_category   = "CREATE INDEX IF NOT EXISTS idx_watch_history_category ON watch_history(category);";
+    QString idx_wh_session    = "CREATE INDEX IF NOT EXISTS idx_watch_history_session ON watch_history(session_id);";
+    QString idx_wh_watched_at = "CREATE INDEX IF NOT EXISTS idx_watch_history_watched_at ON watch_history(watched_at);";
 
     this->db.transaction();
     QSqlQuery query = QSqlQuery(this->db);
@@ -2255,6 +2310,7 @@ void sqliteDB::createTables() {
     query.exec(idx_wh_video);
     query.exec(idx_wh_category);
     query.exec(idx_wh_session);
+    query.exec(idx_wh_watched_at);
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('current', 'MINUS', '')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('current', 'PLUS', '')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('currentIconPath', 'MINUS', '')");

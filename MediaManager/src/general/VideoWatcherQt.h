@@ -32,6 +32,7 @@ public:
     int currentSessionId() const { return m_currentSessionId; }
     double currentSessionTime() const;
     void resetSession();  // invalidate the current session ID (e.g. after a DB restore)
+    int ensureSession();  // create a session if none active, returns session ID
 
     VideoWatcherQt(MainApp* App, QObject* parent = nullptr);
     QSharedPointer<BasePlayer> newPlayer(QString path, int video_id);

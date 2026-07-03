@@ -1667,6 +1667,7 @@ bool MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool incre
     bool video_changed = this->NextVideo(mode, increment, update_watched_state, skipped, actualDelta);
 
     if (increment && video_changed && oldVideoId >= 0) {
+        this->App->VW->ensureSession();
         double watched_end = oldPos;
         if (watched_end < 0)
             watched_end = (player && player->duration > 0) ? player->duration : oldStartProgress;

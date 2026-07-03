@@ -22,26 +22,20 @@ QSharedPointer<BasePlayer> VideoWatcherQt::newPlayer(QString path, int video_id)
 	QMutexLocker lock(&this->data_lock);
 
 	// Start a new session if none is active
-	if (m_currentSessionId < 0) {
-		m_sessionStartTime = QDateTime::currentDateTime();
-		m_sessionStartMonotonic = utils::QueryUnbiasedInterruptTimeChrono();
-		m_currentSessionId = this->db->insertSession(
-			m_sessionStartTime.toString("yyyy-MM-dd HH:mm:ss"));
-		if (m_currentSessionId <= 0) {
-			m_sessionStartMonotonic = std::chrono::microseconds{};
-			if (qMainApp) {
-				qMainApp->logger->log(
-					QStringLiteral("Failed to create new session — watch history will not be linked to a session"),
-					"VideoWatcherQt");
-				QMessageBox* mb = new QMessageBox(QMessageBox::Warning,
-					QStringLiteral("Session Error"),
-					QStringLiteral("Failed to create a new watch session.\n\n"
-						"Watch history will not be tracked until the application is restarted.\n"
-						"Check that the database is not full or locked."),
-					QMessageBox::Ok, this->App->mainWindow);
-				mb->setAttribute(Qt::WA_DeleteOnClose);
-				mb->show();
-			}
+	int sid = ensureSession();
+	if (sid <= 0) {
+		if (qMainApp) {
+			qMainApp->logger->log(
+				QStringLiteral("Failed to create new session — watch history will not be linked to a session"),
+				"VideoWatcherQt");
+			QMessageBox* mb = new QMessageBox(QMessageBox::Warning,
+				QStringLiteral("Session Error"),
+				QStringLiteral("Failed to create a new watch session.\n\n"
+					"Watch history will not be tracked until the application is restarted.\n"
+					"Check that the database is not full or locked."),
+				QMessageBox::Ok, this->App->mainWindow);
+			mb->setAttribute(Qt::WA_DeleteOnClose);
+			mb->show();
 		}
 	}
 
@@ -274,6 +268,25 @@ double VideoWatcherQt::currentSessionTime() const
 	if (m_currentSessionId < 0) return 0.0;
 	return std::chrono::duration_cast<std::chrono::duration<double>>(
 		utils::QueryUnbiasedInterruptTimeChrono() - m_sessionStartMonotonic).count();
+}
+
+int VideoWatcherQt::ensureSession()
+{
+	if (m_currentSessionId > 0) return m_currentSessionId;
+
+	m_sessionStartTime = QDateTime::currentDateTime();
+	m_sessionStartMonotonic = utils::QueryUnbiasedInterruptTimeChrono();
+	m_currentSessionId = this->db->insertSession(
+		m_sessionStartTime.toString("yyyy-MM-dd HH:mm:ss"));
+	if (m_currentSessionId <= 0) {
+		m_sessionStartMonotonic = std::chrono::microseconds{};
+		if (qMainApp) {
+			qMainApp->logger->log(
+				QStringLiteral("Failed to create session — watch history may not be linked"),
+				"VideoWatcherQt");
+		}
+	}
+	return m_currentSessionId;
 }
 
 void VideoWatcherQt::resetSession()

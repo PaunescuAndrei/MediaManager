@@ -2,6 +2,7 @@
 #include "AutoToolTipDelegate.h"
 #include <QToolTip>
 #include <QPoint>
+#include <QApplication>
 
 bool AutoToolTipDelegate::helpEvent(QHelpEvent* e, QAbstractItemView* view,
     const QStyleOptionViewItem& option, const QModelIndex& index)
@@ -10,14 +11,28 @@ bool AutoToolTipDelegate::helpEvent(QHelpEvent* e, QAbstractItemView* view,
         return false;
 
     if (e->type() == QEvent::ToolTip) {
-        QRect rect = view->visualRect(index);
-        QSize size = sizeHint(option, index);
-        if (rect.width() < size.width()) {
-            QVariant tooltip = index.data(Qt::DisplayRole);
-            QRect rect = view->visualRect(index);
-            QPoint localPoint = QPoint(rect.x() - 2, rect.y() + 4);
-            if (tooltip.canConvert<QString>()) {
-                QToolTip::showText(view->viewport()->mapToGlobal(localPoint), tooltip.toString(), view);
+        QString text = index.data(Qt::DisplayRole).toString();
+        if (!text.isEmpty()) {
+            QStyleOptionViewItem opt = option;
+            initStyleOption(&opt, index);
+
+            QRect textRect = view->style()->subElementRect(
+                QStyle::SE_ItemViewItemText, &opt, view);
+
+            // Qt's own text-eliding code (QCommonStyle::viewItemDrawText, used by
+            // paint()) reserves this exact margin on each side of the text rect
+            // before eliding. subElementRect() doesn't factor it in, which is the
+            // real source of the dead zone -- not something to hand-tune.
+            int textMargin = view->style()->pixelMetric(
+                QStyle::PM_FocusFrameHMargin, &opt, view) + 1;
+            int availableWidth = textRect.width() - (2 * textMargin);
+
+            QString elided = opt.fontMetrics.elidedText(text, Qt::ElideRight, availableWidth);
+            bool clipped = (elided != text);
+
+            if (clipped) {
+                QPoint pos = view->viewport()->mapToGlobal(textRect.bottomLeft());
+                QToolTip::showText(pos, text, view->viewport(), textRect);
                 return true;
             }
         }

@@ -1748,6 +1748,7 @@ void StatsDialog::setupSessionsTab(MainApp* app)
         m_sessionsListTable->setHorizontalHeaderLabels({"Date", "Duration", "Videos", "Categories"});
         m_sessionsListTable->verticalHeader()->setVisible(false);
         m_sessionsListTable->horizontalHeader()->setVisible(true);
+        m_sessionsListTable->setItemDelegate(new AutoToolTipDelegate(m_sessionsListTable));
         m_sessionsListTable->setMaximumHeight(250);
         m_sessionsListTable->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
@@ -1782,9 +1783,10 @@ void StatsDialog::setupSessionsTab(MainApp* app)
                     completedItem->setTextAlignment(Qt::AlignCenter);
                     detail->setItem(i, 3, completedItem);
                 }
-                detail->resizeColumnsToContents();
-                if (detail->columnWidth(0) < 150) detail->setColumnWidth(0, 150);
-                if (detail->columnWidth(1) < 100) detail->setColumnWidth(1, 100);
+                // Only resize non-stretch columns — column 0 (Stretch) fills remaining space
+                detail->resizeColumnToContents(1);
+                detail->resizeColumnToContents(2);
+                detail->resizeColumnToContents(3);
             });
     }
 
@@ -1824,6 +1826,9 @@ void StatsDialog::setupSessionsTab(MainApp* app)
     detail->setHorizontalHeaderLabels({"Video", "Author", "Watched Time", "Completed"});
     detail->setItemDelegate(new AutoToolTipDelegate(detail));
     detail->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    detail->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    detail->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    detail->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
 
     // Show first session's videos by default
     if (!sessions.isEmpty())

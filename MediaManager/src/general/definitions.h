@@ -12,6 +12,7 @@ extern std::map<QString, int> sortingDict;
 extern std::map<int, QString> sortingDict_reversed;
 extern QStringList videoTypes;
 extern QStringList svTypes;
+extern const QStringList counterBonusMessages;
 
 struct VideoWeightedData {
 	int id;

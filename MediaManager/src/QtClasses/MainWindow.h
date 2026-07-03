@@ -61,8 +61,9 @@ public:
     bool animatedIconFlag = false;
     bool toggleDatesFlag = false;
     bool intro_played = true;
-    QDate lastGoalNotifiedDate; // invalid (null) date until first goal notification fires
-    QDate lastMilestoneDate;    // tracks which day the milestone counters belong to
+    QDate lastVideoGoalNotifiedDate; // invalid (null) date until video goal notification fires
+    QDate lastTimeGoalNotifiedDate;  // invalid (null) date until time goal notification fires
+    QDate lastMilestoneDate;         // tracks which day the milestone counters belong to
     QDate lastStreakRiskNotifiedDate; // which day streak-at-risk was last notified
     QTime lastStreakRiskNotifiedTime; // exact time streak-at-risk was last notified
     int previousBestVideos = 0;      // best videos-in-a-day count (cached at startup, updated as records are broken)

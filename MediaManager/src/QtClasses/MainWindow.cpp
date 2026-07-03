@@ -3084,6 +3084,10 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     config->set("session_save_interval_seconds", QString::number(dialog->ui.sessionSaveIntervalSpinBox->value()));
     config->set("daily_video_goal", QString::number(dialog->ui.dailyVideoGoalSpinBox->value()));
     config->set("daily_time_goal_minutes", QString::number(dialog->ui.dailyTimeGoalSpinBox->value()));
+    config->set("goal_reached_counter_enabled",
+        dialog->goalReachedCounterEnabled->isChecked() ? "True" : "False");
+    config->set("goal_reached_counter_amount",
+        QString::number(dialog->goalReachedCounterAmountSpinBox->value()));
     if (dialog->ui.emptyPlayerTracking->checkState() == Qt::CheckState::Checked)
         config->set("empty_player_tracking", "True");
     else
@@ -3965,8 +3969,10 @@ void MainWindow::checktimeWatchedIncrement() {
 void MainWindow::loadDailyProgressState()
 {
     QDate today = QDate::currentDate();
-    QString goalDateStr = this->App->db->getMainInfoValue("last_goal_notified_date", "ALL");
-    this->lastGoalNotifiedDate = goalDateStr.isEmpty() ? QDate() : QDate::fromString(goalDateStr, "yyyy-MM-dd");
+    QString videoGoalDateStr = this->App->db->getMainInfoValue("last_video_goal_notified_date", "ALL");
+    this->lastVideoGoalNotifiedDate = videoGoalDateStr.isEmpty() ? QDate() : QDate::fromString(videoGoalDateStr, "yyyy-MM-dd");
+    QString timeGoalDateStr = this->App->db->getMainInfoValue("last_time_goal_notified_date", "ALL");
+    this->lastTimeGoalNotifiedDate = timeGoalDateStr.isEmpty() ? QDate() : QDate::fromString(timeGoalDateStr, "yyyy-MM-dd");
     QString milestoneDateStr = this->App->db->getMainInfoValue("last_milestone_date", "ALL");
     this->lastMilestoneDate = milestoneDateStr.isEmpty() ? QDate() : QDate::fromString(milestoneDateStr, "yyyy-MM-dd");
     QString streakRiskDateStr = this->App->db->getMainInfoValue("last_streak_risk_notified_date", "ALL");
@@ -4015,8 +4021,10 @@ void MainWindow::loadDailyProgressState()
 
 void MainWindow::saveDailyProgressState()
 {
-    this->App->db->setMainInfoValue("last_goal_notified_date", "ALL",
-        this->lastGoalNotifiedDate.isValid() ? this->lastGoalNotifiedDate.toString("yyyy-MM-dd") : "");
+    this->App->db->setMainInfoValue("last_video_goal_notified_date", "ALL",
+        this->lastVideoGoalNotifiedDate.isValid() ? this->lastVideoGoalNotifiedDate.toString("yyyy-MM-dd") : "");
+    this->App->db->setMainInfoValue("last_time_goal_notified_date", "ALL",
+        this->lastTimeGoalNotifiedDate.isValid() ? this->lastTimeGoalNotifiedDate.toString("yyyy-MM-dd") : "");
     this->App->db->setMainInfoValue("last_milestone_date", "ALL",
         this->lastMilestoneDate.isValid() ? this->lastMilestoneDate.toString("yyyy-MM-dd") : "");
     this->App->db->setMainInfoValue("last_video_milestone", "ALL", QString::number(this->lastVideoMilestone));
@@ -4030,7 +4038,6 @@ void MainWindow::saveDailyProgressState()
 void MainWindow::checkDailyProgress()
 {
     QDate today = QDate::currentDate();
-    bool goalAlreadyNotified = this->lastGoalNotifiedDate == today;
 
     // Reset milestone trackers on day change (uses its own date, independent of goals)
     if (this->lastMilestoneDate != today) {
@@ -4075,9 +4082,7 @@ void MainWindow::checkDailyProgress()
     // Persist all daily-progress state once per tick (was scattered across individual notifiers)
     this->saveDailyProgressState();
 
-    // --- Final goal notification (once per day) ---
-    if (goalAlreadyNotified)
-        return;
+    // --- Goal checks (each goal tracked independently, once per day per goal) ---
 
     // Helper to format a double without trailing zeros
     auto fmtDouble = [](double v) -> QString {
@@ -4089,23 +4094,46 @@ void MainWindow::checkDailyProgress()
         return s;
     };
 
-    QString goalTitle;
-    QString goalMessage;
+    // Helper: apply counter bonus and pick a random message if enabled
+    auto applyCounterBonus = [this](QString& message) {
+        if (!this->App->config->get_bool("goal_reached_counter_enabled"))
+            return;
+        int bonus = this->App->config->get("goal_reached_counter_amount").toInt();
+        if (bonus <= 0)
+            return;
+        this->incrementCounterVar(bonus);
+        QString msgSeed = this->App->config->get_bool("random_use_seed")
+            ? this->App->config->get("random_seed") : "";
+        QRandomGenerator msgRng;
+        if (msgSeed.isEmpty()) {
+            msgRng.seed(QRandomGenerator::global()->generate());
+        } else {
+            msgRng.seed(utils::stringToSeed(this->saltSeed(msgSeed)));
+        }
+        int idx = msgRng.bounded(counterBonusMessages.size());
+        message += "\n" + counterBonusMessages[idx].arg(bonus);
+    };
 
-    if (dailyVideoGoal > 0.0 && videosToday >= dailyVideoGoal) {
-        goalTitle = "Daily Video Goal Reached!";
-        int pct = dailyVideoGoal > 0.0 ? static_cast<int>(videosToday * 100.0 / dailyVideoGoal) : 100;
-        goalMessage = QString("%1 / %2 videos (%3%)")
-            .arg(videosToday).arg(fmtDouble(dailyVideoGoal)).arg(pct);
-    } else if (dailyTimeGoalMin > 0 && watchedTodayMin >= dailyTimeGoalMin) {
-        goalTitle = "Daily Time Goal Reached!";
-        int pct = dailyTimeGoalMin > 0 ? (watchedTodayMin * 100 / dailyTimeGoalMin) : 100;
-        goalMessage = QString("%1 / %2 min (%3%)")
-            .arg(watchedTodayMin).arg(dailyTimeGoalMin).arg(pct);
+    // --- Video goal ---
+    if (dailyVideoGoal > 0.0 && videosToday >= dailyVideoGoal
+        && this->lastVideoGoalNotifiedDate != today) {
+        QString goalMessage = QString("%1 / %2 videos (%3%)")
+            .arg(videosToday).arg(fmtDouble(dailyVideoGoal))
+            .arg(static_cast<int>(videosToday * 100.0 / dailyVideoGoal));
+        applyCounterBonus(goalMessage);
+        this->lastVideoGoalNotifiedDate = today;
+        this->GoalMetNotification("Daily Video Goal Reached!", goalMessage);
     }
 
-    if (!goalTitle.isEmpty()) {
-        this->GoalMetNotification(goalTitle, goalMessage);
+    // --- Time goal ---
+    if (dailyTimeGoalMin > 0 && watchedTodayMin >= dailyTimeGoalMin
+        && this->lastTimeGoalNotifiedDate != today) {
+        QString goalMessage = QString("%1 / %2 min (%3%)")
+            .arg(watchedTodayMin).arg(dailyTimeGoalMin)
+            .arg(watchedTodayMin * 100 / dailyTimeGoalMin);
+        applyCounterBonus(goalMessage);
+        this->lastTimeGoalNotifiedDate = today;
+        this->GoalMetNotification("Daily Time Goal Reached!", goalMessage);
     }
 }
 
@@ -4113,7 +4141,6 @@ void MainWindow::GoalMetNotification(const QString& title, const QString& messag
 {
     if (!this->App->config->get_bool("notification_goal_met_enabled"))
         return;
-    this->lastGoalNotifiedDate = QDate::currentDate();
     this->notificationManager->showGoalMet(title, message);
 }
 

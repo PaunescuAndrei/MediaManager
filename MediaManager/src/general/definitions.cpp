@@ -42,6 +42,15 @@ std::map<int, QString> sortingDict_reversed = {
 QStringList videoTypes = QStringList();
 QStringList svTypes = QStringList();
 
+// Pool of messages for the counter bonus notification — one is picked at random
+const QStringList counterBonusMessages = {
+    "⭐ Earned +%1 bonus!",
+    "Counter boosted by %1!",
+    "Nice! +%1 to your counter",
+    "+%1 bonus earned",
+    "💎 Counter reward: +%1",
+};
+
  uint qHash(const Tag& key)
  {
 	 return qHash(QPair<int, QPair<QString, int>>(key.id, qMakePair(key.name, key.display_priority)));

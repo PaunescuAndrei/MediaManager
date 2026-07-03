@@ -70,6 +70,10 @@ public:
     QDoubleSpinBox* notificationTimerBarOpacitySpinBox = nullptr;
     QDoubleSpinBox* notificationCounterOpacitySpinBox = nullptr;
 
+    // General page — goal-reached counter bonus
+    QCheckBox* goalReachedCounterEnabled = nullptr;
+    QSpinBox* goalReachedCounterAmountSpinBox = nullptr;
+
 private:
     // Per-category setup methods
     void setupGeneralPage(class MainWindow* mw);

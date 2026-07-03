@@ -168,6 +168,28 @@ void SettingsDialog::setupGeneralPage(MainWindow* mw)
     this->ui.dailyVideoGoalSpinBox->setValue(dailyVid);
     this->ui.dailyTimeGoalSpinBox->setValue(dailyTime);
 
+    // --- Goal-Reached Counter Bonus ---
+    {
+        QHBoxLayout* row = new QHBoxLayout();
+        goalReachedCounterEnabled = new QCheckBox("Counter bonus on daily goal reached");
+        goalReachedCounterEnabled->setToolTip("When a daily goal is met, add a bonus to the main counter");
+        setupCheckBox(goalReachedCounterEnabled, "goal_reached_counter_enabled", mw);
+        row->addWidget(goalReachedCounterEnabled);
+        row->addStretch();
+        goalReachedCounterAmountSpinBox = new QSpinBox();
+        goalReachedCounterAmountSpinBox->setMinimum(1);
+        goalReachedCounterAmountSpinBox->setMaximum(999);
+        goalReachedCounterAmountSpinBox->setToolTip("Amount to add to the counter when a daily goal is reached");
+        goalReachedCounterAmountSpinBox->setValue(
+            qBound(1, config->get("goal_reached_counter_amount").toInt(), 999));
+        goalReachedCounterAmountSpinBox->setEnabled(goalReachedCounterEnabled->isChecked());
+        setupSpinStyle(goalReachedCounterAmountSpinBox, "spinbox");
+        connect(goalReachedCounterEnabled, &QCheckBox::toggled,
+                goalReachedCounterAmountSpinBox, &QSpinBox::setEnabled);
+        row->addWidget(goalReachedCounterAmountSpinBox);
+        qobject_cast<QVBoxLayout*>(this->ui.statsGroupBox->layout())->addLayout(row);
+    }
+
     // --- Tooltip Settings ---
     setupCheckBox(this->ui.tooltipsEnabled, "tooltips_enabled", mw);
     setupSpinStyle(this->ui.tooltipDelaySpinBox, "spinbox");

@@ -523,12 +523,20 @@ void MainWindow::UpdateWindowTitle() {
     QString thumb_work_count;
     QString bpm_work_count;
     QString main_title = QStringLiteral("Media Manager %1 %2").arg(this->getCategoryName()).arg(VERSION_TEXT);
-    if (this->App->VW and this->App->VW->mainPlayer) {
+    if (this->App->VW) {
         int sessionSeconds = static_cast<int>(this->App->VW->currentSessionTime());
-        int watchedSeconds = this->App->VW->mainPlayer->getTotalWatchedTime();
         if (sessionSeconds > 0) {
             session_time = QStringLiteral(" [Session: %1]").arg(utils::formatSecondsCompactQt(sessionSeconds));
         }
+        // NOTE: Summing live player times means the watched time drops
+        // when a player closes. A better approach would be to maintain
+        // a running session total inside VideoWatcherQt.
+        double totalWatched = 0.0;
+        for (const auto& player : this->App->VW->Players) {
+            if (player)
+                totalWatched += player->getTotalWatchedTime();
+        }
+        int watchedSeconds = static_cast<int>(totalWatched);
         if (watchedSeconds > 0) {
             watched_time = QStringLiteral(" [Watched: %1]").arg(utils::formatSecondsCompactQt(watchedSeconds));
         }

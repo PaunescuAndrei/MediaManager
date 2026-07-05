@@ -222,12 +222,17 @@ void finishDialog::updateWindowTitle() {
 	QString currentTime = QTime::currentTime().toString("hh:mm:ss");
 	QString session_time = "";
 	QString watched_time = "";
-	if (this->MW and this->MW->App->VW and this->MW->App->VW->mainPlayer) {
+	if (this->MW and this->MW->App->VW) {
 		int sessionSeconds = static_cast<int>(this->MW->App->VW->currentSessionTime());
-		int watchedSeconds = this->MW->App->VW->mainPlayer->getTotalWatchedTime();
 		if (sessionSeconds > 0) {
 			session_time = QStringLiteral(" [Session: %1]").arg(utils::formatSecondsCompactQt(sessionSeconds));
 		}
+		double totalWatched = 0.0;
+		for (const auto& player : this->MW->App->VW->Players) {
+			if (player)
+				totalWatched += player->getTotalWatchedTime();
+		}
+		int watchedSeconds = static_cast<int>(totalWatched);
 		if (watchedSeconds > 0) {
 			watched_time = QStringLiteral(" [Watched: %1]").arg(utils::formatSecondsCompactQt(watchedSeconds));
 		}

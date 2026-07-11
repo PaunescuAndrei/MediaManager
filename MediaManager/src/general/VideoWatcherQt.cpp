@@ -365,7 +365,7 @@ void VideoWatcherQt::run()
 				int minSessionSec = this->App->config->get("notification_session_summary_min_session_seconds").toInt();
 				if (sessionTime >= static_cast<double>(minSessionSec)) {
 					auto [videosWatched, videosCompleted, totalWatch, _] =
-						this->db->getSessionSummaryStats(closingSessionId);
+						this->db->getSessionSummaryStats(closingSessionId, this->App->config->get("notification_session_summary_min_video_watch_seconds").toDouble());
 					if (videosWatched > 0) {
 						QStringList cats = this->db->getSessionCategories(closingSessionId);
 						QString category = cats.isEmpty() ? this->App->currentDB : cats.join(", ");

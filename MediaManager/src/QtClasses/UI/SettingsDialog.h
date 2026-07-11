@@ -61,6 +61,7 @@ public:
     QCheckBox* notificationSessionSummaryEnabled = nullptr;
     QSpinBox* notificationSessionSummaryDurationSpinBox = nullptr;
     QSpinBox* notificationSessionSummaryMinSessionSpinBox = nullptr;
+    QSpinBox* notificationSessionSummaryMinVideoWatchSpinBox = nullptr;
     QSpinBox* pbVideosStepSpinBox = nullptr;
     QSpinBox* pbTimeStepSpinBox = nullptr;
     QSpinBox* pbVideosMinThresholdSpinBox = nullptr;

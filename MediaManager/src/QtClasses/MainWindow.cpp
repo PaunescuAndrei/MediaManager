@@ -2888,6 +2888,8 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         QString::number(dialog->notificationSessionSummaryDurationSpinBox->value()));
     config->set("notification_session_summary_min_session_seconds",
         QString::number(dialog->notificationSessionSummaryMinSessionSpinBox->value()));
+    config->set("notification_session_summary_min_video_watch_seconds",
+        QString::number(dialog->notificationSessionSummaryMinVideoWatchSpinBox->value()));
     int heatmapMonths = kHeatmapMonthOptions[dialog->ui.statsHeatmapMonthsCombo->currentIndex()];
     if (heatmapMonths != qBound(1, config->get("stats_heatmap_months").toInt(), 24))
         config->set("stats_heatmap_months", QString::number(heatmapMonths));

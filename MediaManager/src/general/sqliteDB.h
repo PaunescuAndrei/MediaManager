@@ -128,7 +128,7 @@ public:
     double getAverageWatchTimePerDay();
     double getAverageSessionTimePerDay();
     double getAverageCompletedPerDay();
-    std::tuple<int, int, double, double> getSessionSummaryStats(int sessionId);
+    std::tuple<int, int, double, double> getSessionSummaryStats(int sessionId, double minWatchSeconds = 0.0);
     QStringList getSessionCategories(int sessionId);  // distinct categories watched in this session
 
     int getTotalWatchDays();

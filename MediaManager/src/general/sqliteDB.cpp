@@ -2096,18 +2096,28 @@ double sqliteDB::getAverageCompletedPerDay()
     return 0.0;
 }
 
-std::tuple<int, int, double, double> sqliteDB::getSessionSummaryStats(int sessionId)
+std::tuple<int, int, double, double> sqliteDB::getSessionSummaryStats(int sessionId, double minWatchSeconds)
 {
     if (sessionId <= 0)
         return {0, 0, 0.0, 0.0};
 
     QSqlQuery query(this->db);
-    query.prepare(QStringLiteral(
-        "SELECT COUNT(*), "
-        "       COALESCE(SUM(CASE WHEN completed THEN 1 ELSE 0 END), 0), "
-        "       COALESCE(SUM(watched_time), 0) "
-        "FROM watch_history WHERE session_id = ?"));
-    query.addBindValue(sessionId);
+    if (minWatchSeconds > 0.0) {
+        query.prepare(QStringLiteral(
+            "SELECT COUNT(*), "
+            "       COALESCE(SUM(CASE WHEN completed THEN 1 ELSE 0 END), 0), "
+            "       COALESCE(SUM(watched_time), 0) "
+            "FROM watch_history WHERE session_id = ? AND watched_time >= ?"));
+        query.addBindValue(sessionId);
+        query.addBindValue(minWatchSeconds);
+    } else {
+        query.prepare(QStringLiteral(
+            "SELECT COUNT(*), "
+            "       COALESCE(SUM(CASE WHEN completed THEN 1 ELSE 0 END), 0), "
+            "       COALESCE(SUM(watched_time), 0) "
+            "FROM watch_history WHERE session_id = ?"));
+        query.addBindValue(sessionId);
+    }
 
     if (query.exec() && query.next()) {
         return {

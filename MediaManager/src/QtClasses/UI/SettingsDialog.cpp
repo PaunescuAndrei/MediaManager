@@ -922,7 +922,26 @@ void SettingsDialog::setupNotificationsPage(MainWindow* mw)
     notificationSessionSummaryMinSessionSpinBox->setValue(config->get("notification_session_summary_min_session_seconds").toInt());
     setupSpinStyle(notificationSessionSummaryMinSessionSpinBox, "spinbox");
     ssMinSessionRow->addWidget(notificationSessionSummaryMinSessionSpinBox);
+    connect(notificationSessionSummaryEnabled, &QCheckBox::toggled, notificationSessionSummaryMinSessionSpinBox, &QSpinBox::setEnabled);
+    notificationSessionSummaryMinSessionSpinBox->setEnabled(notificationSessionSummaryEnabled->isChecked());
     sessionSummaryLayout->addLayout(ssMinSessionRow);
+
+    // Min video watch time row
+    QHBoxLayout* ssMinVideoWatchRow = new QHBoxLayout();
+    QLabel* ssMinVideoWatchLabel = new QLabel("Minimum video watch time (seconds):");
+    ssMinVideoWatchLabel->setToolTip("Videos watched for less than this time won't count toward the session summary");
+    ssMinVideoWatchRow->addWidget(ssMinVideoWatchLabel);
+    ssMinVideoWatchRow->addStretch();
+    notificationSessionSummaryMinVideoWatchSpinBox = new QSpinBox();
+    notificationSessionSummaryMinVideoWatchSpinBox->setMinimum(1);
+    notificationSessionSummaryMinVideoWatchSpinBox->setMaximum(300);
+    notificationSessionSummaryMinVideoWatchSpinBox->setToolTip("Videos watched for less than this many seconds won't count toward the session summary");
+    notificationSessionSummaryMinVideoWatchSpinBox->setValue(config->get("notification_session_summary_min_video_watch_seconds").toInt());
+    setupSpinStyle(notificationSessionSummaryMinVideoWatchSpinBox, "spinbox");
+    ssMinVideoWatchRow->addWidget(notificationSessionSummaryMinVideoWatchSpinBox);
+    connect(notificationSessionSummaryEnabled, &QCheckBox::toggled, notificationSessionSummaryMinVideoWatchSpinBox, &QSpinBox::setEnabled);
+    notificationSessionSummaryMinVideoWatchSpinBox->setEnabled(notificationSessionSummaryEnabled->isChecked());
+    sessionSummaryLayout->addLayout(ssMinVideoWatchRow);
 
     pageLayout->addWidget(sessionSummaryGroup);
 

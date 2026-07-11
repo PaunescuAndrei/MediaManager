@@ -168,6 +168,7 @@ void Config::init_defaults() {
         {"notification_session_summary_enabled", "True"},
         {"notification_session_summary_duration_ms", "10000"},
         {"notification_session_summary_min_session_seconds", "10"},
+        {"notification_session_summary_min_video_watch_seconds", "10"},
         {"notification_bg_opacity", "1.00"},
         {"notification_content_opacity", "1.00"},
         {"notification_timerbar_opacity", "1.00"},

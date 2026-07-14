@@ -1027,9 +1027,9 @@ QString utils::formatTimeAgo(qint64 seconds) {
 bool utils::isSingleInstanceRunning(QString appid) {
 	QLocalSocket socket;
 	socket.connectToServer(appid);
-	bool isOpen = socket.isOpen();
+	bool isRunning = socket.waitForConnected(500);
 	socket.close();
-	return isOpen;
+	return isRunning;
 }
 
 void utils::openFileExplorer(QString path) {

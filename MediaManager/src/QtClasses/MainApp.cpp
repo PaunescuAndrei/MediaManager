@@ -215,10 +215,17 @@ void MainApp::startSingleInstanceServer(QString appid) {
 			this->mainWindow->iconActivated(QSystemTrayIcon::DoubleClick);
 		}
 	});
-	if(this->instanceServer->listen(appid)){
-		this->logger->log(QStringLiteral("Single instance server started with id: %1").arg(appid), "INFO");
+	if (!this->instanceServer->listen(appid)) {
+		// A previous instance may have crashed, leaving a stale server name.
+		// Remove it and retry once.
+		QLocalServer::removeServer(appid);
+		if (this->instanceServer->listen(appid)) {
+			this->logger->log(QStringLiteral("Single instance server started (after cleanup) with id: %1").arg(appid), "INFO");
+		} else {
+			this->logger->log(QStringLiteral("Single instance server failed to start with id: %1").arg(appid), "ERROR");
+		}
 	} else {
-		this->logger->log(QStringLiteral("Single instance server failed to start with id: %1").arg(appid), "ERROR");
+		this->logger->log(QStringLiteral("Single instance server started with id: %1").arg(appid), "INFO");
 	}
 }
 

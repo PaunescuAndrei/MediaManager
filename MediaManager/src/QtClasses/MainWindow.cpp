@@ -3453,6 +3453,8 @@ void MainWindow::showEndOfVideoDialog(QSharedPointer<BasePlayer> player, finishD
                         // WatchSelected or WatchExternal — End button
                         // Finalize watch history with completed = true
                         double watched = player->videoWatchedTime();
+                        double endActualDelta = watched - player->lastCheckpointWatchedTime;
+                        player->lastCheckpointWatchedTime = watched;
                         if (watched > 0 || player->activeWatchHistoryRowId > 0) {
                             double watched_end = player->position;
                             if (watched_end < 0)
@@ -3467,8 +3469,40 @@ void MainWindow::showEndOfVideoDialog(QSharedPointer<BasePlayer> player, finishD
                         if (player->position != -1 && player->video_id >= 0) {
                             this->App->db->updateVideoProgress(player->video_id, player->position);
                         }
+
+                        // Counter pipeline — counter deltas, time-watched, and
+                        // SV-count increment apply to all contexts. SV-target
+                        // recalculation and sv_count reset are MainPlayer-only
+                        // (never reached from End, but the guards are
+                        // self-documenting).
+                        {
+                            QPersistentModelIndex srcIdx = this->modelIndexByPath(player->video_path);
+                            QString currentType;
+                            if (srcIdx.isValid()) {
+                                currentType = srcIdx.sibling(srcIdx.row(), ListColumns["TYPE_COLUMN"]).data(Qt::DisplayRole).toString();
+                            }
+                            double actualDelta = this->counter_use_actual_watch_time ? endActualDelta : 0.0;
+                            bool playedSpecialType = this->applyPostWatchAdjustments(currentType, player->video_id, true, player->position, true, false, actualDelta, true);
+                            playedSpecialType = false; // allow sv_count++ but never sv_count=0
+                            this->updateSvCountersAfterPlayback(playedSpecialType, false);
+                            this->checktimeWatchedIncrement();
+                            this->updateWatchedProgressBar();
+                            if (srcIdx.isValid()) {
+                                const int row = srcIdx.row();
+                                const QPersistentModelIndex viewsIdx = srcIdx.sibling(row, ListColumns["VIEWS_COLUMN"]);
+                                int views = viewsIdx.data(Qt::DisplayRole).toInt();
+                                this->videosModel->setData(viewsIdx, QString::number(views + 1), Qt::DisplayRole);
+                                const QPersistentModelIndex lastWatchedIdx = srcIdx.sibling(row, ListColumns["LAST_WATCHED_COLUMN"]);
+                                this->videosModel->setData(lastWatchedIdx, QDateTime::currentDateTime(), Qt::DisplayRole);
+                            }
+                            if (player->video_id >= 0) {
+                                this->App->db->incrementVideoViews(player->video_id, 1, true);
+                            }
+                        }
+
                         // Reset timing so the watcher loop doesn't create a duplicate entry
                         player->resetVideoTiming();
+                        this->checkDailyProgress();
 
                         if (context == finishDialog::PlayerContext::WatchSelected) {
                             // Close the player window entirely.

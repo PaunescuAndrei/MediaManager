@@ -3504,9 +3504,10 @@ void MainWindow::showEndOfVideoDialog(QSharedPointer<BasePlayer> player, finishD
                         // shouldn't touch the main playlist's SV progress.
                         const bool isMainPlayer = (context == finishDialog::PlayerContext::MainPlayer);
                         bool playedSpecialType = this->applyPostWatchAdjustments(currentType, player->video_id, true, replayProgress, true, false, this->counter_use_actual_watch_time ? replayActualDelta : 0.0, !isMainPlayer);
-                        if (isMainPlayer) {
-                            this->updateSvCountersAfterPlayback(playedSpecialType, false);
+                        if (!isMainPlayer) {
+                            playedSpecialType = false; // allow sv_count++ but never sv_count=0
                         }
+                        this->updateSvCountersAfterPlayback(playedSpecialType, false);
                         this->checktimeWatchedIncrement();
                         this->updateWatchedProgressBar();
                         if (srcIdx.isValid()) {

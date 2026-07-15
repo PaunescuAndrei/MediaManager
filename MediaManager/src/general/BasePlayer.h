@@ -48,7 +48,8 @@ public:
     bool isProcessAlive();  
     virtual void openPlayer(QString video_path = "", double position_seconds = -1) = 0;  
     virtual void askForStatus() = 0;  
-    virtual void closePlayer() = 0;  
+    virtual void closePlayer() = 0;
+    virtual void unloadCurrentFile() = 0;  
     virtual void setPaused(bool paused, bool direct = false) = 0;  
     virtual void toggleFullScreen(bool direct = false) = 0;  
     virtual void displayOsdMessage(QString message, int duration, bool direct = false) = 0;  

@@ -27,6 +27,7 @@ public:
     void askForStatus();
     void drop();
     void closePlayer();
+    void unloadCurrentFile() override;
     void setPaused(bool paused, bool direct = false);
     void toggleFullScreen(bool direct = false);
     void displayOsdMessage(QString message, int duration, bool direct = false);

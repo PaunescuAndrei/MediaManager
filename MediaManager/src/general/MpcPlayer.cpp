@@ -236,6 +236,11 @@ void MpcPlayer::drop()
 }
 void MpcPlayer::closePlayer()
 {
+    this->send_message(CMD_CLOSEAPP);
+}
+void MpcPlayer::unloadCurrentFile()
+{
+    this->send_message(CMD_CLOSEFILE);
 }
 
 void MpcPlayer::setPaused(bool paused, bool direct)

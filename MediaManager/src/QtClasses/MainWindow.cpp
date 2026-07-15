@@ -2167,7 +2167,7 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
     return video_changed;
 }
 
-bool MainWindow::applyPostWatchAdjustments(const QString& videoType, int videoId, bool increment, double watchedProgressOverride, bool useOverrideProgress, bool skipped, double actualWatchTimeDelta) {
+bool MainWindow::applyPostWatchAdjustments(const QString& videoType, int videoId, bool increment, double watchedProgressOverride, bool useOverrideProgress, bool skipped, double actualWatchTimeDelta, bool skipSvRecalc) {
     const bool isSpecialType = svTypes.contains(videoType);
     const bool treatSpecialAsPlus = this->App->config->get("sv_mode").compare(QStringLiteral("PLUS"), Qt::CaseInsensitive) == 0;
 
@@ -2201,7 +2201,7 @@ bool MainWindow::applyPostWatchAdjustments(const QString& videoType, int videoId
         }
 	}
 
-    if (isSpecialType) {
+    if (isSpecialType && !skipSvRecalc) {
         if (this->App->currentDB != "PLUS" || this->App->config->get_bool("sv_track_in_plus")) {
             int val = this->calculate_sv_target();
             this->App->db->setMainInfoValue("sv_target_count", "ALL", QString::number(val));
@@ -3498,8 +3498,15 @@ void MainWindow::showEndOfVideoDialog(QSharedPointer<BasePlayer> player, finishD
                         double replayProgress = std::max(0.0, player->position);
                         double replayActualDelta = player->videoWatchedTime() - player->lastCheckpointWatchedTime;
                         player->lastCheckpointWatchedTime = player->videoWatchedTime();
-                        bool playedSpecialType = this->applyPostWatchAdjustments(currentType, player->video_id, true, replayProgress, true, false, this->counter_use_actual_watch_time ? replayActualDelta : 0.0);
-                        this->updateSvCountersAfterPlayback(playedSpecialType, false);
+                        // Counter deltas and time-watched increments apply to all
+                        // contexts. SV-target recalculation and sv_count reset are
+                        // MainPlayer-only — WatchSelected/WatchExternal replays
+                        // shouldn't touch the main playlist's SV progress.
+                        const bool isMainPlayer = (context == finishDialog::PlayerContext::MainPlayer);
+                        bool playedSpecialType = this->applyPostWatchAdjustments(currentType, player->video_id, true, replayProgress, true, false, this->counter_use_actual_watch_time ? replayActualDelta : 0.0, !isMainPlayer);
+                        if (isMainPlayer) {
+                            this->updateSvCountersAfterPlayback(playedSpecialType, false);
+                        }
                         this->checktimeWatchedIncrement();
                         this->updateWatchedProgressBar();
                         if (srcIdx.isValid()) {

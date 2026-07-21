@@ -56,6 +56,7 @@ public:
     QSpinBox* streakAtRiskMinDaysSpinBox = nullptr;
     QSpinBox* streakAtRiskCutoffHourSpinBox = nullptr;
     QSpinBox* streakAtRiskRefireSpinBox = nullptr;
+    QSpinBox* streakDailyTimeTargetSpinBox = nullptr;
     QCheckBox* notificationPersonalBestEnabled = nullptr;
     QSpinBox* notificationPersonalBestDurationSpinBox = nullptr;
     QCheckBox* notificationSessionSummaryEnabled = nullptr;

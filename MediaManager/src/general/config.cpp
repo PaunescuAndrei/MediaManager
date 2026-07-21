@@ -154,6 +154,7 @@ void Config::init_defaults() {
         {"empty_player_tracking", "True"},
         {"daily_video_goal", "5.0"},
         {"daily_time_goal_minutes", "60"},
+        {"streak_daily_time_target_minutes", "5"},
         {"goal_reached_counter_enabled", "False"},
         {"goal_reached_counter_amount", "1"},
         {"tooltips_enabled", "True"},

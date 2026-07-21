@@ -2862,6 +2862,8 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         QString::number(dialog->streakAtRiskCutoffHourSpinBox->value()));
     config->set("streak_at_risk_refire_minutes",
         QString::number(dialog->streakAtRiskRefireSpinBox->value()));
+    config->set("streak_daily_time_target_minutes",
+        QString::number(dialog->streakDailyTimeTargetSpinBox->value()));
     config->set("notification_personal_best_enabled",
         dialog->notificationPersonalBestEnabled->isChecked() ? "True" : "False");
     config->set("notification_personal_best_duration_ms",
@@ -4185,7 +4187,7 @@ void MainWindow::checkDailyProgress()
     }
 
     // Streak-at-risk check (runs every invocation, independent of goal)
-    this->checkStreakAtRisk(videosToday);
+    this->checkStreakAtRisk(watchedTodaySec);
 
     // Personal best checks (runs every invocation, independent of goal)
     this->checkPersonalBests(videosToday, watchedTodaySec);
@@ -4260,7 +4262,7 @@ void MainWindow::MilestoneNotification(const QString& description)
     this->notificationManager->showGeneralMessage("Daily Milestone", description);
 }
 
-void MainWindow::checkStreakAtRisk(int videosToday)
+void MainWindow::checkStreakAtRisk(double watchedTodaySec)
 {
     QDate today = QDate::currentDate();
     QTime now = QTime::currentTime();
@@ -4275,8 +4277,17 @@ void MainWindow::checkStreakAtRisk(int videosToday)
             return; // not time to re-fire yet
     }
 
-    // Already watched today — streak is safe
-    if (videosToday > 0)
+    // Read the streak threshold and decide if today already qualifies
+    int streakTargetMin = this->App->config->get("streak_daily_time_target_minutes").toInt();
+    bool todayQualifies = false;
+    if (streakTargetMin > 0) {
+        int streakTargetSec = streakTargetMin * 60;
+        todayQualifies = (static_cast<int>(watchedTodaySec) >= streakTargetSec);
+    } else {
+        // Backward compatible: old completed-video logic — any watch today counts
+        todayQualifies = (watchedTodaySec > 0.0);
+    }
+    if (todayQualifies)
         return;
 
     int minDays = this->App->config->get("streak_at_risk_min_days").toInt();
@@ -4285,16 +4296,23 @@ void MainWindow::checkStreakAtRisk(int videosToday)
     if (now.hour() < cutoffHour)
         return; // not late enough yet
 
-    WatchStreak streak = this->App->db->getWatchStreak();
+    int thresholdSec = streakTargetMin > 0 ? streakTargetMin * 60 : 0;
+    WatchStreak streak = this->App->db->getWatchStreak(thresholdSec);
     if (streak.currentStreak < minDays)
         return; // streak not significant enough
 
     this->lastStreakRiskNotifiedDate = today;
     this->lastStreakRiskNotifiedTime = now;
-    this->notificationManager->showStreakAtRisk(
-        QString("Streak At Risk!"),
-        QString("Your %1-day watch streak is at risk today! Watch a video to keep it alive.")
-            .arg(streak.currentStreak));
+
+    QString message;
+    if (streakTargetMin > 0) {
+        message = QString("Your %1-day watch streak is at risk today! Watch for at least %2 minutes to keep it alive.")
+            .arg(streak.currentStreak).arg(streakTargetMin);
+    } else {
+        message = QString("Your %1-day watch streak is at risk today! Watch a video to keep it alive.")
+            .arg(streak.currentStreak);
+    }
+    this->notificationManager->showStreakAtRisk(QString("Streak At Risk!"), message);
 }
 
 void MainWindow::checkPersonalBests(int videosToday, double watchedTodaySec)

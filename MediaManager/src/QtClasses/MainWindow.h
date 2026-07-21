@@ -194,7 +194,7 @@ public:
     void startDailyProgressTimer();
     void GoalMetNotification(const QString& title, const QString& message);
     void MilestoneNotification(const QString& description);
-    void checkStreakAtRisk(int videosToday);
+    void checkStreakAtRisk(double watchedTodaySec);
     void checkPersonalBests(int videosToday, double watchedTodaySec);
     void incrementCounterVar(int value = 1);
     bool applyPostWatchAdjustments(const QString& videoType, int videoId, bool increment, double watchedProgressOverride = 0.0, bool useOverrideProgress = false, bool suppressMinusCounter = false, double actualWatchTimeDelta = 0.0, bool skipSvRecalc = false);

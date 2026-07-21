@@ -1368,16 +1368,30 @@ QVector<QPair<int, int>> sqliteDB::getDayOfWeekCount(int days)
     return results;
 }
 
-WatchStreak sqliteDB::getWatchStreak()
+WatchStreak sqliteDB::getWatchStreak(double minSeconds)
 {
     WatchStreak streak;
     QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QStringLiteral(
-        "SELECT DISTINCT date(sh.session_start) as day "
-        "FROM watch_history wh "
-        "JOIN session_history sh ON wh.session_id = sh.id "
-        "WHERE wh.completed = 1 "
-        "ORDER BY day DESC"));
+
+    // Time-based threshold: count a day when total watch time >= minSeconds.
+    // Falls back to the original completed-video query when minSeconds <= 0.
+    if (minSeconds > 0.0) {
+        query.prepare(QStringLiteral(
+            "SELECT date(sh.session_start) as day, SUM(wh.watched_time) as total_time "
+            "FROM watch_history wh "
+            "JOIN session_history sh ON wh.session_id = sh.id "
+            "GROUP BY day "
+            "HAVING SUM(wh.watched_time) >= ? "
+            "ORDER BY day DESC"));
+        query.addBindValue(minSeconds);
+    } else {
+        query.prepare(QStringLiteral(
+            "SELECT DISTINCT date(sh.session_start) as day "
+            "FROM watch_history wh "
+            "JOIN session_history sh ON wh.session_id = sh.id "
+            "WHERE wh.completed = 1 "
+            "ORDER BY day DESC"));
+    }
     if (!query.exec()) return streak;
 
     QList<QDate> dates;

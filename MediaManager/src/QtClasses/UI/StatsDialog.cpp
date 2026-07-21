@@ -272,7 +272,9 @@ void StatsDialog::setupStreaksTab(MainApp* app)
 
     // Streak display
     QGridLayout* streakLayout = ui.streakDisplayLayout;
-    WatchStreak streak = app->db->getWatchStreak();
+    int streakTargetMin = app->config->get("streak_daily_time_target_minutes").toInt();
+    int thresholdSec = streakTargetMin > 0 ? streakTargetMin * 60 : 0;
+    WatchStreak streak = app->db->getWatchStreak(thresholdSec);
     int totalDays = app->db->getTotalWatchDays();
     QDateTime firstWatch = app->db->getFirstWatchDate();
 
@@ -342,10 +344,10 @@ void StatsDialog::setupStreaksTab(MainApp* app)
     totalActiveDaysLabel->setFont(statFont);
     streakLayout->addWidget(totalActiveDaysLabel, 3, 1, Qt::AlignCenter);
 
-    // Row 4, Col 0: Last Watched
+    // Row 4, Col 0: Last Streak Day
     QString lastWatchedStr = streak.lastWatchedDate.isValid()
         ? relativeDate(streak.lastWatchedDate) : QStringLiteral("N/A");
-    QLabel* lastWatchedLabel = new QLabel(QString("Last Watched: %1").arg(lastWatchedStr));
+    QLabel* lastWatchedLabel = new QLabel(QString("Last Streak Day: %1").arg(lastWatchedStr));
     lastWatchedLabel->setAlignment(Qt::AlignCenter);
     lastWatchedLabel->setFont(statFont);
     streakLayout->addWidget(lastWatchedLabel, 4, 0, Qt::AlignCenter);
@@ -385,6 +387,26 @@ void StatsDialog::setupStreaksTab(MainApp* app)
     // Daily Goals — reuse cached values from setupAchievements when available
     QGridLayout* goalsGrid = ui.goalsGridLayout;
     int row = 0;
+
+    // Today's Streak Progress
+    if (streakTargetMin > 0) {
+        int streakTargetSec = streakTargetMin * 60;
+        double watchedTodayForStreak = m_cachedWatchedTodaySec >= 0.0
+            ? m_cachedWatchedTodaySec
+            : app->db->getTotalWatchedTimeToday();
+
+        QLabel* streakGoalLabel = new QLabel(QString("Streak: %1 / %2").arg(
+            QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(watchedTodayForStreak))),
+            QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(streakTargetSec)))));
+        goalsGrid->addWidget(streakGoalLabel, row, 0);
+
+        QProgressBar* streakGoalBar = new QProgressBar();
+        streakGoalBar->setRange(0, std::max(streakTargetSec, 1));
+        streakGoalBar->setValue(std::min(static_cast<int>(watchedTodayForStreak), streakTargetSec));
+        streakGoalBar->setTextVisible(true);
+        streakGoalBar->setMinimumHeight(22);
+        goalsGrid->addWidget(streakGoalBar, row++, 1);
+    }
 
     double dailyVideoGoal = m_cachedDailyVideoGoal >= 0.0
         ? m_cachedDailyVideoGoal

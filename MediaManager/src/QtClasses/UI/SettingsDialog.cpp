@@ -168,6 +168,26 @@ void SettingsDialog::setupGeneralPage(MainWindow* mw)
     this->ui.dailyVideoGoalSpinBox->setValue(dailyVid);
     this->ui.dailyTimeGoalSpinBox->setValue(dailyTime);
 
+    // --- Streak Daily Time Target ---
+    {
+        QHBoxLayout* row = new QHBoxLayout();
+        QLabel* streakTimeTargetLabel = new QLabel("Streak daily time target (min):");
+        streakTimeTargetLabel->setToolTip(
+            "Minutes of watch time needed per day to keep your streak alive (0 = count completed videos instead)");
+        row->addWidget(streakTimeTargetLabel);
+        row->addStretch();
+        streakDailyTimeTargetSpinBox = new QSpinBox();
+        streakDailyTimeTargetSpinBox->setMinimum(0);
+        streakDailyTimeTargetSpinBox->setMaximum(480);
+        streakDailyTimeTargetSpinBox->setSingleStep(1);
+        streakDailyTimeTargetSpinBox->setToolTip(
+            "Minutes of watch time needed per day to keep your streak alive. Set to 0 to count completed videos instead.");
+        streakDailyTimeTargetSpinBox->setValue(config->get("streak_daily_time_target_minutes").toInt());
+        setupSpinStyle(streakDailyTimeTargetSpinBox, "spinbox");
+        row->addWidget(streakDailyTimeTargetSpinBox);
+        qobject_cast<QVBoxLayout*>(this->ui.statsGroupBox->layout())->addLayout(row);
+    }
+
     // --- Goal-Reached Counter Bonus ---
     {
         QHBoxLayout* row = new QHBoxLayout();

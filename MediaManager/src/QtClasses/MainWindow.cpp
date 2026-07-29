@@ -480,7 +480,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     
     this->animatedIcon = new IconChanger(this->App, this->App->config->get_bool("random_icon"));
     connect(this->animatedIcon, &IconChanger::animatedIconSignal, this, [this](QIcon icon) {
-        if (this->animatedIconFlag)
+        if (this->animatedIconFlag && (this->iconWatchingState || !this->App->config->get_bool("default_icon_not_watching")))
             this->setIcon(icon);
     });
     this->animatedIcon->start();

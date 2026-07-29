@@ -117,7 +117,7 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 		this->mainWindow->updateProgressBar(position, duration, player,running); 
 	});
 	connect(this->VW, &VideoWatcherQt::updateTaskbarIconSignal, this, [this](bool watching) {
-		this->mainWindow->setIconWatchingState(watching);
+		this->mainWindow->setIsWatching(watching);
 		this->mainWindow->updateIconByWatchingState();
 	});
 	connect(this->VW, &VideoWatcherQt::updateMusicPlayerSignal, this, [this](bool flag) {

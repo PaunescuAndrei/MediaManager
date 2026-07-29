@@ -149,7 +149,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     new QShortcut(QKeySequence("ESC"), this->ui.searchBar, [this] {this->ui.searchBar->setText(""); });
     this->UpdateWindowTitle();
     
-    this->animatedIconFlag = this->App->config->get_bool("animated_icon_flag");
+    this->animatedIconEnabled = this->App->config->get_bool("animated_icon_flag");
     this->time_watched_limit = this->App->config->get("time_watched_limit").toInt();
     this->counter_use_actual_watch_time = this->App->config->get_bool("counter_use_actual_watch_time");
     this->ui.watchedTimePB->setMaximum(this->time_watched_limit);
@@ -480,7 +480,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     
     this->animatedIcon = new IconChanger(this->App, this->App->config->get_bool("random_icon"));
     connect(this->animatedIcon, &IconChanger::animatedIconSignal, this, [this](QIcon icon) {
-        if (this->animatedIconFlag && (this->iconWatchingState || !this->App->config->get_bool("default_icon_not_watching")))
+        if (this->animatedIconEnabled && (this->isWatching || !this->App->config->get_bool("show_default_icon_when_idle")))
             this->setIcon(icon);
     });
     this->animatedIcon->start();
@@ -1049,10 +1049,10 @@ void MainWindow::refreshVisibility()
 }
 
 void MainWindow::init_icons() {
-    if (this->animatedIconFlag && this->animatedIcon && this->App->config->get_bool("default_icon_not_watching")) {
+    if (this->animatedIconEnabled && this->animatedIcon && this->App->config->get_bool("show_default_icon_when_idle")) {
         this->animatedIcon->initIcon(false);
     }
-    else if (this->animatedIconFlag && this->animatedIcon && not this->App->config->get_bool("default_icon_not_watching")) {
+    else if (this->animatedIconEnabled && this->animatedIcon && not this->App->config->get_bool("show_default_icon_when_idle")) {
         this->animatedIcon->initIcon(true);
     }
     else {
@@ -1192,24 +1192,24 @@ QIcon MainWindow::getIconByStage(int stage)
     return QIcon();
 }
 
-void MainWindow::setIconWatchingState(bool watching)
+void MainWindow::setIsWatching(bool watching)
 {
-    this->iconWatchingState = watching;
+    this->isWatching = watching;
 }
 
 void MainWindow::updateIconByWatchingState() {
-    if (this->animatedIconFlag and this->animatedIcon) {
-        if (this->iconWatchingState == true)
+    if (this->animatedIconEnabled and this->animatedIcon) {
+        if (this->isWatching == true)
             this->animatedIcon->animatedIconEvent.set();
         else {
             this->animatedIcon->animatedIconEvent.clear();
-            if (this->App->config->get_bool("default_icon_not_watching")) {
+            if (this->App->config->get_bool("show_default_icon_when_idle")) {
                 this->setIcon(this->getIconByStage(2));
             }
         }
     }
     else {
-        if (this->iconWatchingState == true)
+        if (this->isWatching == true)
             this->setIcon(this->getIconByStage(1));
         else
             this->setIcon(this->getIconByStage(2));
@@ -1699,8 +1699,8 @@ bool MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool incre
         }
     }
     if (video_changed) {
-        if (this->animatedIconFlag)
-            this->animatedIcon->setRandomIcon(not this->App->config->get_bool("default_icon_not_watching"));
+        if (this->animatedIconEnabled)
+            this->animatedIcon->setRandomIcon(not this->App->config->get_bool("show_default_icon_when_idle"));
         if (this->App->config->get_bool("mascots"))
             this->updateMascots();
     }
@@ -2618,20 +2618,20 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     }
     if (dialog->ui.AnimatedIcons->checkState() == Qt::CheckState::Checked) {
         config->set("animated_icon_flag", "True");
-        this->animatedIconFlag = true;
+        this->animatedIconEnabled = true;
         this->animatedIcon->showFirstIcon();
     }
     else if (dialog->ui.AnimatedIcons->checkState() == Qt::CheckState::Unchecked) {
         config->set("animated_icon_flag", "False");
-        this->animatedIconFlag = false;
+        this->animatedIconEnabled = false;
         this->updateIconByWatchingState();
     }
-    if (dialog->ui.defaultIconNotWatching->checkState() == Qt::CheckState::Checked) {
-        config->set("default_icon_not_watching", "True");
+    if (dialog->ui.showDefaultIconWhenIdle->checkState() == Qt::CheckState::Checked) {
+        config->set("show_default_icon_when_idle", "True");
         this->updateIconByWatchingState();
     }
-    else if (dialog->ui.defaultIconNotWatching->checkState() == Qt::CheckState::Unchecked) {
-        config->set("default_icon_not_watching", "False");
+    else if (dialog->ui.showDefaultIconWhenIdle->checkState() == Qt::CheckState::Unchecked) {
+        config->set("show_default_icon_when_idle", "False");
         this->updateIconByWatchingState();
     }
     if (dialog->ui.randomIcon->checkState() == Qt::CheckState::Checked) {
@@ -3126,7 +3126,7 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
 
 void MainWindow::setDebugMode(bool debug) {
     if (debug == true) {
-        this->setIconWatchingState(true);
+        this->setIsWatching(true);
         this->updateIconByWatchingState();
         QPushButton* btn1 = this->ui.MenuButtons->findChild<QPushButton*>("resetIconBtn");
         if (!btn1) {

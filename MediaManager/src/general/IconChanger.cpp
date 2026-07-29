@@ -306,7 +306,7 @@ void IconChanger::run()
 			this->update_copies = false;
 		}
 		this->animatedIconEvent.wait();
-		if (this->App->mainWindow->iconWatchingState == true) {
+		if (this->App->mainWindow->isWatching == true) {
 			if (failcount != 0)
 				failcount = 0;
 			if (this->compression) {
@@ -328,7 +328,7 @@ void IconChanger::run()
 					else {
 						break;
 					}
-					if (this->App->mainWindow->iconWatchingState == false && running == true) {
+					if (this->App->mainWindow->isWatching == false && running == true) {
 						this->animatedIconEvent.clear();
 						this->animatedIconEvent.wait();
 					}
@@ -354,7 +354,7 @@ void IconChanger::run()
 					else {
 						break;
 					}
-					if (this->App->mainWindow->iconWatchingState == false && running == true) {
+					if (this->App->mainWindow->isWatching == false && running == true) {
 						this->animatedIconEvent.clear();
 						this->animatedIconEvent.wait();
 					}

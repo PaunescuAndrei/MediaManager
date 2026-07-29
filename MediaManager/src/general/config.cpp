@@ -65,7 +65,7 @@ void Config::init_defaults() {
 		{"animated_icon_flag", "False"},
 		{"animated_icon_fps_modifier", "1.0"},
 		{"random_icon", "False"},
-		{"default_icon_not_watching", "True"},
+		{"show_default_icon_when_idle", "True"},
 		{"headers_minus_visible", "author name path type watched_yes watched_no views rating"},
 		{"headers_plus_visible", "author name path type watched_yes watched_no views rating"},
 		{"sort_column", "PATH_COLUMN"},

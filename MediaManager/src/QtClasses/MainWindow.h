@@ -57,8 +57,8 @@ public:
     int sv_target_count = 0;
     int time_watched_limit = -1;
     bool counter_use_actual_watch_time = false;
-    bool iconWatchingState = false;
-    bool animatedIconFlag = false;
+    bool isWatching = false;
+    bool animatedIconEnabled = false;
     bool toggleDatesFlag = false;
     bool intro_played = true;
     QDate lastVideoGoalNotifiedDate; // invalid (null) date until video goal notification fires
@@ -264,7 +264,7 @@ public:
     void setCounterDialogButton();
     void loadIcons(QString path);
     QIcon getIconByStage(int stage);
-    void setIconWatchingState(bool watching);
+    void setIsWatching(bool watching);
     void updateIconByWatchingState();
     void setIcon(QIcon icon);
     void closeEvent(QCloseEvent* event) override;

@@ -378,14 +378,14 @@ void VideoWatcherQt::run()
 				emit updateMusicPlayerSignal(true);
 		}
 		if(this->watching){
-			if (this->App->debug_mode == false && this->App->mainWindow->iconWatchingState == false) {
+			if (this->App->debug_mode == false && this->App->mainWindow->isWatching == false) {
 				emit this->updateTaskbarIconSignal(true);
 			}
 			if (this->App->taskbar)
 				this->App->taskbar->setPause(this->App->taskbar->hwnd,false);
 		}
 		else if(!this->watching) {
-			if (this->App->debug_mode == false && this->App->mainWindow->iconWatchingState == true) {
+			if (this->App->debug_mode == false && this->App->mainWindow->isWatching == true) {
 				emit this->updateTaskbarIconSignal(false);
 			}
 			if(this->App->taskbar)

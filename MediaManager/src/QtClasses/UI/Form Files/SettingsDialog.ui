@@ -1047,8 +1047,8 @@
              </widget>
             </item>
             <item>
-             <widget class="QCheckBox" name="defaultIconNotWatching">
-              <property name="text"><string>Default Icon when not watching</string></property>
+             <widget class="QCheckBox" name="showDefaultIconWhenIdle">
+              <property name="text"><string>Show default icon when idle</string></property>
               <property name="toolTip"><string>Show the default application icon when no video is playing</string></property>
              </widget>
             </item>

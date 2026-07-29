@@ -405,7 +405,7 @@ void SettingsDialog::setupAppearancePage(MainWindow* mw)
     // --- Icon Settings ---
     setupCheckBox(this->ui.AnimatedIcons, "animated_icon_flag", mw);
     setupCheckBox(this->ui.randomIcon, "random_icon", mw);
-    setupCheckBox(this->ui.defaultIconNotWatching, "default_icon_not_watching", mw);
+    setupCheckBox(this->ui.showDefaultIconWhenIdle, "show_default_icon_when_idle", mw);
 
     setupSpinStyle(this->ui.aicon_fps_modifier_spinBox, "doublespinbox");
     this->ui.aicon_fps_modifier_spinBox->setValue(config->get("animated_icon_fps_modifier").toDouble());

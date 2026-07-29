@@ -117,7 +117,7 @@ LRESULT RawInputKeyboard::OnCopyData(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM
                     }
                 }
                 if (this->App != nullptr && this->App->numlock_only_on == true && raw->data.keyboard.VKey == VK_F8) {
-                    if(this->App->mainWindow->iconWatchingState)
+                    if(this->App->mainWindow->isWatching)
                         this->App->mainWindow->playSpecialSoundEffect(true);
                 }
 			}

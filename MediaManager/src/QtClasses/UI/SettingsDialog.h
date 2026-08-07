@@ -35,6 +35,7 @@ public:
     double old_mascotsChanceSpinBox = 0;
     double old_aicon_fps_modifier = 1.0;
     int old_mascotsFreqSpinBox = 400;
+    int old_mascotsWidthSpinBox = 15;
     bool oldTooltipsEnabled = true;
     int oldTooltipDelayMs = 700;
 

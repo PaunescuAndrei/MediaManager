@@ -2951,6 +2951,11 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         this->App->MascotsAnimation->frequency = dialog->ui.mascotsFreqSpinBox->value();
         dialog->old_mascotsFreqSpinBox = dialog->ui.mascotsFreqSpinBox->value();
     }
+    if (dialog->ui.mascotsWidthSpinBox->value() != dialog->old_mascotsWidthSpinBox) {
+        config->set("mascots_width_percent", QString::number(dialog->ui.mascotsWidthSpinBox->value()));
+        this->applyMascotWidth(this->width(), dialog->ui.mascotsWidthSpinBox->value());
+        dialog->old_mascotsWidthSpinBox = dialog->ui.mascotsWidthSpinBox->value();
+    }
     if (dialog->ui.mascotsRandomChange->checkState() == Qt::CheckState::Checked) {
         config->set("mascots_random_change", "True");
         this->App->MascotsAnimation->random_change = true;
@@ -3188,6 +3193,7 @@ void MainWindow::settingsDialogButton()
         dialog.oldVolume = dialog.ui.volumeSpinBox->value();
         dialog.old_mascotsChanceSpinBox = dialog.ui.mascotsChanceSpinBox->value();
         dialog.old_mascotsFreqSpinBox = dialog.ui.mascotsFreqSpinBox->value();
+        dialog.old_mascotsWidthSpinBox = dialog.ui.mascotsWidthSpinBox->value();
         dialog.old_aicon_fps_modifier = dialog.ui.aicon_fps_modifier_spinBox->value();
         dialog.oldTooltipsEnabled = dialog.ui.tooltipsEnabled->isChecked();
         dialog.oldTooltipDelayMs = dialog.ui.tooltipDelaySpinBox->value();
@@ -3207,6 +3213,9 @@ void MainWindow::settingsDialogButton()
         }
         if (dialog.ui.mascotsFreqSpinBox->value() != dialog.old_mascotsFreqSpinBox) {
             this->App->MascotsAnimation->frequency = dialog.old_mascotsFreqSpinBox;
+        }
+        if (dialog.ui.mascotsWidthSpinBox->value() != dialog.old_mascotsWidthSpinBox) {
+            this->applyMascotWidth(this->width(), dialog.old_mascotsWidthSpinBox);
         }
         if (dialog.ui.aicon_fps_modifier_spinBox->value() != dialog.old_aicon_fps_modifier) {
             this->animatedIcon->fps_modifier = dialog.old_aicon_fps_modifier;
@@ -5078,10 +5087,17 @@ bool MainWindow::event(QEvent* e)
         QResizeEvent* resizeEvent = static_cast<QResizeEvent*>(e);
         int windowWidth = resizeEvent->size().width();
         int windowHeight = resizeEvent->size().height();
-        this->ui.leftImg->setMinimumWidth(windowWidth / 6.6);
-        this->ui.rightImg->setMinimumWidth(windowWidth / 6.6);
+        this->applyMascotWidth(windowWidth, this->App->config->get_double("mascots_width_percent", 15.0));
     }
     return QMainWindow::event(e);
+}
+
+void MainWindow::applyMascotWidth(int windowWidth, double percent) {
+    int width = static_cast<int>(windowWidth * percent / 100.0);
+    this->ui.leftImg->setMinimumWidth(width);
+    this->ui.leftImg->setMaximumWidth(width);
+    this->ui.rightImg->setMinimumWidth(width);
+    this->ui.rightImg->setMaximumWidth(width);
 }
 
 void MainWindow::playSpecialSoundEffect(bool force_play) {

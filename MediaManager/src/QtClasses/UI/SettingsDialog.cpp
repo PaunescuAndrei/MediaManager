@@ -430,6 +430,13 @@ void SettingsDialog::setupAppearancePage(MainWindow* mw)
         mw->App->MascotsAnimation->frequency = this->ui.mascotsFreqSpinBox->value();
     });
 
+    setupSpinStyle(this->ui.mascotsWidthSpinBox, "spinbox");
+    this->ui.mascotsWidthSpinBox->setValue(static_cast<int>(config->get_double("mascots_width_percent", 15.0)));
+    this->old_mascotsWidthSpinBox = this->ui.mascotsWidthSpinBox->value();
+    connect(this->ui.mascotsWidthSpinBox, &QSpinBox::valueChanged, this, [mw, this] {
+        mw->applyMascotWidth(mw->width(), this->ui.mascotsWidthSpinBox->value());
+    });
+
     setupCheckBox(this->ui.mascotsRandomChange, "mascots_random_change", mw);
     setupSpinStyle(this->ui.mascotsChanceSpinBox, "spinbox");
     this->ui.mascotsChanceSpinBox->setValue(config->get("mascots_random_chance").toInt());

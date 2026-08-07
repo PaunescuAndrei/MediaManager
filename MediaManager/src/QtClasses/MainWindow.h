@@ -233,6 +233,7 @@ public:
     void cleanMissingFilesDialog(QWidget* parent = nullptr);
     void handleMascotClickEvents(customGraphicsView* mascot, Qt::MouseButton button, Qt::KeyboardModifiers modifiers);
     void applySettings(SettingsDialog* dialog);
+    void applyMascotWidth(int windowWidth, double percent);
     void setDebugMode(bool debug);
     void settingsDialogButton();
     QString saltSeed(QString seed) const;

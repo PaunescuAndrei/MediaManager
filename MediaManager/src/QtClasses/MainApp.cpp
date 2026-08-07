@@ -302,6 +302,10 @@ void MainApp::stop_handle()
 	this->stopSingleInstanceServer();
 	this->VW->wait();
 	this->mainWindow->animatedIcon->wait();
+	// Wait for mascots threads to exit before deleteLater() destroys them -
+	// deleting a running QThread (Qt 6.8 docs) results in a program crash.
+	this->MascotsGenerator->wait();
+	this->MascotsAnimation->wait();
 }
 
 MainApp::~MainApp()

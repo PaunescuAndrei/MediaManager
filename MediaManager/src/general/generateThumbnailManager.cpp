@@ -39,7 +39,7 @@ void generateThumbnailManager::start() {
         return;
     }
     for (int i = 0; i < this->thumbsThreadPool->maxThreadCount(); i++) {
-        generateThumbnailRunnable* thumbsTask = new generateThumbnailRunnable(&this->queue, this, this);
+        generateThumbnailRunnable* thumbsTask = new generateThumbnailRunnable(&this->queue, this, nullptr); // no QObject parent: the thread pool (autoDelete) is the sole owner, avoiding a double-delete with ~QObject's children cleanup
         connect(thumbsTask, &generateThumbnailRunnable::openFile, this, &generateThumbnailManager::openFile);
         if (!this->thumbsThreadPool->tryStart(thumbsTask)) {
             thumbsTask->deleteLater();

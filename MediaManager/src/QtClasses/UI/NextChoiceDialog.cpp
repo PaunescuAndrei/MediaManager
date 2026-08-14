@@ -172,6 +172,10 @@ NextChoiceDialog::NextChoiceDialog(QWidget* parent) : QDialog(parent)
             this->accept();
         }
     });
+    connect(this->ui.replayButton, &QPushButton::clicked, this, [this] {
+        emit this->replayRequested();
+        this->reject();
+    });
     if (auto buttonBox = this->findChild<QDialogButtonBox*>()) {
         connect(buttonBox, &QDialogButtonBox::rejected, this, &NextChoiceDialog::reject);
     }

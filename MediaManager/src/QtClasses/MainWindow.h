@@ -33,6 +33,7 @@ class MainApp;
 class VideosModel;
 class VideosProxyModel;
 class VideosSortProxyModel;
+class NextChoiceDialog;
 
 class MainWindow : public QMainWindow
 {
@@ -133,6 +134,8 @@ public:
     void showEndOfVideoDialog(QSharedPointer<BasePlayer> player, finishDialog::PlayerContext context,
         bool ignore_end_of_video = false, bool show_notification = false,
         QPointer<NotificationWidget> resumeNotification = nullptr);
+    void replayVideo(QSharedPointer<BasePlayer> player, finishDialog::PlayerContext context, bool finalize = true);
+    void connectReplayRequested(NextChoiceDialog& dialog, bool finalize);
     void SkipVideo();
     void updateProgressBar(QString position, QString duration);
     void updateTotalListLabel(bool force_update = false);

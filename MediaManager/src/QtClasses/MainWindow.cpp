@@ -334,6 +334,10 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
                 candidates
             );
 
+            // Random chooser — the current video hasn't finished, so replay
+            // just restarts it without counter/view bookkeeping.
+            this->connectReplayRequested(dialog, false);
+
             if (dialog.exec() == QDialog::Accepted) {
                 selectedChoice = dialog.selectedChoice();
             }
@@ -2103,6 +2107,8 @@ bool MainWindow::NextVideo(NextVideoModes::Mode mode, bool increment, bool updat
                 candidates
             );
 
+            this->connectReplayRequested(dialog, true);
+
             if (dialog.exec() == QDialog::Accepted) {
                 selectedChoice = dialog.selectedChoice();
             }
@@ -3456,6 +3462,11 @@ void MainWindow::showEndOfVideoDialog(QSharedPointer<BasePlayer> player, finishD
                         if (player->position != -1) {
                             this->App->db->updateVideoProgress(player->video_id, player->position);
                         }
+                        // Preserve the finish state so a Replay in the Next chooser
+                        // can still credit this completed watch — the Next flow resets
+                        // position to -1 and advances the checkpoint below.
+                        player->replayEndPosition = player->position;
+                        player->replayCheckpoint = player->lastCheckpointWatchedTime;
                         player->position = -1;
                         this->NextButtonClicked(player, true, this->getCheckedUpdateWatchedToggleButton());
                         this->position = 0;
@@ -3534,56 +3545,7 @@ void MainWindow::showEndOfVideoDialog(QSharedPointer<BasePlayer> player, finishD
                 }
                 else if (result == finishDialog::Replay) {
                     // Replay — work for all contexts
-                        this->App->db->db.transaction();
-                        QPersistentModelIndex srcIdx = this->modelIndexByPath(player->video_path);
-                        QString currentType;
-                        if (srcIdx.isValid()) {
-                            currentType = srcIdx.sibling(srcIdx.row(), ListColumns["TYPE_COLUMN"]).data(Qt::DisplayRole).toString();
-                        }
-                        double replayProgress = std::max(0.0, player->position);
-                        double replayActualDelta = player->videoWatchedTime() - player->lastCheckpointWatchedTime;
-                        player->lastCheckpointWatchedTime = player->videoWatchedTime();
-                        // Counter deltas and time-watched increments apply to all
-                        // contexts. SV-target recalculation and sv_count reset are
-                        // MainPlayer-only — WatchSelected/WatchExternal replays
-                        // shouldn't touch the main playlist's SV progress.
-                        const bool isMainPlayer = (context == finishDialog::PlayerContext::MainPlayer);
-                        bool playedSpecialType = this->applyPostWatchAdjustments(currentType, player->video_id, true, replayProgress, true, false, this->counter_use_actual_watch_time ? replayActualDelta : 0.0, !isMainPlayer);
-                        if (!isMainPlayer) {
-                            playedSpecialType = false; // allow sv_count++ but never sv_count=0
-                        }
-                        this->updateSvCountersAfterPlayback(playedSpecialType, false);
-                        this->checktimeWatchedIncrement();
-                        this->updateWatchedProgressBar();
-                        if (srcIdx.isValid()) {
-                            const int row = srcIdx.row();
-                            const QPersistentModelIndex viewsIdx = srcIdx.sibling(row, ListColumns["VIEWS_COLUMN"]);
-                            int views = viewsIdx.data(Qt::DisplayRole).toInt();
-                            this->videosModel->setData(viewsIdx, QString::number(views + 1), Qt::DisplayRole);
-                            const QPersistentModelIndex lastWatchedIdx = srcIdx.sibling(row, ListColumns["LAST_WATCHED_COLUMN"]);
-                            this->videosModel->setData(lastWatchedIdx, QDateTime::currentDateTime(), Qt::DisplayRole);
-                        }
-                        if (player->video_id >= 0) {
-                            this->App->db->incrementVideoViews(player->video_id, 1, true);
-                        }
-
-                        double rwatched = player->videoWatchedTime();
-                        if (rwatched > 0 || player->activeWatchHistoryRowId > 0) {
-                            double watched_end = player->position;
-                            if (watched_end < 0)
-                                watched_end = (player->duration > 0) ? player->duration : player->startProgress;
-                            this->App->db->upsertWatchHistory(player->activeWatchHistoryRowId, player->video_id, player->category, player->video_path,
-                                player->startProgress, watched_end,
-                                rwatched,
-                                this->App->VW->currentSessionId(), true);
-                            player->activeWatchHistoryRowId = -1;
-                        }
-                        player->resetVideoTiming();
-                        player->startProgress = 0;
-                        this->App->db->db.commit();
-                        this->checkDailyProgress();
-                        player->queue.push(std::make_shared<MpcDirectCommand>(CMD_SETPOSITION, "0"));
-                        this->position = 0;
+                    this->replayVideo(player, context);
                 }
                 else if (result == finishDialog::Skip) {
                     // Skip is only valid for MainPlayer
@@ -3609,6 +3571,117 @@ void MainWindow::showEndOfVideoDialog(QSharedPointer<BasePlayer> player, finishD
         // repopulating with potentially stale/incorrect current-video data.
         resumeNotification->showNotification();
     }
+}
+
+void MainWindow::connectReplayRequested(NextChoiceDialog& dialog, bool finalize)
+{
+    connect(&dialog, &NextChoiceDialog::replayRequested, this, [this, finalize] {
+        this->replayVideo(this->App->VW->mainPlayer, finishDialog::PlayerContext::MainPlayer, finalize);
+    });
+}
+
+void MainWindow::replayVideo(QSharedPointer<BasePlayer> player, finishDialog::PlayerContext context, bool finalize)
+{
+	if (!finalize) {
+		// Simple restart (Random chooser): the current video is still playing,
+		// so replay just restarts it without the counter, time-watched and
+		// view bookkeeping that a "finished watching" replay applies.
+		if (player) {
+			player->queue.push(std::make_shared<MpcDirectCommand>(CMD_SETPOSITION, "0"));
+		} else if (this->ui.currentVideo && this->ui.currentVideo->id >= 0) {
+			this->App->db->updateVideoProgress(this->ui.currentVideo->id, 0.0);
+			// No player means the watcher has no position to push — refresh the
+			// progress bar here so it reflects the reset immediately.
+			this->updateProgressBar("0", utils::getVideoDuration(this->ui.currentVideo->path));
+		}
+		this->position = 0;
+		return;
+	}
+	// The video to replay is the player's current video, or the currently
+	// selected video when no player is open. Without a player there is no
+	// immediate playback — the saved progress is reset instead so the video
+	// starts from the beginning the next time it is opened.
+	const QString replayPath = player ? player->video_path : this->ui.currentVideo->path;
+	if (replayPath.isEmpty()) {
+		return;
+	}
+	const int replayVideoId = player ? player->video_id : this->ui.currentVideo->id;
+	// Replay — work for all contexts
+	this->App->db->db.transaction();
+	QPersistentModelIndex srcIdx = this->modelIndexByPath(replayPath);
+	QString currentType;
+	if (srcIdx.isValid()) {
+		currentType = srcIdx.sibling(srcIdx.row(), ListColumns["TYPE_COLUMN"]).data(Qt::DisplayRole).toString();
+	}
+	double replayProgress = std::max(0.0, player ? player->position : this->position);
+	double replayActualDelta = player ? player->videoWatchedTime() - player->lastCheckpointWatchedTime : 0.0;
+	if (player && player->end_of_video && player->position < 0 && player->replayEndPosition >= 0) {
+		// End-of-video Next resets position to -1 and advances the checkpoint
+		// before the chooser can fire Replay — restore the preserved finish state
+		// so the completed watch still credits its time-watched.
+		replayProgress = player->replayEndPosition;
+		replayActualDelta = player->videoWatchedTime() - player->replayCheckpoint;
+	}
+	if (player) {
+		player->lastCheckpointWatchedTime = player->videoWatchedTime();
+		player->replayEndPosition = -1;
+		player->replayCheckpoint = -1;
+	}
+	// Counter deltas and time-watched increments apply to all
+	// contexts. SV-target recalculation and sv_count reset are
+	// MainPlayer-only — WatchSelected/WatchExternal replays
+	// shouldn't touch the main playlist's SV progress.
+	const bool isMainPlayer = (context == finishDialog::PlayerContext::MainPlayer);
+	bool playedSpecialType = this->applyPostWatchAdjustments(currentType, replayVideoId, true, replayProgress, true, false, this->counter_use_actual_watch_time ? replayActualDelta : 0.0, !isMainPlayer);
+	if (!isMainPlayer) {
+		playedSpecialType = false; // allow sv_count++ but never sv_count=0
+	}
+	this->updateSvCountersAfterPlayback(playedSpecialType, false);
+	this->checktimeWatchedIncrement();
+	this->updateWatchedProgressBar();
+	if (srcIdx.isValid()) {
+		const int row = srcIdx.row();
+		const QPersistentModelIndex viewsIdx = srcIdx.sibling(row, ListColumns["VIEWS_COLUMN"]);
+		int views = viewsIdx.data(Qt::DisplayRole).toInt();
+		this->videosModel->setData(viewsIdx, QString::number(views + 1), Qt::DisplayRole);
+		const QPersistentModelIndex lastWatchedIdx = srcIdx.sibling(row, ListColumns["LAST_WATCHED_COLUMN"]);
+		this->videosModel->setData(lastWatchedIdx, QDateTime::currentDateTime(), Qt::DisplayRole);
+	}
+	if (replayVideoId >= 0) {
+		this->App->db->incrementVideoViews(replayVideoId, 1, true);
+	}
+
+	if (player) {
+		double rwatched = player->videoWatchedTime();
+		if (rwatched > 0 || player->activeWatchHistoryRowId > 0) {
+			double watched_end = player->position;
+			if (watched_end < 0)
+				watched_end = (player->duration > 0) ? player->duration : player->startProgress;
+			this->App->db->upsertWatchHistory(player->activeWatchHistoryRowId, player->video_id, player->category, player->video_path,
+				player->startProgress, watched_end,
+				rwatched,
+				this->App->VW->currentSessionId(), true);
+			player->activeWatchHistoryRowId = -1;
+		}
+		player->resetVideoTiming();
+		player->startProgress = 0;
+	}
+	// Reset the saved progress so the video starts from the beginning the
+	// next time it is opened (this is what triggers the restart when no
+	// player is currently open).
+	if (replayVideoId >= 0) {
+		this->App->db->updateVideoProgress(replayVideoId, 0.0);
+	}
+	this->App->db->db.commit();
+	this->checkDailyProgress();
+	if (player) {
+		player->queue.push(std::make_shared<MpcDirectCommand>(CMD_SETPOSITION, "0"));
+	} else if (this->ui.currentVideo && !this->ui.currentVideo->path.isEmpty()) {
+		// No player — the watcher has no position to push, so refresh the
+		// progress bar here to reflect the reset.
+		this->updateProgressBar("0", utils::getVideoDuration(this->ui.currentVideo->path));
+	}
+	this->position = 0;
 }
 
 void MainWindow::SkipVideo() {

@@ -38,6 +38,12 @@ public:
     bool wasPlayingLastCheck = false;
     double m_videoWatchedBaseline = 0.0;
     double lastCheckpointWatchedTime = 0.0;
+    // Finish state preserved across the end-of-video Next flow so a Replay in
+    // the Next chooser can still credit the completed watch — position is reset
+    // to -1 and the checkpoint advanced before the chooser appears. Only valid
+    // between the finish-dialog Next handler and replayVideo's finalize branch.
+    double replayEndPosition = -1;
+    double replayCheckpoint = -1;
     int activeWatchHistoryRowId = -1;
     QDateTime videoStartWallClock;
     QDateTime lastCheckpointTime;

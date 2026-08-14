@@ -51,6 +51,16 @@
        </widget>
       </item>
       <item>
+       <widget class="QPushButton" name="replayButton">
+        <property name="toolTip">
+         <string>Replay the current video from the beginning</string>
+        </property>
+        <property name="text">
+         <string>Replay</string>
+        </property>
+       </widget>
+      </item>
+      <item>
        <spacer name="topBarRightSpacer">
         <property name="orientation">
          <enum>Qt::Orientation::Horizontal</enum>

@@ -39,6 +39,8 @@ public:
                IntMutator onSetRefreshCounter,
                IntAccessor onGetRollCounter, IntMutator onSetRollCounter,
                const QList<NextVideoChoice>& initialCandidates);
+signals:
+    void replayRequested();
 private:
     void rebuildCards(int startIndex = 0);
     QWidget* buildCard(const NextVideoChoice& choice, int index);

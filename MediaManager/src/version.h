@@ -1,7 +1,7 @@
 #pragma once
 
-#define VERSION_COMMA       1,10,14
-#define VERSION_TEXT       "1.10.14"
+#define VERSION_COMMA       1,10,15
+#define VERSION_TEXT       "1.10.15"
 
 #define FILEVER_VSINFO      VERSION_COMMA
 #define FILEVER_TEXT        VERSION_TEXT

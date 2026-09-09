@@ -309,7 +309,9 @@ void VideoWatcherQt::rollDayIfNeeded()
 
 		double watched = player->videoWatchedTime();
 		if (watchhistory::hasWatchToPersist(player)) {
-			watchhistory::flushPlayer(this->db, *player, m_currentSessionId, false, true);
+			// Mid-watch snapshot of a live player: if the playhead has not been reported
+			// yet, claim no progress rather than the full duration.
+			watchhistory::flushPlayer(this->db, *player, m_currentSessionId, false, false);
 		}
 		// Emit the pending counter delta before the baseline moves, so the
 		// pre-midnight portion is counted exactly once.

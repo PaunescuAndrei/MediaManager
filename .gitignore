@@ -24,4 +24,6 @@ docs/superpowers/
 .superpowers/
 CLAUDE.md
 /reasonix.toml
-/.claude/skills/gitnexus
+
+# Claude Code local config and generated skills
+/.claude/

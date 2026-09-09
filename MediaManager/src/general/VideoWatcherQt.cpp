@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "VideoWatcherQt.h"
+#include "WatchHistory.h"
 #include "utils.h"
 #include "winuser.h"
 #include "MainApp.h"
@@ -15,6 +16,7 @@ VideoWatcherQt::VideoWatcherQt(MainApp* App, QObject* parent) : QThread(parent)
 {
 	this->App = App;
 	this->db = new sqliteDB(this->App->db->location, "videowatcher_con");
+	this->m_lastRollDate = QDate::currentDate();
 }
 
 QSharedPointer<BasePlayer> VideoWatcherQt::newPlayer(QString path, int video_id)
@@ -62,21 +64,10 @@ void VideoWatcherQt::clearData(bool include_mainplayer) {
 				this->db->updateVideoProgress((*it)->video_id, (*it)->position);
 			}
 			double watchedTime = (*it)->videoWatchedTime();
-			if ((watchedTime > 0 || (*it)->activeWatchHistoryRowId > 0) && ((*it)->video_id >= 0 || (*it)->trackExternalVideo)) {
-				double endPos = (*it)->position;
-				if (endPos < 0) endPos = ((*it)->duration > 0) ? (*it)->duration : (*it)->startProgress;
-				this->db->upsertWatchHistory((*it)->activeWatchHistoryRowId,
-					(*it)->video_id, (*it)->category, (*it)->video_path,
-					(*it)->startProgress, endPos, watchedTime,
-					m_currentSessionId, false);
+			if (watchhistory::hasWatchToPersist(*it) && watchhistory::isTrackedVideo(*it)) {
+				watchhistory::flushPlayer(this->db, *(*it), m_currentSessionId, false, true);
 			}
-			if (this->App->config->get_bool("counter_use_actual_watch_time") && shouldCountWatchTime(*it)) {
-				double delta = watchedTime - (*it)->lastCheckpointWatchedTime;
-				if (delta > 0.0) {
-					(*it)->lastCheckpointWatchedTime = watchedTime;
-					emit timeWatchedIncrementSignal(delta);
-				}
-			}
+			this->emitCounterDelta(*it, watchedTime);
 		}
 		(*it)->drop();
 		(*it).reset();
@@ -178,21 +169,14 @@ void VideoWatcherQt::checkpointPlayer(QSharedPointer<BasePlayer> player, int int
 	if (m_currentSessionId > 0) {
 		this->db->bumpSessionTime(m_currentSessionId, currentSessionTime());
 	}
-	this->db->upsertWatchHistory(player->activeWatchHistoryRowId,
-		player->video_id, player->category, player->video_path,
-		player->startProgress, pos, watched,
-		m_currentSessionId, false);
+	if (watchhistory::hasWatchToPersist(player)) {
+		watchhistory::flushPlayer(this->db, *player, m_currentSessionId, false, false);
+	}
 	player->lastCheckpointTime = now;
 	if (pos >= 0 && player->video_id >= 0) {
 		this->db->updateVideoProgress(player->video_id, pos);
 	}
-	if (this->App->config->get_bool("counter_use_actual_watch_time") && shouldCountWatchTime(player)) {
-		double delta = player->videoWatchedTime() - player->lastCheckpointWatchedTime;
-		if (delta > 0.0) {
-			player->lastCheckpointWatchedTime = player->videoWatchedTime();
-			emit timeWatchedIncrementSignal(delta);
-		}
-	}
+	this->emitCounterDelta(player, watched);
 }
 
 void VideoWatcherQt::handleExternalVideoChange(QSharedPointer<BasePlayer> player)
@@ -215,14 +199,8 @@ void VideoWatcherQt::handleExternalVideoChange(QSharedPointer<BasePlayer> player
 		return;
 	}
 
-	double watchedTime = player->videoWatchedTime();
-	if ((watchedTime > 0 || player->activeWatchHistoryRowId > 0) && player->video_id >= 0) {
-		double endPos = player->position;
-		if (endPos < 0) endPos = (player->duration > 0) ? player->duration : player->startProgress;
-		this->db->upsertWatchHistory(player->activeWatchHistoryRowId,
-			player->video_id, player->category, player->video_path,
-			player->startProgress, endPos, watchedTime,
-			m_currentSessionId, false);
+	if (watchhistory::hasWatchToPersist(player) && watchhistory::isTrackedVideo(player)) {
+		watchhistory::flushPlayer(this->db, *player, m_currentSessionId, false, true);
 	}
 	if (!player->trackExternalVideo) {
 		player->video_id = -1;
@@ -246,11 +224,17 @@ void VideoWatcherQt::handleExternalVideoChange(QSharedPointer<BasePlayer> player
 	player->activeWatchHistoryRowId = -1;
 	player->startProgress = 0;
 	player->resetVideoTiming();
-	player->activeWatchHistoryRowId = this->db->upsertWatchHistory(
-		player->activeWatchHistoryRowId,
-		newVideoId, player->category, player->video_path,
-		0, 0, 0,
-		m_currentSessionId, false);
+	// Only open a row for a video that will actually be tracked; an untracked
+	// external file (empty_player_tracking off) would otherwise leave a row that
+	// no flush path is allowed to update.
+	if (watchhistory::isTrackedVideo(player)) {
+		watchhistory::RowState newRow;
+		newRow.videoId = newVideoId;
+		newRow.category = player->category;
+		newRow.videoPath = player->video_path;
+		watchhistory::flush(this->db, newRow, m_currentSessionId);
+		player->activeWatchHistoryRowId = newRow.rowId;
+	}
 }
 
 bool VideoWatcherQt::shouldCountWatchTime(QSharedPointer<BasePlayer> player)
@@ -261,6 +245,16 @@ bool VideoWatcherQt::shouldCountWatchTime(QSharedPointer<BasePlayer> player)
 		return true;
 	const bool isMinusPlus = this->App->config->get("sv_mode").compare("PLUS", Qt::CaseInsensitive) == 0;
 	return isMinusPlus && svTypes.contains(player->video_type, Qt::CaseInsensitive);
+}
+
+void VideoWatcherQt::emitCounterDelta(QSharedPointer<BasePlayer> player, double watched)
+{
+	if (!this->App->config->get_bool("counter_use_actual_watch_time")) return;
+	if (!shouldCountWatchTime(player)) return;
+	double delta = watched - player->lastCheckpointWatchedTime;
+	if (delta <= 0.0) return;
+	player->lastCheckpointWatchedTime = watched;
+	emit timeWatchedIncrementSignal(delta);
 }
 
 double VideoWatcherQt::currentSessionTime() const
@@ -294,6 +288,44 @@ void VideoWatcherQt::resetSession()
 	m_currentSessionId = -1;
 }
 
+void VideoWatcherQt::rollDayIfNeeded()
+{
+	if (m_lastRollDate == QDate::currentDate()) return;
+
+	// Flush every active player's accumulated watch time into its current row while
+	// that row still belongs to the old day, then rebase the per-play timing so the
+	// next checkpoint opens a fresh row for the new day. Day queries bucket rows by
+	// watch_history.watched_at, which is stamped once at INSERT and never rewritten,
+	// so without this a row opened before midnight would keep yesterday's date and
+	// its post-midnight time would count for the wrong day. The session is left open
+	// on purpose: a watch that crosses midnight stays one session.
+	for (const QSharedPointer<BasePlayer>& player : this->Players) {
+		if (!player || player->video_path.isEmpty()) continue;
+		if (!player->trackExternalVideo && player->video_id < 0) continue;
+		// A video change in flight leaves video_id and video_path describing different
+		// videos, so flushing now would persist a mismatched row. Retry on the next
+		// tick: m_lastRollDate only advances after a pass that skipped nobody.
+		if (player->change_in_progress || player->video_path != player->trackedVideoPath) return;
+
+		double watched = player->videoWatchedTime();
+		if (watchhistory::hasWatchToPersist(player)) {
+			watchhistory::flushPlayer(this->db, *player, m_currentSessionId, false, true);
+		}
+		// Emit the pending counter delta before the baseline moves, so the
+		// pre-midnight portion is counted exactly once.
+		this->emitCounterDelta(player, watched);
+		player->activeWatchHistoryRowId = -1;   // next checkpoint inserts a new row
+		player->resetVideoTiming();             // rebase watched-time / checkpoint clock
+	}
+
+	m_lastRollDate = QDate::currentDate();
+	if (qMainApp) {
+		qMainApp->logger->log(
+			QStringLiteral("Day changed - rolled watch history rows for the new day"),
+			"VideoWatcherQt");
+	}
+}
+
 double VideoWatcherQt::endCurrentSession()
 {
 	if (m_currentSessionId <= 0) return -1.0;
@@ -312,6 +344,7 @@ void VideoWatcherQt::run()
 {
 	while (this->running) {
 		int saveInterval = this->App->config->get("session_save_interval_seconds").toInt();
+		this->rollDayIfNeeded();
 		for (QSharedPointer<BasePlayer> player : this->Players) {
 			if (!player->video_path.isEmpty() && player->video_path != player->trackedVideoPath && !player->change_in_progress) {
 				this->handleExternalVideoChange(player);
@@ -326,22 +359,10 @@ void VideoWatcherQt::run()
 					this->db->updateVideoProgress(player->video_id, player->position);
 				}
 				double watchedTime = player->videoWatchedTime();
-				if ((watchedTime > 0 || player->activeWatchHistoryRowId > 0) && (player->video_id >= 0 || player->trackExternalVideo)) {
-					double watched_end = player->position;
-					if (watched_end < 0)
-						watched_end = (player->duration > 0) ? player->duration : player->startProgress;
-					this->db->upsertWatchHistory(player->activeWatchHistoryRowId,
-						player->video_id, player->category, player->video_path,
-						player->startProgress, watched_end, watchedTime,
-						m_currentSessionId, false);
+				if (watchhistory::hasWatchToPersist(player) && watchhistory::isTrackedVideo(player)) {
+					watchhistory::flushPlayer(this->db, *player, m_currentSessionId, false, true);
 				}
-				if (this->App->config->get_bool("counter_use_actual_watch_time") && shouldCountWatchTime(player)) {
-					double delta = watchedTime - player->lastCheckpointWatchedTime;
-					if (delta > 0.0) {
-						player->lastCheckpointWatchedTime = watchedTime;
-						emit timeWatchedIncrementSignal(delta);
-					}
-				}
+				this->emitCounterDelta(player, watchedTime);
 				if (player == this->mainPlayer) {
 					this->clearAfterMainVideoEnd();
 				}
@@ -397,14 +418,8 @@ void VideoWatcherQt::run()
 		if (player->position != -1) {
 			this->db->updateVideoProgress(player->video_id, player->position);
 		}
-		double watchedTime = player->videoWatchedTime();
-		if ((watchedTime > 0 || player->activeWatchHistoryRowId > 0) && (player->video_id >= 0 || player->trackExternalVideo)) {
-			double endPos = player->position;
-			if (endPos < 0) endPos = (player->duration > 0) ? player->duration : player->startProgress;
-			this->db->upsertWatchHistory(player->activeWatchHistoryRowId,
-				player->video_id, player->category, player->video_path,
-				player->startProgress, endPos, watchedTime,
-				m_currentSessionId, false);
+		if (watchhistory::hasWatchToPersist(player) && watchhistory::isTrackedVideo(player)) {
+			watchhistory::flushPlayer(this->db, *player, m_currentSessionId, false, true);
 		}
 		player->process->terminate();
 	}
@@ -423,14 +438,8 @@ VideoWatcherQt::~VideoWatcherQt()
 		if (item->position != -1 && item->video_id >= 0) {
 			this->db->updateVideoProgress(item->video_id, item->position);
 		}
-		double w = item->videoWatchedTime();
-		if ((w > 0 || item->activeWatchHistoryRowId > 0) && (item->video_id >= 0 || item->trackExternalVideo)) {
-			double endPos = item->position;
-			if (endPos < 0) endPos = (item->duration > 0) ? item->duration : item->startProgress;
-			this->db->upsertWatchHistory(item->activeWatchHistoryRowId,
-				item->video_id, item->category, item->video_path,
-				item->startProgress, endPos, w,
-				m_currentSessionId, false);
+		if (watchhistory::hasWatchToPersist(item) && watchhistory::isTrackedVideo(item)) {
+			watchhistory::flushPlayer(this->db, *item, m_currentSessionId, false, true);
 		}
 		item->process->terminate();
 		item.reset();

@@ -48,6 +48,18 @@ public:
     ~VideoWatcherQt();
 
 private:
+    // Roll the calendar day at midnight: flush each active player's watch-history row so
+    // the next checkpoint opens a fresh row for the new day. Day queries bucket rows by
+    // watch_history.watched_at, which is stamped once at INSERT, so without this a row
+    // opened before midnight would keep yesterday's date and its post-midnight time
+    // would count for the wrong day. The session is left open - a watch that crosses
+    // midnight stays one session.
+    void rollDayIfNeeded();
+    // Calendar day the watch-history rows were last rolled for.
+    QDate m_lastRollDate;
+    // Emit the pending watch-time delta for the counter, advancing the watermark
+    // first so the same seconds are never counted twice.
+    void emitCounterDelta(QSharedPointer<BasePlayer> player, double watched);
     // Close the current session (update session_history), return session duration in seconds.
     // Returns -1 if no session was active. Resets m_currentSessionId to -1.
     double endCurrentSession();

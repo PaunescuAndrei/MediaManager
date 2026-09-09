@@ -119,7 +119,6 @@ public:
     void closeOrphanedSessions();  // close sessions left open by ungraceful exit
 
     // Session History
-    QVector<SessionEntry> getRecentWatchHistory(int limit = 50);
     QVector<SessionSummary> getRecentSessions(int limit = 50);
     QVector<SessionEntry> getSessionVideos(int sessionId);
     double getAverageSessionTime();

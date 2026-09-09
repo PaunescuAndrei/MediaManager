@@ -181,6 +181,9 @@
     <ClCompile Include="src\general\sqliteDB.cpp">
       <Filter>Source Files\general</Filter>
     </ClCompile>
+    <ClCompile Include="src\general\WatchHistory.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
     <ClCompile Include="src\general\taskbar.cpp">
       <Filter>Source Files\general</Filter>
     </ClCompile>
@@ -352,6 +355,9 @@
       <Filter>Header Files\general</Filter>
     </ClInclude>
     <ClInclude Include="src\general\sqliteDB.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\WatchHistory.h">
       <Filter>Header Files\general</Filter>
     </ClInclude>
     <ClInclude Include="src\general\taskbar.h">

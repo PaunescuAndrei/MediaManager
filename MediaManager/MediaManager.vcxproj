@@ -41,6 +41,7 @@
     <ClCompile Include="src\general\shokoAPI.cpp" />
     <ClCompile Include="src\general\SoundPlayer.cpp" />
     <ClCompile Include="src\general\sqliteDB.cpp" />
+    <ClCompile Include="src\general\WatchHistory.cpp" />
     <ClCompile Include="src\general\taskbar.cpp" />
     <ClCompile Include="src\general\VideoWatcherQt.cpp" />
     <ClCompile Include="src\logger.cpp" />
@@ -153,6 +154,7 @@
     <ClInclude Include="src\general\shokoAPI.h" />
     <ClInclude Include="src\general\SoundPlayer.h" />
     <ClInclude Include="src\general\sqliteDB.h" />
+    <ClInclude Include="src\general\WatchHistory.h" />
     <ClInclude Include="src\general\taskbar.h" />
     <QtMoc Include="src\QtClasses\UI\InsertSettingsDialog.h" />
     <QtMoc Include="src\QtClasses\Widgets\generalEventFilter.h" />

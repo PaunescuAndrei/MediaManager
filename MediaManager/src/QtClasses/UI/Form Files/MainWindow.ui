@@ -632,7 +632,7 @@ Right-click: Cycle between modes
               <item>
                <widget class="QCheckBox" name="visibleOnlyCheckBox">
                 <property name="toolTip">
-                 <string>When checked, only show videos passing active filters</string>
+                 <string>While searching, apply the watched filter from the header instead of showing every video</string>
                 </property>
                 <property name="text">
                  <string>Visible Only</string>

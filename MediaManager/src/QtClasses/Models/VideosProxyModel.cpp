@@ -28,11 +28,6 @@ void VideosProxyModel::setWatchedOption(const QString& option) {
     invalidateFilter();
 }
 
-void VideosProxyModel::setVisibleOnlyChecked(bool enabled) {
-    visible_only = enabled;
-    invalidateFilter();
-}
-
 void VideosProxyModel::rebuildAuthorsWithUnwatched() {
     authorsWithUnwatched.clear();
     if (watched_option != "Mixed" || !sourceModel()) return;

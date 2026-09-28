@@ -136,6 +136,15 @@ mascotsGeneratorThread::mascotsGeneratorThread(MainApp* App, QString mascots_pat
 	this->running = true;
 }
 
+void mascotsGeneratorThread::stop() {
+	this->running = false;
+	// Release the producer if it is parked in push() on a full queue. It only re-reads
+	// `running` at the top of its loop, so without this it would never return from
+	// loadImage(), never exit, and MainApp::stop_handle would block in wait() forever.
+	if (this->mascots_pixmap)
+		this->mascots_pixmap->shutdown();
+}
+
 void mascotsGeneratorThread::run() {
 	while (this->running) {
 		this->loadImage();

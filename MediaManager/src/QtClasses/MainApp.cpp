@@ -256,7 +256,9 @@ void MainApp::stop_handle()
 	
 	this->VW->running = false;
 	this->mainWindow->animatedIcon->running = false;
-	this->MascotsGenerator->running = false;
+	// stop() also shuts the pixmap queue down, releasing the generator if it is parked
+	// in push() on a full queue - without that the wait() below would deadlock.
+	this->MascotsGenerator->stop();
 	this->MascotsAnimation->running = false;
 	this->MascotsAnimation->runningEvent.set();
 	this->mainWindow->animatedIcon->animatedIconEvent.set();

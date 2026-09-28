@@ -13,23 +13,47 @@ public:
 
     ~BlockingQueue() = default;
 
-    // Push methods
-    void push(const T& item) {
-        pushBack(item);
+    // Release every waiter and refuse further pushes. A producer parked in push* on a
+    // full queue can only be woken by a consumer, so without this a shutdown that
+    // joins the producer deadlocks: the producer never returns from push*, never
+    // re-reads its stop flag, and the joining thread waits forever. Call this before
+    // waiting on the producer. The queue stays closed; pop*/front/back return a
+    // default-constructed T once it is drained.
+    void shutdown() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        closed_ = true;
+        condFull_.notify_all();
+        condEmpty_.notify_all();
     }
 
-    void pushFront(const T& item) {
+    bool isClosed() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return closed_;
+    }
+
+    // Push methods - return false when the queue is closed (item dropped).
+    bool push(const T& item) {
+        return pushBack(item);
+    }
+
+    bool pushFront(const T& item) {
         std::unique_lock<std::mutex> lock(mutex_);
-        condFull_.wait(lock, [this] { return queue_.size() < maxSize_; });
+        condFull_.wait(lock, [this] { return closed_ || queue_.size() < maxSize_; });
+        if (closed_)
+            return false;
         queue_.push_front(item);
         condEmpty_.notify_one();
+        return true;
     }
 
-    void pushBack(const T& item) {
+    bool pushBack(const T& item) {
         std::unique_lock<std::mutex> lock(mutex_);
-        condFull_.wait(lock, [this] { return queue_.size() < maxSize_; });
+        condFull_.wait(lock, [this] { return closed_ || queue_.size() < maxSize_; });
+        if (closed_)
+            return false;
         queue_.push_back(item);
         condEmpty_.notify_one();
+        return true;
     }
 
     // Pop methods
@@ -39,7 +63,9 @@ public:
 
     T popFront() {
         std::unique_lock<std::mutex> lock(mutex_);
-        condEmpty_.wait(lock, [this] { return !queue_.empty(); });
+        condEmpty_.wait(lock, [this] { return closed_ || !queue_.empty(); });
+        if (queue_.empty())
+            return T();
         T item = queue_.front();
         queue_.pop_front();
         condFull_.notify_one();
@@ -48,7 +74,9 @@ public:
 
     T popBack() {
         std::unique_lock<std::mutex> lock(mutex_);
-        condEmpty_.wait(lock, [this] { return !queue_.empty(); });
+        condEmpty_.wait(lock, [this] { return closed_ || !queue_.empty(); });
+        if (queue_.empty())
+            return T();
         T item = queue_.back();
         queue_.pop_back();
         condFull_.notify_one();
@@ -58,13 +86,17 @@ public:
     // Peek methods (blocking)
     T front() {
         std::unique_lock<std::mutex> lock(mutex_);
-        condEmpty_.wait(lock, [this] { return !queue_.empty(); });
+        condEmpty_.wait(lock, [this] { return closed_ || !queue_.empty(); });
+        if (queue_.empty())
+            return T();
         return queue_.front();
     }
 
     T back() {
         std::unique_lock<std::mutex> lock(mutex_);
-        condEmpty_.wait(lock, [this] { return !queue_.empty(); });
+        condEmpty_.wait(lock, [this] { return closed_ || !queue_.empty(); });
+        if (queue_.empty())
+            return T();
         return queue_.back();
     }
 
@@ -100,4 +132,5 @@ private:
     std::condition_variable condFull_;
     std::deque<T> queue_;
     size_t maxSize_;
+    bool closed_ = false;
 };

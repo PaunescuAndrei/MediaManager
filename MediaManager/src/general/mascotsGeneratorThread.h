@@ -38,6 +38,9 @@ public:
     static QPair<QList<color_area>, QList<color_area>> extractColors(QPixmap& img);
     void loadImage();
     void clearCache();
+    // Ask the thread to stop and release it if it is parked in push() on a full queue,
+    // so that waiting on it cannot deadlock (see MainApp::stop_handle).
+    void stop();
     void run() override;
     mascotsGeneratorThread(MainApp* App,QString mascots_path, bool allfiles_random = false, QObject* parent = nullptr);
     ~mascotsGeneratorThread();

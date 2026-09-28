@@ -36,7 +36,9 @@ double resolveEndPosition(double position, double duration, double startProgress
 int flush(sqliteDB* db, RowState& st, int sessionId);
 
 // Upsert a row from a live player, writing the row id back into
-// player->activeWatchHistoryRowId.
+// player->activeWatchHistoryRowId. The row is named with trackedVideoPath, the path that
+// belongs to video_id, rather than video_path, which still names the previous file until
+// MPC confirms a change.
 int flushPlayer(sqliteDB* db, BasePlayer& player, int sessionId, bool completed, bool assumeEnded);
 
 }

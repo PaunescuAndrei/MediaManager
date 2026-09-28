@@ -42,7 +42,14 @@ int flushPlayer(sqliteDB* db, BasePlayer& player, int sessionId, bool completed,
     st.rowId = player.activeWatchHistoryRowId;
     st.videoId = player.video_id;
     st.category = player.category;
-    st.videoPath = player.video_path;
+    // Name the row with the path that belongs to video_id. trackedVideoPath is only
+    // ever written alongside video_id, whereas video_path is set from MPC's
+    // CMD_NOWPLAYING and so still names the previous file until a change lands: on an
+    // external file change the player is already relabelled when the outgoing video is
+    // flushed, which would credit its watched time to the incoming video's path — and
+    // for a video that is not in the DB that path is its only identity. Same for the
+    // window while a programmatic change has not been confirmed by MPC yet.
+    st.videoPath = player.trackedVideoPath.isEmpty() ? player.video_path : player.trackedVideoPath;
     st.watchedStart = player.startProgress;
     st.watchedEnd = resolveEndPosition(player.position, player.duration, player.startProgress, assumeEnded);
     st.watchedTime = player.videoWatchedTime();

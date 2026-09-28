@@ -200,6 +200,10 @@ void VideoWatcherQt::handleExternalVideoChange(QSharedPointer<BasePlayer> player
 	}
 
 	if (watchhistory::hasWatchToPersist(player) && watchhistory::isTrackedVideo(player)) {
+		// The player is still labelled with the video we are leaving (video_id and
+		// trackedVideoPath) while video_path already names the new file, and flushPlayer
+		// names the row from trackedVideoPath — so the outgoing video's accumulated watch
+		// time keeps its own path instead of being credited to the new video.
 		watchhistory::flushPlayer(this->db, *player, m_currentSessionId, false, true);
 	}
 	if (!player->trackExternalVideo) {

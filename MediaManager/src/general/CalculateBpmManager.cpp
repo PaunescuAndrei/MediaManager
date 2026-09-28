@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "CalculateBpmManager.h"
+#include "MainApp.h"
 
 CalculateBpmManager::CalculateBpmManager(int threads_number, QObject* parent)
     : QObject(parent) {
@@ -92,11 +93,18 @@ void CalculateBpmManager::start() {
 }
 
 void CalculateBpmManager::stop() {
+    // Bounded: the runnables honour the cancel flag at several points, but one wedged in
+    // file I/O or in the beat model must not be able to block shutdown forever. If it
+    // does not finish in time the process is exiting anyway.
+    static constexpr int kShutdownWaitMs = 20000;
+
     this->is_running = false;
     this->cancellation_requested = true;
     this->clear_work();
     if (this->threadPool) {
-        this->threadPool->waitForDone();
+        if (!this->threadPool->waitForDone(kShutdownWaitMs) && qMainApp) {
+            qMainApp->logger->log(QStringLiteral("BPM thread pool did not finish within %1 ms - continuing shutdown").arg(kShutdownWaitMs), "CalculateBpmManager");
+        }
     }
     
     // Clear runnables list

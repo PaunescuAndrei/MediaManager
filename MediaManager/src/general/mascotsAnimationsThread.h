@@ -4,6 +4,7 @@
 #include <QMutex>
 #include <QProcess>
 #include <QFuture>
+#include <atomic>
 
 #include "beat_this_api.h"
 
@@ -17,7 +18,9 @@ public:
     MainApp* App;
     bool random_change = true;
     double random_chance = 0.1;
-    bool running = false;
+    // Read by the animation loop, written by the GUI thread on shutdown; atomic so the
+    // loop cannot keep reading a cached true.
+    std::atomic<bool> running = false;
     BeatThis::BeatThis* beatAnalyzer = nullptr;
     int frequency = 400;
     QList<double> beats = QList<double>();
@@ -42,6 +45,9 @@ public:
     void set_current_track(QString track);
     void stop_running();
     void start_running();
+    // Stop the thread and release it if it is parked in runningEvent.wait(), so that
+    // waiting on it cannot deadlock (see MainApp::stop_handle).
+    void stop();
     ~mascotsAnimationsThread();
     void run() override;
 signals:

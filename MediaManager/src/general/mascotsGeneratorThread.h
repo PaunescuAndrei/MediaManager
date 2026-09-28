@@ -6,6 +6,7 @@
 #include <QPixmap>
 #include <QColor>
 #include <random>
+#include <atomic>
 #include "colorPaletteExtractor.h"
 
 class MainApp;
@@ -25,7 +26,9 @@ class mascotsGeneratorThread :
 public:
     MainApp* App;
     QString mascots_path = "";
-    bool running = false;
+    // Read by the generator loop, written by whichever thread calls stop(); atomic so
+    // the loop cannot keep reading a cached true.
+    std::atomic<bool> running = false;
     bool allfiles_random = false;
     QStringList mascots_paths = QStringList();
     QStringList mascots_allpaths = QStringList();

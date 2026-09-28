@@ -286,6 +286,15 @@ void IconChanger::showFirstIcon()
 		emit animatedIconSignal(this->icon.first());
 }
 
+void IconChanger::stop()
+{
+	this->running = false;
+	// Release both locks the run() loop can be parked on: it only re-reads `running`
+	// after a wait returns, so a parked loop would deadlock MainApp::stop_handle.
+	this->animatedIconEvent.set();
+	this->setIcon_lock.set();
+}
+
 void IconChanger::run()
 {
 	this->initIcon(false);

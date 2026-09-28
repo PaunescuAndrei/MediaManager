@@ -6,6 +6,7 @@
 #include <QMediaPlayer>
 #include <QStringList>
 #include <QMediaDevices>
+#include <atomic>
 
 class QSoundEffect;
 
@@ -15,7 +16,8 @@ public:
 	QMediaDevices* media_devices = nullptr;
 	QObject* parent = nullptr;
 	qreal volume;
-	bool running = false;
+	// Read by the GUI thread (exit-sound decision) while the sound thread writes it.
+	std::atomic<bool> running = false;
 	QStringList sound_effects;
 	QStringList sound_effects_special;
 	QStringList intro_effects;

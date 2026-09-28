@@ -5,6 +5,7 @@
 #include "EventLock.h"
 #include <QFuture>
 #include <QStringList>
+#include <atomic>
 //#include <chrono>
 
 class MainApp;
@@ -14,7 +15,9 @@ class IconChanger :
 {
     Q_OBJECT
 public:
-    bool running = true;
+    // Read by the icon loop and by the setIcon() tasks it runs, written by the GUI
+    // thread; atomic so neither can keep reading a cached true past shutdown.
+    std::atomic<bool> running = true;
     bool compression = false;
     bool random_icon = false;
     bool update_copies = false;
@@ -44,6 +47,9 @@ public:
     void setRandomIcon(bool instant,bool updatedb = true);
     void rebuildIconCache();
     void showFirstIcon();
+    // Stop the thread and release it if it is parked on animatedIconEvent or
+    // setIcon_lock, so that waiting on it cannot deadlock (see MainApp::stop_handle).
+    void stop();
     void run() override;
     ~IconChanger();
 signals:

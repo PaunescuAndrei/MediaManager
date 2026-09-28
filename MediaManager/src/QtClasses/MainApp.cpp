@@ -8,6 +8,7 @@
 #include "shobjidl_core.h"
 #include <QSoundEffect>
 #include <QFontDatabase>
+#include <atomic>
 #include "timeapi.h"
 #include "generalEventFilter.h"
 #include "TooltipEventFilter.h"
@@ -244,6 +245,44 @@ void MainApp::showErrorMessage(QString message) {
 	this->logger->log(message, "Error");
 }
 
+// How long a single worker thread may take to stop before shutdown stops waiting on it.
+// Generous for what the longest of them actually does on the way out (flushing the last
+// watch rows, terminating a player process), short enough not to read as a hang.
+static constexpr int SHUTDOWN_THREAD_WAIT_MS = 15000;
+// Hard deadline for the whole shutdown, and the outer ceiling on the joins below. Without
+// it a call with no timeout of its own (music/sound player stop, a window close handler)
+// leaves a process with no windows, no way to quit, and no event loop left to run either
+// exit-sound fallback. Set above one thread timeout so a single stuck thread still gets
+// the per-thread trace rather than this one.
+static constexpr int SHUTDOWN_WATCHDOG_MS = 45000;
+
+// Set once stop_handle() got past its joins with every thread stopped. File-scope so the
+// watchdog does not dereference the app while it is being torn down.
+static std::atomic<bool> shutdown_finished{ false };
+
+// Append to a file next to the working directory. The logger keeps its messages in
+// memory, so nothing in it survives the kind of hang this traces: a shutdown that
+// misfires is exactly when the record has to outlive the process.
+static void writeShutdownTrace(const QString& message)
+{
+	QFile file(QDir::current().filePath(QStringLiteral("shutdown_trace.log")));
+	if (file.open(QIODevice::Append | QIODevice::Text))
+		file.write((QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss ")) + message + QLatin1Char('\n')).toUtf8());
+}
+
+// Detached last resort. At this point the only thing still pending is the exit itself, so
+// killing the process beats leaving one that cannot be closed.
+static void armShutdownWatchdog()
+{
+	std::thread([] {
+		std::this_thread::sleep_for(std::chrono::milliseconds(SHUTDOWN_WATCHDOG_MS));
+		if (shutdown_finished.load())
+			return;
+		writeShutdownTrace(QStringLiteral("shutdown watchdog fired after %1 ms - forcing exit").arg(SHUTDOWN_WATCHDOG_MS));
+		::TerminateProcess(::GetCurrentProcess(), 0);
+	}).detach();
+}
+
 void MainApp::stop_handle()
 {
 	this->closeAllWindows();
@@ -254,15 +293,13 @@ void MainApp::stop_handle()
 		this->BpmManager->stop();
 	}
 	
+	// Each stop() also releases whatever can park its thread - the pixmap queue, the icon
+	// and animation event locks - because a parked thread never re-reads its running
+	// flag, which is what used to deadlock the joins at the end of this function.
 	this->VW->running = false;
-	this->mainWindow->animatedIcon->running = false;
-	// stop() also shuts the pixmap queue down, releasing the generator if it is parked
-	// in push() on a full queue - without that the wait() below would deadlock.
+	this->mainWindow->animatedIcon->stop();
 	this->MascotsGenerator->stop();
-	this->MascotsAnimation->running = false;
-	this->MascotsAnimation->runningEvent.set();
-	this->mainWindow->animatedIcon->animatedIconEvent.set();
-	this->mainWindow->animatedIcon->setIcon_lock.set();
+	this->MascotsAnimation->stop();
 	this->mainWindow->animatedIcon->quit();
 	this->VW->quit();
 	this->MascotsGenerator->quit();
@@ -296,18 +333,45 @@ void MainApp::stop_handle()
 			this->ready_to_quit = true;
 			this->quit();
 		}
+		else {
+			// Re-entered after the exit sound was already triggered: neither branch above
+			// sets ready_to_quit, and QuitEater eats every Quit event while it is false.
+			// Leaving it false here would strand the app with no windows and nothing left
+			// that could ever set it again.
+			this->ready_to_quit = true;
+		}
 	}
 	else {
 		this->ready_to_quit = true;
 		this->quit();
 	}
+	// Armed before the joins: from here on a call with no timeout of its own must not be
+	// able to leave a windowless process that cannot be quit.
+	armShutdownWatchdog();
+
 	this->stopSingleInstanceServer();
-	this->VW->wait();
-	this->mainWindow->animatedIcon->wait();
+	// Bounded joins. A thread that will not stop used to hang the app for good, because
+	// the Quit event was already eaten and both exit-sound fallbacks need the event loop
+	// that these waits were blocking.
+	const bool vwStopped = this->VW->wait(QDeadlineTimer(SHUTDOWN_THREAD_WAIT_MS));
+	const bool iconStopped = this->mainWindow->animatedIcon->wait(QDeadlineTimer(SHUTDOWN_THREAD_WAIT_MS));
 	// Wait for mascots threads to exit before deleteLater() destroys them -
 	// deleting a running QThread (Qt 6.8 docs) results in a program crash.
-	this->MascotsGenerator->wait();
-	this->MascotsAnimation->wait();
+	const bool generatorStopped = this->MascotsGenerator->wait(QDeadlineTimer(SHUTDOWN_THREAD_WAIT_MS));
+	const bool animationStopped = this->MascotsAnimation->wait(QDeadlineTimer(SHUTDOWN_THREAD_WAIT_MS));
+
+	if (!(vwStopped && iconStopped && generatorStopped && animationStopped)) {
+		// The destructor would race a thread that is still touching this object, so
+		// leave the process instead of tearing the app down around it.
+		const QString stuck = (vwStopped ? QString() : QStringLiteral("VideoWatcherQt "))
+			+ (iconStopped ? QString() : QStringLiteral("IconChanger "))
+			+ (generatorStopped ? QString() : QStringLiteral("mascotsGenerator "))
+			+ (animationStopped ? QString() : QStringLiteral("mascotsAnimations "));
+		writeShutdownTrace(QStringLiteral("stop_handle: thread(s) did not stop within %1 ms (%2) - forcing exit")
+			.arg(SHUTDOWN_THREAD_WAIT_MS).arg(stuck.trimmed()));
+		::TerminateProcess(::GetCurrentProcess(), 0);
+	}
+	shutdown_finished.store(true);
 }
 
 MainApp::~MainApp()

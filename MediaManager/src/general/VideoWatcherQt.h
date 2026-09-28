@@ -3,6 +3,7 @@
 #include <QMutex>
 #include <QDate>
 #include <chrono>
+#include <atomic>
 #include "sqliteDB.h"
 #include "BasePlayer.h"
 #include "MpcPlayer.h"
@@ -15,7 +16,9 @@ class VideoWatcherQt :
 {
     Q_OBJECT
 public:
-    bool running = true;
+    // Cleared by the GUI thread on shutdown; atomic so the watcher loop cannot keep
+    // reading a cached true and outlive the wait() in MainApp::stop_handle.
+    std::atomic<bool> running = true;
     bool watching = false;
     int CLASS_COUNT = 0;
     QMutex data_lock = QMutex();

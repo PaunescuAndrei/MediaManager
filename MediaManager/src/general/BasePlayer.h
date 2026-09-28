@@ -6,7 +6,8 @@
 #include "MpcApi.h"  
 #include "PlayerCommands.h"  
 #include <chrono>
-#include <QDateTime>  
+#include <atomic>
+#include <QDateTime>
 
 class MainApp;  
 
@@ -15,7 +16,9 @@ class BasePlayer : public QThread
     Q_OBJECT  
 
 public:  
-    bool running = false;  
+    // Written by the thread that owns the player and read by the player thread's run
+    // loop, so it has to be atomic: a cached read here is a thread that never stops.
+    std::atomic<bool> running = false;
     NonBlockingQueue< std::shared_ptr<PlayerCommand>> queue = NonBlockingQueue< std::shared_ptr<PlayerCommand>>();
     QString video_path = "";  
     QString target_video_path = "";  

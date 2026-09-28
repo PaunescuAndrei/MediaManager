@@ -202,6 +202,14 @@ void mascotsAnimationsThread::start_running() {
     this->runningEvent.set();
 }
 
+void mascotsAnimationsThread::stop() {
+    this->running = false;
+    // Release the loop if it is parked in runningEvent.wait() - it only re-reads
+    // `running` once that wait returns, so a missed set() would strand the thread and
+    // deadlock MainApp::stop_handle.
+    this->runningEvent.set();
+}
+
 void mascotsAnimationsThread::run()
 {
     while (this->running) {

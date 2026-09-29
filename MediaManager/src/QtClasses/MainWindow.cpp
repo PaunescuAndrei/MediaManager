@@ -2449,13 +2449,24 @@ bool MainWindow::loadDB(QString path, QWidget* parent) {
     return return_code == 0;
 }
 
+// A backup file is named after its creation time (see backupDB). A file whose name
+// does not carry that timestamp cannot be ordered, so it is reported as invalid
+// instead of silently comparing as "older than everything" and being deleted first.
+static QDateTime backupDateTimeFromFileName(const QString& fileName) {
+    return QDateTime::fromString(QFileInfo(fileName).baseName(), "yyyy-MM-dd hh mm ss");
+}
+
 bool MainWindow::loadDB(QWidget* parent)
 {
     int return_code = -1;
     QDir bak_dir(DATABASE_BACKUPS_PATH);
     QStringList backups = bak_dir.entryList(QStringList() << "*.bak", QDir::Files);
     std::sort(backups.begin(), backups.end(), [](auto const& l, auto const& r) {
-        return QDateTime::fromString(QFileInfo(l).baseName(), "yyyy-MM-dd hh mm ss") > QDateTime::fromString(QFileInfo(r).baseName(), "yyyy-MM-dd hh mm ss");
+        const QDateTime left = backupDateTimeFromFileName(l);
+        const QDateTime right = backupDateTimeFromFileName(r);
+        // Keep unrecognised names listed, but sort them after the real backups.
+        if (left.isValid() != right.isValid()) return left.isValid();
+        return left > right;
     });
     loadBackupDialog loadDialog = loadBackupDialog(parent);
     loadDialog.ui.comboBox_backups->addItems(backups);
@@ -2502,8 +2513,13 @@ bool MainWindow::backupDB(QWidget* parent)
 {
     QDir bak_dir(DATABASE_BACKUPS_PATH);
     QStringList backups = bak_dir.entryList(QStringList() << "*.bak", QDir::Files);
+    // Only files named after a real backup timestamp take part in the rotation: a file
+    // whose name cannot be parsed is never the "oldest" one, so it is left on disk.
+    backups.erase(std::remove_if(backups.begin(), backups.end(), [](const QString& backup) {
+        return not backupDateTimeFromFileName(backup).isValid();
+    }), backups.end());
     std::sort(backups.begin(), backups.end(), [](auto const& l, auto const& r) {
-        return QDateTime::fromString(QFileInfo(l).baseName(), "yyyy-MM-dd hh mm ss") > QDateTime::fromString(QFileInfo(r).baseName(), "yyyy-MM-dd hh mm ss");
+        return backupDateTimeFromFileName(l) > backupDateTimeFromFileName(r);
     });
     while (backups.size() >= 15) {
         QString oldest_backup = backups.takeLast();

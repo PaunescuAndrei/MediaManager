@@ -11,6 +11,7 @@ VideosProxyModel::VideosProxyModel(QObject* parent)
 }
 
 void VideosProxyModel::setSearchText(const QString& text) {
+    beginFilterChange();
     search_text = text;
     search_text_lower = text.toLower();
     if (!search_text.isEmpty()) {
@@ -19,13 +20,14 @@ void VideosProxyModel::setSearchText(const QString& text) {
     else {
         cached_ratio.reset();
     }
-    invalidateFilter();
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
 }
 
 void VideosProxyModel::setWatchedOption(const QString& option) {
+    beginFilterChange();
     watched_option = option; // expects one of: Yes, No, Mixed, All
     rebuildAuthorsWithUnwatched();
-    invalidateFilter();
+    endFilterChange(QSortFilterProxyModel::Direction::Rows);
 }
 
 void VideosProxyModel::rebuildAuthorsWithUnwatched() {
@@ -47,6 +49,37 @@ void VideosProxyModel::rebuildAuthorsWithUnwatched() {
             authorsWithUnwatched.insert(aIdx.data(Qt::DisplayRole).toString());
         }
     }
+}
+
+// filterAcceptsRow() reads only the columns below, so a dataChanged() touching none of
+// them cannot change the filter result for any row. Without this the default answer
+// ("any change is relevant for filtering") re-runs filterAcceptsRow() over the whole
+// model - including a fuzzy match per row while a search is active - for nothing.
+// The base's verdict on sorting is passed through untouched, so ordering cannot go stale.
+QSortFilterProxyModel::DataChangeRelevanceFlags VideosProxyModel::dataChangeRelevanceFlags(
+    const QModelIndex& sourceTopLeft, const QModelIndex& sourceBottomRight, const QList<int>& roles) const
+{
+    Q_UNUSED(roles);
+
+    static const int watchedCol = ListColumns["WATCHED_COLUMN"];
+    static const int authorCol = ListColumns["AUTHOR_COLUMN"];
+    static const int pathCol = ListColumns["PATH_COLUMN"];
+    static const int tagsCol = ListColumns["TAGS_COLUMN"];
+    static const int typeCol = ListColumns["TYPE_COLUMN"];
+
+    const DataChangeRelevanceFlags base = QSortFilterProxyModel::dataChangeRelevanceFlags(sourceTopLeft, sourceBottomRight, roles);
+
+    const int first = sourceTopLeft.column();
+    const int last = sourceBottomRight.column();
+    const bool touchesFilterColumn =
+        (watchedCol >= first && watchedCol <= last) ||
+        (authorCol >= first && authorCol <= last) ||
+        (pathCol >= first && pathCol <= last) ||
+        (tagsCol >= first && tagsCol <= last) ||
+        (typeCol >= first && typeCol <= last);
+
+    if (touchesFilterColumn) return base | DataChangeRelevanceFlag::RelevantForFiltering;
+    return base & DataChangeRelevanceFlag::RelevantForSorting;
 }
 
 bool VideosProxyModel::filterAcceptsRow(int source_row, const QModelIndex& source_parent) const {

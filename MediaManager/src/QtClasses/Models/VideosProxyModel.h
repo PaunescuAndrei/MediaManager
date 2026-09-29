@@ -18,6 +18,13 @@ public:
 protected:
     bool filterAcceptsRow(int source_row, const QModelIndex& source_parent) const override;
     void sort(int column, Qt::SortOrder order = Qt::AscendingOrder) override;
+    // Not virtual until Qt 7 (see qsortfilterproxymodel.h), so this is Q_INVOKABLE rather
+    // than an override - the proxy finds and calls it through the meta-object system.
+    // Declaring it "override" here would not compile.
+    Q_INVOKABLE QSortFilterProxyModel::DataChangeRelevanceFlags dataChangeRelevanceFlags(
+        const QModelIndex& sourceTopLeft,
+        const QModelIndex& sourceBottomRight,
+        const QList<int>& roles) const;
 
 private:
     QString search_text;

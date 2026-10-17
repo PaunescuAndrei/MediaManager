@@ -321,7 +321,7 @@ void finishDialog::updateWindowTitle() {
 			session_time = QStringLiteral(" [Session: %1]").arg(utils::formatSecondsCompactQt(sessionSeconds));
 		}
 		double totalWatched = 0.0;
-		for (const auto& player : this->MW->App->VW->Players) {
+		for (const auto& player : this->MW->App->VW->playersSnapshot()) {
 			if (player)
 				totalWatched += player->getTotalWatchedTime();
 		}

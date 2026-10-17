@@ -37,6 +37,10 @@ public:
     QMutex data_lock = QMutex();
     MainApp* App = nullptr;
     sqliteDB* db = nullptr;
+    // "iconchanger_con" is touched by the GUI thread (initIcon/setRandomIcon from
+    // MainWindow) and by the IconChanger thread, and Qt opens SQLite connections with
+    // SQLITE_OPEN_NOMUTEX, so every access is serialized through this lock.
+    QMutex db_lock = QMutex();
     IconChanger(MainApp* App,bool random_icon = false, QObject* parent = nullptr);
     void initIcon(bool instant= true);
     void setIcon(QString path,bool cache_check=true,bool instant = true);

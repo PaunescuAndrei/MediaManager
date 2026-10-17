@@ -537,7 +537,7 @@ void MainWindow::UpdateWindowTitle() {
         // when a player closes. A better approach would be to maintain
         // a running session total inside VideoWatcherQt.
         double totalWatched = 0.0;
-        for (const auto& player : this->App->VW->Players) {
+        for (const auto& player : this->App->VW->playersSnapshot()) {
             if (player)
                 totalWatched += player->getTotalWatchedTime();
         }

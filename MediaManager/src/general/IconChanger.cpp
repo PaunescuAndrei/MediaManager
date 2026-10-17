@@ -26,7 +26,10 @@ void IconChanger::initIcon(bool instant)
 		this->setRandomIcon(instant, false);
 		return;
 	}
-	this->currentIconPath = this->db->getMainInfoValue("currentIconPath",this->App->currentDB);
+	{
+		QMutexLocker lock(&this->db_lock);
+		this->currentIconPath = this->db->getMainInfoValue("currentIconPath",this->App->currentDB);
+	}
 	if (this->currentIconPath.isEmpty() || !QFileInfo::exists(this->currentIconPath)) {
 		this->setRandomIcon(instant, true);
 	}
@@ -203,8 +206,10 @@ void IconChanger::setRandomIcon(bool instant, bool updatedb)
 		int index = utils::randint(0, this->archiveFiles.size() - 1);
 		this->currentIconPath = this->archiveFiles.at(index);
 		this->setIconNonBlocking(this->currentIconPath, true, instant);
-		if(updatedb)
+		if(updatedb) {
+			QMutexLocker lock(&this->db_lock);
 			this->db->setMainInfoValue("currentIconPath", this->App->currentDB, this->currentIconPath);
+		}
 	}
 }
 

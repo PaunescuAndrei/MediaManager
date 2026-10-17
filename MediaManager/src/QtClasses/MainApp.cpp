@@ -240,6 +240,14 @@ void MainApp::stopSingleInstanceServer() {
 }
 
 void MainApp::showErrorMessage(QString message) {
+	// Database errors are reported from worker threads too (e.g. VideoWatcherQt's
+	// connection); ErrorDialog is a GUI object, so marshal the call to the GUI thread
+	// instead of touching it directly.
+	if (QThread::currentThread() != this->thread()) {
+		QMetaObject::invokeMethod(this, [this, message]() { this->showErrorMessage(message); },
+			Qt::QueuedConnection);
+		return;
+	}
 	this->ErrorDialog->setWindowFlags(this->ErrorDialog->windowFlags() | Qt::WindowStaysOnTopHint);
 	this->ErrorDialog->showMessage(message);
 	this->logger->log(message, "Error");

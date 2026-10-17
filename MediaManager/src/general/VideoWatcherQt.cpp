@@ -24,9 +24,7 @@ VideoWatcherQt::VideoWatcherQt(MainApp* App, QObject* parent) : QThread(parent)
 
 QSharedPointer<BasePlayer> VideoWatcherQt::newPlayer(QString path, int video_id)
 {
-	QMutexLocker lock(&this->data_lock);
-
-	// Start a new session if none is active
+	// Start a new session if none is active (DB work stays outside data_lock).
 	int sid = ensureSession();
 	if (sid <= 0) {
 		if (qMainApp) {
@@ -45,8 +43,6 @@ QSharedPointer<BasePlayer> VideoWatcherQt::newPlayer(QString path, int video_id)
 	}
 
 	QSharedPointer<BasePlayer> newVideo = QSharedPointer<MpcPlayer>::create(path, video_id,&this->CLASS_COUNT,this->App,this->App);
-	this->Players.append(newVideo);
-	this->CLASS_COUNT++;
 	newVideo->setCategory(this->App->currentDB);
 	// newPlayer() is called from the GUI thread (video start / next / watch external),
 	// never from the watcher thread, so these reads go through the GUI connection. The
@@ -55,41 +51,53 @@ QSharedPointer<BasePlayer> VideoWatcherQt::newPlayer(QString path, int video_id)
 	newVideo->startProgress = this->App->db->getVideoProgress(video_id, "0").toDouble();
 	newVideo->setTrackedVideoPath(path);
 	newVideo->start();
+
+	// Publish only once the player is fully set up, and hold the lock for the append only.
+	QMutexLocker lock(&this->data_lock);
+	this->Players.append(newVideo);
+	this->CLASS_COUNT++;
 	return newVideo;
 }
 
 void VideoWatcherQt::clearData(bool include_mainplayer) {
-	// Runs on the GUI thread while the watcher thread iterates the same list every tick.
-	QMutexLocker lock(&this->data_lock);
-	QList<QSharedPointer<BasePlayer>>::iterator it = this->Players.begin();
-	while (it != this->Players.end()) {
-		if (!include_mainplayer && (*it) != nullptr && (*it) == this->mainPlayer) {
-			++it;
-			continue;
-		}
-		if (*it) {
-			if ((*it)->position != -1) {
-				// GUI thread: use the GUI connection, never the watcher's own one.
-				this->App->db->updateVideoProgress((*it)->video_id, (*it)->position);
+	// Detach the players under the lock; the database work and window teardown happen
+	// outside it, so the watcher/raw-input threads never wait on our SQLite calls.
+	QList<QSharedPointer<BasePlayer>> cleared;
+	bool empty = false;
+	{
+		QMutexLocker lock(&this->data_lock);
+		for (int i = 0; i < this->Players.size(); ) {
+			const QSharedPointer<BasePlayer>& player = this->Players.at(i);
+			if (!include_mainplayer && player != nullptr && player == this->mainPlayer) {
+				++i;
+				continue;
 			}
-			double watchedTime = (*it)->videoWatchedTime();
-			if (watchhistory::hasWatchToPersist(*it) && watchhistory::isTrackedVideo(*it)) {
-				watchhistory::flushPlayer(this->App->db, *(*it), m_currentSessionId, false, true);
-			}
-			this->emitCounterDelta(*it, watchedTime);
+			cleared.append(player);
+			this->Players.removeAt(i);
 		}
-		(*it)->drop();
-		(*it).reset();
-		it = this->Players.erase(it);
+		empty = this->Players.isEmpty();
+	}
+
+	for (const QSharedPointer<BasePlayer>& player : cleared) {
+		if (!player) continue;
+		if (player->position != -1) {
+			// GUI thread: use the GUI connection, never the watcher's own one.
+			this->App->db->updateVideoProgress(player->video_id, player->position);
+		}
+		double watchedTime = player->videoWatchedTime();
+		if (watchhistory::hasWatchToPersist(player) && watchhistory::isTrackedVideo(player)) {
+			watchhistory::flushPlayer(this->App->db, *player, m_currentSessionId, false, true);
+		}
+		this->emitCounterDelta(player, watchedTime);
+		player->drop();
 	}
 
 	// End session if all players are gone
-	if (m_currentSessionId > 0 && this->Players.isEmpty()) {
+	if (m_currentSessionId > 0 && empty) {
 		// GUI thread: close the session through the GUI connection.
 		endCurrentSession(this->App->db);
 	}
 
-	lock.unlock();
 	if(include_mainplayer)
 		this->clearAfterMainVideoEnd();
 }
@@ -337,6 +345,12 @@ void VideoWatcherQt::rollDayIfNeeded()
 {
 	if (m_lastRollDate == QDate::currentDate()) return;
 
+	QList<QSharedPointer<BasePlayer>> players;
+	{
+		QMutexLocker lock(&this->data_lock);
+		players = this->Players;
+	}
+
 	// Flush every active player's accumulated watch time into its current row while
 	// that row still belongs to the old day, then rebase the per-play timing so the
 	// next checkpoint opens a fresh row for the new day. Day queries bucket rows by
@@ -344,7 +358,7 @@ void VideoWatcherQt::rollDayIfNeeded()
 	// so without this a row opened before midnight would keep yesterday's date and
 	// its post-midnight time would count for the wrong day. The session is left open
 	// on purpose: a watch that crosses midnight stays one session.
-	for (const QSharedPointer<BasePlayer>& player : this->Players) {
+	for (const QSharedPointer<BasePlayer>& player : players) {
 		if (!player) continue;
 		const PlayerSnapshot s = player->snapshot();
 		if (s.videoPath.isEmpty()) continue;
@@ -405,46 +419,58 @@ void VideoWatcherQt::run()
 
 	while (this->running) {
 		int saveInterval = this->App->config->get("session_save_interval_seconds").toInt();
+		// Every lock below only copies or edits the player list; database work and signals
+		// happen outside it, so the GUI and raw-input threads never wait on a checkpoint's
+		// SQLite call.
+		this->rollDayIfNeeded();
+
+		QList<QSharedPointer<BasePlayer>> players;
+		{
+			QMutexLocker lock(&this->data_lock);
+			players = this->Players;
+		}
+		for (const QSharedPointer<BasePlayer>& player : players) {
+			if (!player) continue;
+			const PlayerSnapshot s = player->snapshot();
+			if (!s.videoPath.isEmpty() && s.videoPath != s.trackedVideoPath && !s.changeInProgress) {
+				this->handleExternalVideoChange(player);
+			}
+			this->checkpointPlayer(player, saveInterval);
+			// Compare against the current video path published by the label; both the
+			// label and the player hand out locked copies, so this is safe from the
+			// watcher thread.
+			if (player->videoPath() == this->App->mainWindow->ui.currentVideo->currentPath()) {
+				emit updateProgressBarSignal(player->position,player->duration, player, true);
+			}
+			player->updateWatchedTiming();
+			if (!player->isProcessAlive()) {
+				if (player->position != -1) {
+					this->db->updateVideoProgress(player->video_id, player->position);
+				}
+				double watchedTime = player->videoWatchedTime();
+				if (watchhistory::hasWatchToPersist(player) && watchhistory::isTrackedVideo(player)) {
+					watchhistory::flushPlayer(this->db, *player, m_currentSessionId, false, true);
+				}
+				this->emitCounterDelta(player, watchedTime);
+				bool wasMainPlayer = false;
+				{
+					QMutexLocker lock(&this->data_lock);
+					wasMainPlayer = (player == this->mainPlayer);
+				}
+				if (wasMainPlayer) {
+					this->clearAfterMainVideoEnd();
+				}
+				player->drop();
+				{
+					QMutexLocker lock(&this->data_lock);
+					this->Players.removeOne(player);
+				}
+			}
+		}
+
 		bool hasPlayers = false;
 		{
-			// newPlayer()/clearData() run on the GUI thread and also add/erase players, so
-			// the whole per-tick pass holds the lock they take.
 			QMutexLocker lock(&this->data_lock);
-			this->rollDayIfNeeded();
-			for (int i = 0; i < this->Players.size(); ) {
-				QSharedPointer<BasePlayer> player = this->Players.at(i);
-				const PlayerSnapshot s = player->snapshot();
-				if (!s.videoPath.isEmpty() && s.videoPath != s.trackedVideoPath && !s.changeInProgress) {
-					this->handleExternalVideoChange(player);
-				}
-				this->checkpointPlayer(player, saveInterval);
-				// Compare against the current video path published by the label; both the
-				// label and the player now hand out locked copies, so this is safe from
-				// the watcher thread.
-				if (player->videoPath() == this->App->mainWindow->ui.currentVideo->currentPath()) {
-					emit updateProgressBarSignal(player->position,player->duration, player, true);
-				}
-				player->updateWatchedTiming();
-				if (!player->isProcessAlive()) {
-					if (player->position != -1) {
-						this->db->updateVideoProgress(player->video_id, player->position);
-					}
-					double watchedTime = player->videoWatchedTime();
-					if (watchhistory::hasWatchToPersist(player) && watchhistory::isTrackedVideo(player)) {
-						watchhistory::flushPlayer(this->db, *player, m_currentSessionId, false, true);
-					}
-					this->emitCounterDelta(player, watchedTime);
-					if (player == this->mainPlayer) {
-						this->clearAfterMainVideoEnd();
-					}
-					player->drop();
-					// Erasing in place: do not advance i, the next player now sits here.
-					this->Players.removeAt(i);
-					player.reset();
-					continue;
-				}
-				++i;
-			}
 			hasPlayers = !this->Players.isEmpty();
 		}
 		if (hasPlayers) {
@@ -482,17 +508,19 @@ void VideoWatcherQt::run()
 		}
 		this->msleep(100);
 	}
+	QList<QSharedPointer<BasePlayer>> players;
 	{
 		QMutexLocker lock(&this->data_lock);
-		for (QSharedPointer<BasePlayer> player : this->Players) {
-			if (player->position != -1) {
-				this->db->updateVideoProgress(player->video_id, player->position);
-			}
-			if (watchhistory::hasWatchToPersist(player) && watchhistory::isTrackedVideo(player)) {
-				watchhistory::flushPlayer(this->db, *player, m_currentSessionId, false, true);
-			}
-			player->process->terminate();
+		players = this->Players;
+	}
+	for (const QSharedPointer<BasePlayer>& player : players) {
+		if (player->position != -1) {
+			this->db->updateVideoProgress(player->video_id, player->position);
 		}
+		if (watchhistory::hasWatchToPersist(player) && watchhistory::isTrackedVideo(player)) {
+			watchhistory::flushPlayer(this->db, *player, m_currentSessionId, false, true);
+		}
+		player->process->terminate();
 	}
 
 	// End session on shutdown

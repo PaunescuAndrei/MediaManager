@@ -32,24 +32,26 @@ void BasePlayer::start() {
 }
 
 void BasePlayer::startWatchedTiming() {
-    if (this->watchedTimeStart != nullptr) {
-        this->watchedTimeStart.reset();
-    }
-    this->watchedTimeStart = std::make_shared<std::chrono::microseconds>(utils::QueryUnbiasedInterruptTimeChrono());
+    QMutexLocker lock(&m_stateLock);
+    if (m_watchedTimeStart != nullptr)
+        return;
+    m_watchedTimeStart = std::make_shared<std::chrono::microseconds>(utils::QueryUnbiasedInterruptTimeChrono());
 }
 
 void BasePlayer::stopWatchedTiming() {
-    if (this->watchedTimeStart != nullptr) {
-        double elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(utils::QueryUnbiasedInterruptTimeChrono() - *this->watchedTimeStart).count();
+    QMutexLocker lock(&m_stateLock);
+    if (m_watchedTimeStart != nullptr) {
+        double elapsed = std::chrono::duration_cast<std::chrono::duration<double>>(utils::QueryUnbiasedInterruptTimeChrono() - *m_watchedTimeStart).count();
         this->totalWatchedTimeSeconds += elapsed;
-        this->watchedTimeStart.reset();
+        m_watchedTimeStart.reset();
     }
 }
 
 double BasePlayer::getTotalWatchedTime() {
+    QMutexLocker lock(&m_stateLock);
     double total = this->totalWatchedTimeSeconds;
-    if (this->watchedTimeStart != nullptr) {
-        double currentSession = std::chrono::duration_cast<std::chrono::duration<double>>(utils::QueryUnbiasedInterruptTimeChrono() - *this->watchedTimeStart).count();
+    if (m_watchedTimeStart != nullptr) {
+        double currentSession = std::chrono::duration_cast<std::chrono::duration<double>>(utils::QueryUnbiasedInterruptTimeChrono() - *m_watchedTimeStart).count();
         total += currentSession;
     }
     return total;
@@ -67,12 +69,11 @@ void BasePlayer::updateWatchedTiming() {
     this->wasPlayingLastCheck = isCurrentlyPlaying;
 }
 
-void BasePlayer::onPausedChanged(bool paused) {    bool isCurrentlyPlaying = !paused;
-    if (isCurrentlyPlaying && this->watchedTimeStart == nullptr) {
-        this->startWatchedTiming();
-    } else if (!isCurrentlyPlaying && this->watchedTimeStart != nullptr) {
+void BasePlayer::onPausedChanged(bool paused) {
+    if (paused)
         this->stopWatchedTiming();
-    }
+    else
+        this->startWatchedTiming();
 }
 
 void BasePlayer::resetVideoTiming()
@@ -88,14 +89,17 @@ double BasePlayer::videoWatchedTime()
 }
 
 void BasePlayer::recordVideoStart() {
-    videoStartWallClock = QDateTime::currentDateTime();
-    lastCheckpointTime = videoStartWallClock;
+    const QDateTime now = QDateTime::currentDateTime();
+    QMutexLocker lock(&m_stateLock);
+    m_videoStartWallClock = now;
+    m_lastCheckpointTime = now;
 }
 
 bool BasePlayer::shouldCheckpoint(const QDateTime& now, int intervalSeconds) {
+    QMutexLocker lock(&m_stateLock);
     return intervalSeconds > 0
-        && lastCheckpointTime.isValid()
-        && lastCheckpointTime.secsTo(now) >= intervalSeconds;
+        && m_lastCheckpointTime.isValid()
+        && m_lastCheckpointTime.secsTo(now) >= intervalSeconds;
 }
 
 QString BasePlayer::videoPath() const {
@@ -146,4 +150,47 @@ void BasePlayer::setVideoType(const QString& type) {
 void BasePlayer::setCategory(const QString& category) {
     QMutexLocker lock(&m_stateLock);
     m_category = category;
+}
+
+QDateTime BasePlayer::videoStartWallClock() const {
+    QMutexLocker lock(&m_stateLock);
+    return m_videoStartWallClock;
+}
+
+QDateTime BasePlayer::lastCheckpointTime() const {
+    QMutexLocker lock(&m_stateLock);
+    return m_lastCheckpointTime;
+}
+
+void BasePlayer::setVideoStartWallClock(const QDateTime& time) {
+    QMutexLocker lock(&m_stateLock);
+    m_videoStartWallClock = time;
+}
+
+void BasePlayer::setLastCheckpointTime(const QDateTime& time) {
+    QMutexLocker lock(&m_stateLock);
+    m_lastCheckpointTime = time;
+}
+
+PlayerSnapshot BasePlayer::snapshot() const {
+    PlayerSnapshot s;
+    QMutexLocker lock(&m_stateLock);
+    // Implicitly shared members: must be copied under the lock.
+    s.videoPath = m_videoPath;
+    s.trackedVideoPath = m_trackedVideoPath;
+    s.targetVideoPath = m_targetVideoPath;
+    s.videoType = m_videoType;
+    s.category = m_category;
+    s.lastCheckpointTime = m_lastCheckpointTime;
+    // Plain values: their writers do not take this lock, so these can be a tick stale or
+    // torn, but that cannot corrupt memory and is no worse than the previous reads.
+    s.videoId = video_id;
+    s.activeWatchHistoryRowId = activeWatchHistoryRowId;
+    s.position = position;
+    s.duration = duration;
+    s.startProgress = startProgress;
+    s.changeInProgress = change_in_progress;
+    s.trackExternalVideo = trackExternalVideo;
+    s.endOfVideo = end_of_video;
+    return s;
 }

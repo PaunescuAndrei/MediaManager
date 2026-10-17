@@ -191,13 +191,14 @@ void VideoWatcherQt::checkpointPlayer(QSharedPointer<BasePlayer> player, int int
 	QDateTime now = QDateTime::currentDateTime();
 	if (!player->shouldCheckpoint(now, intervalSeconds))
 		return;
-	if (player->videoPath().isEmpty())
+	const PlayerSnapshot s = player->snapshot();
+	if (s.videoPath.isEmpty())
 		return;
-	if (!player->trackExternalVideo && player->video_id < 0)
+	if (!s.trackExternalVideo && s.videoId < 0)
 		return;
 	double watched = player->videoWatchedTime();
-	double pos = player->position;
-	if (pos < 0) pos = player->startProgress;
+	double pos = s.position;
+	if (pos < 0) pos = s.startProgress;
 	// Bump session_time first so that if we crash after upsertWatchHistory
 	// the session duration on recovery is at worst slightly longer than the
 	// last persisted row, not shorter (closeOrphanedSessions derives
@@ -208,9 +209,9 @@ void VideoWatcherQt::checkpointPlayer(QSharedPointer<BasePlayer> player, int int
 	if (watchhistory::hasWatchToPersist(player)) {
 		watchhistory::flushPlayer(this->db, *player, m_currentSessionId, false, false);
 	}
-	player->lastCheckpointTime = now;
-	if (pos >= 0 && player->video_id >= 0) {
-		this->db->updateVideoProgress(player->video_id, pos);
+	player->setLastCheckpointTime(now);
+	if (pos >= 0 && s.videoId >= 0) {
+		this->db->updateVideoProgress(s.videoId, pos);
 	}
 	this->emitCounterDelta(player, watched);
 }
@@ -344,12 +345,14 @@ void VideoWatcherQt::rollDayIfNeeded()
 	// its post-midnight time would count for the wrong day. The session is left open
 	// on purpose: a watch that crosses midnight stays one session.
 	for (const QSharedPointer<BasePlayer>& player : this->Players) {
-		if (!player || player->videoPath().isEmpty()) continue;
-		if (!player->trackExternalVideo && player->video_id < 0) continue;
+		if (!player) continue;
+		const PlayerSnapshot s = player->snapshot();
+		if (s.videoPath.isEmpty()) continue;
+		if (!s.trackExternalVideo && s.videoId < 0) continue;
 		// A video change in flight leaves video_id and video_path describing different
 		// videos, so flushing now would persist a mismatched row. Retry on the next
 		// tick: m_lastRollDate only advances after a pass that skipped nobody.
-		if (player->change_in_progress || player->videoPath() != player->trackedVideoPath()) return;
+		if (s.changeInProgress || s.videoPath != s.trackedVideoPath) return;
 
 		double watched = player->videoWatchedTime();
 		if (watchhistory::hasWatchToPersist(player)) {
@@ -410,7 +413,8 @@ void VideoWatcherQt::run()
 			this->rollDayIfNeeded();
 			for (int i = 0; i < this->Players.size(); ) {
 				QSharedPointer<BasePlayer> player = this->Players.at(i);
-				if (!player->videoPath().isEmpty() && player->videoPath() != player->trackedVideoPath() && !player->change_in_progress) {
+				const PlayerSnapshot s = player->snapshot();
+				if (!s.videoPath.isEmpty() && s.videoPath != s.trackedVideoPath && !s.changeInProgress) {
 					this->handleExternalVideoChange(player);
 				}
 				this->checkpointPlayer(player, saveInterval);

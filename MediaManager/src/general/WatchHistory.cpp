@@ -38,10 +38,12 @@ int flush(sqliteDB* db, RowState& st, int sessionId)
 
 int flushPlayer(sqliteDB* db, BasePlayer& player, int sessionId, bool completed, bool assumeEnded)
 {
+    // One locked view so a tick cannot persist fields from before and after a video change.
+    const PlayerSnapshot s = player.snapshot();
     RowState st;
-    st.rowId = player.activeWatchHistoryRowId;
-    st.videoId = player.video_id;
-    st.category = player.category();
+    st.rowId = s.activeWatchHistoryRowId;
+    st.videoId = s.videoId;
+    st.category = s.category;
     // Name the row with the path that belongs to video_id. trackedVideoPath is only
     // ever written alongside video_id, whereas video_path is set from MPC's
     // CMD_NOWPLAYING and so still names the previous file until a change lands: on an
@@ -49,10 +51,9 @@ int flushPlayer(sqliteDB* db, BasePlayer& player, int sessionId, bool completed,
     // flushed, which would credit its watched time to the incoming video's path — and
     // for a video that is not in the DB that path is its only identity. Same for the
     // window while a programmatic change has not been confirmed by MPC yet.
-    const QString trackedPath = player.trackedVideoPath();
-    st.videoPath = trackedPath.isEmpty() ? player.videoPath() : trackedPath;
-    st.watchedStart = player.startProgress;
-    st.watchedEnd = resolveEndPosition(player.position, player.duration, player.startProgress, assumeEnded);
+    st.videoPath = s.trackedVideoPath.isEmpty() ? s.videoPath : s.trackedVideoPath;
+    st.watchedStart = s.startProgress;
+    st.watchedEnd = resolveEndPosition(s.position, s.duration, s.startProgress, assumeEnded);
     st.watchedTime = player.videoWatchedTime();
     st.completed = completed;
     const int rowId = flush(db, st, sessionId);

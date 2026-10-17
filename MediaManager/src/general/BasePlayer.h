@@ -12,6 +12,27 @@
 
 class MainApp;  
 
+// One consistent view of a player's video state for the watcher thread. Gathered under the
+// player's lock so a tick cannot mix fields from before and after a video change. Plain
+// numeric/flag values are copied under the lock too; they are written without it, so a
+// torn value is possible but harmless (only implicitly shared types can corrupt memory).
+struct PlayerSnapshot {
+    QString videoPath;
+    QString trackedVideoPath;
+    QString targetVideoPath;
+    QString videoType;
+    QString category;
+    int videoId = -1;
+    int activeWatchHistoryRowId = -1;
+    double position = -1;
+    double duration = -1;
+    double startProgress = 0.0;
+    bool changeInProgress = false;
+    bool trackExternalVideo = false;
+    bool endOfVideo = false;
+    QDateTime lastCheckpointTime;
+};
+
 class BasePlayer : public QThread  
 {  
     Q_OBJECT  
@@ -33,7 +54,6 @@ public:
     bool end_of_video = false;  
     HWND player_hwnd = HWND();  
     QProcess* process;  
-    std::shared_ptr<std::chrono::microseconds> watchedTimeStart = nullptr;
     double totalWatchedTimeSeconds = 0.0;
     bool wasPlayingLastCheck = false;
     double m_videoWatchedBaseline = 0.0;
@@ -45,8 +65,6 @@ public:
     double replayEndPosition = -1;
     double replayCheckpoint = -1;
     int activeWatchHistoryRowId = -1;
-    QDateTime videoStartWallClock;
-    QDateTime lastCheckpointTime;
     bool trackExternalVideo = false;
     BasePlayer(QString video_path, int video_id, int* CLASS_COUNT, QObject* parent = nullptr, MainApp* App = nullptr);  
     virtual ~BasePlayer();  
@@ -81,6 +99,13 @@ public:
     void setTrackedVideoPath(const QString& path);
     void setVideoType(const QString& type);
     void setCategory(const QString& category);
+    // QDateTime is implicitly shared, so the two timestamps are guarded like the strings.
+    QDateTime videoStartWallClock() const;
+    QDateTime lastCheckpointTime() const;
+    void setVideoStartWallClock(const QDateTime& time);
+    void setLastCheckpointTime(const QDateTime& time);
+    // One locked copy of everything the watcher needs for a tick.
+    PlayerSnapshot snapshot() const;
 signals:  
     void endOfVideoSignal();  
     void pausedChangedSignal(bool paused);  
@@ -94,5 +119,8 @@ private:
     QString m_trackedVideoPath;
     QString m_videoType;
     QString m_category;
+    QDateTime m_videoStartWallClock;
+    QDateTime m_lastCheckpointTime;
+    std::shared_ptr<std::chrono::microseconds> m_watchedTimeStart;
     mutable QMutex m_stateLock;
 };

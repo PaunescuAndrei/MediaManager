@@ -3956,8 +3956,9 @@ void MainWindow::watchCurrent() {
         l->openPlayer(this->ui.currentVideo->path, seconds);
         l->setTrackedVideoPath(this->ui.currentVideo->path);
         l->startProgress = seconds;
-        l->videoStartWallClock = QDateTime::currentDateTime();
-        l->lastCheckpointTime = l->videoStartWallClock;
+        const QDateTime now = QDateTime::currentDateTime();
+        l->setVideoStartWallClock(now);
+        l->setLastCheckpointTime(now);
         watchhistory::RowState newRow;
         newRow.videoId = l->video_id;
         newRow.category = l->category();
@@ -3985,8 +3986,9 @@ void MainWindow::watchSelected(int video_id, QString path) {
     l->openPlayer(path, seconds);
     l->setTrackedVideoPath(path);
     l->startProgress = seconds;
-    l->videoStartWallClock = QDateTime::currentDateTime();
-    l->lastCheckpointTime = l->videoStartWallClock;
+    const QDateTime now = QDateTime::currentDateTime();
+    l->setVideoStartWallClock(now);
+    l->setLastCheckpointTime(now);
     watchhistory::RowState newRow;
     newRow.videoId = video_id;
     newRow.category = l->category();

@@ -15,8 +15,6 @@
 #include <QLineEdit>
 #include <QComboBox>
 #include <QMessageBox>
-#include <QUuid>
-#include <QFile>
 #include <QDir>
 #include <QUrl>
 #include <shellapi.h>
@@ -1089,67 +1087,39 @@ bool runElevated(const QString& file, const QString& arguments, DWORD& exitCode)
     return true;
 }
 
-// .reg representation of a REG_EXPAND_SZ value: UTF-16LE bytes (terminator included)
-// listed as hex pairs. WER documents DumpFolder as REG_EXPAND_SZ.
-QString regExpandSzHex(const QString& value)
+QString cmdExePath()
 {
-    QString hex = QStringLiteral("hex(2):");
-    const QString terminated = value + QChar(0);
-    for (int i = 0; i < terminated.size(); ++i) {
-        const ushort unit = terminated.at(i).unicode();
-        if (i > 0)
-            hex += QLatin1Char(',');
-        hex += QStringLiteral("%1,%2")
-            .arg(unit & 0xFF, 2, 16, QLatin1Char('0'))
-            .arg((unit >> 8) & 0xFF, 2, 16, QLatin1Char('0'));
-    }
-    return hex;
+    QString systemRoot = qEnvironmentVariable("SystemRoot");
+    if (systemRoot.isEmpty())
+        systemRoot = QStringLiteral("C:/Windows");
+    return systemRoot + QStringLiteral("/System32/cmd.exe");
 }
 
-// Import a generated .reg file in one elevated call. Importing avoids re-quoting every
-// value on a reg.exe command line and keeps this to a single elevation.
+// Write the per-application LocalDumps values in one elevated call. The values travel as
+// arguments to the elevated process instead of through a temporary file: a .reg in the
+// user's %TEMP% could be replaced by any same-user process during the UAC prompt and then
+// be imported with administrator rights.
 bool writeLocalDumpsKey(const QString& dumpFolder, int dumpType, int dumpCount, DWORD& exitCode)
 {
-    // The folder normally comes from the registry; keep the generated .reg file free of
-    // quotes/newlines should anything unexpected ever be stored there.
+    // The folder normally comes from the registry. Reject characters cmd.exe would treat
+    // specially even inside quotes (% expands variables); otherwise use the default.
     QString safeFolder = dumpFolder;
-    if (safeFolder.contains(QLatin1Char('"')) || safeFolder.contains(QLatin1Char('\n'))
-        || safeFolder.contains(QLatin1Char('\r'))) {
+    if (safeFolder.contains(QLatin1Char('"')) || safeFolder.contains(QLatin1Char('%'))
+        || safeFolder.contains(QLatin1Char('\n')) || safeFolder.contains(QLatin1Char('\r'))) {
         safeFolder = defaultCrashDumpFolder();
     }
 
-    QString text = QStringLiteral("Windows Registry Editor Version 5.00\r\n\r\n[")
-        + localDumpsKeyPath() + QStringLiteral("]\r\n");
-    text += QStringLiteral("\"DumpFolder\"=%1\r\n").arg(regExpandSzHex(QDir::toNativeSeparators(safeFolder)));
-    text += QStringLiteral("\"DumpType\"=dword:%1\r\n").arg(dumpType, 8, 16, QLatin1Char('0'));
-    text += QStringLiteral("\"DumpCount\"=dword:%1\r\n").arg(dumpCount, 8, 16, QLatin1Char('0'));
+    const QString reg = QStringLiteral("\"%1\"").arg(QDir::toNativeSeparators(regExePath()));
+    const QString key = QStringLiteral("\"%1\"").arg(localDumpsKeyPath());
+    const QString folder = QStringLiteral("\"%1\"").arg(QDir::toNativeSeparators(safeFolder));
 
-    // reg.exe expects a Unicode .reg file, so write a UTF-16LE BOM followed by the text.
-    QByteArray bytes;
-    bytes.append(char(0xFF));
-    bytes.append(char(0xFE));
-    for (const QChar ch : text) {
-        bytes.append(char(ch.unicode() & 0xFF));
-        bytes.append(char((ch.unicode() >> 8) & 0xFF));
-    }
+    QStringList commands;
+    commands << QStringLiteral("%1 add %2 /v DumpFolder /t REG_EXPAND_SZ /d %3 /f").arg(reg, key, folder);
+    commands << QStringLiteral("%1 add %2 /v DumpType /t REG_DWORD /d %3 /f").arg(reg, key, QString::number(dumpType));
+    commands << QStringLiteral("%1 add %2 /v DumpCount /t REG_DWORD /d %3 /f").arg(reg, key, QString::number(dumpCount));
 
-    // Plain QFile, not QTemporaryFile: on Windows QTemporaryFile keeps its file handle
-    // open even after close(), and the elevated reg.exe then fails to open the file
-    // ("Error opening the file", exit code 1). QFile::close() really releases it.
-    const QString path = QDir::tempPath() + QStringLiteral("/mm_localdumps_%1.reg")
-        .arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size()) {
-        file.close();
-        QFile::remove(path);
-        return false;
-    }
-    file.close();
-
-    const bool launched = runElevated(regExePath(),
-        QStringLiteral("import \"%1\"").arg(QDir::toNativeSeparators(path)), exitCode);
-    QFile::remove(path);
-    return launched;
+    return runElevated(cmdExePath(),
+        QStringLiteral("/c \"%1\"").arg(commands.join(QStringLiteral(" && "))), exitCode);
 }
 
 bool removeLocalDumpsKey(DWORD& exitCode)

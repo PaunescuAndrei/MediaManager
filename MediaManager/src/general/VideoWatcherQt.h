@@ -70,6 +70,8 @@ private:
     void rollDayIfNeeded();
     // Calendar day the watch-history rows were last rolled for.
     QDate m_lastRollDate;
+    // Last watching state the watcher emitted for the taskbar; watcher thread only.
+    bool m_taskbarWatching = false;
     // Emit the pending watch-time delta for the counter, advancing the watermark
     // first so the same seconds are never counted twice.
     void emitCounterDelta(QSharedPointer<BasePlayer> player, double watched);
@@ -82,6 +84,9 @@ private:
 signals:
     void updateProgressBarSignal(double position,double duration, QSharedPointer<BasePlayer> player, bool running);
     void updateTaskbarIconSignal(bool watching);
+    // Emitted on watching transitions; the GUI thread applies it to the taskbar (a COM/UI
+    // object), instead of the watcher calling into it.
+    void updateTaskbarPauseSignal(bool paused);
     void updateMusicPlayerSignal(bool flag);
     void timeWatchedIncrementSignal(double delta);
     void sessionEndedSignal(QString category, int videoCount, int completedCount, double watchTimeSec, double sessionTimeSec);

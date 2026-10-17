@@ -10,6 +10,9 @@ BasePlayer::BasePlayer(QString video_path, int video_id, int* CLASS_COUNT, QObje
     this->video_id = video_id;
     this->CLASS_COUNT = CLASS_COUNT;
     this->process = new QProcess(parent);
+    connect(this->process, &QProcess::stateChanged, this, [this](QProcess::ProcessState state) {
+        m_processAlive.store(state != QProcess::NotRunning);
+    });
     connect(this, &BasePlayer::pausedChangedSignal, this, &BasePlayer::onPausedChanged);
 }
 
@@ -21,9 +24,9 @@ BasePlayer::~BasePlayer()
     this->process->deleteLater();
 }
 
-bool BasePlayer::isProcessAlive()
+bool BasePlayer::isProcessAlive() const
 {
-    return !(this->process->state() == QProcess::NotRunning);
+    return m_processAlive.load();
 }
 
 void BasePlayer::start() {

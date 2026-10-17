@@ -68,7 +68,8 @@ public:
     bool trackExternalVideo = false;
     BasePlayer(QString video_path, int video_id, int* CLASS_COUNT, QObject* parent = nullptr, MainApp* App = nullptr);  
     virtual ~BasePlayer();  
-    bool isProcessAlive();  
+    // Cached from QProcess::stateChanged so the watcher never touches the QProcess object.
+    bool isProcessAlive() const;  
     virtual void openPlayer(QString video_path = "", double position_seconds = -1) = 0;  
     virtual void askForStatus() = 0;  
     virtual void closePlayer() = 0;
@@ -122,5 +123,6 @@ private:
     QDateTime m_videoStartWallClock;
     QDateTime m_lastCheckpointTime;
     std::shared_ptr<std::chrono::microseconds> m_watchedTimeStart;
+    std::atomic<bool> m_processAlive{ false };
     mutable QMutex m_stateLock;
 };

@@ -121,6 +121,10 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 		this->mainWindow->setIsWatching(watching);
 		this->mainWindow->updateIconByWatchingState();
 	});
+	connect(this->VW, &VideoWatcherQt::updateTaskbarPauseSignal, this, [this](bool paused) {
+		if (this->taskbar)
+			this->taskbar->setPause(this->taskbar->hwnd, paused);
+	});
 	connect(this->VW, &VideoWatcherQt::updateMusicPlayerSignal, this, [this](bool flag) {
 		if (this->musicPlayer)
 			if (flag)

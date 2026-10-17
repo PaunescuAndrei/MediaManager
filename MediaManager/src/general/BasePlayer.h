@@ -107,6 +107,9 @@ public:
     void setLastCheckpointTime(const QDateTime& time);
     // One locked copy of everything the watcher needs for a tick.
     PlayerSnapshot snapshot() const;
+    // Serializes watch-history row persistence for this player: clearData() (GUI) and the
+    // watcher can otherwise flush the same player at the same time.
+    QMutex& historyLock() const { return m_historyLock; }
 signals:  
     void endOfVideoSignal();  
     void pausedChangedSignal(bool paused);  
@@ -125,4 +128,5 @@ private:
     std::shared_ptr<std::chrono::microseconds> m_watchedTimeStart;
     std::atomic<bool> m_processAlive{ false };
     mutable QMutex m_stateLock;
+    mutable QMutex m_historyLock;
 };

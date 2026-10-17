@@ -38,6 +38,10 @@ int flush(sqliteDB* db, RowState& st, int sessionId)
 
 int flushPlayer(sqliteDB* db, BasePlayer& player, int sessionId, bool completed, bool assumeEnded)
 {
+    // clearData() and the watcher can now reach the same player concurrently (data_lock is
+    // not held across database work), so serialize the row update: the second caller must
+    // see the row id the first one wrote back instead of inserting a duplicate row.
+    QMutexLocker historyLock(&player.historyLock());
     // One locked view so a tick cannot persist fields from before and after a video change.
     const PlayerSnapshot s = player.snapshot();
     RowState st;

@@ -11,11 +11,20 @@ currentVideoQLabel::currentVideoQLabel(QWidget* parent) : customQLabel(parent) {
 
 void currentVideoQLabel::setValues(int id, QString path, QString name, QString author, QString tags) {
 	this->id = id;
-	this->path = path;
+	{
+		// Only `path` is read from the watcher thread; the rest are GUI-only.
+		QMutexLocker lock(&this->path_lock);
+		this->path = path;
+	}
 	this->name = name;
 	this->author = author;
 	this->tags = tags;
 	this->updateText();
+}
+
+QString currentVideoQLabel::currentPath() const {
+	QMutexLocker lock(&this->path_lock);
+	return this->path;
 }
 
 void currentVideoQLabel::setValues(std::tuple<int, QString, QString, QString, QString> values) {

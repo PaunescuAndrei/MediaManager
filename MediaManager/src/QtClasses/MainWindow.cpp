@@ -1652,8 +1652,8 @@ bool MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool incre
     QString oldCategory, oldVideoPath;
     if (increment && player) {
         oldVideoId = player->video_id;
-        oldCategory = player->category;
-        oldVideoPath = player->video_path;
+        oldCategory = player->category();
+        oldVideoPath = player->videoPath();
         oldStartProgress = player->startProgress;
         oldPos = player->position;
         oldWatchedTime = player->videoWatchedTime();
@@ -3442,7 +3442,7 @@ void MainWindow::updateProgressBar(double position, double duration) {
 
 void MainWindow::updateProgressBar(double position, double duration, QSharedPointer<BasePlayer> player, bool running)
 {
-    if (not player->change_in_progress and player->video_path == this->ui.currentVideo->path) {
+    if (not player->change_in_progress and player->videoPath() == this->ui.currentVideo->path) {
         this->updateProgressBar(position, duration);
     }
 }
@@ -3455,7 +3455,7 @@ void MainWindow::showEndOfVideoDialog(bool ignore_end_of_video, bool show_notifi
 void MainWindow::showEndOfVideoDialog(QSharedPointer<BasePlayer> player, finishDialog::PlayerContext context,
     bool ignore_end_of_video, bool show_notification, QPointer<NotificationWidget> resumeNotification) {
     if (player
-        && !player->video_path.isEmpty()
+        && !player->videoPath().isEmpty()
         && (ignore_end_of_video || player->end_of_video)
         && player->change_in_progress == false) {
         if (not this->finish_dialog) {
@@ -3503,7 +3503,7 @@ void MainWindow::showEndOfVideoDialog(QSharedPointer<BasePlayer> player, finishD
                         // (never reached from End, but the guards are
                         // self-documenting).
                         {
-                            QPersistentModelIndex srcIdx = this->modelIndexByPath(player->video_path);
+                            QPersistentModelIndex srcIdx = this->modelIndexByPath(player->videoPath());
                             QString currentType;
                             if (srcIdx.isValid()) {
                                 currentType = srcIdx.sibling(srcIdx.row(), ListColumns["TYPE_COLUMN"]).data(Qt::DisplayRole).toString();
@@ -3536,15 +3536,15 @@ void MainWindow::showEndOfVideoDialog(QSharedPointer<BasePlayer> player, finishD
                             // Clear video_path so checkpointPlayer and the player
                             // thread's end-of-video loop don't touch this player
                             // while we wait for the process to die.
-                            player->video_path = QString();
+                            player->setVideoPath(QString());
                             player->closePlayer();
                         } else {
                             // WatchExternal — unload the file, keep player open for reuse
                             player->unloadCurrentFile();
                             player->startProgress = 0;
                             player->video_id = -1;
-                            player->trackedVideoPath = QString();
-                            player->video_path = QString();
+                            player->setTrackedVideoPath(QString());
+                            player->setVideoPath(QString());
                         }
                     }
                 }
@@ -3606,7 +3606,7 @@ void MainWindow::replayVideo(QSharedPointer<BasePlayer> player, finishDialog::Pl
 	// selected video when no player is open. Without a player there is no
 	// immediate playback — the saved progress is reset instead so the video
 	// starts from the beginning the next time it is opened.
-	const QString replayPath = player ? player->video_path : this->ui.currentVideo->path;
+	const QString replayPath = player ? player->videoPath() : this->ui.currentVideo->path;
 	if (replayPath.isEmpty()) {
 		return;
 	}
@@ -3928,7 +3928,7 @@ void MainWindow::openEmptyVideoPlayer() {
         QSharedPointer<BasePlayer> l = this->App->VW->newPlayer("",-1);
         l->trackExternalVideo = this->App->config->get_bool("empty_player_tracking");
         this->App->VW->setMainPlayer(l);
-        l->openPlayer(l->video_path, l->position);
+        l->openPlayer(l->videoPath(), l->position);
         connect(l.data(), &BasePlayer::endOfVideoSignal, this, [this, l_weak = l.toWeakRef()]() {
             auto player = l_weak.toStrongRef();
             if (player) {
@@ -3954,14 +3954,14 @@ void MainWindow::watchCurrent() {
             seconds = this->duration - 0.1;
         }
         l->openPlayer(this->ui.currentVideo->path, seconds);
-        l->trackedVideoPath = this->ui.currentVideo->path;
+        l->setTrackedVideoPath(this->ui.currentVideo->path);
         l->startProgress = seconds;
         l->videoStartWallClock = QDateTime::currentDateTime();
         l->lastCheckpointTime = l->videoStartWallClock;
         watchhistory::RowState newRow;
         newRow.videoId = l->video_id;
-        newRow.category = l->category;
-        newRow.videoPath = l->video_path;
+        newRow.category = l->category();
+        newRow.videoPath = l->videoPath();
         newRow.watchedStart = seconds;
         newRow.watchedEnd = seconds;
         watchhistory::flush(this->App->db, newRow, this->App->VW->currentSessionId());
@@ -3983,13 +3983,13 @@ void MainWindow::watchSelected(int video_id, QString path) {
     if (seconds < 0.001)
         seconds = 0.001;
     l->openPlayer(path, seconds);
-    l->trackedVideoPath = path;
+    l->setTrackedVideoPath(path);
     l->startProgress = seconds;
     l->videoStartWallClock = QDateTime::currentDateTime();
     l->lastCheckpointTime = l->videoStartWallClock;
     watchhistory::RowState newRow;
     newRow.videoId = video_id;
-    newRow.category = l->category;
+    newRow.category = l->category();
     newRow.videoPath = path;
     newRow.watchedStart = seconds;
     newRow.watchedEnd = seconds;
@@ -5327,13 +5327,13 @@ void MainWindow::updateTotalListLabel(bool force_update) {
 }
 
 void MainWindow::changePlayerVideo(QSharedPointer<BasePlayer> player, QString path, int video_id, double position) {
-    if (player && watchhistory::isTrackedVideo(player) && player->video_path != path && player->activeWatchHistoryRowId > 0) {
+    if (player && watchhistory::isTrackedVideo(player) && player->videoPath() != path && player->activeWatchHistoryRowId > 0) {
         watchhistory::flushPlayer(this->App->db, *player, this->App->VW->currentSessionId(), false, true);
     }
     player->video_id = video_id;
-    player->category = this->App->currentDB;
-    player->video_type = this->App->db->getVideoType(video_id);
-    player->trackedVideoPath = path;
+    player->setCategory(this->App->currentDB);
+    player->setVideoType(this->App->db->getVideoType(video_id));
+    player->setTrackedVideoPath(path);
     player->activeWatchHistoryRowId = -1;
     player->startProgress = this->App->db->getVideoProgress(video_id, "0").toDouble();
     player->changeVideo(path, video_id, position);

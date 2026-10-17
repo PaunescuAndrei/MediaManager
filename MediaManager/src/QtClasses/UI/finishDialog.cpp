@@ -28,7 +28,7 @@ finishDialog::finishDialog(MainWindow* MW, QSharedPointer<BasePlayer> player, Pl
 	if (m_context == PlayerContext::MainPlayer && MW) {
 		lookupPath = MW->ui.currentVideo->path;
 	} else if (m_player) {
-		lookupPath = m_player->video_path;
+		lookupPath = m_player->videoPath();
 	}
 
 	QString videoAuthor;

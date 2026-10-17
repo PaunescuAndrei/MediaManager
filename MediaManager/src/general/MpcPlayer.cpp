@@ -88,7 +88,7 @@ LRESULT MpcPlayer::OnCopyData(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
                     }
                 }
                 else {
-                    if (this->change_in_progress_video == true and (this->target_video_path.isEmpty() or this->target_video_path == this->video_path))
+                    if (this->change_in_progress_video == true and (this->targetVideoPath().isEmpty() or this->targetVideoPath() == this->videoPath()))
                         this->change_in_progress_video = false;
                 }
                 break;
@@ -100,20 +100,20 @@ LRESULT MpcPlayer::OnCopyData(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
                     QStringList items = nowplaying.split("|");
                     if (!items.isEmpty()) {
                         QString newPath = items.value(3);
-                        if (this->video_path != newPath) {
-                            this->video_path = newPath;
+                        if (this->videoPath() != newPath) {
+                            this->setVideoPath(newPath);
                             // If MPC loaded a file we no longer want (target changed
                             // mid-flight via a new changeVideo call), allow the state
                             // machine to send CMD_OPENFILE for the correct target.
-                            if (this->change_in_progress_video && this->video_path != this->target_video_path) {
+                            if (this->change_in_progress_video && this->videoPath() != this->targetVideoPath()) {
                                 this->change_in_progress_video = false;
                             }
                         }
                         // Sync trackedVideoPath when MPC confirms the file we told it to open —
                         // prevents the watcher from seeing a spurious mismatch and firing
                         // handleExternalVideoChange with stale data during programmatic changes.
-                        if (this->video_path == this->target_video_path)
-                            this->trackedVideoPath = this->video_path;
+                        if (this->videoPath() == this->targetVideoPath())
+                            this->setTrackedVideoPath(this->videoPath());
                         QString val = items.value(4);
                         if (!val.isEmpty()) {
                             this->duration = val.toDouble(); // this doesnt work when changing video to the same video
@@ -318,10 +318,10 @@ void MpcPlayer::run() {
                     }
                     this->change_in_progress = true;
                     command->change_in_progress = true;
-                    this->target_video_path = command->video_path;
+                    this->setTargetVideoPath(command->video_path);
                     this->video_id = command->video_id;
                     this->position = -1;
-                    if (this->video_path != this->target_video_path) { // dirty fix, this wont work if the file has changed and we try to load it again
+                    if (this->videoPath() != this->targetVideoPath()) { // dirty fix, this wont work if the file has changed and we try to load it again
                         this->duration = -1;
                         this->paused = false;
                     }
@@ -331,7 +331,7 @@ void MpcPlayer::run() {
                     this->queue.popFront();
                 }
                 else {
-                    if (this->change_in_progress_video == false and this->video_path != this->target_video_path) {
+                    if (this->change_in_progress_video == false and this->videoPath() != this->targetVideoPath()) {
                         this->change_in_progress_video = true;
                         this->send_message(CMD_OPENFILE, command->video_path);
                         this->msleep(250);
@@ -380,7 +380,7 @@ void MpcPlayer::run() {
                 this->queue.popFront();
             }
         }
-        if (this->change_in_progress == false and not this->video_path.isEmpty() and this->position >= 0 and this->duration >= 0 and this->position >= this->duration - 0.5) {
+        if (this->change_in_progress == false and not this->videoPath().isEmpty() and this->position >= 0 and this->duration >= 0 and this->position >= this->duration - 0.5) {
             if (this->end_of_video == false) {
                 auto now = utils::QueryUnbiasedInterruptTimeChrono();
                 auto time_since_seek = std::chrono::duration_cast<std::chrono::milliseconds>(now - this->last_seek_time).count();

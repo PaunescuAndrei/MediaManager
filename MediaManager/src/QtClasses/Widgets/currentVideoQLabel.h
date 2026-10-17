@@ -2,6 +2,7 @@
 #include "customQLabel.h"
 #include <QString>
 #include <tuple>
+#include <QMutex>
 
 class currentVideoQLabel :public customQLabel
 {
@@ -10,6 +11,8 @@ class currentVideoQLabel :public customQLabel
 public:
     int id = -1;
     QString name = "";
+    // GUI thread only: written under path_lock by setValues(); safe to read directly on
+    // the GUI. Other threads must use currentPath().
     QString path = "";
     QString author = "";
     QString tags = "";
@@ -19,6 +22,10 @@ public:
     void setValues(std::tuple<int, QString, QString, QString, QString> values);
     void updateText();
     void mousePressEvent(QMouseEvent* e) override;
+    // Locked copy of `path` for readers on other threads (the watcher).
+    QString currentPath() const;
     ~currentVideoQLabel();
+private:
+    mutable QMutex path_lock;
 };
 

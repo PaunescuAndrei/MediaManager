@@ -47,13 +47,13 @@ QSharedPointer<BasePlayer> VideoWatcherQt::newPlayer(QString path, int video_id)
 	QSharedPointer<BasePlayer> newVideo = QSharedPointer<MpcPlayer>::create(path, video_id,&this->CLASS_COUNT,this->App,this->App);
 	this->Players.append(newVideo);
 	this->CLASS_COUNT++;
-	newVideo->category = this->App->currentDB;
+	newVideo->setCategory(this->App->currentDB);
 	// newPlayer() is called from the GUI thread (video start / next / watch external),
 	// never from the watcher thread, so these reads go through the GUI connection. The
 	// watcher's own connection belongs to the watcher thread.
-	newVideo->video_type = this->App->db->getVideoType(video_id);
+	newVideo->setVideoType(this->App->db->getVideoType(video_id));
 	newVideo->startProgress = this->App->db->getVideoProgress(video_id, "0").toDouble();
-	newVideo->trackedVideoPath = path;
+	newVideo->setTrackedVideoPath(path);
 	newVideo->start();
 	return newVideo;
 }
@@ -191,7 +191,7 @@ void VideoWatcherQt::checkpointPlayer(QSharedPointer<BasePlayer> player, int int
 	QDateTime now = QDateTime::currentDateTime();
 	if (!player->shouldCheckpoint(now, intervalSeconds))
 		return;
-	if (player->video_path.isEmpty())
+	if (player->videoPath().isEmpty())
 		return;
 	if (!player->trackExternalVideo && player->video_id < 0)
 		return;
@@ -230,8 +230,9 @@ void VideoWatcherQt::handleExternalVideoChange(QSharedPointer<BasePlayer> player
 	// never sees video_path != trackedVideoPath for programmatic changes. This guard
 	// is defense-in-depth: if handleExternalVideoChange is ever called from a code
 	// path that lacks the trackedVideoPath sync, the guard prevents state corruption.
-	if (player->video_path == player->target_video_path) {
-		player->trackedVideoPath = player->video_path;
+	const QString currentPath = player->videoPath();
+	if (currentPath == player->targetVideoPath()) {
+		player->setTrackedVideoPath(currentPath);
 		return;
 	}
 
@@ -244,8 +245,8 @@ void VideoWatcherQt::handleExternalVideoChange(QSharedPointer<BasePlayer> player
 	}
 	if (!player->trackExternalVideo) {
 		player->video_id = -1;
-		player->video_type = QString();
-		player->trackedVideoPath = player->video_path;
+		player->setVideoType(QString());
+		player->setTrackedVideoPath(currentPath);
 		player->activeWatchHistoryRowId = -1;
 		player->startProgress = 0;
 		return;
@@ -253,14 +254,14 @@ void VideoWatcherQt::handleExternalVideoChange(QSharedPointer<BasePlayer> player
 	int newVideoId = -1;
 	QSqlQuery query(this->db->db);
 	query.prepare("SELECT id FROM videodetails WHERE path = ? AND category = ?");
-	query.addBindValue(player->video_path);
-	query.addBindValue(player->category);
+	query.addBindValue(currentPath);
+	query.addBindValue(player->category());
 	if (query.exec() && query.next()) {
 		newVideoId = query.value(0).toInt();
 	}
 	player->video_id = newVideoId;
-	player->video_type = newVideoId >= 0 ? this->db->getVideoType(newVideoId) : QString();
-	player->trackedVideoPath = player->video_path;
+	player->setVideoType(newVideoId >= 0 ? this->db->getVideoType(newVideoId) : QString());
+	player->setTrackedVideoPath(currentPath);
 	player->activeWatchHistoryRowId = -1;
 	player->startProgress = 0;
 	player->resetVideoTiming();
@@ -270,8 +271,8 @@ void VideoWatcherQt::handleExternalVideoChange(QSharedPointer<BasePlayer> player
 	if (watchhistory::isTrackedVideo(player)) {
 		watchhistory::RowState newRow;
 		newRow.videoId = newVideoId;
-		newRow.category = player->category;
-		newRow.videoPath = player->video_path;
+		newRow.category = player->category();
+		newRow.videoPath = currentPath;
 		watchhistory::flush(this->db, newRow, m_currentSessionId);
 		player->activeWatchHistoryRowId = newRow.rowId;
 	}
@@ -284,7 +285,7 @@ bool VideoWatcherQt::shouldCountWatchTime(QSharedPointer<BasePlayer> player)
 	if (this->App->currentDB != "MINUS")
 		return true;
 	const bool isMinusPlus = this->App->config->get("sv_mode").compare("PLUS", Qt::CaseInsensitive) == 0;
-	return isMinusPlus && svTypes.contains(player->video_type, Qt::CaseInsensitive);
+	return isMinusPlus && svTypes.contains(player->videoType(), Qt::CaseInsensitive);
 }
 
 void VideoWatcherQt::emitCounterDelta(QSharedPointer<BasePlayer> player, double watched)
@@ -343,12 +344,12 @@ void VideoWatcherQt::rollDayIfNeeded()
 	// its post-midnight time would count for the wrong day. The session is left open
 	// on purpose: a watch that crosses midnight stays one session.
 	for (const QSharedPointer<BasePlayer>& player : this->Players) {
-		if (!player || player->video_path.isEmpty()) continue;
+		if (!player || player->videoPath().isEmpty()) continue;
 		if (!player->trackExternalVideo && player->video_id < 0) continue;
 		// A video change in flight leaves video_id and video_path describing different
 		// videos, so flushing now would persist a mismatched row. Retry on the next
 		// tick: m_lastRollDate only advances after a pass that skipped nobody.
-		if (player->change_in_progress || player->video_path != player->trackedVideoPath) return;
+		if (player->change_in_progress || player->videoPath() != player->trackedVideoPath()) return;
 
 		double watched = player->videoWatchedTime();
 		if (watchhistory::hasWatchToPersist(player)) {
@@ -409,14 +410,14 @@ void VideoWatcherQt::run()
 			this->rollDayIfNeeded();
 			for (int i = 0; i < this->Players.size(); ) {
 				QSharedPointer<BasePlayer> player = this->Players.at(i);
-				if (!player->video_path.isEmpty() && player->video_path != player->trackedVideoPath && !player->change_in_progress) {
+				if (!player->videoPath().isEmpty() && player->videoPath() != player->trackedVideoPath() && !player->change_in_progress) {
 					this->handleExternalVideoChange(player);
 				}
 				this->checkpointPlayer(player, saveInterval);
-				// The receiver (MainWindow::updateProgressBar) already compares the
-				// player's path with the current video on the GUI thread, so the watcher
-				// does not need to read currentVideo->path (a GUI object) from here.
-				if (!player->video_path.isEmpty()) {
+				// Compare against the current video path published by the label; both the
+				// label and the player now hand out locked copies, so this is safe from
+				// the watcher thread.
+				if (player->videoPath() == this->App->mainWindow->ui.currentVideo->currentPath()) {
 					emit updateProgressBarSignal(player->position,player->duration, player, true);
 				}
 				player->updateWatchedTiming();

@@ -6,7 +6,7 @@
 BasePlayer::BasePlayer(QString video_path, int video_id, int* CLASS_COUNT, QObject* parent, MainApp* App)
 {
     this->App = App;
-    this->target_video_path = video_path;
+    this->setTargetVideoPath(video_path);
     this->video_id = video_id;
     this->CLASS_COUNT = CLASS_COUNT;
     this->process = new QProcess(parent);
@@ -56,7 +56,7 @@ double BasePlayer::getTotalWatchedTime() {
 }
 
 void BasePlayer::updateWatchedTiming() {
-    bool isCurrentlyPlaying = !this->paused && !this->video_path.isEmpty();
+    bool isCurrentlyPlaying = !this->paused && !this->videoPath().isEmpty();
     
     if (isCurrentlyPlaying && !this->wasPlayingLastCheck) {
         this->startWatchedTiming();
@@ -67,8 +67,7 @@ void BasePlayer::updateWatchedTiming() {
     this->wasPlayingLastCheck = isCurrentlyPlaying;
 }
 
-void BasePlayer::onPausedChanged(bool paused) {
-    bool isCurrentlyPlaying = !paused;
+void BasePlayer::onPausedChanged(bool paused) {    bool isCurrentlyPlaying = !paused;
     if (isCurrentlyPlaying && this->watchedTimeStart == nullptr) {
         this->startWatchedTiming();
     } else if (!isCurrentlyPlaying && this->watchedTimeStart != nullptr) {
@@ -97,4 +96,54 @@ bool BasePlayer::shouldCheckpoint(const QDateTime& now, int intervalSeconds) {
     return intervalSeconds > 0
         && lastCheckpointTime.isValid()
         && lastCheckpointTime.secsTo(now) >= intervalSeconds;
+}
+
+QString BasePlayer::videoPath() const {
+    QMutexLocker lock(&m_stateLock);
+    return m_videoPath;
+}
+
+QString BasePlayer::targetVideoPath() const {
+    QMutexLocker lock(&m_stateLock);
+    return m_targetVideoPath;
+}
+
+QString BasePlayer::trackedVideoPath() const {
+    QMutexLocker lock(&m_stateLock);
+    return m_trackedVideoPath;
+}
+
+QString BasePlayer::videoType() const {
+    QMutexLocker lock(&m_stateLock);
+    return m_videoType;
+}
+
+QString BasePlayer::category() const {
+    QMutexLocker lock(&m_stateLock);
+    return m_category;
+}
+
+void BasePlayer::setVideoPath(const QString& path) {
+    QMutexLocker lock(&m_stateLock);
+    m_videoPath = path;
+}
+
+void BasePlayer::setTargetVideoPath(const QString& path) {
+    QMutexLocker lock(&m_stateLock);
+    m_targetVideoPath = path;
+}
+
+void BasePlayer::setTrackedVideoPath(const QString& path) {
+    QMutexLocker lock(&m_stateLock);
+    m_trackedVideoPath = path;
+}
+
+void BasePlayer::setVideoType(const QString& type) {
+    QMutexLocker lock(&m_stateLock);
+    m_videoType = type;
+}
+
+void BasePlayer::setCategory(const QString& category) {
+    QMutexLocker lock(&m_stateLock);
+    m_category = category;
 }

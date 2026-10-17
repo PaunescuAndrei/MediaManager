@@ -2,6 +2,7 @@
 #include <QThread>  
 #include <windows.h>  
 #include <QProcess>  
+#include <QMutex>
 #include "NonBlockingQueue.h"  
 #include "MpcApi.h"  
 #include "PlayerCommands.h"  
@@ -20,16 +21,12 @@ public:
     // loop, so it has to be atomic: a cached read here is a thread that never stops.
     std::atomic<bool> running = false;
     NonBlockingQueue< std::shared_ptr<PlayerCommand>> queue = NonBlockingQueue< std::shared_ptr<PlayerCommand>>();
-    QString video_path = "";  
-    QString target_video_path = "";  
     int video_id = -1;  
     int* CLASS_COUNT;  
     MainApp* App = nullptr;  
     qint64 pid = -1;  
     double position = -1;  
     double startProgress = 0.0;
-    QString category;
-    QString video_type;
     double duration = -1;
     bool change_in_progress = false;  
     bool paused = false;  
@@ -50,7 +47,6 @@ public:
     int activeWatchHistoryRowId = -1;
     QDateTime videoStartWallClock;
     QDateTime lastCheckpointTime;
-    QString trackedVideoPath;
     bool trackExternalVideo = false;
     BasePlayer(QString video_path, int video_id, int* CLASS_COUNT, QObject* parent = nullptr, MainApp* App = nullptr);  
     virtual ~BasePlayer();  
@@ -73,10 +69,30 @@ public:
     double videoWatchedTime();
     bool shouldCheckpoint(const QDateTime& now, int intervalSeconds);
     void recordVideoStart();
+    // The video strings are shared with the watcher thread: private storage, every access
+    // through these. The setters lock; the getters return a copy.
+    QString videoPath() const;
+    QString targetVideoPath() const;
+    QString trackedVideoPath() const;
+    QString videoType() const;
+    QString category() const;
+    void setVideoPath(const QString& path);
+    void setTargetVideoPath(const QString& path);
+    void setTrackedVideoPath(const QString& path);
+    void setVideoType(const QString& type);
+    void setCategory(const QString& category);
 signals:  
     void endOfVideoSignal();  
     void pausedChangedSignal(bool paused);  
 
 private slots:  
     void onPausedChanged(bool paused);  
+
+private:
+    QString m_videoPath;
+    QString m_targetVideoPath;
+    QString m_trackedVideoPath;
+    QString m_videoType;
+    QString m_category;
+    mutable QMutex m_stateLock;
 };

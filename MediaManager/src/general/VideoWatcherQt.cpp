@@ -101,10 +101,13 @@ QList<QSharedPointer<BasePlayer>> VideoWatcherQt::playersSnapshot()
 }
 
 void VideoWatcherQt::setMainPlayer(QSharedPointer<BasePlayer> player) {
+	// mainPlayer is read by the watcher thread and by toggle_window() (raw-input thread).
+	QMutexLocker lock(&this->data_lock);
 	this->mainPlayer = player;
 }
 
 void VideoWatcherQt::clearMainPlayer() {
+	QMutexLocker lock(&this->data_lock);
 	this->mainPlayer = nullptr;
 }
 
@@ -129,8 +132,16 @@ void VideoWatcherQt::clearAfterMainVideoEnd()
 
 void VideoWatcherQt::toggle_window()
 {
-	if (!this->Players.isEmpty() && this->mainPlayer != nullptr) {
-		QSharedPointer<BasePlayer> player = this->mainPlayer;
+	// Copy the player while holding the lock, then release it before the slow window work
+	// below (HWND enumeration, foreground retries, OSD). This way the raw-input thread
+	// never waits on the watcher's checkpoint pass, and the watcher never waits on MPC.
+	QSharedPointer<BasePlayer> player;
+	{
+		QMutexLocker lock(&this->data_lock);
+		if (!this->Players.isEmpty() && this->mainPlayer != nullptr)
+			player = this->mainPlayer;
+	}
+	if (player) {
 		bool fullscreen = utils::is_hwnd_full_screen(player->player_hwnd);
 		QList<HWND> hwnds = utils::get_hwnds_for_pid(player->pid);
 		bool is_foreground = false;
@@ -402,7 +413,10 @@ void VideoWatcherQt::run()
 					this->handleExternalVideoChange(player);
 				}
 				this->checkpointPlayer(player, saveInterval);
-				if (player->video_path == this->App->mainWindow->ui.currentVideo->path) {
+				// The receiver (MainWindow::updateProgressBar) already compares the
+				// player's path with the current video on the GUI thread, so the watcher
+				// does not need to read currentVideo->path (a GUI object) from here.
+				if (!player->video_path.isEmpty()) {
 					emit updateProgressBarSignal(player->position,player->duration, player, true);
 				}
 				player->updateWatchedTiming();

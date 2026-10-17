@@ -19,7 +19,8 @@ public:
     // Cleared by the GUI thread on shutdown; atomic so the watcher loop cannot keep
     // reading a cached true and outlive the wait() in MainApp::stop_handle.
     std::atomic<bool> running = true;
-    bool watching = false;
+    // Written by the watcher thread, read by the mascots animation thread.
+    std::atomic<bool> watching{ false };
     int CLASS_COUNT = 0;
     QMutex data_lock = QMutex();
     MainApp *App = nullptr;

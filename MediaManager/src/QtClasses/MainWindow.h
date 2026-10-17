@@ -27,6 +27,7 @@
 #include <QPersistentModelIndex>
 #include <QHash>
 #include "VideoData.h"
+#include "definitions.h"
 #include <QMutex>
 
 class MainApp;
@@ -68,6 +69,8 @@ public:
     QDate lastMilestoneDate;         // tracks which day the milestone counters belong to
     QDate lastStreakRiskNotifiedDate; // which day streak-at-risk was last notified
     QTime lastStreakRiskNotifiedTime; // exact time streak-at-risk was last notified
+    QDate streakReconcileDate;        // in-memory guard: last day streak saves were reconciled
+    bool lastStreakRiskWasFinalHour = false; // debt-day final-hour escalation state
     int previousBestVideos = 0;      // best videos-in-a-day count (cached at startup, updated as records are broken)
     QDate previousBestVideosDate;    // date of the previous best videos record
     double previousBestTimeSec = 0.0; // best watch-time-in-a-day (cached at startup, updated as records are broken)
@@ -198,7 +201,11 @@ public:
     void startDailyProgressTimer();
     void GoalMetNotification(const QString& title, const QString& message);
     void MilestoneNotification(const QString& description);
-    void checkStreakAtRisk(double watchedTodaySec);
+    void checkStreakAtRisk(double watchedTodaySec, int videosToday);
+    void reconcileStreakSaves();
+    int getNextStreakFreezePrice();
+    bool buyStreakFreeze(QString* errorMessage = nullptr);
+    StreakSaveInfo getStreakSaveInfo();
     void checkPersonalBests(int videosToday, double watchedTodaySec);
     void incrementCounterVar(int value = 1);
     bool applyPostWatchAdjustments(const QString& videoType, int videoId, bool increment, double watchedProgressOverride = 0.0, bool useOverrideProgress = false, bool suppressMinusCounter = false, double actualWatchTimeDelta = 0.0, bool skipSvRecalc = false);

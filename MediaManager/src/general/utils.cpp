@@ -847,6 +847,29 @@ QString utils::formatDurationHuman(double total_seconds)
 	return QStringLiteral("%1s").arg(secs);
 }
 
+QString utils::formatStreakAmount(double amount, const QString& unit, bool shortForm)
+{
+	if (unit == QStringLiteral("videos")) {
+		const int count = std::max(0, static_cast<int>(std::lround(amount)));
+		if (shortForm)
+			return QString::number(count);
+		const QString suffix = (count == 1) ? QString() : QStringLiteral("s");
+		return QStringLiteral("%1 completed video%2").arg(count).arg(suffix);
+	}
+	return formatDurationHuman(amount);
+}
+
+QString utils::formatStreakRequirement(double baseAmount, double debtAmount, const QString& unit)
+{
+	const QString total = formatStreakAmount(baseAmount + debtAmount, unit);
+	if (debtAmount <= 0.0)
+		return total;
+	return QStringLiteral("%1 (base %2 + debt %3)")
+		.arg(total)
+		.arg(formatStreakAmount(baseAmount, unit, true))
+		.arg(formatStreakAmount(debtAmount, unit, true));
+}
+
 bool utils::hiddenCheck(QStringList &settings) {
 	return settings.length() > 1;
 }

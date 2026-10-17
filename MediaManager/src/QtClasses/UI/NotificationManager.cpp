@@ -100,14 +100,27 @@ void NotificationManager::showGoalMet(const QString& title, const QString& messa
 	repositionAll(); // after show so adjustSize works correctly
 }
 
-void NotificationManager::showStreakAtRisk(const QString& title, const QString& message)
+void NotificationManager::showStreakAtRisk(const QString& title, const QString& message, bool urgent)
 {
 	if (!mw_->App->config->get_bool("notification_streak_at_risk_enabled"))
 		return;
 
 	int durationMs = mw_->App->config->get("notification_streak_at_risk_duration_ms").toInt();
 	NotificationWidget* dialog = createNotification(NotificationType::StreakAtRisk);
-	dialog->populateStreakAtRisk(title, message);
+	dialog->populateStreakAtRisk(title, message, urgent);
+	insertNotification(dialog);
+	dialog->showNotification(durationMs, 5);
+	repositionAll();
+}
+
+void NotificationManager::showStreakSaved(const QString& title, const QString& message, bool urgent)
+{
+	if (!mw_->App->config->get_bool("notification_streak_saved_enabled"))
+		return;
+
+	int durationMs = mw_->App->config->get("notification_streak_saved_duration_ms").toInt();
+	NotificationWidget* dialog = createNotification(NotificationType::StreakSaved);
+	dialog->populateStreakSaved(title, message, urgent);
 	insertNotification(dialog);
 	dialog->showNotification(durationMs, 5);
 	repositionAll();

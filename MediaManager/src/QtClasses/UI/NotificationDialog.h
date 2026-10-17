@@ -13,6 +13,7 @@ enum class NotificationType {
 	GeneralMessage,
 	GoalMet,
 	StreakAtRisk,
+	StreakSaved,
 	PersonalBest,
 	SessionSummary
 };
@@ -48,7 +49,8 @@ public:
 	void populateVideoInfo(MainWindow* mw);
 	void populateGeneralMessage(const QString& title, const QString& message);
 	void populateGoalMet(const QString& title, const QString& message);
-	void populateStreakAtRisk(const QString& title, const QString& message);
+	void populateStreakAtRisk(const QString& title, const QString& message, bool urgent = false);
+	void populateStreakSaved(const QString& title, const QString& message, bool urgent = false);
 	void populatePersonalBest(const QString& title, const QString& message);
 	void populateSessionSummary(const QString& summaryLine, const QString& watchStr, const QString& sessionStr, const QString& activeStr, const QString& perVideoStr);
 

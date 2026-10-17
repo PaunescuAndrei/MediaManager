@@ -8,6 +8,7 @@
 #include "utils.h"
 #include "stylesQt.h"
 #include <QSpinBox>
+#include <QDoubleSpinBox>
 #include <QSignalBlocker>
 #include "flowlayout.h"
 #include <QCheckBox>
@@ -174,26 +175,6 @@ void SettingsDialog::setupGeneralPage(MainWindow* mw)
     this->ui.dailyVideoGoalSpinBox->setValue(dailyVid);
     this->ui.dailyTimeGoalSpinBox->setValue(dailyTime);
 
-    // --- Streak Daily Time Target ---
-    {
-        QHBoxLayout* row = new QHBoxLayout();
-        QLabel* streakTimeTargetLabel = new QLabel("Streak daily time target (min):");
-        streakTimeTargetLabel->setToolTip(
-            "Minutes of watch time needed per day to keep your streak alive (0 = count completed videos instead)");
-        row->addWidget(streakTimeTargetLabel);
-        row->addStretch();
-        streakDailyTimeTargetSpinBox = new QSpinBox();
-        streakDailyTimeTargetSpinBox->setMinimum(0);
-        streakDailyTimeTargetSpinBox->setMaximum(480);
-        streakDailyTimeTargetSpinBox->setSingleStep(1);
-        streakDailyTimeTargetSpinBox->setToolTip(
-            "Minutes of watch time needed per day to keep your streak alive. Set to 0 to count completed videos instead.");
-        streakDailyTimeTargetSpinBox->setValue(config->get("streak_daily_time_target_minutes").toInt());
-        setupSpinStyle(streakDailyTimeTargetSpinBox, "spinbox");
-        row->addWidget(streakDailyTimeTargetSpinBox);
-        qobject_cast<QVBoxLayout*>(this->ui.statsGroupBox->layout())->addLayout(row);
-    }
-
     // --- Goal-Reached Counter Bonus ---
     {
         QHBoxLayout* row = new QHBoxLayout();
@@ -230,6 +211,183 @@ void SettingsDialog::setupGeneralPage(MainWindow* mw)
     // --- Daily Progress Check ---
     setupSpinStyle(this->ui.dailyProgressIntervalSpinBox, "spinbox");
     this->ui.dailyProgressIntervalSpinBox->setValue(config->get("daily_progress_check_interval_seconds").toInt());
+}
+
+void SettingsDialog::setupStreaksPage(MainWindow* mw)
+{
+    Config* config = mw->App->config;
+
+    // Build the page programmatically and place it before Notifications.
+    QScrollArea* scrollArea = new QScrollArea();
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setWidgetResizable(true);
+
+    QWidget* pageContent = new QWidget();
+    QVBoxLayout* pageLayout = new QVBoxLayout(pageContent);
+    pageLayout->setContentsMargins(4, 4, 4, 4);
+    pageLayout->setSpacing(8);
+
+    // --- Streak Target ---
+    QGroupBox* targetGroup = new QGroupBox("Streak Target");
+    QVBoxLayout* targetLayout = new QVBoxLayout(targetGroup);
+    targetLayout->setSpacing(4);
+
+    QHBoxLayout* targetRow = new QHBoxLayout();
+    QLabel* targetLabel = new QLabel("Daily target (min):");
+    targetLabel->setToolTip(
+        "Minutes of watch time needed per day to keep your streak alive (0 = count completed videos instead)");
+    targetRow->addWidget(targetLabel);
+    targetRow->addStretch();
+    streakDailyTimeTargetSpinBox = new QSpinBox();
+    streakDailyTimeTargetSpinBox->setMinimum(0);
+    streakDailyTimeTargetSpinBox->setMaximum(480);
+    streakDailyTimeTargetSpinBox->setSingleStep(1);
+    streakDailyTimeTargetSpinBox->setToolTip(
+        "Minutes of watch time needed per day to keep your streak alive. Set to 0 to count completed videos instead.");
+    streakDailyTimeTargetSpinBox->setValue(config->get("streak_daily_time_target_minutes").toInt());
+    setupSpinStyle(streakDailyTimeTargetSpinBox, "spinbox");
+    targetRow->addWidget(streakDailyTimeTargetSpinBox);
+    targetLayout->addLayout(targetRow);
+
+    QLabel* targetHint = new QLabel(
+        "The auto-save multiplier applies to whichever unit is active: minutes, or the 1-video base in completed-video mode.");
+    targetHint->setWordWrap(true);
+    targetHint->setStyleSheet("color: #AAAAAA;");
+    targetLayout->addWidget(targetHint);
+
+    pageLayout->addWidget(targetGroup);
+
+    // --- Streak Saves ---
+    QGroupBox* streakSavesGroup = new QGroupBox("Streak Saves");
+    QVBoxLayout* savesLayout = new QVBoxLayout(streakSavesGroup);
+    savesLayout->setSpacing(4);
+
+    streakSaveEnabled = new QCheckBox("Enable streak saves");
+    streakSaveEnabled->setToolTip("Master switch for auto saves and purchasable freezes");
+    setupCheckBox(streakSaveEnabled, "streak_save_enabled", mw);
+    savesLayout->addWidget(streakSaveEnabled);
+
+    streakAutoSaveEnabled = new QCheckBox("Auto save a missed day (adds a debt to the next day)");
+    streakAutoSaveEnabled->setToolTip(
+        "A missed day is saved automatically, but the next day's target is multiplied. "
+        "Time mode multiplies minutes; completed-video mode multiplies the 1-video base.");
+    setupCheckBox(streakAutoSaveEnabled, "streak_auto_save_enabled", mw);
+    savesLayout->addWidget(streakAutoSaveEnabled);
+
+    auto addDoubleRow = [&](const QString& label, const QString& tooltip, double minV, double maxV,
+                            double step, double value, QDoubleSpinBox*& target) {
+        QHBoxLayout* row = new QHBoxLayout();
+        QLabel* lbl = new QLabel(label);
+        lbl->setToolTip(tooltip);
+        row->addWidget(lbl);
+        row->addStretch();
+        target = new QDoubleSpinBox();
+        target->setMinimum(minV);
+        target->setMaximum(maxV);
+        target->setSingleStep(step);
+        target->setDecimals(1);
+        target->setToolTip(tooltip);
+        target->setValue(qBound(minV, value, maxV));
+        setupSpinStyle(target, "spinbox");
+        row->addWidget(target);
+        savesLayout->addLayout(row);
+    };
+
+    auto addIntRow = [&](const QString& label, const QString& tooltip, int minV, int maxV,
+                         int step, int value, QSpinBox*& target) {
+        QHBoxLayout* row = new QHBoxLayout();
+        QLabel* lbl = new QLabel(label);
+        lbl->setToolTip(tooltip);
+        row->addWidget(lbl);
+        row->addStretch();
+        target = new QSpinBox();
+        target->setMinimum(minV);
+        target->setMaximum(maxV);
+        target->setSingleStep(step);
+        target->setToolTip(tooltip);
+        target->setValue(qBound(minV, value, maxV));
+        setupSpinStyle(target, "spinbox");
+        row->addWidget(target);
+        savesLayout->addLayout(row);
+    };
+
+    addDoubleRow("Target multiplier:",
+        "Multiplier for the first auto save. Time mode multiplies minutes; completed-video mode multiplies the 1-video base.",
+        1.0, 20.0, 0.5,
+        config->get_double("streak_auto_save_target_multiplier", 2.0),
+        streakAutoSaveMultiplierSpinBox);
+    addDoubleRow("Multiplier increment:",
+        "Added to the multiplier for each consecutive auto save.",
+        0.0, 20.0, 0.5,
+        config->get_double("streak_auto_save_target_multiplier_increment", 1.0),
+        streakAutoSaveMultiplierIncrementSpinBox);
+    addIntRow("Max consecutive auto saves:",
+        "0 = unlimited. After this many consecutive auto saves, the next miss breaks the streak.",
+        0, 99, 1,
+        config->get("streak_auto_save_max_consecutive").toInt(),
+        streakAutoSaveMaxConsecutiveSpinBox);
+
+    streakFreezeEnabled = new QCheckBox("Enable purchasable freezes");
+    streakFreezeEnabled->setToolTip("Buy freezes with counter points; a freeze covers a missed day with no debt.");
+    setupCheckBox(streakFreezeEnabled, "streak_freeze_enabled", mw);
+    savesLayout->addWidget(streakFreezeEnabled);
+
+    addIntRow("Freeze base price (points):", "Points for the first freeze.", 0, 9999, 1,
+              config->get("streak_freeze_base_price").toInt(), streakFreezeBasePriceSpinBox);
+    addIntRow("Freeze price increment:", "Added for each consecutive purchase.", 0, 9999, 1,
+              config->get("streak_freeze_price_increment").toInt(), streakFreezePriceIncrementSpinBox);
+    addIntRow("Freeze max stock:", "Maximum freezes you can hold (0 = disabled).", 0, 99, 1,
+              config->get("streak_freeze_max_stock").toInt(), streakFreezeMaxStockSpinBox);
+    addIntRow("Price reset (days):",
+              "Consecutive purchase pricing resets after this many days without a purchase (0 = never).",
+              0, 365, 1,
+              config->get("streak_freeze_price_reset_days").toInt(),
+              streakFreezePriceResetDaysSpinBox);
+
+    streakFreezeConsumeFirstCheckBox = new QCheckBox("Use a freeze before auto debt");
+    streakFreezeConsumeFirstCheckBox->setToolTip(
+        "If off, auto debt is tried first and a freeze is only used when the debt path is unavailable.");
+    setupCheckBox(streakFreezeConsumeFirstCheckBox, "streak_freeze_consume_first", mw);
+    savesLayout->addWidget(streakFreezeConsumeFirstCheckBox);
+
+    auto refreshStreakSaveEnableState = [this]() {
+        const bool master = streakSaveEnabled->isChecked();
+        streakAutoSaveEnabled->setEnabled(master);
+        streakFreezeEnabled->setEnabled(master);
+        const bool autoOn = master && streakAutoSaveEnabled->isChecked();
+        streakAutoSaveMultiplierSpinBox->setEnabled(autoOn);
+        streakAutoSaveMultiplierIncrementSpinBox->setEnabled(autoOn);
+        streakAutoSaveMaxConsecutiveSpinBox->setEnabled(autoOn);
+        const bool freezeOn = master && streakFreezeEnabled->isChecked();
+        streakFreezeBasePriceSpinBox->setEnabled(freezeOn);
+        streakFreezePriceIncrementSpinBox->setEnabled(freezeOn);
+        streakFreezeMaxStockSpinBox->setEnabled(freezeOn);
+        streakFreezePriceResetDaysSpinBox->setEnabled(freezeOn);
+        streakFreezeConsumeFirstCheckBox->setEnabled(freezeOn);
+    };
+    connect(streakSaveEnabled, &QCheckBox::toggled, this,
+            [refreshStreakSaveEnableState](bool) { refreshStreakSaveEnableState(); });
+    connect(streakAutoSaveEnabled, &QCheckBox::toggled, this,
+            [refreshStreakSaveEnableState](bool) { refreshStreakSaveEnableState(); });
+    connect(streakFreezeEnabled, &QCheckBox::toggled, this,
+            [refreshStreakSaveEnableState](bool) { refreshStreakSaveEnableState(); });
+    refreshStreakSaveEnableState();
+
+    pageLayout->addWidget(streakSavesGroup);
+    pageLayout->addStretch();
+
+    scrollArea->setWidget(pageContent);
+
+    // Insert before Notifications in both the sidebar and the stack so the two stay in sync.
+    int streakIndex = this->ui.categoryList->count() - 1;
+    for (int i = 0; i < this->ui.categoryList->count(); ++i) {
+        if (this->ui.categoryList->item(i)->text() == QStringLiteral("Notifications")) {
+            streakIndex = i;
+            break;
+        }
+    }
+    this->ui.settingsStack->insertWidget(streakIndex, scrollArea);
+    this->ui.categoryList->insertItem(streakIndex, "Streaks");
 }
 
 void SettingsDialog::setupPlaybackPage(MainWindow* mw)
@@ -758,8 +916,8 @@ void SettingsDialog::setupNotificationsPage(MainWindow* mw)
 
     pageLayout->addWidget(milestonesGroup);
 
-    // ── Streak at Risk ──────────────────────────────────────────────
-    QGroupBox* streakRiskGroup = new QGroupBox("Streak at Risk");
+    // ── Streak Notifications ────────────────────────────────────────
+    QGroupBox* streakRiskGroup = new QGroupBox("Streak Notifications");
     QVBoxLayout* streakRiskLayout = new QVBoxLayout(streakRiskGroup);
     streakRiskLayout->setSpacing(4);
 
@@ -826,6 +984,62 @@ void SettingsDialog::setupNotificationsPage(MainWindow* mw)
     setupSpinStyle(streakAtRiskRefireSpinBox, "spinbox");
     streakRefireRow->addWidget(streakAtRiskRefireSpinBox);
     streakRiskLayout->addLayout(streakRefireRow);
+
+    // Streak saved / debt failed notification
+    QHBoxLayout* streakSavedRow = new QHBoxLayout();
+    notificationStreakSavedEnabled = new QCheckBox("Notify when a streak save is used");
+    notificationStreakSavedEnabled->setToolTip(
+        "Show a popup when a freeze or auto save covers a missed day, or when an auto-save debt fails");
+    setupCheckBox(notificationStreakSavedEnabled, "notification_streak_saved_enabled", mw);
+    streakSavedRow->addWidget(notificationStreakSavedEnabled);
+    streakSavedRow->addStretch();
+    notificationStreakSavedDurationSpinBox = new QSpinBox();
+    notificationStreakSavedDurationSpinBox->setMinimum(1000);
+    notificationStreakSavedDurationSpinBox->setMaximum(60000);
+    notificationStreakSavedDurationSpinBox->setSingleStep(500);
+    notificationStreakSavedDurationSpinBox->setToolTip("Duration in milliseconds");
+    notificationStreakSavedDurationSpinBox->setValue(config->get("notification_streak_saved_duration_ms").toInt());
+    setupSpinStyle(notificationStreakSavedDurationSpinBox, "spinbox");
+    connect(notificationStreakSavedEnabled, &QCheckBox::toggled,
+            notificationStreakSavedDurationSpinBox, &QSpinBox::setEnabled);
+    notificationStreakSavedDurationSpinBox->setEnabled(notificationStreakSavedEnabled->isChecked());
+    streakSavedRow->addWidget(notificationStreakSavedDurationSpinBox);
+    streakRiskLayout->addLayout(streakSavedRow);
+
+    // Debt-day re-fire interval
+    QHBoxLayout* streakDebtRefireRow = new QHBoxLayout();
+    QLabel* streakDebtRefireLabel = new QLabel("Debt re-fire interval (min):");
+    streakDebtRefireLabel->setToolTip(
+        "While an auto-save debt is pending, re-fire the urgent notification every N minutes (0 = use the normal re-fire)");
+    streakDebtRefireRow->addWidget(streakDebtRefireLabel);
+    streakDebtRefireRow->addStretch();
+    streakDebtRefireSpinBox = new QSpinBox();
+    streakDebtRefireSpinBox->setMinimum(0);
+    streakDebtRefireSpinBox->setMaximum(480);
+    streakDebtRefireSpinBox->setSingleStep(15);
+    streakDebtRefireSpinBox->setToolTip(
+        "While an auto-save debt is pending, re-fire the urgent notification every N minutes (0 = use the normal re-fire)");
+    streakDebtRefireSpinBox->setValue(config->get("streak_debt_refire_minutes").toInt());
+    setupSpinStyle(streakDebtRefireSpinBox, "spinbox");
+    streakDebtRefireRow->addWidget(streakDebtRefireSpinBox);
+    streakRiskLayout->addLayout(streakDebtRefireRow);
+
+    // Debt final-hour escalation
+    QHBoxLayout* streakDebtFinalHourRow = new QHBoxLayout();
+    QLabel* streakDebtFinalHourLabel = new QLabel("Debt final hour (0-23):");
+    streakDebtFinalHourLabel->setToolTip(
+        "After this hour, a pending debt notification becomes LAST CHANCE (clamped to at least the at-risk cutoff)");
+    streakDebtFinalHourRow->addWidget(streakDebtFinalHourLabel);
+    streakDebtFinalHourRow->addStretch();
+    streakDebtFinalHourSpinBox = new QSpinBox();
+    streakDebtFinalHourSpinBox->setMinimum(0);
+    streakDebtFinalHourSpinBox->setMaximum(23);
+    streakDebtFinalHourSpinBox->setToolTip(
+        "After this hour, a pending debt notification becomes LAST CHANCE (clamped to at least the at-risk cutoff)");
+    streakDebtFinalHourSpinBox->setValue(config->get("streak_debt_final_hour").toInt());
+    setupSpinStyle(streakDebtFinalHourSpinBox, "spinbox");
+    streakDebtFinalHourRow->addWidget(streakDebtFinalHourSpinBox);
+    streakRiskLayout->addLayout(streakDebtFinalHourRow);
 
     pageLayout->addWidget(streakRiskGroup);
 
@@ -1357,6 +1571,7 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
     setupAudioPage(mw);
     setupDatabasePage(mw);
     setupRandomPage(mw);
+    setupStreaksPage(mw);
     setupNotificationsPage(mw);
 
     //These need to be at the bottom

@@ -5,6 +5,7 @@
 #include "utils.h"
 #include <QSqlError>
 #include <QSqlDriver>
+#include <algorithm>
 #include "TreeWidgetItem.h"
 #include "MainApp.h"
 #include <QJsonObject>
@@ -1392,6 +1393,17 @@ WatchStreak sqliteDB::getWatchStreak(double minSeconds)
         dates.append(QDate::fromString(query.value(0).toString(), "yyyy-MM-dd"));
     }
 
+    // Merge days covered by streak saves (consumed freezes and pending/paid auto saves).
+    // Saved days count as streak days even though they have no matching watch row.
+    const QSet<QDate> savedDates = this->getStreakSavedDates();
+    for (const QDate& savedDate : savedDates) {
+        if (!dates.contains(savedDate))
+            dates.append(savedDate);
+    }
+    std::sort(dates.begin(), dates.end(), [](const QDate& a, const QDate& b) {
+        return a > b;
+    });
+
     if (dates.isEmpty()) return streak;
 
     // Current streak: consecutive days from today (or yesterday) going backwards
@@ -1466,6 +1478,158 @@ WatchStreak sqliteDB::getWatchStreak(double minSeconds)
     }
 
     return streak;
+}
+
+int sqliteDB::getStreakFreezeStock()
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT COUNT(*) FROM streak_saves WHERE kind = 'freeze' AND status = 'stock'"));
+    if (!query.exec()) return 0;
+    return query.first() ? query.value(0).toInt() : 0;
+}
+
+QSet<QDate> sqliteDB::getStreakSavedDates()
+{
+    QSet<QDate> result;
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT DISTINCT saved_date FROM streak_saves "
+        "WHERE saved_date IS NOT NULL AND status IN ('applied','pending','paid') "
+        "AND saved_date <= ?"));
+    query.addBindValue(QDate::currentDate().toString(QStringLiteral("yyyy-MM-dd")));
+    if (!query.exec()) return result;
+    while (query.next()) {
+        QDate date = QDate::fromString(query.value(0).toString(), QStringLiteral("yyyy-MM-dd"));
+        if (date.isValid()) result.insert(date);
+    }
+    return result;
+}
+
+StreakPendingDebt sqliteDB::getPendingStreakDebt(QDate today)
+{
+    StreakPendingDebt debt;
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT saved_date, debt_unit, base_amount, debt_amount FROM streak_saves "
+        "WHERE kind = 'auto' AND status = 'pending' AND saved_date = ? "
+        "ORDER BY id DESC LIMIT 1"));
+    query.addBindValue(today.addDays(-1).toString(QStringLiteral("yyyy-MM-dd")));
+    if (!query.exec() || !query.first()) return debt;
+    debt.valid = true;
+    debt.savedDate = QDate::fromString(query.value(0).toString(), QStringLiteral("yyyy-MM-dd"));
+    debt.unit = query.value(1).toString();
+    debt.baseAmount = query.value(2).toDouble();
+    debt.debtAmount = query.value(3).toDouble();
+    return debt;
+}
+
+bool sqliteDB::insertStreakFreezeStock(int pricePaid)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "INSERT INTO streak_saves(saved_date, kind, status, debt_unit, base_amount, debt_amount, price_paid) "
+        "VALUES(NULL, 'freeze', 'stock', 'seconds', 0, 0, ?)"));
+    query.addBindValue(pricePaid);
+    if (!query.exec()) {
+        if (qMainApp) {
+            qMainApp->logger->log(QStringLiteral("Database Error at insertStreakFreezeStock: %1").arg(query.lastError().text()), "Database", query.lastError().text());
+        }
+        return false;
+    }
+    return true;
+}
+
+bool sqliteDB::consumeStreakFreeze(QDate savedDate)
+{
+    QSqlQuery pick = QSqlQuery(this->db);
+    pick.prepare(QStringLiteral(
+        "SELECT id FROM streak_saves WHERE kind = 'freeze' AND status = 'stock' ORDER BY id ASC LIMIT 1"));
+    if (!pick.exec() || !pick.first()) return false;
+    const int id = pick.value(0).toInt();
+
+    QSqlQuery update = QSqlQuery(this->db);
+    update.prepare(QStringLiteral(
+        "UPDATE streak_saves SET saved_date = ?, status = 'applied', "
+        "resolved_at = datetime('now','localtime') WHERE id = ? AND status = 'stock'"));
+    update.addBindValue(savedDate.toString(QStringLiteral("yyyy-MM-dd")));
+    update.addBindValue(id);
+    if (!update.exec() || update.numRowsAffected() <= 0) return false;
+    return true;
+}
+
+bool sqliteDB::insertStreakAutoSave(QDate savedDate, const QString& unit, double baseAmount, double debtAmount)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "INSERT OR IGNORE INTO streak_saves(saved_date, kind, status, debt_unit, base_amount, debt_amount) "
+        "VALUES(?, 'auto', 'pending', ?, ?, ?)"));
+    query.addBindValue(savedDate.toString(QStringLiteral("yyyy-MM-dd")));
+    query.addBindValue(unit);
+    query.addBindValue(baseAmount);
+    query.addBindValue(debtAmount);
+    if (!query.exec()) {
+        if (qMainApp) {
+            qMainApp->logger->log(QStringLiteral("Database Error at insertStreakAutoSave: %1").arg(query.lastError().text()), "Database", query.lastError().text());
+        }
+        return false;
+    }
+    return query.numRowsAffected() > 0;
+}
+
+bool sqliteDB::resolveStreakAutoSave(QDate savedDate, bool paid)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "UPDATE streak_saves SET status = ?, resolved_at = datetime('now','localtime') "
+        "WHERE kind = 'auto' AND status = 'pending' AND saved_date = ?"));
+    query.addBindValue(paid ? QStringLiteral("paid") : QStringLiteral("failed"));
+    query.addBindValue(savedDate.toString(QStringLiteral("yyyy-MM-dd")));
+    return query.exec() && query.numRowsAffected() > 0;
+}
+
+bool sqliteDB::hasStreakSave(QDate savedDate)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral("SELECT 1 FROM streak_saves WHERE saved_date = ? LIMIT 1"));
+    query.addBindValue(savedDate.toString(QStringLiteral("yyyy-MM-dd")));
+    if (!query.exec()) return false;
+    return query.first();
+}
+
+int sqliteDB::failPendingAutoSavesBefore(QDate date)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "UPDATE streak_saves SET status = 'failed', resolved_at = datetime('now','localtime') "
+        "WHERE kind = 'auto' AND status = 'pending' AND saved_date < ?"));
+    query.addBindValue(date.toString(QStringLiteral("yyyy-MM-dd")));
+    if (!query.exec()) return 0;
+    return query.numRowsAffected();
+}
+
+double sqliteDB::getWatchedSecondsOn(QDate date)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT COALESCE(SUM(watched_time), 0) FROM watch_history "
+        "WHERE watched_at >= ? AND watched_at < ?"));
+    query.addBindValue(date.toString(QStringLiteral("yyyy-MM-dd")));
+    query.addBindValue(date.addDays(1).toString(QStringLiteral("yyyy-MM-dd")));
+    if (!query.exec()) return 0.0;
+    return query.first() ? query.value(0).toDouble() : 0.0;
+}
+
+int sqliteDB::getCompletedVideosOn(QDate date)
+{
+    QSqlQuery query = QSqlQuery(this->db);
+    query.prepare(QStringLiteral(
+        "SELECT COUNT(*) FROM watch_history WHERE completed = 1 "
+        "AND watched_at >= ? AND watched_at < ?"));
+    query.addBindValue(date.toString(QStringLiteral("yyyy-MM-dd")));
+    query.addBindValue(date.addDays(1).toString(QStringLiteral("yyyy-MM-dd")));
+    if (!query.exec()) return 0;
+    return query.first() ? query.value(0).toInt() : 0;
 }
 
 QVector<QPair<QString, int>> sqliteDB::getTopAuthors(int limit, const QString& category)
@@ -2278,6 +2442,26 @@ void sqliteDB::createTables() {
     QString idx_wh_session    = "CREATE INDEX IF NOT EXISTS idx_watch_history_session ON watch_history(session_id);";
     QString idx_wh_watched_at = "CREATE INDEX IF NOT EXISTS idx_watch_history_watched_at ON watch_history(watched_at);";
 
+    // Streak saves: purchased freezes (saved_date NULL, status 'stock') and
+    // auto saves (pending/paid/failed) whose requirement is stored in base_amount + debt_amount.
+    QString streak_saves =
+        "CREATE TABLE IF NOT EXISTS streak_saves ("
+        "\"id\"            INTEGER NOT NULL,"
+        "\"saved_date\"    TEXT,"
+        "\"kind\"          TEXT NOT NULL CHECK(kind IN ('freeze','auto')),"
+        "\"status\"        TEXT NOT NULL DEFAULT 'applied' "
+        "CHECK(status IN ('stock','applied','pending','paid','failed')),"
+        "\"debt_unit\"     TEXT NOT NULL DEFAULT 'seconds' CHECK(debt_unit IN ('seconds','videos')),"
+        "\"base_amount\"   REAL NOT NULL DEFAULT 0,"
+        "\"debt_amount\"   REAL NOT NULL DEFAULT 0,"
+        "\"price_paid\"    INTEGER NOT NULL DEFAULT 0,"
+        "\"created_at\"    TEXT NOT NULL DEFAULT (datetime('now','localtime')),"
+        "\"resolved_at\"   TEXT,"
+        "PRIMARY KEY(\"id\" AUTOINCREMENT));";
+    QString idx_ss_date       = "CREATE INDEX IF NOT EXISTS idx_streak_saves_date ON streak_saves(saved_date);";
+    QString idx_ss_status     = "CREATE INDEX IF NOT EXISTS idx_streak_saves_status ON streak_saves(status);";
+    QString idx_ss_unique_day = "CREATE UNIQUE INDEX IF NOT EXISTS idx_streak_saves_unique_day ON streak_saves(saved_date) WHERE saved_date IS NOT NULL;";
+
     this->db.transaction();
     QSqlQuery query = QSqlQuery(this->db);
     query.exec(videodetails);
@@ -2295,6 +2479,10 @@ void sqliteDB::createTables() {
     query.exec(idx_wh_category);
     query.exec(idx_wh_session);
     query.exec(idx_wh_watched_at);
+    query.exec(streak_saves);
+    query.exec(idx_ss_date);
+    query.exec(idx_ss_status);
+    query.exec(idx_ss_unique_day);
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('current', 'MINUS', '')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('current', 'PLUS', '')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('currentIconPath', 'MINUS', '')");
@@ -2314,6 +2502,10 @@ void sqliteDB::createTables() {
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('last_time_milestone', 'ALL', '0')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('last_streak_risk_notified_date', 'ALL', '')");
     query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('last_streak_risk_notified_time', 'ALL', '')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('streak_last_processed_date', 'ALL', '')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('streak_auto_save_consecutive', 'ALL', '0')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('streak_freeze_consecutive', 'ALL', '0')");
+    query.exec("INSERT OR IGNORE INTO maininfo(name, category, value) VALUES('streak_freeze_last_purchase_date', 'ALL', '')");
     this->db.commit();
 }
 
@@ -2330,6 +2522,7 @@ void sqliteDB::resetDB(QString category) {
         }
         query.exec("DROP TABLE IF EXISTS watch_history");
         query.exec("DROP TABLE IF EXISTS session_history");
+        query.exec("DROP TABLE IF EXISTS streak_saves");
         this->createTables();
         this->setMainInfoValue("current", "MINUS", "");
         this->setMainInfoValue("current", "PLUS", "");
@@ -2337,6 +2530,10 @@ void sqliteDB::resetDB(QString category) {
         this->setMainInfoValue("currentIconPath", "PLUS", "");
         this->setMainInfoValue("sv_target_count", "ALL", "0");
         this->setMainInfoValue("sv_count", "ALL", "0");
+        this->setMainInfoValue("streak_last_processed_date", "ALL", "");
+        this->setMainInfoValue("streak_auto_save_consecutive", "ALL", "0");
+        this->setMainInfoValue("streak_freeze_consecutive", "ALL", "0");
+        this->setMainInfoValue("streak_freeze_last_purchase_date", "ALL", "");
         this->db.commit();
     }
     else {

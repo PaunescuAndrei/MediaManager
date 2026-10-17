@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "StatsDialog.h"
 #include "MainApp.h"
+#include "MainWindow.h"
 #include "utils.h"
 #include "ContributionHeatmapWidget.h"
 #include "AutoToolTipDelegate.h"
@@ -11,6 +12,8 @@
 #include <QApplication>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QMessageBox>
+#include <cmath>
 
 StatsDialog::StatsDialog(QWidget* parent) : QDialog(parent)
 {
@@ -278,6 +281,13 @@ void StatsDialog::setupStreaksTab(MainApp* app)
     int totalDays = app->db->getTotalWatchDays();
     QDateTime firstWatch = app->db->getFirstWatchDate();
 
+    MainWindow* mw = app->mainWindow;
+    StreakSaveInfo saveInfo = mw ? mw->getStreakSaveInfo() : StreakSaveInfo();
+    const int effectiveTargetSec = saveInfo.timeMode
+        ? std::max(1, static_cast<int>(std::lround(
+              saveInfo.effectiveTargetSeconds > 0.0 ? saveInfo.effectiveTargetSeconds : streakTargetMin * 60.0)))
+        : 0;
+
     // Relative date helper (avoids duplicated logic for streakStart / lastWatched)
     auto relativeDate = [](const QDate& d) -> QString {
         QDate today = QDate::currentDate();
@@ -369,11 +379,59 @@ void StatsDialog::setupStreaksTab(MainApp* app)
     longestIntervalLabel->setFont(statFont);
     streakLayout->addWidget(longestIntervalLabel, 4, 1, Qt::AlignCenter);
 
+    // Streak protection panel (freezes, auto save, today's debt)
+    if (ui.streakProtectionLayout) {
+        QGridLayout* protection = ui.streakProtectionLayout;
+        int prow = 0;
+
+        m_freezeStockLabel = new QLabel();
+        protection->addWidget(new QLabel("Freezes:"), prow, 0);
+        protection->addWidget(m_freezeStockLabel, prow++, 1);
+
+        m_freezePriceLabel = new QLabel();
+        protection->addWidget(new QLabel("Next freeze:"), prow, 0);
+        QHBoxLayout* buyRow = new QHBoxLayout();
+        buyRow->addWidget(m_freezePriceLabel);
+        buyRow->addStretch();
+        m_buyFreezeButton = new QPushButton("Buy Freeze");
+        buyRow->addWidget(m_buyFreezeButton);
+        protection->addLayout(buyRow, prow++, 1);
+
+        m_autoSaveStatusLabel = new QLabel();
+        protection->addWidget(new QLabel("Auto save:"), prow, 0);
+        protection->addWidget(m_autoSaveStatusLabel, prow++, 1);
+
+        m_debtLabel = new QLabel();
+        m_debtLabel->setWordWrap(true);
+        protection->addWidget(new QLabel("Debt today:"), prow, 0);
+        protection->addWidget(m_debtLabel, prow++, 1);
+
+        QLabel* legend = new QLabel("Outlined days in the calendar were saved.");
+        legend->setStyleSheet("color: #AAAAAA;");
+        protection->addWidget(legend, prow++, 0, 1, 2);
+
+        connect(m_buyFreezeButton, &QPushButton::clicked, this, [this, app]() {
+            MainWindow* mainWindow = app->mainWindow;
+            if (!mainWindow)
+                return;
+            QString error;
+            if (!mainWindow->buyStreakFreeze(&error)) {
+                QMessageBox::warning(this, "Streak Freeze", error);
+                return;
+            }
+            this->refreshStreakProtection();
+        });
+
+        this->refreshStreakProtection();
+    }
+
     // Streak calendar heatmap — cache for reuse by setupContributionHeatmap
     m_heatmapCache = app->db->getDailyWatchedHistory(m_heatmapDays);
+    m_savedDatesCache = app->db->getStreakSavedDates();
     ContributionHeatmapWidget* streakCalendar = new ContributionHeatmapWidget();
     streakCalendar->setDayRange(m_heatmapDays);
     streakCalendar->setData(m_heatmapCache);
+    streakCalendar->setSavedDates(m_savedDatesCache);
     ui.streakCalendarLayout->addWidget(streakCalendar);
     ui.streakCalendarLayout->setAlignment(streakCalendar, Qt::AlignCenter);
 
@@ -388,24 +446,40 @@ void StatsDialog::setupStreaksTab(MainApp* app)
     QGridLayout* goalsGrid = ui.goalsGridLayout;
     int row = 0;
 
-    // Today's Streak Progress
-    if (streakTargetMin > 0) {
-        int streakTargetSec = streakTargetMin * 60;
+    // Today's Streak Progress (includes any auto-save debt; time or completed-video unit)
+    {
         double watchedTodayForStreak = m_cachedWatchedTodaySec >= 0.0
             ? m_cachedWatchedTodaySec
             : app->db->getTotalWatchedTimeToday();
+        int videosTodayForStreak = m_cachedVideosToday >= 0
+            ? m_cachedVideosToday
+            : app->db->getVideosWatchedToday("ALL");
 
-        QLabel* streakGoalLabel = new QLabel(QString("Streak: %1 / %2").arg(
-            QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(watchedTodayForStreak))),
-            QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(streakTargetSec)))));
-        goalsGrid->addWidget(streakGoalLabel, row, 0);
+        if (saveInfo.timeMode) {
+            QLabel* streakGoalLabel = new QLabel(QString("Streak: %1 / %2").arg(
+                QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(watchedTodayForStreak))),
+                QString::fromStdString(utils::convert_time_to_text(static_cast<unsigned long>(effectiveTargetSec)))));
+            goalsGrid->addWidget(streakGoalLabel, row, 0);
 
-        QProgressBar* streakGoalBar = new QProgressBar();
-        streakGoalBar->setRange(0, std::max(streakTargetSec, 1));
-        streakGoalBar->setValue(std::min(static_cast<int>(watchedTodayForStreak), streakTargetSec));
-        streakGoalBar->setTextVisible(true);
-        streakGoalBar->setMinimumHeight(22);
-        goalsGrid->addWidget(streakGoalBar, row++, 1);
+            QProgressBar* streakGoalBar = new QProgressBar();
+            streakGoalBar->setRange(0, effectiveTargetSec);
+            streakGoalBar->setValue(std::min(static_cast<int>(watchedTodayForStreak), effectiveTargetSec));
+            streakGoalBar->setTextVisible(true);
+            streakGoalBar->setMinimumHeight(22);
+            goalsGrid->addWidget(streakGoalBar, row++, 1);
+        } else {
+            const int targetVideos = std::max(1, saveInfo.effectiveTargetVideos);
+            QLabel* streakGoalLabel = new QLabel(QString("Streak: %1 / %2 completed videos")
+                .arg(videosTodayForStreak).arg(targetVideos));
+            goalsGrid->addWidget(streakGoalLabel, row, 0);
+
+            QProgressBar* streakGoalBar = new QProgressBar();
+            streakGoalBar->setRange(0, targetVideos);
+            streakGoalBar->setValue(std::min(videosTodayForStreak, targetVideos));
+            streakGoalBar->setTextVisible(true);
+            streakGoalBar->setMinimumHeight(22);
+            goalsGrid->addWidget(streakGoalBar, row++, 1);
+        }
     }
 
     double dailyVideoGoal = m_cachedDailyVideoGoal >= 0.0
@@ -461,6 +535,7 @@ void StatsDialog::setupStreaksTab(MainApp* app)
             ui.chartsHeatmapRangeCombo->setCurrentIndex(idx);
             ui.chartsHeatmapRangeCombo->blockSignals(false);
             m_heatmapCache = app->db->getDailyWatchedHistory(m_heatmapDays);
+            m_savedDatesCache = app->db->getStreakSavedDates();
             // Update heatmap widgets in both tabs
             auto updateHeatmap = [&](QLayout* layout) {
                 QLayoutItem* item = layout->itemAt(0);
@@ -469,12 +544,75 @@ void StatsDialog::setupStreaksTab(MainApp* app)
                     if (heatmap) {
                         heatmap->setDayRange(m_heatmapDays);
                         heatmap->setData(m_heatmapCache);
+                        heatmap->setSavedDates(m_savedDatesCache);
                     }
                 }
             };
             updateHeatmap(ui.streakCalendarLayout);
             updateHeatmap(ui.heatmapLayout);
         });
+}
+
+void StatsDialog::refreshStreakProtection()
+{
+    if (!m_app || !m_app->mainWindow)
+        return;
+    MainWindow* mw = m_app->mainWindow;
+    const StreakSaveInfo info = mw->getStreakSaveInfo();
+
+    if (m_freezeStockLabel)
+        m_freezeStockLabel->setText(QString("%1 / %2").arg(info.freezeStock).arg(info.freezeMaxStock));
+
+    if (m_freezePriceLabel) {
+        if (info.freezeMaxStock <= 0)
+            m_freezePriceLabel->setText(QStringLiteral("disabled"));
+        else
+            m_freezePriceLabel->setText(QString("%1 points (you have %2)").arg(info.freezePrice).arg(info.counterPoints));
+    }
+
+    if (m_buyFreezeButton) {
+        m_buyFreezeButton->setEnabled(info.canBuyFreeze);
+        if (!info.enabled)
+            m_buyFreezeButton->setToolTip(QStringLiteral("Streak saves are disabled."));
+        else if (!info.freezeEnabled)
+            m_buyFreezeButton->setToolTip(QStringLiteral("Freezes are disabled."));
+        else if (info.freezeMaxStock <= 0)
+            m_buyFreezeButton->setToolTip(QStringLiteral("Freeze stock is disabled."));
+        else if (info.freezeStock >= info.freezeMaxStock)
+            m_buyFreezeButton->setToolTip(QStringLiteral("Freeze stock is full."));
+        else if (info.counterPoints < info.freezePrice)
+            m_buyFreezeButton->setToolTip(QStringLiteral("Not enough points."));
+        else
+            m_buyFreezeButton->setToolTip(QStringLiteral("Buy a freeze with counter points."));
+    }
+
+    if (m_autoSaveStatusLabel) {
+        if (!info.autoSaveEnabled) {
+            m_autoSaveStatusLabel->setText(QStringLiteral("Off"));
+        } else {
+            const double baseMult = m_app->config->get_double("streak_auto_save_target_multiplier", 2.0);
+            const double inc = m_app->config->get_double("streak_auto_save_target_multiplier_increment", 1.0);
+            const double nextMult = std::max(1.0, baseMult + inc * info.autoSaveConsecutive);
+            m_autoSaveStatusLabel->setText(QString("On — next miss needs %1x target").arg(nextMult, 0, 'f', 1));
+        }
+    }
+
+    if (m_debtLabel) {
+        if (!info.debtUnit.isEmpty() && info.debtAmount > 0.0) {
+            const QString requirement = utils::formatStreakRequirement(
+                info.debtBaseAmount, info.debtAmount, info.debtUnit);
+            if (info.debtPaidToday) {
+                m_debtLabel->setText(QString("%1 — paid, target met").arg(requirement));
+                m_debtLabel->setStyleSheet(QString());
+            } else {
+                m_debtLabel->setText(QString("%1 — due today").arg(requirement));
+                m_debtLabel->setStyleSheet(QStringLiteral("color: #e05a47; font-weight: bold;"));
+            }
+        } else {
+            m_debtLabel->setText(QStringLiteral("none"));
+            m_debtLabel->setStyleSheet(QString());
+        }
+    }
 }
 
 void StatsDialog::addAuthorRow(QGridLayout* layout, int row, int rank, const QString& author, const QString& value, const QColor& barColor)
@@ -877,9 +1015,12 @@ void StatsDialog::setupContributionHeatmap(QLayout* layout)
     // Reuse cached heatmap data if setupStreaksTab already fetched it
     if (m_heatmapCache.isEmpty())
         m_heatmapCache = m_app->db->getDailyWatchedHistory(m_heatmapDays);
+    if (m_savedDatesCache.isEmpty())
+        m_savedDatesCache = m_app->db->getStreakSavedDates();
     auto* heatmap = new ContributionHeatmapWidget();
     heatmap->setDayRange(m_heatmapDays);
     heatmap->setData(m_heatmapCache);
+    heatmap->setSavedDates(m_savedDatesCache);
     layout->addWidget(heatmap);
     layout->setAlignment(heatmap, Qt::AlignCenter);
 
@@ -896,6 +1037,7 @@ void StatsDialog::setupContributionHeatmap(QLayout* layout)
             ui.streaksHeatmapRangeCombo->setCurrentIndex(idx);
             ui.streaksHeatmapRangeCombo->blockSignals(false);
             m_heatmapCache = m_app->db->getDailyWatchedHistory(m_heatmapDays);
+            m_savedDatesCache = m_app->db->getStreakSavedDates();
             // Update heatmap widgets in both tabs
             QLayoutItem* item = layout->itemAt(0);
             if (item) {
@@ -903,6 +1045,7 @@ void StatsDialog::setupContributionHeatmap(QLayout* layout)
                 if (hmap) {
                     hmap->setDayRange(m_heatmapDays);
                     hmap->setData(m_heatmapCache);
+                    hmap->setSavedDates(m_savedDatesCache);
                 }
             }
             QLayoutItem* streakItem = ui.streakCalendarLayout->itemAt(0);
@@ -911,6 +1054,7 @@ void StatsDialog::setupContributionHeatmap(QLayout* layout)
                 if (streakHmap) {
                     streakHmap->setDayRange(m_heatmapDays);
                     streakHmap->setData(m_heatmapCache);
+                    streakHmap->setSavedDates(m_savedDatesCache);
                 }
             }
         });

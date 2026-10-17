@@ -9,6 +9,7 @@
 
 // Shared style constants — whiter and slightly bigger
 static const char* TITLE_STYLE = "QLabel { font-size: 13pt; font-weight: bold; }";
+static const char* URGENT_TITLE_STYLE = "QLabel { font-size: 13pt; font-weight: bold; color: #e05a47; }";
 static const char* BODY_STYLE = "QLabel { font-size: 12pt; }";
 static const char* DETAIL_STYLE = "QLabel { font-size: 11pt; color: #AAAAAA; }";
 static const int PROGRESS_BAR_HEIGHT = 5;
@@ -80,6 +81,7 @@ void NotificationWidget::buildLayout()
 	case NotificationType::GeneralMessage:
 	case NotificationType::GoalMet:
 	case NotificationType::StreakAtRisk:
+	case NotificationType::StreakSaved:
 	case NotificationType::PersonalBest:
 		contentWidget_ = new QWidget(this);
 		buildSimpleContent();
@@ -201,6 +203,7 @@ void NotificationWidget::buildSimpleContent()
 
 	messageLabel_ = new QLabel();
 	messageLabel_->setStyleSheet(QString(BODY_STYLE) + QStringLiteral(" color: #AAAAAA;"));
+	messageLabel_->setWordWrap(true);
 	layout->addWidget(messageLabel_);
 }
 
@@ -375,11 +378,20 @@ void NotificationWidget::populateGoalMet(const QString& title, const QString& me
 	titleLabel_->show();
 	messageLabel_->setText(message);
 }
-void NotificationWidget::populateStreakAtRisk(const QString& title, const QString& message)
+void NotificationWidget::populateStreakAtRisk(const QString& title, const QString& message, bool urgent)
 {
-	populateGoalMet(title, message);
+	if (!titleLabel_ || !messageLabel_) return;
+
+	titleLabel_->setStyleSheet(urgent ? URGENT_TITLE_STYLE : TITLE_STYLE);
+	titleLabel_->setText(title);
+	titleLabel_->show();
+	messageLabel_->setText(message);
 }
 
+void NotificationWidget::populateStreakSaved(const QString& title, const QString& message, bool urgent)
+{
+	populateStreakAtRisk(title, message, urgent);
+}
 void NotificationWidget::populatePersonalBest(const QString& title, const QString& message)
 {
 	populateGoalMet(title, message);

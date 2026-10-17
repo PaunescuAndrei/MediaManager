@@ -2,6 +2,7 @@
 #include <QWidget>
 #include <QMap>
 #include <QDate>
+#include <QSet>
 #include <QVector>
 
 class ContributionHeatmapWidget : public QWidget
@@ -11,6 +12,7 @@ public:
     explicit ContributionHeatmapWidget(QWidget* parent = nullptr);
 
     void setData(const QVector<QPair<QDate, double>>& data);
+    void setSavedDates(const QSet<QDate>& dates);
     void setDayRange(int totalDays);
 
 protected:
@@ -18,6 +20,7 @@ protected:
 
 private:
     QMap<QDate, double> m_dayMap;
+    QSet<QDate> m_savedDates;
     QDate m_today;
     QDate m_start;
     int m_totalDays = 0;

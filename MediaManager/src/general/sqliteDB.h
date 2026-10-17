@@ -2,6 +2,7 @@
 #include <string>
 #include <QSqlDatabase>
 #include <QTreeWidget>
+#include <QSet>
 #include "VideoData.h"
 #include "sqlite3.h"
 #include <tuple>
@@ -79,6 +80,19 @@ public:
     QVector<QPair<int, double>> getDayOfWeekDistribution(int days = -1);
     QVector<QPair<int, int>> getDayOfWeekCount(int days = -1);
     WatchStreak getWatchStreak(double minSeconds = 0.0);
+
+    // Streak saves (freezes bought with counter points, and auto time/video debt)
+    int getStreakFreezeStock();
+    QSet<QDate> getStreakSavedDates();
+    StreakPendingDebt getPendingStreakDebt(QDate today);
+    bool insertStreakFreezeStock(int pricePaid);
+    bool consumeStreakFreeze(QDate savedDate);
+    bool insertStreakAutoSave(QDate savedDate, const QString& unit, double baseAmount, double debtAmount);
+    bool resolveStreakAutoSave(QDate savedDate, bool paid);
+    bool hasStreakSave(QDate savedDate);
+    int failPendingAutoSavesBefore(QDate date);
+    double getWatchedSecondsOn(QDate date);
+    int getCompletedVideosOn(QDate date);
     QVector<QPair<QString, int>> getTopAuthors(int limit, const QString& category);
     QVector<QPair<QString, double>> getTopAuthorsByRating(int limit, const QString& category);
     QVector<QPair<QString, double>> getAuthorCompletion(const QString& category);

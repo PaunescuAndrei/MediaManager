@@ -4,6 +4,8 @@
 #include <QGridLayout>
 #include <QSqlQuery>
 #include <QProgressBar>
+#include <QDate>
+#include <QSet>
 #include "ui_StatsDialog.h"
 
 class QChartView;
@@ -12,6 +14,7 @@ class QBarSet;
 class QBarSeries;
 class QBarCategoryAxis;
 class QValueAxis;
+class QPushButton;
 
 class MainApp;
 class ContributionHeatmapWidget;
@@ -51,6 +54,7 @@ private:
     void addRatingDistributionTable(QGridLayout* layout, int& row, const QMap<double, int>& ratingCounts);
     void addAuthorRow(QGridLayout* layout, int row, int rank, const QString& author, const QString& value, const QColor& barColor = QColor());
     void setupContributionHeatmap(QLayout* layout);
+    void refreshStreakProtection();
     void createDailyBars(QLayout* layout);
     void createHourlyHistogram(QLayout* layout);
     void createDayOfWeek(QLayout* layout);
@@ -105,6 +109,14 @@ private:
 
     // Shared caches to avoid redundant DB queries between setup methods
     QVector<QPair<QDate, double>> m_heatmapCache;
+    QSet<QDate> m_savedDatesCache;
+
+    // Streak protection panel (built in setupStreaksTab)
+    QLabel* m_freezeStockLabel = nullptr;
+    QLabel* m_freezePriceLabel = nullptr;
+    QLabel* m_autoSaveStatusLabel = nullptr;
+    QLabel* m_debtLabel = nullptr;
+    QPushButton* m_buyFreezeButton = nullptr;
     int m_cachedVideosToday = -1;
     double m_cachedWatchedTodaySec = -1.0;
     double m_cachedDailyVideoGoal = -1.0;

@@ -58,6 +58,23 @@ public:
     QSpinBox* streakAtRiskCutoffHourSpinBox = nullptr;
     QSpinBox* streakAtRiskRefireSpinBox = nullptr;
     QSpinBox* streakDailyTimeTargetSpinBox = nullptr;
+    QCheckBox* notificationStreakSavedEnabled = nullptr;
+    QSpinBox* notificationStreakSavedDurationSpinBox = nullptr;
+    QSpinBox* streakDebtRefireSpinBox = nullptr;
+    QSpinBox* streakDebtFinalHourSpinBox = nullptr;
+
+    // General page — streak saves (auto debt + bought freezes)
+    QCheckBox* streakSaveEnabled = nullptr;
+    QCheckBox* streakAutoSaveEnabled = nullptr;
+    QDoubleSpinBox* streakAutoSaveMultiplierSpinBox = nullptr;
+    QDoubleSpinBox* streakAutoSaveMultiplierIncrementSpinBox = nullptr;
+    QSpinBox* streakAutoSaveMaxConsecutiveSpinBox = nullptr;
+    QCheckBox* streakFreezeEnabled = nullptr;
+    QSpinBox* streakFreezeBasePriceSpinBox = nullptr;
+    QSpinBox* streakFreezePriceIncrementSpinBox = nullptr;
+    QSpinBox* streakFreezeMaxStockSpinBox = nullptr;
+    QSpinBox* streakFreezePriceResetDaysSpinBox = nullptr;
+    QCheckBox* streakFreezeConsumeFirstCheckBox = nullptr;
     QCheckBox* notificationPersonalBestEnabled = nullptr;
     QSpinBox* notificationPersonalBestDurationSpinBox = nullptr;
     QCheckBox* notificationSessionSummaryEnabled = nullptr;
@@ -85,6 +102,7 @@ private:
     void setupAudioPage(class MainWindow* mw);
     void setupDatabasePage(class MainWindow* mw);
     void setupRandomPage(class MainWindow* mw);
+    void setupStreaksPage(class MainWindow* mw);
     void setupNotificationsPage(class MainWindow* mw);
     void setupCrashDumpsPage(class MainWindow* mw);
 

@@ -19,6 +19,12 @@ void ContributionHeatmapWidget::setDayRange(int totalDays)
     m_requestedDays = totalDays;
 }
 
+void ContributionHeatmapWidget::setSavedDates(const QSet<QDate>& dates)
+{
+    m_savedDates = dates;
+    update();
+}
+
 void ContributionHeatmapWidget::setData(const QVector<QPair<QDate, double>>& data)
 {
     m_dayMap.clear();
@@ -115,5 +121,15 @@ void ContributionHeatmapWidget::paintEvent(QPaintEvent*)
         painter.setPen(Qt::NoPen);
         painter.setBrush(color);
         painter.drawRoundedRect(cellRect, 2, 2);
+
+        // Saved days (freezes / auto debt) get a distinct outline without
+        // changing the watch-time intensity fill.
+        if (m_savedDates.contains(date)) {
+            QPen savedPen(highlight);
+            savedPen.setWidth(1);
+            painter.setPen(savedPen);
+            painter.setBrush(Qt::NoBrush);
+            painter.drawRoundedRect(cellRect.adjusted(0, 0, -1, -1), 2, 2);
+        }
     }
 }

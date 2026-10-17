@@ -55,6 +55,42 @@ struct WatchStreak {
     QDate longestStreakEndDate;    // latest date of the longest streak
 };
 
+// Pending auto-save debt: the requirement on the day after a missed day.
+// unit is "seconds" (time-target mode) or "videos" (completed-video mode).
+struct StreakPendingDebt {
+    bool valid = false;
+    QDate savedDate;
+    QString unit;
+    double baseAmount = 0.0;
+    double debtAmount = 0.0;
+};
+
+// Aggregated streak-save state used by the Stats panel and the at-risk checks.
+struct StreakSaveInfo {
+    bool enabled = false;
+    bool autoSaveEnabled = false;
+    bool freezeEnabled = false;
+    bool timeMode = true;              // current base mode
+    int freezeStock = 0;
+    int freezeMaxStock = 0;
+    int freezePrice = 0;
+    int freezeConsecutive = 0;
+    int counterPoints = 0;
+    int autoSaveConsecutive = 0;
+    int autoSaveMaxConsecutive = 0;
+    double baseTargetSeconds = 0.0;    // time mode
+    int baseTargetVideos = 1;          // video mode
+    QString debtUnit;                  // "seconds" | "videos"; empty if no pending debt
+    double debtBaseAmount = 0.0;       // base requirement captured when the debt was created
+    double debtAmount = 0.0;
+    double storedRequired = 0.0;       // base_amount + debt_amount
+    QDate debtFromDate;
+    double effectiveTargetSeconds = 0.0;
+    int effectiveTargetVideos = 0;
+    bool debtPaidToday = false;
+    bool canBuyFreeze = false;
+};
+
 // Personal Records
 struct DayRecord {
     QDate date;

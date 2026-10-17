@@ -5,6 +5,7 @@
 #include "version.h"
 #include <iostream>
 #include <algorithm>
+#include <cmath>
 #include <QDebug>
 #include "ini.h"
 #include "definitions.h"
@@ -422,6 +423,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     });
 
     this->loadDailyProgressState(); // must load BEFORE initListDetails so progress checks see persisted state
+    this->reconcileStreakSaves();   // resolve/persist any missed-day saves before the UI reads the streak
     this->initListDetails();
     this->refreshHeadersVisibility();
     this->populateList();
@@ -2422,11 +2424,24 @@ bool MainWindow::loadDB(QString path, QWidget* parent) {
             }
             return_code = this->App->db->loadOrSaveDb(this->App->db->db, path.toStdString().c_str(), false);
             if (return_code == 0) {
+                // Backups written before streak saves existed lack the table/keys.
+                this->App->db->createTables();
+                // Never backfill a gap that predates the restore: clamp the watermark and
+                // fail any pending auto save older than yesterday.
+                const QDate yesterday = QDate::currentDate().addDays(-1);
+                const QDate watermark = QDate::fromString(
+                    this->App->db->getMainInfoValue("streak_last_processed_date", "ALL"), "yyyy-MM-dd");
+                if (!watermark.isValid() || watermark < yesterday) {
+                    this->App->db->failPendingAutoSavesBefore(yesterday);
+                    this->App->db->setMainInfoValue("streak_last_processed_date", "ALL", yesterday.toString("yyyy-MM-dd"));
+                    this->App->db->setMainInfoValue("streak_auto_save_consecutive", "ALL", "0");
+                }
                 // restored DB has a different session_history — invalidate stale session ID.
                 // A failed load leaves the current DB in use, so its session stays valid.
                 this->App->VW->resetSession();
             }
             this->loadDailyProgressState(); // restore tracking state from the loaded DB before initListDetails triggers progress checks
+            this->reconcileStreakSaves();   // restore streak-save state from the loaded DB
             this->initListDetails();
             this->refreshVideosWidget(false, true);
             this->refreshHeadersVisibility();
@@ -2891,6 +2906,36 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         QString::number(dialog->streakAtRiskRefireSpinBox->value()));
     config->set("streak_daily_time_target_minutes",
         QString::number(dialog->streakDailyTimeTargetSpinBox->value()));
+    config->set("streak_save_enabled",
+        dialog->streakSaveEnabled->isChecked() ? "True" : "False");
+    config->set("streak_auto_save_enabled",
+        dialog->streakAutoSaveEnabled->isChecked() ? "True" : "False");
+    config->set("streak_auto_save_target_multiplier",
+        QString::number(dialog->streakAutoSaveMultiplierSpinBox->value()));
+    config->set("streak_auto_save_target_multiplier_increment",
+        QString::number(dialog->streakAutoSaveMultiplierIncrementSpinBox->value()));
+    config->set("streak_auto_save_max_consecutive",
+        QString::number(dialog->streakAutoSaveMaxConsecutiveSpinBox->value()));
+    config->set("streak_freeze_enabled",
+        dialog->streakFreezeEnabled->isChecked() ? "True" : "False");
+    config->set("streak_freeze_base_price",
+        QString::number(dialog->streakFreezeBasePriceSpinBox->value()));
+    config->set("streak_freeze_price_increment",
+        QString::number(dialog->streakFreezePriceIncrementSpinBox->value()));
+    config->set("streak_freeze_max_stock",
+        QString::number(dialog->streakFreezeMaxStockSpinBox->value()));
+    config->set("streak_freeze_price_reset_days",
+        QString::number(dialog->streakFreezePriceResetDaysSpinBox->value()));
+    config->set("streak_freeze_consume_first",
+        dialog->streakFreezeConsumeFirstCheckBox->isChecked() ? "True" : "False");
+    config->set("notification_streak_saved_enabled",
+        dialog->notificationStreakSavedEnabled->isChecked() ? "True" : "False");
+    config->set("notification_streak_saved_duration_ms",
+        QString::number(dialog->notificationStreakSavedDurationSpinBox->value()));
+    config->set("streak_debt_refire_minutes",
+        QString::number(dialog->streakDebtRefireSpinBox->value()));
+    config->set("streak_debt_final_hour",
+        QString::number(dialog->streakDebtFinalHourSpinBox->value()));
     config->set("notification_personal_best_enabled",
         dialog->notificationPersonalBestEnabled->isChecked() ? "True" : "False");
     config->set("notification_personal_best_duration_ms",
@@ -3154,6 +3199,11 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         qMainApp->tooltipFilter->reloadConfig();
     // These need to be at the bottom
     config->save_config();
+
+    // Re-evaluate streak saves with the new settings. The watermark is already current,
+    // so this cannot backfill past days; it only picks up newly enabled saves.
+    this->streakReconcileDate = QDate();
+    this->reconcileStreakSaves();
 }
 
 void MainWindow::setDebugMode(bool debug) {
@@ -4197,6 +4247,8 @@ void MainWindow::loadDailyProgressState()
     this->lastStreakRiskNotifiedDate = streakRiskDateStr.isEmpty() ? QDate() : QDate::fromString(streakRiskDateStr, "yyyy-MM-dd");
     QString streakRiskTimeStr = this->App->db->getMainInfoValue("last_streak_risk_notified_time", "ALL");
     this->lastStreakRiskNotifiedTime = streakRiskTimeStr.isEmpty() ? QTime() : QTime::fromString(streakRiskTimeStr, "HH:mm");
+    this->streakReconcileDate = QDate();
+    this->lastStreakRiskWasFinalHour = false;
 
     // Cache the previous record as a baseline so checkPersonalBests can detect a new record
     // even when today is already the record holder (the query would otherwise return today's count)
@@ -4257,6 +4309,9 @@ void MainWindow::checkDailyProgress()
 {
     QDate today = QDate::currentDate();
 
+    // Resolve missed days and apply/persist streak saves before any UI or at-risk check.
+    this->reconcileStreakSaves();
+
     // Reset milestone trackers on day change (uses its own date, independent of goals)
     if (this->lastMilestoneDate != today) {
         this->lastMilestoneDate = today;
@@ -4292,7 +4347,7 @@ void MainWindow::checkDailyProgress()
     }
 
     // Streak-at-risk check (runs every invocation, independent of goal)
-    this->checkStreakAtRisk(watchedTodaySec);
+    this->checkStreakAtRisk(watchedTodaySec, videosToday);
 
     // Personal best checks (runs every invocation, independent of goal)
     this->checkPersonalBests(videosToday, watchedTodaySec);
@@ -4369,58 +4424,443 @@ void MainWindow::MilestoneNotification(const QString& description)
     this->notificationManager->showGeneralMessage("Daily Milestone", description);
 }
 
-void MainWindow::checkStreakAtRisk(double watchedTodaySec)
+int MainWindow::getNextStreakFreezePrice()
 {
-    QDate today = QDate::currentDate();
-    QTime now = QTime::currentTime();
+    Config* config = this->App->config;
+    sqliteDB* db = this->App->db;
+    const int basePrice = qMax(0, config->get("streak_freeze_base_price").toInt());
+    const int increment = qMax(0, config->get("streak_freeze_price_increment").toInt());
+    const int resetDays = qMax(0, config->get("streak_freeze_price_reset_days").toInt());
+    int consecutive = qMax(0, db->getMainInfoValue("streak_freeze_consecutive", "ALL", "0").toInt());
+    const QString lastStr = db->getMainInfoValue("streak_freeze_last_purchase_date", "ALL", "");
+    const QDate last = lastStr.isEmpty() ? QDate() : QDate::fromString(lastStr, "yyyy-MM-dd");
+    if (!last.isValid() || (resetDays > 0 && last.daysTo(QDate::currentDate()) > resetDays))
+        consecutive = 0;
+    return basePrice + increment * consecutive;
+}
 
-    // Already notified today — check re-fire interval
-    if (this->lastStreakRiskNotifiedDate == today) {
-        int refireMin = this->App->config->get("streak_at_risk_refire_minutes").toInt();
-        if (refireMin <= 0 || !this->lastStreakRiskNotifiedTime.isValid())
-            return; // once-per-day mode, or no time recorded
-        int elapsedMin = this->lastStreakRiskNotifiedTime.secsTo(now) / 60;
-        if (elapsedMin < refireMin)
-            return; // not time to re-fire yet
+StreakSaveInfo MainWindow::getStreakSaveInfo()
+{
+    StreakSaveInfo info;
+    Config* config = this->App->config;
+    sqliteDB* db = this->App->db;
+
+    info.enabled = config->get_bool("streak_save_enabled");
+    info.autoSaveEnabled = info.enabled && config->get_bool("streak_auto_save_enabled");
+    info.freezeEnabled = info.enabled && config->get_bool("streak_freeze_enabled");
+    info.timeMode = config->get("streak_daily_time_target_minutes").toInt() > 0;
+    info.baseTargetSeconds = info.timeMode
+        ? config->get("streak_daily_time_target_minutes").toInt() * 60.0
+        : 0.0;
+    info.baseTargetVideos = 1;
+    info.freezeStock = db->getStreakFreezeStock();
+    info.freezeMaxStock = qMax(0, config->get("streak_freeze_max_stock").toInt());
+    info.freezeConsecutive = qMax(0, db->getMainInfoValue("streak_freeze_consecutive", "ALL", "0").toInt());
+    info.freezePrice = this->getNextStreakFreezePrice();
+    info.counterPoints = this->getCounterVar();
+    info.autoSaveConsecutive = qMax(0, db->getMainInfoValue("streak_auto_save_consecutive", "ALL", "0").toInt());
+    info.autoSaveMaxConsecutive = qMax(0, config->get("streak_auto_save_max_consecutive").toInt());
+    info.canBuyFreeze = info.freezeEnabled
+        && info.freezeMaxStock > 0
+        && info.freezeStock < info.freezeMaxStock
+        && info.counterPoints >= info.freezePrice;
+
+    const QDate today = QDate::currentDate();
+    const StreakPendingDebt pending = db->getPendingStreakDebt(today);
+    if (pending.valid) {
+        info.debtUnit = pending.unit;
+        info.debtBaseAmount = pending.baseAmount;
+        info.debtAmount = pending.debtAmount;
+        info.storedRequired = pending.baseAmount + pending.debtAmount;
+        info.debtFromDate = pending.savedDate;
     }
 
-    // Read the streak threshold and decide if today already qualifies
-    int streakTargetMin = this->App->config->get("streak_daily_time_target_minutes").toInt();
-    bool todayQualifies = false;
-    if (streakTargetMin > 0) {
-        int streakTargetSec = streakTargetMin * 60;
-        todayQualifies = (static_cast<int>(watchedTodaySec) >= streakTargetSec);
+    // Effective target = current base plus the stored requirement. When the mode was
+    // changed mid-debt the stored unit and the current base are both enforced.
+    if (info.timeMode) {
+        info.effectiveTargetSeconds = info.baseTargetSeconds;
+        info.effectiveTargetVideos = 0;
+        if (pending.valid) {
+            if (pending.unit == QStringLiteral("videos"))
+                info.effectiveTargetVideos = std::max(1, static_cast<int>(std::lround(info.storedRequired)));
+            else
+                info.effectiveTargetSeconds = std::max(info.baseTargetSeconds, info.storedRequired);
+        }
     } else {
-        // Backward compatible: old completed-video logic — any watch today counts
-        todayQualifies = (watchedTodaySec > 0.0);
+        info.effectiveTargetVideos = 1;
+        info.effectiveTargetSeconds = 0.0;
+        if (pending.valid) {
+            if (pending.unit == QStringLiteral("videos"))
+                info.effectiveTargetVideos = std::max(1, static_cast<int>(std::lround(info.storedRequired)));
+            else
+                info.effectiveTargetSeconds = std::max(0.0, info.storedRequired);
+        }
     }
-    if (todayQualifies)
+
+    if (pending.valid) {
+        const double watchedToday = db->getWatchedSecondsOn(today);
+        const int videosToday = db->getCompletedVideosOn(today);
+        const bool meetsStored = (pending.unit == QStringLiteral("videos"))
+            ? (videosToday >= static_cast<int>(std::lround(info.storedRequired)))
+            : (watchedToday >= info.storedRequired);
+        const bool meetsBase = info.timeMode
+            ? (watchedToday >= info.baseTargetSeconds)
+            : (videosToday >= 1);
+        info.debtPaidToday = meetsStored && meetsBase;
+    }
+
+    return info;
+}
+
+bool MainWindow::buyStreakFreeze(QString* errorMessage)
+{
+    auto fail = [errorMessage](const QString& message) {
+        if (errorMessage) *errorMessage = message;
+        return false;
+    };
+
+    if (!this->App->config->get_bool("streak_save_enabled"))
+        return fail(QStringLiteral("Streak saves are disabled."));
+    if (!this->App->config->get_bool("streak_freeze_enabled"))
+        return fail(QStringLiteral("Streak freezes are disabled."));
+
+    const int maxStock = qMax(0, this->App->config->get("streak_freeze_max_stock").toInt());
+    if (maxStock <= 0)
+        return fail(QStringLiteral("Freeze stock is disabled."));
+
+    const int stock = this->App->db->getStreakFreezeStock();
+    if (stock >= maxStock)
+        return fail(QStringLiteral("Freeze stock is full."));
+
+    const int price = this->getNextStreakFreezePrice();
+    if (this->getCounterVar() < price)
+        return fail(QStringLiteral("Not enough points (need %1).").arg(price));
+
+    const QDate today = QDate::currentDate();
+    const int resetDays = qMax(0, this->App->config->get("streak_freeze_price_reset_days").toInt());
+    const QString lastStr = this->App->db->getMainInfoValue("streak_freeze_last_purchase_date", "ALL", "");
+    const QDate last = lastStr.isEmpty() ? QDate() : QDate::fromString(lastStr, "yyyy-MM-dd");
+    int consecutive = qMax(0, this->App->db->getMainInfoValue("streak_freeze_consecutive", "ALL", "0").toInt());
+    if (!last.isValid() || (resetDays > 0 && last.daysTo(today) > resetDays))
+        consecutive = 0;
+
+    this->App->db->db.transaction();
+    if (!this->App->db->insertStreakFreezeStock(price)) {
+        this->App->db->db.rollback();
+        return fail(QStringLiteral("Could not store the freeze."));
+    }
+    this->incrementCounterVar(-price);
+    this->App->db->setMainInfoValue("streak_freeze_consecutive", "ALL", QString::number(consecutive + 1));
+    this->App->db->setMainInfoValue("streak_freeze_last_purchase_date", "ALL", today.toString("yyyy-MM-dd"));
+    this->App->db->db.commit();
+
+    if (qMainApp && qMainApp->logger) {
+        qMainApp->logger->log(
+            QStringLiteral("Bought streak freeze for %1 points (stock %2/%3)").arg(price).arg(stock + 1).arg(maxStock),
+            "Stats");
+    }
+    return true;
+}
+
+void MainWindow::reconcileStreakSaves()
+{
+    const QDate today = QDate::currentDate();
+    const QDate yesterday = today.addDays(-1);
+    if (this->streakReconcileDate == today)
         return;
 
-    int minDays = this->App->config->get("streak_at_risk_min_days").toInt();
-    int cutoffHour = this->App->config->get("streak_at_risk_cutoff_hour").toInt();
+    Config* config = this->App->config;
+    sqliteDB* db = this->App->db;
+    const bool saveEnabled = config->get_bool("streak_save_enabled");
+    const bool autoEnabled = saveEnabled && config->get_bool("streak_auto_save_enabled");
+    const bool freezeEnabled = saveEnabled && config->get_bool("streak_freeze_enabled");
+    const bool timeMode = config->get("streak_daily_time_target_minutes").toInt() > 0;
+    const double baseSeconds = timeMode
+        ? config->get("streak_daily_time_target_minutes").toInt() * 60.0
+        : 0.0;
+    const double multiplier = std::max(1.0, config->get_double("streak_auto_save_target_multiplier", 2.0));
+    const double increment = std::max(0.0, config->get_double("streak_auto_save_target_multiplier_increment", 1.0));
+    const int maxConsecutive = qMax(0, config->get("streak_auto_save_max_consecutive").toInt());
+    const int maxStock = qMax(0, config->get("streak_freeze_max_stock").toInt());
+    const bool freezeFirst = config->get_bool("streak_freeze_consume_first");
 
+    const QString watermarkStr = db->getMainInfoValue("streak_last_processed_date", "ALL", "");
+    const QDate watermark = watermarkStr.isEmpty() ? QDate() : QDate::fromString(watermarkStr, "yyyy-MM-dd");
+
+    // Forward-only: never backfill days that predate the feature.
+    if (!watermark.isValid()) {
+        db->setMainInfoValue("streak_last_processed_date", "ALL", yesterday.toString("yyyy-MM-dd"));
+        this->streakReconcileDate = today;
+        return;
+    }
+    if (watermark >= yesterday) {
+        this->streakReconcileDate = today;
+        return;
+    }
+
+    int autoConsecutive = qMax(0, db->getMainInfoValue("streak_auto_save_consecutive", "ALL", "0").toInt());
+    int freezeConsecutive = qMax(0, db->getMainInfoValue("streak_freeze_consecutive", "ALL", "0").toInt());
+    int freezesUsed = 0;
+    int autoSavesApplied = 0;
+    bool failure = false;
+    bool streakBroken = false;
+
+    for (QDate day = watermark.addDays(1); day <= yesterday; day = day.addDays(1)) {
+        const double watched = db->getWatchedSecondsOn(day);
+        const int completed = db->getCompletedVideosOn(day);
+
+        // 1) Resolve a pending auto save whose requirement was due on this day.
+        const StreakPendingDebt pending = db->getPendingStreakDebt(day);
+        const bool debtDue = pending.valid;
+        if (pending.valid) {
+            const double storedRequired = pending.baseAmount + pending.debtAmount;
+            const bool meetsStored = (pending.unit == QStringLiteral("videos"))
+                ? (completed >= static_cast<int>(std::lround(storedRequired)))
+                : (watched >= storedRequired);
+            const bool meetsBase = timeMode ? (watched >= baseSeconds) : (completed >= 1);
+            if (meetsStored && meetsBase) {
+                db->resolveStreakAutoSave(pending.savedDate, true);
+            } else {
+                db->resolveStreakAutoSave(pending.savedDate, false);
+                autoConsecutive = 0;
+                failure = true;
+                break;
+            }
+        }
+
+        // 2) Does the completed day qualify at the base requirement?
+        const bool qualifies = timeMode ? (watched >= baseSeconds) : (completed >= 1);
+        if (qualifies) {
+            // A debt-payment day is not a clean day; don't reset the auto-save chain.
+            if (!debtDue) {
+                autoConsecutive = 0;
+                freezeConsecutive = 0;
+            }
+            continue;
+        }
+
+        if (!saveEnabled) {
+            // The streak is allowed to lapse while saves are off; don't carry an
+            // old escalation chain into a later re-enable.
+            autoConsecutive = 0;
+            continue;
+        }
+
+        // 3) A freeze is the cleanest save; consume it first by default.
+        if (freezeEnabled && maxStock > 0 && freezeFirst && db->getStreakFreezeStock() > 0) {
+            if (db->consumeStreakFreeze(day)) {
+                freezesUsed++;
+                autoConsecutive = 0; // a freeze-covered day breaks the auto-save chain
+                continue;
+            }
+        }
+
+        // 4) Auto save: apply the multiplier to the current base unit.
+        if (autoEnabled && (maxConsecutive <= 0 || autoConsecutive < maxConsecutive)) {
+            const double effectiveMultiplier = std::max(1.0, multiplier + increment * autoConsecutive);
+            bool applied = false;
+            if (timeMode) {
+                const double debt = baseSeconds * (effectiveMultiplier - 1.0);
+                applied = db->insertStreakAutoSave(day, "seconds", baseSeconds, debt);
+            } else {
+                const int requiredVideos = std::max(1, static_cast<int>(std::ceil(effectiveMultiplier)));
+                const double debt = static_cast<double>(requiredVideos - 1);
+                applied = db->insertStreakAutoSave(day, "videos", 1.0, debt);
+            }
+            if (applied) {
+                autoSavesApplied++;
+                autoConsecutive++;
+                continue;
+            }
+        }
+
+        // 5) Priority disabled, or auto debt unavailable: use a freeze if one is left.
+        if (freezeEnabled && maxStock > 0 && db->getStreakFreezeStock() > 0) {
+            if (db->consumeStreakFreeze(day)) {
+                freezesUsed++;
+                autoConsecutive = 0;
+                continue;
+            }
+        }
+
+        // 6) Nothing can save this day: the streak ends here.
+        autoConsecutive = 0;
+        streakBroken = true;
+        break;
+    }
+
+    db->setMainInfoValue("streak_last_processed_date", "ALL", yesterday.toString("yyyy-MM-dd"));
+    db->setMainInfoValue("streak_auto_save_consecutive", "ALL", QString::number(autoConsecutive));
+    db->setMainInfoValue("streak_freeze_consecutive", "ALL", QString::number(freezeConsecutive));
+    this->streakReconcileDate = today;
+
+    // One aggregated notification per reconciliation (the notification type is gated by config).
+    if ((freezesUsed > 0 || autoSavesApplied > 0 || failure || streakBroken)
+        && config->get_bool("notification_streak_saved_enabled")) {
+        const int thresholdSec = timeMode ? static_cast<int>(baseSeconds) : 0;
+        const WatchStreak streak = db->getWatchStreak(thresholdSec);
+        StreakSaveInfo info = this->getStreakSaveInfo();
+
+        if (failure) {
+            this->notificationManager->showStreakSaved(
+                QStringLiteral("STREAK SAVE FAILED"),
+                QStringLiteral("The auto-save debt wasn't met. Your streak ended."),
+                true);
+        } else if (streakBroken) {
+            const QString body = (freezesUsed > 0)
+                ? QStringLiteral("%1 freeze(s) covered earlier days, but the streak ended when no save was left.")
+                    .arg(freezesUsed)
+                : QStringLiteral("A missed day couldn't be saved. Your streak ended.");
+            this->notificationManager->showStreakSaved(
+                QStringLiteral("STREAK ENDED"),
+                body,
+                true);
+        } else if (!info.debtUnit.isEmpty() && info.debtAmount > 0.0) {
+            const double baseAtSave = info.storedRequired - info.debtAmount;
+            const QString requirement = utils::formatStreakRequirement(baseAtSave, info.debtAmount, info.debtUnit);
+            this->notificationManager->showStreakSaved(
+                QStringLiteral("STREAK IN DEBT"),
+                QStringLiteral("You missed a day. Your %1-day streak is on borrowed time: today needs %2 or it ends at midnight.")
+                    .arg(streak.currentStreak)
+                    .arg(requirement),
+                true);
+        } else if (!info.debtUnit.isEmpty() && info.debtPaidToday) {
+            this->notificationManager->showStreakSaved(
+                QStringLiteral("Streak Saved"),
+                QStringLiteral("An auto save covered a missed day and its debt was already paid today."),
+                false);
+        } else if (freezesUsed > 0 && autoSavesApplied > 0) {
+            this->notificationManager->showStreakSaved(
+                QStringLiteral("Streak Saved"),
+                QStringLiteral("%1 freeze(s) and %2 auto save(s) covered your absence. %3-day streak kept.")
+                    .arg(freezesUsed)
+                    .arg(autoSavesApplied)
+                    .arg(streak.currentStreak),
+                false);
+        } else if (freezesUsed > 0) {
+            const QString body = (freezesUsed == 1)
+                ? QStringLiteral("A freeze covered your missed day. %1-day streak kept. Freezes left: %2.")
+                    .arg(streak.currentStreak)
+                    .arg(info.freezeStock)
+                : QStringLiteral("%1 freezes covered your missed days. %2-day streak kept. Freezes left: %3.")
+                    .arg(freezesUsed)
+                    .arg(streak.currentStreak)
+                    .arg(info.freezeStock);
+            this->notificationManager->showStreakSaved(
+                QStringLiteral("Freeze Used"),
+                body,
+                false);
+        } else {
+            this->notificationManager->showStreakSaved(
+                QStringLiteral("Streak Saved"),
+                QStringLiteral("An auto save covered a missed day and its debt was paid."),
+                false);
+        }
+    }
+}
+
+void MainWindow::checkStreakAtRisk(double watchedTodaySec, int videosToday)
+{
+    const QDate today = QDate::currentDate();
+    const QTime now = QTime::currentTime();
+
+    // A new day resets the final-hour transition flag.
+    if (this->lastStreakRiskNotifiedDate != today)
+        this->lastStreakRiskWasFinalHour = false;
+
+    const StreakSaveInfo info = this->getStreakSaveInfo();
+    const bool debtPending = !info.debtUnit.isEmpty() && info.debtAmount > 0.0;
+
+    const bool baseQualifies = info.timeMode
+        ? (watchedTodaySec >= info.effectiveTargetSeconds)
+        : (videosToday >= info.effectiveTargetVideos);
+    bool storedQualifies = true;
+    if (debtPending) {
+        storedQualifies = (info.debtUnit == QStringLiteral("videos"))
+            ? (videosToday >= static_cast<int>(std::lround(info.storedRequired)))
+            : (watchedTodaySec >= info.storedRequired);
+    }
+    if (baseQualifies && storedQualifies)
+        return;
+
+    const int cutoffHour = this->App->config->get("streak_at_risk_cutoff_hour").toInt();
     if (now.hour() < cutoffHour)
         return; // not late enough yet
 
-    int thresholdSec = streakTargetMin > 0 ? streakTargetMin * 60 : 0;
-    WatchStreak streak = this->App->db->getWatchStreak(thresholdSec);
+    const int finalHour = std::max(cutoffHour, this->App->config->get("streak_debt_final_hour").toInt());
+    const bool isFinalHour = debtPending && now.hour() >= finalHour;
+
+    // Already notified today — apply the debt-day re-fire or the once-per-day rule.
+    if (this->lastStreakRiskNotifiedDate == today) {
+        const bool enteringFinalHour = isFinalHour && !this->lastStreakRiskWasFinalHour;
+        if (!enteringFinalHour) {
+            int refireMin = debtPending
+                ? this->App->config->get("streak_debt_refire_minutes").toInt()
+                : this->App->config->get("streak_at_risk_refire_minutes").toInt();
+            if (debtPending && refireMin <= 0)
+                refireMin = this->App->config->get("streak_at_risk_refire_minutes").toInt();
+            if (refireMin <= 0 || !this->lastStreakRiskNotifiedTime.isValid())
+                return;
+            const int elapsedMin = this->lastStreakRiskNotifiedTime.secsTo(now) / 60;
+            if (elapsedMin < refireMin)
+                return;
+        }
+    }
+
+    const int thresholdSec = info.timeMode ? static_cast<int>(info.baseTargetSeconds) : 0;
+    const WatchStreak streak = this->App->db->getWatchStreak(thresholdSec);
+    const int minDays = this->App->config->get("streak_at_risk_min_days").toInt();
     if (streak.currentStreak < minDays)
-        return; // streak not significant enough
+        return;
 
     this->lastStreakRiskNotifiedDate = today;
     this->lastStreakRiskNotifiedTime = now;
+    this->lastStreakRiskWasFinalHour = isFinalHour;
+
+    if (debtPending) {
+        const double baseAtSave = info.storedRequired - info.debtAmount;
+        const QString requirement = utils::formatStreakRequirement(baseAtSave, info.debtAmount, info.debtUnit);
+        const double remainingAmount = (info.debtUnit == QStringLiteral("videos"))
+            ? std::max(0.0, static_cast<double>(static_cast<int>(std::lround(info.storedRequired)) - videosToday))
+            : std::max(0.0, info.storedRequired - watchedTodaySec);
+        const QString remaining = utils::formatStreakAmount(remainingAmount, info.debtUnit);
+
+        QString message;
+        QString title;
+        if (isFinalHour) {
+            const qint64 secondsLeft = QDateTime::currentDateTime().secsTo(
+                QDateTime(today.addDays(1), QTime(0, 0)));
+            const int minutesLeft = static_cast<int>(std::max<qint64>(0, secondsLeft) / 60);
+            title = QStringLiteral("LAST CHANCE — STREAK ENDS AT MIDNIGHT");
+            message = QStringLiteral("Your %1-day streak ends at midnight. You still need %2 (%3). %4 minutes left.")
+                .arg(streak.currentStreak)
+                .arg(remaining)
+                .arg(requirement)
+                .arg(minutesLeft);
+        } else {
+            title = QStringLiteral("STREAK DEBT DUE");
+            message = QStringLiteral("Your %1-day streak ends at midnight. Today needs %2. You still need %3. Freezes left: %4.")
+                .arg(streak.currentStreak)
+                .arg(requirement)
+                .arg(remaining)
+                .arg(info.freezeStock);
+        }
+        this->notificationManager->showStreakAtRisk(title, message, true);
+        return;
+    }
 
     QString message;
-    if (streakTargetMin > 0) {
-        message = QString("Your %1-day watch streak is at risk today! Watch for at least %2 minutes to keep it alive.")
-            .arg(streak.currentStreak).arg(streakTargetMin);
+    if (info.timeMode) {
+        message = QStringLiteral("Your %1-day watch streak is at risk today! Watch for at least %2 to keep it alive.")
+            .arg(streak.currentStreak)
+            .arg(utils::formatDurationHuman(info.baseTargetSeconds));
     } else {
-        message = QString("Your %1-day watch streak is at risk today! Watch a video to keep it alive.")
+        message = QStringLiteral("Your %1-day watch streak is at risk today! Complete a video to keep it alive.")
             .arg(streak.currentStreak);
     }
-    this->notificationManager->showStreakAtRisk(QString("Streak At Risk!"), message);
+    this->notificationManager->showStreakAtRisk(QStringLiteral("Streak At Risk!"), message, false);
 }
+
 
 void MainWindow::checkPersonalBests(int videosToday, double watchedTodaySec)
 {

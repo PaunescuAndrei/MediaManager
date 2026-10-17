@@ -40,6 +40,9 @@ namespace utils {
 	std::string formatSecondsCompact(double total_seconds);
 	QString formatSecondsCompactQt(double total_seconds);
 	QString formatDurationHuman(double total_seconds);
+	// Streak-save formatting: unit is "seconds" or "videos".
+	QString formatStreakAmount(double amount, const QString& unit, bool shortForm = false);
+	QString formatStreakRequirement(double baseAmount, double debtAmount, const QString& unit);
 	bool hiddenCheck(QStringList &settings);
 	int randint(int start,int stop, quint32 seed = 0);
 	double randfloat(double start, double stop, quint32 seed = 0);

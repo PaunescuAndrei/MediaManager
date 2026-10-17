@@ -12,6 +12,14 @@
 #include "flowlayout.h"
 #include <QCheckBox>
 #include <QListWidget>
+#include <QLineEdit>
+#include <QComboBox>
+#include <QMessageBox>
+#include <QUuid>
+#include <QFile>
+#include <QDir>
+#include <QUrl>
+#include <shellapi.h>
 
 // ---------------------------------------------------------------------------
 // Shared style constants
@@ -1019,6 +1027,345 @@ void SettingsDialog::setupNotificationsPage(MainWindow* mw)
 }
 
 // ---------------------------------------------------------------------------
+// Crash dumps page — Windows Error Reporting LocalDumps for this executable
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// WER reads per-application dump settings from this machine-wide key. Reading it does
+// not need elevation; writing it does, so we go through an elevated reg.exe.
+QString localDumpsKeyPath()
+{
+    return QStringLiteral("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\Windows Error Reporting\\LocalDumps\\")
+        + QFileInfo(QCoreApplication::applicationFilePath()).fileName();
+}
+
+QString defaultCrashDumpFolder()
+{
+    // GenericDataLocation is %LOCALAPPDATA% on Windows, which is also WER's default.
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+        + QStringLiteral("/CrashDumps");
+}
+
+QString werReportArchivePath()
+{
+    QString programData = qEnvironmentVariable("ProgramData");
+    if (programData.isEmpty())
+        programData = QStringLiteral("C:/ProgramData");
+    return programData + QStringLiteral("/Microsoft/Windows/WER/ReportArchive");
+}
+
+QString regExePath()
+{
+    QString systemRoot = qEnvironmentVariable("SystemRoot");
+    if (systemRoot.isEmpty())
+        systemRoot = QStringLiteral("C:/Windows");
+    return systemRoot + QStringLiteral("/System32/reg.exe");
+}
+
+// Run a helper process elevated: exactly one UAC prompt per call. Returns false without
+// touching exitCode if the prompt is cancelled or cannot be shown; otherwise exitCode is
+// the helper's exit code (0 on success).
+bool runElevated(const QString& file, const QString& arguments, DWORD& exitCode)
+{
+    SHELLEXECUTEINFOW sei{};
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_FLAG_NO_UI;
+    sei.lpVerb = L"runas";
+    sei.nShow = SW_HIDE;
+
+    const std::wstring fileW = QDir::toNativeSeparators(file).toStdWString();
+    const std::wstring argsW = arguments.toStdWString();
+    sei.lpFile = fileW.c_str();
+    sei.lpParameters = argsW.c_str();
+
+    if (!ShellExecuteExW(&sei)) {
+        exitCode = GetLastError();
+        return false;
+    }
+    WaitForSingleObject(sei.hProcess, 60000);
+    GetExitCodeProcess(sei.hProcess, &exitCode);
+    CloseHandle(sei.hProcess);
+    return true;
+}
+
+// .reg representation of a REG_EXPAND_SZ value: UTF-16LE bytes (terminator included)
+// listed as hex pairs. WER documents DumpFolder as REG_EXPAND_SZ.
+QString regExpandSzHex(const QString& value)
+{
+    QString hex = QStringLiteral("hex(2):");
+    const QString terminated = value + QChar(0);
+    for (int i = 0; i < terminated.size(); ++i) {
+        const ushort unit = terminated.at(i).unicode();
+        if (i > 0)
+            hex += QLatin1Char(',');
+        hex += QStringLiteral("%1,%2")
+            .arg(unit & 0xFF, 2, 16, QLatin1Char('0'))
+            .arg((unit >> 8) & 0xFF, 2, 16, QLatin1Char('0'));
+    }
+    return hex;
+}
+
+// Import a generated .reg file in one elevated call. Importing avoids re-quoting every
+// value on a reg.exe command line and keeps this to a single elevation.
+bool writeLocalDumpsKey(const QString& dumpFolder, int dumpType, int dumpCount, DWORD& exitCode)
+{
+    // The folder normally comes from the registry; keep the generated .reg file free of
+    // quotes/newlines should anything unexpected ever be stored there.
+    QString safeFolder = dumpFolder;
+    if (safeFolder.contains(QLatin1Char('"')) || safeFolder.contains(QLatin1Char('\n'))
+        || safeFolder.contains(QLatin1Char('\r'))) {
+        safeFolder = defaultCrashDumpFolder();
+    }
+
+    QString text = QStringLiteral("Windows Registry Editor Version 5.00\r\n\r\n[")
+        + localDumpsKeyPath() + QStringLiteral("]\r\n");
+    text += QStringLiteral("\"DumpFolder\"=%1\r\n").arg(regExpandSzHex(QDir::toNativeSeparators(safeFolder)));
+    text += QStringLiteral("\"DumpType\"=dword:%1\r\n").arg(dumpType, 8, 16, QLatin1Char('0'));
+    text += QStringLiteral("\"DumpCount\"=dword:%1\r\n").arg(dumpCount, 8, 16, QLatin1Char('0'));
+
+    // reg.exe expects a Unicode .reg file, so write a UTF-16LE BOM followed by the text.
+    QByteArray bytes;
+    bytes.append(char(0xFF));
+    bytes.append(char(0xFE));
+    for (const QChar ch : text) {
+        bytes.append(char(ch.unicode() & 0xFF));
+        bytes.append(char((ch.unicode() >> 8) & 0xFF));
+    }
+
+    // Plain QFile, not QTemporaryFile: on Windows QTemporaryFile keeps its file handle
+    // open even after close(), and the elevated reg.exe then fails to open the file
+    // ("Error opening the file", exit code 1). QFile::close() really releases it.
+    const QString path = QDir::tempPath() + QStringLiteral("/mm_localdumps_%1.reg")
+        .arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size()) {
+        file.close();
+        QFile::remove(path);
+        return false;
+    }
+    file.close();
+
+    const bool launched = runElevated(regExePath(),
+        QStringLiteral("import \"%1\"").arg(QDir::toNativeSeparators(path)), exitCode);
+    QFile::remove(path);
+    return launched;
+}
+
+bool removeLocalDumpsKey(DWORD& exitCode)
+{
+    return runElevated(regExePath(),
+        QStringLiteral("delete \"%1\" /f").arg(localDumpsKeyPath()), exitCode);
+}
+
+// Read back what WER would use right now, filling in the defaults when the key is absent.
+void readLocalDumpsState(bool& enabled, int& dumpType, int& dumpCount, QString& folder)
+{
+    QSettings settings(localDumpsKeyPath(), QSettings::NativeFormat);
+    enabled = settings.contains(QStringLiteral("DumpType"))
+        || settings.contains(QStringLiteral("DumpFolder"));
+    dumpType = settings.value(QStringLiteral("DumpType"), 1).toInt();
+    dumpCount = settings.value(QStringLiteral("DumpCount"), 10).toInt();
+    folder = settings.value(QStringLiteral("DumpFolder"), defaultCrashDumpFolder()).toString();
+    if (folder.isEmpty())
+        folder = defaultCrashDumpFolder();
+}
+
+bool localDumpsConfigured()
+{
+    QSettings settings(localDumpsKeyPath(), QSettings::NativeFormat);
+    return settings.contains(QStringLiteral("DumpType"))
+        || settings.contains(QStringLiteral("DumpFolder"));
+}
+
+} // namespace
+
+void SettingsDialog::setupCrashDumpsPage(MainWindow* mw)
+{
+    Q_UNUSED(mw);
+
+    QScrollArea* scrollArea = new QScrollArea();
+    scrollArea->setFrameShape(QFrame::NoFrame);
+    scrollArea->setWidgetResizable(true);
+
+    QWidget* pageContent = new QWidget();
+    QVBoxLayout* pageLayout = new QVBoxLayout(pageContent);
+    pageLayout->setContentsMargins(4, 4, 4, 4);
+    pageLayout->setSpacing(8);
+
+    // --- Dump settings ---
+    QGroupBox* dumpGroup = new QGroupBox("Windows Error Reporting dumps");
+    QVBoxLayout* dumpLayout = new QVBoxLayout(dumpGroup);
+    dumpLayout->setSpacing(6);
+
+    QLabel* intro = new QLabel("When Media Manager crashes, Windows can write a dump file that can be analyzed later. "
+        "These settings apply to MediaManager.exe only and are stored machine-wide, so applying them asks for "
+        "administrator rights (UAC).");
+    intro->setWordWrap(true);
+    dumpLayout->addWidget(intro);
+
+    QCheckBox* enableCheck = new QCheckBox("Collect a dump when Media Manager crashes");
+    enableCheck->setToolTip("Creates the per-application LocalDumps registry key. Uncheck and apply to remove it again.");
+    dumpLayout->addWidget(enableCheck);
+
+    QHBoxLayout* levelRow = new QHBoxLayout();
+    levelRow->addWidget(new QLabel("Dump level:"));
+    QComboBox* levelCombo = new QComboBox();
+    levelCombo->addItem("Mini — stack and thread info", 1);
+    levelCombo->addItem("Full — entire process memory", 2);
+    levelCombo->setItemData(0, "Small dump with the crashing thread's call stack; enough to see where it crashed.", Qt::ToolTipRole);
+    levelCombo->setItemData(1, "Full process memory. Much larger, but lets a debugger inspect heap data such as the SQLite connection state.", Qt::ToolTipRole);
+    levelCombo->setToolTip("Windows DumpType: 1 = mini, 2 = full.");
+    levelRow->addWidget(levelCombo, 1);
+    dumpLayout->addLayout(levelRow);
+
+    QHBoxLayout* countRow = new QHBoxLayout();
+    countRow->addWidget(new QLabel("Keep at most:"));
+    QSpinBox* countSpin = new QSpinBox();
+    countSpin->setRange(1, 100);
+    countSpin->setValue(10);
+    countSpin->setToolTip("Older dumps beyond this count are deleted by Windows Error Reporting.");
+    setupSpinStyle(countSpin, "spinbox");
+    countRow->addWidget(countSpin);
+    countRow->addWidget(new QLabel("dumps"));
+    countRow->addStretch();
+    dumpLayout->addLayout(countRow);
+
+    QLabel* statusLabel = new QLabel();
+    statusLabel->setWordWrap(true);
+    dumpLayout->addWidget(statusLabel);
+
+    QHBoxLayout* actionRow = new QHBoxLayout();
+    QPushButton* applyButton = new QPushButton("Apply dump settings");
+    QPushButton* refreshButton = new QPushButton("Refresh");
+    actionRow->addWidget(applyButton);
+    actionRow->addWidget(refreshButton);
+    actionRow->addStretch();
+    dumpLayout->addLayout(actionRow);
+
+    pageLayout->addWidget(dumpGroup);
+
+    // --- Folders ---
+    QGroupBox* foldersGroup = new QGroupBox("Dump folders");
+    QVBoxLayout* foldersLayout = new QVBoxLayout(foldersGroup);
+    foldersLayout->setSpacing(6);
+
+    QLineEdit* dumpFolderEdit = new QLineEdit();
+    dumpFolderEdit->setReadOnly(true);
+    QPushButton* openDumpsButton = new QPushButton("Open");
+
+    QLineEdit* werFolderEdit = new QLineEdit(QDir::toNativeSeparators(werReportArchivePath()));
+    werFolderEdit->setReadOnly(true);
+    QPushButton* openWerButton = new QPushButton("Open");
+
+    QHBoxLayout* dumpsFolderRow = new QHBoxLayout();
+    dumpsFolderRow->addWidget(new QLabel("Crash dumps:"));
+    dumpsFolderRow->addWidget(dumpFolderEdit, 1);
+    dumpsFolderRow->addWidget(openDumpsButton);
+    foldersLayout->addLayout(dumpsFolderRow);
+
+    QHBoxLayout* werFolderRow = new QHBoxLayout();
+    werFolderRow->addWidget(new QLabel("WER reports:"));
+    werFolderRow->addWidget(werFolderEdit, 1);
+    werFolderRow->addWidget(openWerButton);
+    foldersLayout->addLayout(werFolderRow);
+
+    pageLayout->addWidget(foldersGroup);
+    pageLayout->addStretch();
+
+    scrollArea->setWidget(pageContent);
+    this->ui.settingsStack->addWidget(scrollArea);
+    this->ui.categoryList->addItem("Crash Dumps");
+
+    // Helpers ------------------------------------------------------------
+
+    auto refresh = [enableCheck, levelCombo, countSpin, dumpFolderEdit, statusLabel]() {
+        bool enabled = false;
+        int dumpType = 1;
+        int dumpCount = 5;
+        QString folder;
+        readLocalDumpsState(enabled, dumpType, dumpCount, folder);
+
+        {
+            QSignalBlocker blockEnable(enableCheck);
+            QSignalBlocker blockLevel(levelCombo);
+            QSignalBlocker blockCount(countSpin);
+            enableCheck->setChecked(enabled);
+            levelCombo->setCurrentIndex(levelCombo->findData(dumpType == 2 ? 2 : 1));
+            countSpin->setValue(dumpCount >= 1 ? dumpCount : 10);
+        }
+        dumpFolderEdit->setText(QDir::toNativeSeparators(folder));
+        statusLabel->setText(enabled
+            ? QStringLiteral("Enabled: %1 dumps, at most %2 kept, written to %3.")
+                .arg(dumpType == 2 ? QStringLiteral("full") : QStringLiteral("mini"))
+                .arg(dumpCount)
+                .arg(QDir::toNativeSeparators(folder))
+            : QStringLiteral("Not configured — Media Manager will not write a crash dump."));
+    };
+
+    // Connections --------------------------------------------------------
+
+    connect(applyButton, &QPushButton::clicked, this,
+        [this, enableCheck, levelCombo, countSpin, dumpFolderEdit, refresh]() {
+            if (!enableCheck->isChecked() && !localDumpsConfigured()) {
+                refresh();
+                return;
+            }
+
+            DWORD result = 0;
+            bool launched = false;
+            if (enableCheck->isChecked()) {
+                launched = writeLocalDumpsKey(dumpFolderEdit->text(),
+                    levelCombo->currentData().toInt(), countSpin->value(), result);
+            } else {
+                launched = removeLocalDumpsKey(result);
+            }
+
+            if (!launched) {
+                if (result == ERROR_CANCELLED)
+                    QMessageBox::information(this, "Crash dumps",
+                        "The change was cancelled. Administrator rights are required to update the dump settings.");
+                else
+                    QMessageBox::warning(this, "Crash dumps",
+                        QStringLiteral("Could not start the elevated registry update (error %1).").arg(result));
+                return;
+            }
+            if (result != 0) {
+                QMessageBox::warning(this, "Crash dumps",
+                    QStringLiteral("The registry update failed (reg.exe exit code %1).").arg(result));
+                return;
+            }
+            refresh();
+            QMessageBox::information(this, "Crash dumps",
+                "Dump settings updated. They take effect the next time Media Manager crashes.");
+        });
+
+    connect(refreshButton, &QPushButton::clicked, this, refresh);
+    connect(openDumpsButton, &QPushButton::clicked, this, [this, dumpFolderEdit]() {
+        const QString folder = dumpFolderEdit->text();
+        const QString native = QDir::toNativeSeparators(folder);
+        if (!QDir(folder).exists()) {
+            QMessageBox::information(this, "Crash dumps", QStringLiteral("The folder does not exist yet:\n%1").arg(native));
+            return;
+        }
+        if (!QDesktopServices::openUrl(QUrl::fromLocalFile(folder)))
+            QMessageBox::information(this, "Crash dumps", QStringLiteral("Could not open the folder:\n%1").arg(native));
+    });
+    connect(openWerButton, &QPushButton::clicked, this, [this]() {
+        const QString folder = werReportArchivePath();
+        const QString native = QDir::toNativeSeparators(folder);
+        if (!QDir(folder).exists()) {
+            QMessageBox::information(this, "WER reports", QStringLiteral("The folder does not exist yet:\n%1").arg(native));
+            return;
+        }
+        if (!QDesktopServices::openUrl(QUrl::fromLocalFile(folder)))
+            QMessageBox::information(this, "WER reports", QStringLiteral("Could not open the folder:\n%1").arg(native));
+    });
+
+    refresh();
+}
+
+// ---------------------------------------------------------------------------
 // Constructor
 // ---------------------------------------------------------------------------
 
@@ -1045,6 +1392,9 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
     //These need to be at the bottom
     // Wire Apply button for all changeable widgets + wheel filters
     wireApplyEnable();
+    // Added after wireApplyEnable() on purpose: the dump controls only feed the page's own
+    // "Apply dump settings" button and must not enable the dialog-wide Apply button.
+    setupCrashDumpsPage(mw);
     WheelStrongFocusEventFilter* wheelFilter = new WheelStrongFocusEventFilter(this);
     installWheelFilters(wheelFilter);
     this->ui.buttonBox->button(QDialogButtonBox::Apply)->setEnabled(false);

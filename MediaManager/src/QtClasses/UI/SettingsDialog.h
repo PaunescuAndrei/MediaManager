@@ -86,6 +86,7 @@ private:
     void setupDatabasePage(class MainWindow* mw);
     void setupRandomPage(class MainWindow* mw);
     void setupNotificationsPage(class MainWindow* mw);
+    void setupCrashDumpsPage(class MainWindow* mw);
 
     // Helper methods
     void setupCheckBox(QCheckBox* cb, const QString& configKey, class MainWindow* mw);

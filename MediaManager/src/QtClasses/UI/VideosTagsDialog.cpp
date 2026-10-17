@@ -43,6 +43,11 @@ VideosTagsDialog::VideosTagsDialog(QList<QTreeWidgetItem*> items, MainWindow* MW
         }
     }
     this->initTags();
+    this->setupConnections();
+}
+
+void VideosTagsDialog::setupConnections() {
+    this->setWindowModality(Qt::WindowModal);
     connect(this->ui.editTagsButton, &QPushButton::clicked, this, [this] {if (this->MW) { if (this->MW->TagsDialogButton()) { this->updateTags(); } } });
     connect(this->ui.InsertButton, &QPushButton::clicked, this, [this] {if (this->MW) { this->insertTags(this->ui.listWidgetAvailable->selectedItems()); } });
     connect(this->ui.RemoveButton, &QPushButton::clicked, this, [this] {if (this->MW) { this->removeTags(this->ui.listWidgetAdded->selectedItems()); } });
@@ -73,7 +78,14 @@ void VideosTagsDialog::removeTags(QList<QListWidgetItem*> items) {
 void VideosTagsDialog::initTags() {
     QSet<Tag> all_tags = this->MW->App->db->getAllTags();
     QSet<Tag> added_tags = QSet<Tag>();
-    if (not this->show_empty_included) {
+    if (this->tagPickerMode) {
+        for (const Tag& tag : all_tags) {
+            if (this->initialTagIds.contains(tag.id)) {
+                added_tags.insert(tag);
+            }
+        }
+    }
+    else if (not this->show_empty_included and not this->items.isEmpty()) {
         int item_id = this->items.first().first;
         added_tags = this->MW->App->db->getTags(item_id);
     }
@@ -159,9 +171,23 @@ VideosTagsDialog::VideosTagsDialog(const QList<int> ids, MainWindow* MW, QWidget
         }
     }
     this->initTags();
-    connect(this->ui.editTagsButton, &QPushButton::clicked, this, [this] {if (this->MW) { if (this->MW->TagsDialogButton()) { this->updateTags(); } } });
-    connect(this->ui.InsertButton, &QPushButton::clicked, this, [this] {if (this->MW) { this->insertTags(this->ui.listWidgetAvailable->selectedItems()); } });
-    connect(this->ui.RemoveButton, &QPushButton::clicked, this, [this] {if (this->MW) { this->removeTags(this->ui.listWidgetAdded->selectedItems()); } });
-    connect(this->ui.listWidgetAvailable, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* item) { this->insertTags({ item }); });
-    connect(this->ui.listWidgetAdded, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem* item) { this->removeTags({ item }); });
+    this->setupConnections();
+}
+
+VideosTagsDialog::VideosTagsDialog(const QSet<int>& tagIds, MainWindow* MW, QWidget* parent) : QDialog(parent) {
+    this->MW = MW;
+    this->tagPickerMode = true;
+    this->initialTagIds = tagIds;
+    ui.setupUi(this);
+    this->initTags();
+    this->setupConnections();
+}
+
+QSet<int> VideosTagsDialog::selectedTagIds() const {
+    QSet<int> ids;
+    for (int i = 0; i < this->ui.listWidgetAdded->count(); ++i) {
+        const QListWidgetItem* item = this->ui.listWidgetAdded->item(i);
+        ids.insert(item->data(Qt::UserRole).value<Tag>().id);
+    }
+    return ids;
 }

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1050</width>
-    <height>412</height>
+    <width>1250</width>
+    <height>460</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -230,6 +230,11 @@
            </property>
            <property name="textAlignment">
             <set>AlignCenter</set>
+           </property>
+          </column>
+          <column>
+           <property name="text">
+            <string>Tags</string>
            </property>
           </column>
          </widget>

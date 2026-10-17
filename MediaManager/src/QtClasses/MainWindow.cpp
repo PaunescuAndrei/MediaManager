@@ -1389,6 +1389,39 @@ void MainWindow::openThumbnails(QString path) {
     }
 }
 
+PreviewTooltipDialog* MainWindow::createPreviewPopup(const QString& path, QWidget* parent, bool rememberPosition, bool randomHover)
+{
+    auto* popup = new PreviewTooltipDialog(this, parent ? parent : this);
+    popup->path = path;
+
+    auto* preview = new VideoPreviewWidget(popup);
+    preview->setSource(path);
+    preview->setStartDelay(0);
+    int previewVolume = qBound(0, this->App->config->get("preview_volume").toInt(), 100);
+    preview->setVolume(previewVolume);
+    preview->setRandomOnHoverEnabled(randomHover);
+    preview->setRandomStartEnabled(this->App->config->get_bool("preview_random_start"));
+    bool useRemember = rememberPosition && !randomHover;
+    preview->setRememberPositionEnabled(useRemember);
+    bool seeded = this->App->config->get_bool("preview_seeded_random") && this->App->config->get_bool("random_use_seed");
+    preview->setSeededRandom(seeded, this->App->config->get("random_seed"));
+    double overlayScale = std::max(0.1, this->App->config->get("preview_overlay_scale").toDouble());
+    int overlayPadX = std::max(0, this->App->config->get("preview_overlay_pad_x").toInt());
+    int overlayPadY = std::max(0, this->App->config->get("preview_overlay_pad_y").toInt());
+    int overlayMargin = std::max(0, this->App->config->get("preview_overlay_margin").toInt());
+    preview->setOverlayStyle(overlayScale, overlayPadX, overlayPadY, overlayMargin);
+    preview->setMuted(false);
+
+    if (useRemember) {
+        qint64 cached = this->cachedPreviewPosition(path);
+        if (cached > 0)
+            preview->restoreLastPosition(cached);
+    }
+
+    popup->setPreviewWidget(preview);
+    return popup;
+}
+
 void MainWindow::showPreviewTooltip(const QModelIndex& proxyIndex)
 {
     if (!this->App->config->get_bool("preview_main_enabled"))
@@ -1408,38 +1441,14 @@ void MainWindow::showPreviewTooltip(const QModelIndex& proxyIndex)
 
     this->closePreviewTooltip();
 
-    auto* popup = new PreviewTooltipDialog(this, this);
-    popup->path = path;
+    // Main list previews do not use hover-random; keep deterministic position handling here
+    bool randomHover = false;
+    bool rememberPosition = this->App->config->get_bool("preview_remember_position") && !randomHover;
+    auto* popup = this->createPreviewPopup(path, this, rememberPosition, randomHover);
     popup->setProperty("storeOnClose", true);
     this->previewTooltip = popup;
 
-    auto* preview = new VideoPreviewWidget(popup);
-    preview->setSource(path);
-    preview->setStartDelay(0);
-    int previewVolume = qBound(0, this->App->config->get("preview_volume").toInt(), 100);
-    preview->setVolume(previewVolume);
-    // Main list previews do not use hover-random; keep deterministic position handling here
-    bool randomHover = false;
-    preview->setRandomOnHoverEnabled(randomHover);
-    preview->setRandomStartEnabled(this->App->config->get_bool("preview_random_start"));
-    bool rememberPosition = this->App->config->get_bool("preview_remember_position") && !randomHover;
-    preview->setRememberPositionEnabled(rememberPosition);
-    bool seeded = this->App->config->get_bool("preview_seeded_random") && this->App->config->get_bool("random_use_seed");
-    preview->setSeededRandom(seeded, this->App->config->get("random_seed"));
-    double overlayScale = std::max(0.1, this->App->config->get("preview_overlay_scale").toDouble());
-    int overlayPadX = std::max(0, this->App->config->get("preview_overlay_pad_x").toInt());
-    int overlayPadY = std::max(0, this->App->config->get("preview_overlay_pad_y").toInt());
-    int overlayMargin = std::max(0, this->App->config->get("preview_overlay_margin").toInt());
-    preview->setOverlayStyle(overlayScale, overlayPadX, overlayPadY, overlayMargin);
-    preview->setMuted(false);
-
-    if (rememberPosition) {
-        qint64 cached = this->cachedPreviewPosition(path);
-        if (cached > 0)
-            preview->restoreLastPosition(cached);
-    }
-
-    popup->setPreviewWidget(preview);
+    auto* preview = popup->previewWidget();
 
     QPoint globalPos = QCursor::pos();
     QRect screenRect;
@@ -3785,7 +3794,7 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
     QString author_ = "";
     QString type_ = "";
 
-    InsertSettingsDialog dialog(this);
+    InsertSettingsDialog dialog(this, this);
     dialog.ui.ResetWatchedCheckBox->setChecked(update_state);
 
     if (!type.isEmpty()) {
@@ -3804,6 +3813,7 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
         QSet<QString> authors_names_(tmp.begin(),tmp.end());
         authors_names += authors_names_;
         QTreeWidgetItem* item = new TreeWidgetItem({ path_pair.first,"","",""}, 0, nullptr);
+        item->setFlags(item->flags() | Qt::ItemIsEditable);
         item->setDisabled(path_pair.second != -1);
         item->setData(0, CustomRoles::id, path_pair.second);
         item->setTextAlignment(3, Qt::AlignHCenter);
@@ -3854,6 +3864,19 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
             continue;
         }
         this->App->db->insertVideo((*it)->text(0), target_db, (*it)->text(2), (*it)->text(1), (*it)->text(3));
+
+        // Per-row tags are applied while the insert transaction is still open, so a
+        // failed batch rolls back both the video row and its tag relations.
+        const QVariantList tagIds = (*it)->data(4, InsertRoles::tagIds).toList();
+        if (!tagIds.isEmpty()) {
+            const int new_id = this->App->db->getVideoId((*it)->text(0), target_db);
+            if (new_id != -1) {
+                for (const QVariant& tagId : tagIds) {
+                    this->App->db->insertTag(new_id, tagId.toInt());
+                }
+            }
+        }
+
         count++;
         if (count == 100) {
             this->App->db->db.commit();

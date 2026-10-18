@@ -95,4 +95,5 @@ private:
 	void buildVideoInfoContent();
 	void buildSimpleContent();
 	void buildSessionSummaryContent();
+	void updateSimpleMessageWrap();
 };

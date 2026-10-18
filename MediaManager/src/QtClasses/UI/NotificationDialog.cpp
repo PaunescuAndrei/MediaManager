@@ -203,8 +203,38 @@ void NotificationWidget::buildSimpleContent()
 
 	messageLabel_ = new QLabel();
 	messageLabel_->setStyleSheet(QString(BODY_STYLE) + QStringLiteral(" color: #AAAAAA;"));
-	messageLabel_->setWordWrap(true);
+	messageLabel_->setWordWrap(false);
 	layout->addWidget(messageLabel_);
+}
+
+// Measure the message unwrapped and only enable wrapping when it would exceed
+// the dialog's available width. This keeps short notifications at their natural
+// width (the old look) and wraps long debt messages at the full available width,
+// without hardcoded pixel sizes.
+void NotificationWidget::updateSimpleMessageWrap()
+{
+	if (!messageLabel_)
+		return;
+
+	messageLabel_->setWordWrap(false);
+	messageLabel_->setMinimumWidth(0);
+
+	const int maxDialogWidth = this->maximumWidth();
+	if (maxDialogWidth <= 0 || maxDialogWidth >= QWIDGETSIZE_MAX)
+		return;
+
+	int horizontalMargins = 0;
+	if (contentWidget_ && contentWidget_->layout()) {
+		const QMargins margins = contentWidget_->layout()->contentsMargins();
+		horizontalMargins = margins.left() + margins.right();
+	}
+
+	const int availableWidth = qMax(1, maxDialogWidth - horizontalMargins);
+	if (messageLabel_->sizeHint().width() <= availableWidth)
+		return;
+
+	messageLabel_->setWordWrap(true);
+	messageLabel_->setMinimumWidth(availableWidth);
 }
 
 void NotificationWidget::buildSessionSummaryContent()
@@ -386,6 +416,7 @@ void NotificationWidget::populateStreakAtRisk(const QString& title, const QStrin
 	titleLabel_->setText(title);
 	titleLabel_->show();
 	messageLabel_->setText(message);
+	updateSimpleMessageWrap();
 }
 
 void NotificationWidget::populateStreakSaved(const QString& title, const QString& message, bool urgent)

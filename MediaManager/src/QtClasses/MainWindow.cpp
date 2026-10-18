@@ -4704,13 +4704,13 @@ void MainWindow::reconcileStreakSaves()
         if (failure) {
             this->notificationManager->showStreakSaved(
                 QStringLiteral("STREAK SAVE FAILED"),
-                QStringLiteral("The auto-save debt wasn't met. Your streak ended."),
+                QStringLiteral("The auto-save debt wasn't met.\nYour streak ended."),
                 true);
         } else if (streakBroken) {
             const QString body = (freezesUsed > 0)
-                ? QStringLiteral("%1 freeze(s) covered earlier days, but the streak ended when no save was left.")
+                ? QStringLiteral("%1 freeze(s) covered earlier days.\nThe streak ended when no save was left.")
                     .arg(freezesUsed)
-                : QStringLiteral("A missed day couldn't be saved. Your streak ended.");
+                : QStringLiteral("A missed day couldn't be saved.\nYour streak ended.");
             this->notificationManager->showStreakSaved(
                 QStringLiteral("STREAK ENDED"),
                 body,
@@ -4720,29 +4720,29 @@ void MainWindow::reconcileStreakSaves()
             const QString requirement = utils::formatStreakRequirement(baseAtSave, info.debtAmount, info.debtUnit);
             this->notificationManager->showStreakSaved(
                 QStringLiteral("STREAK IN DEBT"),
-                QStringLiteral("You missed a day. Your %1-day streak is on borrowed time: today needs %2 or it ends at midnight.")
+                QStringLiteral("You missed a day.\nYour %1-day streak is on borrowed time.\nToday needs %2 or it ends at midnight.")
                     .arg(streak.currentStreak)
                     .arg(requirement),
                 true);
         } else if (!info.debtUnit.isEmpty() && info.debtPaidToday) {
             this->notificationManager->showStreakSaved(
                 QStringLiteral("Streak Saved"),
-                QStringLiteral("An auto save covered a missed day and its debt was already paid today."),
+                QStringLiteral("An auto save covered a missed day.\nIts debt was already paid today."),
                 false);
         } else if (freezesUsed > 0 && autoSavesApplied > 0) {
             this->notificationManager->showStreakSaved(
                 QStringLiteral("Streak Saved"),
-                QStringLiteral("%1 freeze(s) and %2 auto save(s) covered your absence. %3-day streak kept.")
+                QStringLiteral("%1 freeze(s) and %2 auto save(s) covered your absence.\n%3-day streak kept.")
                     .arg(freezesUsed)
                     .arg(autoSavesApplied)
                     .arg(streak.currentStreak),
                 false);
         } else if (freezesUsed > 0) {
             const QString body = (freezesUsed == 1)
-                ? QStringLiteral("A freeze covered your missed day. %1-day streak kept. Freezes left: %2.")
+                ? QStringLiteral("A freeze covered your missed day.\n%1-day streak kept.\nFreezes left: %2.")
                     .arg(streak.currentStreak)
                     .arg(info.freezeStock)
-                : QStringLiteral("%1 freezes covered your missed days. %2-day streak kept. Freezes left: %3.")
+                : QStringLiteral("%1 freezes covered your missed days.\n%2-day streak kept.\nFreezes left: %3.")
                     .arg(freezesUsed)
                     .arg(streak.currentStreak)
                     .arg(info.freezeStock);
@@ -4753,7 +4753,7 @@ void MainWindow::reconcileStreakSaves()
         } else {
             this->notificationManager->showStreakSaved(
                 QStringLiteral("Streak Saved"),
-                QStringLiteral("An auto save covered a missed day and its debt was paid."),
+                QStringLiteral("An auto save covered a missed day.\nIts debt was paid."),
                 false);
         }
     }
@@ -4832,14 +4832,14 @@ void MainWindow::checkStreakAtRisk(double watchedTodaySec, int videosToday)
                 QDateTime(today.addDays(1), QTime(0, 0)));
             const int minutesLeft = static_cast<int>(std::max<qint64>(0, secondsLeft) / 60);
             title = QStringLiteral("LAST CHANCE — STREAK ENDS AT MIDNIGHT");
-            message = QStringLiteral("Your %1-day streak ends at midnight. You still need %2 (%3). %4 minutes left.")
+            message = QStringLiteral("Your %1-day streak ends at midnight.\nYou still need %2 (%3).\n%4 minutes left.")
                 .arg(streak.currentStreak)
                 .arg(remaining)
                 .arg(requirement)
                 .arg(minutesLeft);
         } else {
             title = QStringLiteral("STREAK DEBT DUE");
-            message = QStringLiteral("Your %1-day streak ends at midnight. Today needs %2. You still need %3. Freezes left: %4.")
+            message = QStringLiteral("Your %1-day streak ends at midnight.\nToday needs %2.\nYou still need %3.\nFreezes left: %4.")
                 .arg(streak.currentStreak)
                 .arg(requirement)
                 .arg(remaining)
@@ -4851,11 +4851,11 @@ void MainWindow::checkStreakAtRisk(double watchedTodaySec, int videosToday)
 
     QString message;
     if (info.timeMode) {
-        message = QStringLiteral("Your %1-day watch streak is at risk today! Watch for at least %2 to keep it alive.")
+        message = QStringLiteral("Your %1-day watch streak is at risk today!\nWatch for at least %2 to keep it alive.")
             .arg(streak.currentStreak)
             .arg(utils::formatDurationHuman(info.baseTargetSeconds));
     } else {
-        message = QStringLiteral("Your %1-day watch streak is at risk today! Complete a video to keep it alive.")
+        message = QStringLiteral("Your %1-day watch streak is at risk today!\nComplete a video to keep it alive.")
             .arg(streak.currentStreak);
     }
     this->notificationManager->showStreakAtRisk(QStringLiteral("Streak At Risk!"), message, false);

@@ -165,7 +165,7 @@ LRESULT MpcPlayer::send_osd_message(QString message, int duration)
             s = message.toStdWString();
             const wchar_t* str = s.c_str();
             datastruct = { 1,duration };
-            wcsncpy(datastruct.strMsg, str, 256);
+            wcsncpy_s(datastruct.strMsg, _countof(datastruct.strMsg), str, _TRUNCATE);
             MyCDS.lpData = (LPVOID)&datastruct;
             MyCDS.cbData = sizeof(datastruct);
         }

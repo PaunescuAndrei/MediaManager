@@ -151,15 +151,18 @@ void VideoWatcherQt::toggle_window()
 	}
 	if (player) {
 		bool fullscreen = utils::is_hwnd_full_screen(player->player_hwnd);
-		QList<HWND> hwnds = utils::get_hwnds_for_pid(player->pid);
-		bool is_foreground = false;
-		HWND foreground_window = GetForegroundWindow();
-		for (HWND& hwnd : hwnds) {
-			if (foreground_window == hwnd) {
-				is_foreground = true;
-				break;
-			}
-		}
+
+		// Identify the foreground by process instead of enumerating every
+		// top-level window: GetWindowThreadProcessId is O(1) and also covers
+		// the player's dialogs/other windows. The window we bring back remains
+		// the player-provided player_hwnd.
+		const HWND foreground_window = GetForegroundWindow();
+		DWORD foreground_pid = 0;
+		if (foreground_window)
+			GetWindowThreadProcessId(foreground_window, &foreground_pid);
+		const bool is_foreground =
+			player->pid > 0 && foreground_pid == static_cast<DWORD>(player->pid);
+
 		if (is_foreground) {
 			player->setPaused(true,true);
 			if (fullscreen)
@@ -171,15 +174,23 @@ void VideoWatcherQt::toggle_window()
 			}
 		}
 		else {
-			this->old_foreground_window = GetForegroundWindow();
-			is_foreground = false;
+			this->old_foreground_window = foreground_window;
 			int tries = 0;
-			while (!is_foreground && tries < 10) {
+			while (tries < 10) {
 				utils::bring_hwnd_to_foreground_uiautomation_method(player->player_hwnd, this->App->uiAutomation);
 				tries++;
-				QList<HWND> hwnds = utils::get_hwnds_for_pid(player->pid);
-				if (hwnds.contains(GetForegroundWindow()))
-					is_foreground = true;
+				HWND fg = GetForegroundWindow();
+				DWORD fg_pid = 0;
+				if (fg)
+					GetWindowThreadProcessId(fg, &fg_pid);
+				if (player->pid > 0 && fg_pid == static_cast<DWORD>(player->pid))
+					break;
+				if (!player->isProcessAlive())
+					break;
+				// Give the shell a chance to apply the activation before the
+				// next attempt; previously all ten tries could fire before the
+				// first one had any effect.
+				Sleep(1);
 			}
 			if (!fullscreen) {
 				player->toggleFullScreen(true);

@@ -544,15 +544,23 @@ void utils::bring_hwnd_to_foreground(HWND hwnd) {
 
 void utils::bring_hwnd_to_foreground_all(HWND hwnd, IUIAutomation* uiAutomation)
 {
+	// Two UI-Automation attempts (the only method that actually ran before,
+	// because the old fallback arms were unreachable `else if`s), then the
+	// least invasive fallback: ShowWindow + SetForegroundWindow. The riskier
+	// methods below stay disabled unless a concrete reliability problem calls
+	// for them.
 	utils::bring_hwnd_to_foreground_uiautomation_method(hwnd, uiAutomation);
 	if (GetForegroundWindow() != hwnd)
 		utils::bring_hwnd_to_foreground_uiautomation_method(hwnd, uiAutomation);
-	else if (GetForegroundWindow() != hwnd)
+
+	// Active fallback: preserves maximized/minimized state via GetWindowPlacement.
+	if (GetForegroundWindow() != hwnd)
 		utils::bring_hwnd_to_foreground(hwnd);
-	else if (GetForegroundWindow() != hwnd)
-		utils::bring_hwnd_to_foreground_console_method(hwnd);
-	else if (GetForegroundWindow() != hwnd)
-		utils::bring_hwnd_to_foreground_alt_method(hwnd);
+
+	// Disabled on purpose (see the comment above):
+	// - bring_hwnd_to_foreground_console_method()  (allocates a console)
+	// - bring_hwnd_to_foreground_alt_method()      (synthesizes an Alt keypress)
+	// - bring_hwnd_to_foreground_attach_method()   (changes the global foreground lock timeout)
 	//if (GetForegroundWindow() != this->old_foreground_window)
 	//	bring_hwnd_to_foreground_attach_method(this->old_foreground_window);
 }

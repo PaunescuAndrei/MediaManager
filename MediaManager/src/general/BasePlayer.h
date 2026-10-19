@@ -84,6 +84,12 @@ public:
     double getTotalWatchedTime();
     void updateWatchedTiming();
     void start();
+    // Stop the player thread and ask the player to close through its own close command,
+    // without waiting for it; the process is killed at teardown if still running.
+    void shutdown();
+    // Wait (bounded) for the process to actually exit after shutdown(). Returns true if it
+    // is gone; the caller decides how long the player may delay the main window.
+    bool waitForProcessExit(int timeoutMs);
     void resetVideoTiming();
     double videoWatchedTime();
     bool shouldCheckpoint(const QDateTime& now, int intervalSeconds);

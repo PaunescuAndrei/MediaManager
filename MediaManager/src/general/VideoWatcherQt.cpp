@@ -531,7 +531,10 @@ void VideoWatcherQt::run()
 		if (watchhistory::hasWatchToPersist(player) && watchhistory::isTrackedVideo(player)) {
 			watchhistory::flushPlayer(this->db, *player, m_currentSessionId, false, true);
 		}
-		player->process->terminate();
+		// The player process is closed by MainApp::stop_handle() through
+		// BasePlayer::shutdown() after this final flush. Terminating it from here, while
+		// its player thread was still polling, made the player close like a killed app
+		// instead of the normal window close a user performs.
 	}
 
 	// End session on shutdown
@@ -558,7 +561,6 @@ VideoWatcherQt::~VideoWatcherQt()
 			if (watchhistory::hasWatchToPersist(item) && watchhistory::isTrackedVideo(item)) {
 				watchhistory::flushPlayer(this->db, *item, m_currentSessionId, false, true);
 			}
-			item->process->terminate();
 			item.reset();
 		}
 

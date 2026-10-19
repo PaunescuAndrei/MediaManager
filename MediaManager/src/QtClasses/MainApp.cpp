@@ -267,6 +267,10 @@ static constexpr int SHUTDOWN_THREAD_WAIT_MS = 15000;
 // exit-sound fallback. Set above one thread timeout so a single stuck thread still gets
 // the per-thread trace rather than this one.
 static constexpr int SHUTDOWN_WATCHDOG_MS = 45000;
+// After asking a player to close, let it actually disappear before the main window is
+// closed, so the player windows do not outlive ours. The exit sound is already playing, so
+// this normally overlaps it; the cap only matters for a player that refuses to exit.
+static constexpr int SHUTDOWN_PLAYER_WAIT_MS = 1000;
 
 // Set once stop_handle() got past its joins with every thread stopped. File-scope so the
 // watchdog does not dereference the app while it is being torn down.
@@ -297,8 +301,6 @@ static void armShutdownWatchdog()
 
 void MainApp::stop_handle()
 {
-	this->closeAllWindows();
-	
 	// Stop BPM manager first - this will cancel ongoing audio processing
 	// and wait for thread pool to finish
 	if (this->BpmManager) {
@@ -383,6 +385,28 @@ void MainApp::stop_handle()
 			.arg(SHUTDOWN_THREAD_WAIT_MS).arg(stuck.trimmed()));
 		::TerminateProcess(::GetCurrentProcess(), 0);
 	}
+	// Close the players only now: the watcher has already flushed the final watch state to
+	// the database. shutdown() stops the player thread first (so no more slave commands are
+	// sent) and then closes the player through its own close command, the same path as a
+	// normal window close, instead of QProcess::terminate() posting WM_CLOSE to every
+	// top-level window of the player.
+	if (this->VW) {
+		const QList<QSharedPointer<BasePlayer>> players = this->VW->playersSnapshot();
+		for (const QSharedPointer<BasePlayer>& player : players) {
+			if (player)
+				player->shutdown();
+		}
+		// Let the players' windows disappear before ours: the close request is asynchronous,
+		// so without this the main window would hide first. Bounded, and it overlaps the exit
+		// sound that stop_handle already started.
+		for (const QSharedPointer<BasePlayer>& player : players) {
+			if (player)
+				player->waitForProcessExit(SHUTDOWN_PLAYER_WAIT_MS);
+		}
+	}
+	// The players have closed; only now let the main window (and any remaining dialogs)
+	// close, so the player windows do not outlive the main window on screen.
+	this->closeAllWindows();
 	shutdown_finished.store(true);
 }
 

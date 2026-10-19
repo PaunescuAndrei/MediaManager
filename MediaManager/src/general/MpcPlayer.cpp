@@ -25,11 +25,19 @@ MpcPlayer::MpcPlayer(QString video_path, int video_id, int* CLASS_COUNT, QObject
 
 MpcPlayer::~MpcPlayer()
 {
+    // Make sure the player thread has stopped before its message window/class goes away.
+    // shutdown() is normally called from MainApp::stop_handle; this is the fallback for
+    // players destroyed outside the shutdown path (e.g. switching the current DB). Its
+    // sends are fire-and-forget now, so this normally returns at once.
+    this->running = false;
+    if (!this->wait(1000)) {
+        // Last resort at teardown: never destroy a running QThread.
+        this->terminate();
+        this->wait(500);
+    }
     this->drop();
     UnregisterClass(this->windowClassName, NULL);
     delete[] this->windowClassName;
-    this->running = false;
-    this->terminate();
 }
 
 LRESULT MpcPlayer::WndProcWrapper(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -227,7 +235,10 @@ void MpcPlayer::openPlayer(QString video_path, double position_seconds)
 
 void MpcPlayer::askForStatus()
 {
-    this->send_message(CMD_GETCURRENTPOSITION);
+    // Fire-and-forget: this is polled every 100 ms and must not pin the player thread for
+    // the full command timeout when the player is busy (e.g. while it is closing), which
+    // would otherwise delay the thread join during shutdown by up to that timeout.
+    this->send_message(CMD_GETCURRENTPOSITION, "", false);
 }
 
 void MpcPlayer::drop()
@@ -236,7 +247,9 @@ void MpcPlayer::drop()
 }
 void MpcPlayer::closePlayer()
 {
-    this->send_message(CMD_CLOSEAPP);
+    // Nothing waits for the player to process the close request; the caller observes the
+    // process instead. A blocking send here would add its timeout to every shutdown.
+    this->send_message(CMD_CLOSEAPP, "", false);
 }
 void MpcPlayer::unloadCurrentFile()
 {
@@ -293,7 +306,8 @@ void MpcPlayer::changeVideo(QString path, int video_id, double position)
 }
 
 void MpcPlayer::run() {
-    this->running = true;
+    // running is set by BasePlayer::start() before the thread starts, so a shutdown()
+    // issued in between cannot be overwritten here.
     while (this->running) {
         this->askForStatus();
         std::optional<std::shared_ptr<PlayerCommand>> _command = this->queue.front();

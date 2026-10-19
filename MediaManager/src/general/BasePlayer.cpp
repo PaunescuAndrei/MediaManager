@@ -18,7 +18,14 @@ BasePlayer::BasePlayer(QString video_path, int video_id, int* CLASS_COUNT, QObje
 
 BasePlayer::~BasePlayer()
 {
-    this->process->terminate();
+    // The graceful close is done by shutdown() while the app is still running; by the time
+    // a player is destroyed (switching DB, teardown) there is nothing left to save, so do
+    // not run QProcess::terminate()'s WM_CLOSE-to-every-window close path here.
+    this->running = false;
+    if (this->process->state() != QProcess::NotRunning) {
+        this->process->kill();
+        this->process->waitForFinished(500);
+    }
     //this->send_message(CMD_CLOSEAPP);
     //this->process->waitForFinished(5000);
     this->process->deleteLater();
@@ -30,8 +37,41 @@ bool BasePlayer::isProcessAlive() const
 }
 
 void BasePlayer::start() {
+    // Set before starting the thread: shutdown() may be called right after start() and a
+    // run() that set it back to true could overwrite that request.
+    this->running = true;
     this->resetVideoTiming();
     QThread::start();
+}
+
+void BasePlayer::shutdown()
+{
+    // Stop the polling loop: it sends askForStatus() to the player every 100 ms and those
+    // commands must not keep arriving while the player is closing.
+    this->running = false;
+
+    if (this->process && this->process->state() != QProcess::NotRunning) {
+        // Destroy our slave window before asking the player to close. The player notifies
+        // the host with a blocking SendMessage during its close, and nothing is pumping
+        // messages on our side at that point, so a live window would make the player wait
+        // for us instead of exiting.
+        this->drop();
+        // CMD_CLOSEAPP makes the player close its own main window, i.e. the same path as a
+        // normal window close. QProcess::terminate() posts WM_CLOSE to every top-level
+        // window of the player (and a WM_CLOSE thread message), which is not how a user
+        // closes it and which its teardown can fail on.
+        this->closePlayer();
+    }
+    // Deliberately no wait here: the close request is asynchronous and the exit sound is
+    // already playing. The caller waits for the process where it needs the player's window
+    // to be gone first, and the process is killed at teardown if still running.
+}
+
+bool BasePlayer::waitForProcessExit(int timeoutMs)
+{
+    if (!this->process || this->process->state() == QProcess::NotRunning)
+        return true;
+    return this->process->waitForFinished(timeoutMs);
 }
 
 void BasePlayer::startWatchedTiming() {

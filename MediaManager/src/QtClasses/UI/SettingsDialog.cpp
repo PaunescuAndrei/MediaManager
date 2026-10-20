@@ -12,6 +12,10 @@
 #include <QSignalBlocker>
 #include "flowlayout.h"
 #include <QCheckBox>
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QVBoxLayout>
 #include <QListWidget>
 #include <QLineEdit>
 #include <QComboBox>
@@ -560,6 +564,74 @@ void SettingsDialog::setupPlaybackPage(MainWindow* mw)
     this->oldPreviewAutoplayAllMute = this->ui.previewAutoplayAllMute->isChecked();
     setupCheckBox(this->ui.previewRandomEachHover, "preview_random_each_hover", mw);
     this->oldPreviewRandomEachHover = this->ui.previewRandomEachHover->isChecked();
+
+    // --- Next Volume Guard ---
+    QGroupBox* volumeGuardGroup = new QGroupBox(QStringLiteral("Next Volume Guard"));
+    QVBoxLayout* volumeGuardLayout = new QVBoxLayout(volumeGuardGroup);
+    volumeGuardLayout->setSpacing(4);
+
+    this->nextVolumeGuardEnabled = new QCheckBox(QStringLiteral("Warn before switching when the player volume is high"));
+    this->nextVolumeGuardEnabled->setToolTip(
+        QStringLiteral("When Next, Skip, or Random changes the video, check the player's volume first."));
+    setupCheckBox(this->nextVolumeGuardEnabled, "next_volume_guard_enabled", mw);
+    volumeGuardLayout->addWidget(this->nextVolumeGuardEnabled);
+
+    QHBoxLayout* thresholdRow = new QHBoxLayout();
+    QLabel* thresholdLabel = new QLabel(QStringLiteral("Trigger at or above:"));
+    thresholdLabel->setToolTip(QStringLiteral("Show the guard when the player volume is at or above this value."));
+    thresholdRow->addWidget(thresholdLabel);
+    thresholdRow->addStretch();
+    this->nextVolumeGuardThreshold = new QSpinBox();
+    this->nextVolumeGuardThreshold->setMinimum(1);
+    this->nextVolumeGuardThreshold->setMaximum(100);
+    this->nextVolumeGuardThreshold->setSuffix(QStringLiteral("%"));
+    this->nextVolumeGuardThreshold->setToolTip(QStringLiteral("Show the guard when the player volume is at or above this value."));
+    setupSpinStyle(this->nextVolumeGuardThreshold, "spinbox");
+    bool thresholdOk = false;
+    int threshold = config->get("next_volume_guard_threshold").toInt(&thresholdOk);
+    if (!thresholdOk)
+        threshold = 50;
+    this->nextVolumeGuardThreshold->setValue(qBound(1, threshold, 100));
+    thresholdRow->addWidget(this->nextVolumeGuardThreshold);
+    volumeGuardLayout->addLayout(thresholdRow);
+
+    QHBoxLayout* targetRow = new QHBoxLayout();
+    QLabel* targetLabel = new QLabel(QStringLiteral("Lower volume to:"));
+    targetLabel->setToolTip(QStringLiteral("Volume applied when you choose to lower it. Keep this below the trigger value."));
+    targetRow->addWidget(targetLabel);
+    targetRow->addStretch();
+    this->nextVolumeGuardTarget = new QSpinBox();
+    this->nextVolumeGuardTarget->setMinimum(0);
+    this->nextVolumeGuardTarget->setMaximum(100);
+    this->nextVolumeGuardTarget->setSuffix(QStringLiteral("%"));
+    this->nextVolumeGuardTarget->setToolTip(QStringLiteral("Volume applied when you choose to lower it. Keep this below the trigger value."));
+    setupSpinStyle(this->nextVolumeGuardTarget, "spinbox");
+    bool targetOk = false;
+    int target = config->get("next_volume_guard_target").toInt(&targetOk);
+    if (!targetOk)
+        target = 20;
+    this->nextVolumeGuardTarget->setValue(qBound(0, target, 100));
+    targetRow->addWidget(this->nextVolumeGuardTarget);
+    volumeGuardLayout->addLayout(targetRow);
+
+    QLabel* volumeGuardHint = new QLabel(QStringLiteral(
+        "On the next video switch you can ignore the warning, lower the volume first, or cancel. "
+        "A lowered volume is confirmed with the player before the video changes."));
+    volumeGuardHint->setWordWrap(true);
+    volumeGuardHint->setStyleSheet("color: #AAAAAA;");
+    volumeGuardLayout->addWidget(volumeGuardHint);
+
+    this->nextVolumeGuardThreshold->setEnabled(this->nextVolumeGuardEnabled->isChecked());
+    this->nextVolumeGuardTarget->setEnabled(this->nextVolumeGuardEnabled->isChecked());
+    connect(this->nextVolumeGuardEnabled, &QCheckBox::toggled, this, [this](bool checked) {
+        this->nextVolumeGuardThreshold->setEnabled(checked);
+        this->nextVolumeGuardTarget->setEnabled(checked);
+    });
+
+    int previewIndex = this->ui.playbackPageLayout->indexOf(this->ui.previewGroupBox);
+    if (previewIndex < 0)
+        previewIndex = this->ui.playbackPageLayout->count() - 1;
+    this->ui.playbackPageLayout->insertWidget(previewIndex, volumeGuardGroup);
 }
 
 void SettingsDialog::setupAppearancePage(MainWindow* mw)

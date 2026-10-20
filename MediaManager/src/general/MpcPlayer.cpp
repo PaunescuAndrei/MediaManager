@@ -131,6 +131,17 @@ LRESULT MpcPlayer::OnCopyData(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
                 }
                 break;
             }
+            case CMD_CURRENTVOLUME:
+            {
+                if (data != nullptr) {
+                    bool ok = false;
+                    const int volume = QString::fromStdWString(data).toInt(&ok);
+                    if (ok) {
+                        this->handleReportedVolume(volume);
+                    }
+                }
+                break;
+            }
             case CMD_NOTIFYSEEK:
             {
                 this->last_seek_time = utils::QueryUnbiasedInterruptTimeChrono();
@@ -202,14 +213,21 @@ LRESULT MpcPlayer::send_message(MPCAPI_COMMAND command, QString data, bool block
             MyCDS.lpData = NULL;
             MyCDS.cbData = 0;
         }
+        // MPC-HC honors its host-authenticated volume commands only when wParam is the
+        // /slave host window, not the player window. Other commands keep the old wParam
+        // so the existing command/state machine is unaffected.
+        HWND senderHwnd = this->player_hwnd;
+        if ((command == CMD_SETVOLUME || command == CMD_GETVOLUME) && this->class_hwnd) {
+            senderHwnd = this->class_hwnd;
+        }
         if (blocking) {
             DWORD_PTR dwResult;
-            if (SendMessageTimeoutW(this->player_hwnd, WM_COPYDATA, (WPARAM)this->player_hwnd, (LPARAM)(LPVOID)&MyCDS, SMTO_NORMAL | SMTO_ABORTIFHUNG, 3000, &dwResult)) {
+            if (SendMessageTimeoutW(this->player_hwnd, WM_COPYDATA, (WPARAM)senderHwnd, (LPARAM)(LPVOID)&MyCDS, SMTO_NORMAL | SMTO_ABORTIFHUNG, 3000, &dwResult)) {
                 return dwResult;
             }
             return -1;
         }
-        return SendMessageTimeout(this->player_hwnd, WM_COPYDATA, (WPARAM)this->player_hwnd, (LPARAM)(LPVOID)&MyCDS, 0, 500, NULL);
+        return SendMessageTimeout(this->player_hwnd, WM_COPYDATA, (WPARAM)senderHwnd, (LPARAM)(LPVOID)&MyCDS, 0, 500, NULL);
     }
     return -1;
 }
@@ -303,6 +321,16 @@ void MpcPlayer::changeVideo(QString path, int video_id, double position)
         bool should_autoplay = this->App->config->get_bool("video_autoplay");
         this->setPaused(!should_autoplay, false);
     }
+}
+
+void MpcPlayer::requestVolume()
+{
+    this->queue.push(std::make_shared<MpcDirectCommand>(CMD_GETVOLUME));
+}
+
+void MpcPlayer::setVolume(int volume)
+{
+    this->queue.push(std::make_shared<MpcDirectCommand>(CMD_SETVOLUME, QString::number(qBound(0, volume, 100))));
 }
 
 void MpcPlayer::run() {

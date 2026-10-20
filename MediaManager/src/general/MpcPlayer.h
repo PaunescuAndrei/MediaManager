@@ -32,6 +32,8 @@ public:
     void toggleFullScreen(bool direct = false);
     void displayOsdMessage(QString message, int duration, bool direct = false);
     void changeVideo(QString path, int video_id, double position = 0);
+    void requestVolume() override;
+    void setVolume(int volume) override;
     void run() override;
 };
 

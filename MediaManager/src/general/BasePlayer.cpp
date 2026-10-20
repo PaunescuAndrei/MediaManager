@@ -36,6 +36,13 @@ bool BasePlayer::isProcessAlive() const
     return m_processAlive.load();
 }
 
+void BasePlayer::handleReportedVolume(int volume)
+{
+    const int clamped = qBound(0, volume, 100);
+    this->m_volume.store(clamped);
+    emit this->volumeChanged(clamped);
+}
+
 void BasePlayer::start() {
     // Set before starting the thread: shutdown() may be called right after start() and a
     // run() that set it back to true could overwrite that request.

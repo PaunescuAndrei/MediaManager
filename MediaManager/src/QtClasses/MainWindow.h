@@ -61,6 +61,7 @@ public:
     int time_watched_limit = -1;
     bool counter_use_actual_watch_time = false;
     bool isWatching = false;
+    bool volumeGuardActive = false;
     bool animatedIconEnabled = false;
     bool toggleDatesFlag = false;
     bool intro_played = true;
@@ -252,7 +253,19 @@ public:
     WeightedBiasSettings getWeightedBiasSettings() const;
     void quit();
     bool NextButtonClicked(bool increment, bool update_watched_state, bool skipped = false);
-    bool NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state, bool skipped = false);
+    bool NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state, bool skipped = false, bool volumeGuardChecked = false);
+    // Timings for the high-volume guard, in milliseconds.
+    static constexpr int VOLUME_QUERY_TIMEOUT_MS = 600;
+    static constexpr int VOLUME_SET_TIMEOUT_MS = 1500;
+    static constexpr int VOLUME_SET_QUERY_TIMEOUT_MS = 300;
+    // After a volume report, wait this long for a newer one (e.g. the actual
+    // CMD_GETVOLUME response) before trusting the value.
+    static constexpr int VOLUME_READ_SETTLE_MS = 150;
+    // High-volume guard shown before a Next/Skip/Random switch. Returns false when the
+    // user cancels or a requested volume change cannot be confirmed by the player.
+    bool ensureSafeVolumeForSwitch(QSharedPointer<BasePlayer> player);
+    int readPlayerVolume(QSharedPointer<BasePlayer> player, int timeoutMs);
+    bool setPlayerVolumeAndVerify(QSharedPointer<BasePlayer> player, int target, int timeoutMs);
     NextVideoSettings getNextVideoSettings();
     NextVideoModes::Mode getNextVideoMode();
     bool NextVideo(NextVideoModes::Mode mode, bool increment, bool update_watched_state, bool skipped, double actualWatchTimeDelta = 0.0);

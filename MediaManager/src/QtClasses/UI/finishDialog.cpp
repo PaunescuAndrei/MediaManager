@@ -171,7 +171,8 @@ finishDialog::finishDialog(MainWindow* MW, QSharedPointer<BasePlayer> player, Pl
 		const QPersistentModelIndex src = MW->modelIndexByPath(tagsVideoPath);
 		if (!src.isValid())
 			return;
-		this->timer.stop();
+		if (this->keepInFrontTimer)
+			this->keepInFrontTimer->stop();
 		const Qt::WindowFlags flags = windowFlags();
 		const bool isOnTop = flags.testFlag(Qt::WindowStaysOnTopHint);
 		this->setWindowFlag(Qt::WindowStaysOnTopHint, false);
@@ -183,7 +184,8 @@ finishDialog::finishDialog(MainWindow* MW, QSharedPointer<BasePlayer> player, Pl
 			connect(dialog, &VideosTagsDialog::finished, this, [this, MW, isOnTop, tagsVideoPath](int) {
 				this->setWindowFlag(Qt::WindowStaysOnTopHint, isOnTop);
 				this->show();
-				this->timer.start(250);
+				if (this->keepInFrontTimer)
+					this->keepInFrontTimer->start();
 				const QPersistentModelIndex updatedSrc = MW->modelIndexByPath(tagsVideoPath);
 				if (updatedSrc.isValid()) {
 					const QPersistentModelIndex tagsIdx = updatedSrc.sibling(updatedSrc.row(), ListColumns["TAGS_COLUMN"]);
@@ -194,7 +196,8 @@ finishDialog::finishDialog(MainWindow* MW, QSharedPointer<BasePlayer> player, Pl
 		else {
 			this->setWindowFlag(Qt::WindowStaysOnTopHint, isOnTop);
 			this->show();
-			this->timer.start(250);
+			if (this->keepInFrontTimer)
+				this->keepInFrontTimer->start();
 		}
 		QTimer::singleShot(100, [dialog] {
 			if (dialog) {
@@ -206,21 +209,15 @@ finishDialog::finishDialog(MainWindow* MW, QSharedPointer<BasePlayer> player, Pl
 		});
 	});
 
-	connect(this->ui.NextButton, &QPushButton::clicked, this, [this]() {this->timer.stop(); this->done(finishDialog::Accepted); } );
-	connect(this->ui.cancelButton, &QPushButton::clicked, this, [this]() {this->timer.stop(); this->done(finishDialog::Rejected); });
-	connect(this->ui.skipButton, &QPushButton::clicked, this, [this]() { this->timer.stop(); this->done(finishDialog::Skip); });
-	connect(this->ui.replayButton, &QPushButton::clicked, this, [this]() {this->timer.stop(); this->done(finishDialog::Replay); });
+	connect(this->ui.NextButton, &QPushButton::clicked, this, [this]() {if (this->keepInFrontTimer) this->keepInFrontTimer->stop(); this->done(finishDialog::Accepted); } );
+	connect(this->ui.cancelButton, &QPushButton::clicked, this, [this]() {if (this->keepInFrontTimer) this->keepInFrontTimer->stop(); this->done(finishDialog::Rejected); });
+	connect(this->ui.skipButton, &QPushButton::clicked, this, [this]() { if (this->keepInFrontTimer) this->keepInFrontTimer->stop(); this->done(finishDialog::Skip); });
+	connect(this->ui.replayButton, &QPushButton::clicked, this, [this]() {if (this->keepInFrontTimer) this->keepInFrontTimer->stop(); this->done(finishDialog::Replay); });
 
-	connect(&this->timer, &QTimer::timeout, this, [this] {
-		if (QGuiApplication::queryKeyboardModifiers() & Qt::AltModifier)
-			return;
-		//if (not (this->isActiveWindow() and utils::IsMyWindowVisible(this))) {
-			utils::bring_hwnd_to_foreground_uiautomation_method((HWND)this->winId(), qMainApp->uiAutomation);
-			this->raise();
-			this->show();
-			this->activateWindow();
-		//}
-	});
+	//if (not (this->isActiveWindow() and utils::IsMyWindowVisible(this))) {
+	const HWND playerHwnd = this->m_player ? this->m_player->player_hwnd : nullptr;
+	this->keepInFrontTimer = utils::start_keep_window_in_front(this, playerHwnd, qMainApp->uiAutomation);
+	//}
 	if (MW->App->config->get_bool("auto_continue")) {
 		this->countdownSeconds = MW->App->config->get("auto_continue_delay").toInt();
 		this->updateCountdownText();
@@ -228,7 +225,8 @@ finishDialog::finishDialog(MainWindow* MW, QSharedPointer<BasePlayer> player, Pl
 			this->countdownSeconds--;
 			if (this->countdownSeconds <= 0) {
 				this->countdownTimer.stop();
-				this->timer.stop();
+				if (this->keepInFrontTimer)
+					this->keepInFrontTimer->stop();
 				this->done(finishDialog::Accepted);
 			} else {
 				this->updateCountdownText();
@@ -238,7 +236,6 @@ finishDialog::finishDialog(MainWindow* MW, QSharedPointer<BasePlayer> player, Pl
 		this->installEventFilter(this);
 		this->ui.tagsButton->installEventFilter(this);
 	}
-	this->timer.start(250);
 
 	// Apply button customization for the context
 	this->configureForContext();
@@ -348,7 +345,8 @@ void finishDialog::updateWindowTitle() {
 finishDialog::~finishDialog()
 {
     titleUpdateTimer.stop();
-    timer.stop();
+    if (keepInFrontTimer)
+        keepInFrontTimer->stop();
     countdownTimer.stop();
     QToolTip::hideText();
 }

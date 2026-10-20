@@ -23,6 +23,11 @@
 #include <QEventLoop>
 #include <QUrl>
 #include <QTimer>
+#include <QGuiApplication>
+#include <QScreen>
+#include <QCursor>
+#include <QMessageBox>
+#include <QWidget>
 #include <atomic>
 
 // SIMD intrinsics
@@ -563,6 +568,109 @@ void utils::bring_hwnd_to_foreground_all(HWND hwnd, IUIAutomation* uiAutomation)
 	// - bring_hwnd_to_foreground_attach_method()   (changes the global foreground lock timeout)
 	//if (GetForegroundWindow() != this->old_foreground_window)
 	//	bring_hwnd_to_foreground_attach_method(this->old_foreground_window);
+}
+
+bool utils::is_player_window_focused(HWND playerHwnd)
+{
+	if (!playerHwnd)
+		return false;
+	const HWND foreground = GetForegroundWindow();
+	if (!foreground)
+		return false;
+	return foreground == playerHwnd || IsChild(playerHwnd, foreground);
+}
+
+void utils::keep_window_in_front_tick(QWidget* window, HWND playerHwnd, IUIAutomation* uiAutomation)
+{
+	if (!window)
+		return;
+	const HWND windowHwnd = (HWND)window->winId();
+	const HWND foreground = GetForegroundWindow();
+	DWORD foregroundPid = 0;
+	if (foreground)
+		GetWindowThreadProcessId(foreground, &foregroundPid);
+	const bool playerFocused = utils::is_player_window_focused(playerHwnd);
+	const bool appFocused = foreground && foregroundPid == GetCurrentProcessId();
+	if (!playerFocused && !appFocused) {
+		// An unrelated app has focus: stop floating above it. Merely dropping the topmost
+		// flag leaves the window at its current z-order, still above the window that was
+		// just activated, so explicitly send it to the bottom as well. It stays open and
+		// comes back when this app or the player is activated.
+		SetWindowPos(windowHwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+			SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+		SetWindowPos(windowHwnd, HWND_BOTTOM, 0, 0, 0, 0,
+			SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+		return;
+	}
+	// Do not fight an Alt+Tab in progress. This only gates bringing a window forward;
+	// the lowering above still runs while Alt is held.
+	if (QGuiApplication::queryKeyboardModifiers() & Qt::AltModifier)
+		return;
+	if (playerFocused) {
+		// The player took focus; bring the window back and focus it.
+		SetWindowPos(windowHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+			SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+		utils::bring_hwnd_to_foreground_uiautomation_method(windowHwnd, uiAutomation);
+		window->raise();
+		window->activateWindow();
+		return;
+	}
+	// This app is active: keep the window above a topmost fullscreen player, but do not
+	// activate it again when it is already the foreground window.
+	SetWindowPos(windowHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+		SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+	if (foreground != windowHwnd) {
+		utils::bring_hwnd_to_foreground_uiautomation_method(windowHwnd, uiAutomation);
+		window->activateWindow();
+	}
+	window->raise();
+}
+
+QTimer* utils::start_keep_window_in_front(QWidget* window, HWND playerHwnd, IUIAutomation* uiAutomation, int intervalMs)
+{
+	if (!window)
+		return nullptr;
+	if (intervalMs <= 0)
+		intervalMs = 50;
+	QTimer* timer = new QTimer(window);
+	timer->setInterval(intervalMs);
+	QObject::connect(timer, &QTimer::timeout, window, [window, playerHwnd, uiAutomation] {
+		utils::keep_window_in_front_tick(window, playerHwnd, uiAutomation);
+	});
+	timer->start();
+	return timer;
+}
+
+void utils::center_widget_on_active_screen(QWidget* widget)
+{
+	if (!widget)
+		return;
+	QScreen* screen = QGuiApplication::screenAt(QCursor::pos());
+	if (!screen)
+		screen = QGuiApplication::primaryScreen();
+	if (!screen)
+		return;
+	widget->adjustSize();
+	const QRect available = screen->availableGeometry();
+	widget->move(available.center() - widget->rect().center());
+}
+
+void utils::exec_topmost_message_box(QMessageBox& box, IUIAutomation* uiAutomation, HWND playerHwnd, int intervalMs)
+{
+	// No parent/owner: activating an owned popup can restore the owner window, which
+	// would drag the main window over the video. An unparented application-modal window
+	// blocks the app without touching any other window. Tool keeps it out of the taskbar
+	// and Alt+Tab, like the parented dialogs.
+	box.setWindowFlag(Qt::Tool, true);
+	box.setWindowModality(Qt::ApplicationModal);
+	utils::center_widget_on_active_screen(&box);
+	const HWND popupHwnd = (HWND)box.winId();
+	SetWindowPos(popupHwnd, HWND_TOPMOST, 0, 0, 0, 0,
+		SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+	QTimer* bringToFrontTimer = utils::start_keep_window_in_front(&box, playerHwnd, uiAutomation, intervalMs);
+	box.exec();
+	if (bringToFrontTimer)
+		bringToFrontTimer->stop();
 }
 
 bool utils::is_hwnd_full_screen(HWND hwnd) {

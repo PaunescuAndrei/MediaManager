@@ -32,8 +32,12 @@
 #include "IconChanger.h"
 #include "BlockingQueue.h"
 #include <QTimer>
+#include <QEventLoop>
+#include <QElapsedTimer>
+#include <QScopedValueRollback>
 #include "SettingsDialog.h"
 #include <QWindow>
+#include <QGuiApplication>
 #include <QScreen>
 #include <QRect>
 #include "ResetDBDialog.h"
@@ -349,6 +353,10 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         }
         else {
             selectedChoice = candidates.first();
+        }
+
+        if (!this->ensureSafeVolumeForSwitch(this->App->VW->mainPlayer)) {
+            return;
         }
 
         bool video_changed = this->applyNextChoice(selectedChoice);
@@ -1651,11 +1659,125 @@ void MainWindow::resize_center(int w, int h)
     }
 }
 
+int MainWindow::readPlayerVolume(QSharedPointer<BasePlayer> player, int timeoutMs)
+{
+    if (!player)
+        return -1;
+    int reported = -1;
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QTimer settle;
+    settle.setSingleShot(true);
+    // Do not quit on the first report: a notification that was already queued could be
+    // older than the CMD_GETVOLUME response. Wait a short settle window for the latest.
+    const QMetaObject::Connection volumeConnection = QObject::connect(
+        player.data(), &BasePlayer::volumeChanged, &loop,
+        [&reported, &settle](int volume) {
+            reported = volume;
+            settle.start(MainWindow::VOLUME_READ_SETTLE_MS);
+        });
+    QObject::connect(&settle, &QTimer::timeout, &loop, &QEventLoop::quit);
+    QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timeout.start(timeoutMs);
+    player->requestVolume();
+    loop.exec();
+    QObject::disconnect(volumeConnection);
+    return reported;
+}
+
+bool MainWindow::setPlayerVolumeAndVerify(QSharedPointer<BasePlayer> player, int target, int timeoutMs)
+{
+    if (!player)
+        return false;
+    const int clampedTarget = qBound(0, target, 100);
+    QElapsedTimer elapsed;
+    elapsed.start();
+    int attempts = 0;
+    while (elapsed.elapsed() < timeoutMs && attempts < 4) {
+        player->setVolume(clampedTarget);
+        const int remaining = timeoutMs - static_cast<int>(elapsed.elapsed());
+        const int queryTimeout = std::max(100, std::min(VOLUME_SET_QUERY_TIMEOUT_MS, remaining));
+        if (this->readPlayerVolume(player, queryTimeout) == clampedTarget)
+            return true;
+        ++attempts;
+    }
+    return false;
+}
+
+bool MainWindow::ensureSafeVolumeForSwitch(QSharedPointer<BasePlayer> player)
+{
+    Config* config = this->App ? this->App->config : nullptr;
+    if (!config || !config->get_bool("next_volume_guard_enabled") || !player)
+        return true;
+    if (this->volumeGuardActive)
+        return false;
+    QScopedValueRollback<bool> guardActive(this->volumeGuardActive, true);
+
+    bool thresholdOk = false;
+    bool targetOk = false;
+    int threshold = config->get("next_volume_guard_threshold").toInt(&thresholdOk);
+    int target = config->get("next_volume_guard_target").toInt(&targetOk);
+    if (!thresholdOk)
+        threshold = 50;
+    if (!targetOk)
+        target = 20;
+    threshold = qBound(1, threshold, 100);
+    target = qBound(0, target, 100);
+
+    const int current = this->readPlayerVolume(player, VOLUME_QUERY_TIMEOUT_MS);
+    if (current < 0) {
+        qMainApp->logger->log(QStringLiteral("Next volume guard: the player did not report its volume, check skipped."), "Video");
+        return true;
+    }
+    if (current < threshold)
+        return true;
+
+    QMessageBox box;
+    box.setWindowTitle(QStringLiteral("High player volume"));
+    box.setIcon(QMessageBox::NoIcon);
+    box.setText(QStringLiteral("The player volume is at %1%.").arg(current));
+    box.setInformativeText(QStringLiteral("The next video can be much louder. Lower the volume before switching?"));
+    QPushButton* lowerButton = box.addButton(QStringLiteral("Set to %1% and continue").arg(target), QMessageBox::AcceptRole);
+    QPushButton* ignoreButton = box.addButton(QStringLiteral("Ignore and continue"), QMessageBox::AcceptRole);
+    QPushButton* cancelButton = box.addButton(QMessageBox::Cancel);
+    box.setDefaultButton(lowerButton);
+    box.setEscapeButton(cancelButton);
+
+    utils::exec_topmost_message_box(box, qMainApp->uiAutomation, player->player_hwnd);
+
+    QAbstractButton* clicked = box.clickedButton();
+    if (clicked == ignoreButton) {
+        qMainApp->logger->log(QStringLiteral("Next volume guard: volume %1% is at or above %2%; ignored.").arg(current).arg(threshold), "Video");
+        return true;
+    }
+    if (clicked != lowerButton) {
+        qMainApp->logger->log(QStringLiteral("Next volume guard: volume change to %1% cancelled.").arg(target), "Video");
+        return false;
+    }
+
+    qMainApp->logger->log(QStringLiteral("Next volume guard: lowering the player volume from %1% to %2% before switching.").arg(current).arg(target), "Video");
+    if (!this->setPlayerVolumeAndVerify(player, target, VOLUME_SET_TIMEOUT_MS)) {
+        const QString message = QStringLiteral("The player did not confirm the volume change to %1%. The video was not switched.").arg(target);
+        qMainApp->logger->log(message, "Error");
+        QMessageBox errorBox;
+        errorBox.setWindowTitle(QStringLiteral("Volume not changed"));
+        errorBox.setIcon(QMessageBox::NoIcon);
+        errorBox.setText(message);
+        utils::exec_topmost_message_box(errorBox, qMainApp->uiAutomation, player->player_hwnd);
+        return false;
+    }
+    qMainApp->logger->log(QStringLiteral("Next volume guard: volume change to %1% confirmed.").arg(target), "Video");
+    return true;
+}
+
 bool MainWindow::NextButtonClicked(bool increment, bool update_watched_state, bool skipped) {
     return this->NextButtonClicked(this->App->VW->mainPlayer, increment, update_watched_state, skipped);
 }
 
-bool MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state, bool skipped) {
+bool MainWindow::NextButtonClicked(QSharedPointer<BasePlayer> player, bool increment, bool update_watched_state, bool skipped, bool volumeGuardChecked) {
+    if (!volumeGuardChecked && !this->ensureSafeVolumeForSwitch(player))
+        return false;
     NextVideoModes::Mode mode = this->getNextVideoMode();
 
     int oldVideoId = -1;
@@ -2866,6 +2988,9 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     config->set("next_multichoice_enabled", dialog->ui.nextMultiChoiceEnabled->isChecked() ? "True" : "False");
     config->set("next_multichoice_count", QString::number(dialog->ui.nextMultiChoiceCount->value()));
     config->set("next_multichoice_append_on_refresh", dialog->ui.nextMultiChoiceAppendOnRefresh->isChecked() ? "True" : "False");
+    config->set("next_volume_guard_enabled", dialog->nextVolumeGuardEnabled->isChecked() ? "True" : "False");
+    config->set("next_volume_guard_threshold", QString::number(dialog->nextVolumeGuardThreshold->value()));
+    config->set("next_volume_guard_target", QString::number(dialog->nextVolumeGuardTarget->value()));
     config->set("rarity_enabled", dialog->ui.rarityEnabled->isChecked() ? "True" : "False");
     // Enforce non-strict ascending: SSR ≤ SR ≤ R.
     // Equality is allowed — it merges adjacent tiers (the lower one becomes
@@ -3529,19 +3654,23 @@ void MainWindow::showEndOfVideoDialog(QSharedPointer<BasePlayer> player, finishD
                 if (result == finishDialog::Accepted) {
                     // Next (MainPlayer) or End (WatchSelected/WatchExternal)
                     if (context == finishDialog::PlayerContext::MainPlayer) {
-                        player->change_in_progress = true;
-                        if (player->position != -1) {
-                            this->App->db->updateVideoProgress(player->video_id, player->position);
+                        // Run the guard before touching player or database state so a
+                        // cancellation leaves the finished video exactly as it is.
+                        if (this->ensureSafeVolumeForSwitch(player)) {
+                            player->change_in_progress = true;
+                            if (player->position != -1) {
+                                this->App->db->updateVideoProgress(player->video_id, player->position);
+                            }
+                            // Preserve the finish state so a Replay in the Next chooser
+                            // can still credit this completed watch — the Next flow resets
+                            // position to -1 and advances the checkpoint below.
+                            player->replayEndPosition = player->position;
+                            player->replayCheckpoint = player->lastCheckpointWatchedTime;
+                            player->position = -1;
+                            this->NextButtonClicked(player, true, this->getCheckedUpdateWatchedToggleButton(), false, true);
+                            this->position = 0;
+                            // changePlayerVideo already shows a new notification
                         }
-                        // Preserve the finish state so a Replay in the Next chooser
-                        // can still credit this completed watch — the Next flow resets
-                        // position to -1 and advances the checkpoint below.
-                        player->replayEndPosition = player->position;
-                        player->replayCheckpoint = player->lastCheckpointWatchedTime;
-                        player->position = -1;
-                        this->NextButtonClicked(player, true, this->getCheckedUpdateWatchedToggleButton());
-                        this->position = 0;
-                        // changePlayerVideo already shows a new notification
                     } else {
                         // WatchSelected or WatchExternal — End button
                         // Finalize watch history with completed = true
@@ -3742,6 +3871,10 @@ void MainWindow::replayVideo(QSharedPointer<BasePlayer> player, finishDialog::Pl
 }
 
 void MainWindow::SkipVideo() {
+    // Before the skip bookkeeping below: a cancelled guard must not mark the
+    // video skipped or touch the player position.
+    if (!this->ensureSafeVolumeForSwitch(this->App->VW->mainPlayer))
+        return;
     const double previousUiPosition = this->position;
     double previousPlayerPosition = -1;
     if (this->App->VW->mainPlayer) {
@@ -3753,7 +3886,7 @@ void MainWindow::SkipVideo() {
         this->App->VW->mainPlayer->change_in_progress = true;
         this->App->VW->mainPlayer->position = -1;
     }
-    const bool video_changed = this->NextButtonClicked(this->App->VW->mainPlayer, false, this->getCheckedUpdateWatchedToggleButton(), true);
+    const bool video_changed = this->NextButtonClicked(this->App->VW->mainPlayer, false, this->getCheckedUpdateWatchedToggleButton(), true, true);
     if (video_changed) {
         this->position = 0;
     } else {

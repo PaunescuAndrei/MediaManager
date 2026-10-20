@@ -58,7 +58,6 @@ private:
     QIcon* activeIcon = nullptr;
     QIcon* halfIcon = nullptr;
     QIcon* inactiveIcon = nullptr;
-    QTimer bringToFrontTimer;
     QHash<int, VideoPreviewWidget*> previewWidgets;
     bool previewAutoplayAllMute = false;
     bool previewEnabled = true;

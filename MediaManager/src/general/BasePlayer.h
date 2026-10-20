@@ -79,6 +79,12 @@ public:
     virtual void displayOsdMessage(QString message, int duration, bool direct = false) = 0;  
     virtual void drop() = 0;  
     virtual void changeVideo(QString path, int video_id, double position = 0) = 0;  
+    // Player volume, 0-100. The state and notification are generic to every player; the
+    // concrete player supplies the transport in requestVolume()/setVolume() and calls
+    // handleReportedVolume() when the player reports a change.
+    int currentVolume() const { return m_volume.load(); }
+    virtual void requestVolume() = 0;
+    virtual void setVolume(int volume) = 0;
     void startWatchedTiming();
     void stopWatchedTiming();
     double getTotalWatchedTime();
@@ -119,9 +125,14 @@ public:
 signals:  
     void endOfVideoSignal();  
     void pausedChangedSignal(bool paused);  
+    void volumeChanged(int volume);
 
 private slots:  
     void onPausedChanged(bool paused);  
+
+protected:
+    // Called by a concrete player when it receives a volume notification.
+    void handleReportedVolume(int volume);
 
 private:
     QString m_videoPath;
@@ -133,6 +144,9 @@ private:
     QDateTime m_lastCheckpointTime;
     std::shared_ptr<std::chrono::microseconds> m_watchedTimeStart;
     std::atomic<bool> m_processAlive{ false };
+    // Written by the GUI thread when the player reports a volume, read from the GUI
+    // thread by the guard; atomic in case a concrete player reports from its own thread.
+    std::atomic<int> m_volume{ -1 };
     mutable QMutex m_stateLock;
     mutable QMutex m_historyLock;
 };

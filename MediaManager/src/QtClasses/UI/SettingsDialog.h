@@ -39,6 +39,11 @@ public:
     bool oldTooltipsEnabled = true;
     int oldTooltipDelayMs = 700;
 
+    // Playback page — next-video volume guard
+    QCheckBox* nextVolumeGuardEnabled = nullptr;
+    QSpinBox* nextVolumeGuardThreshold = nullptr;
+    QSpinBox* nextVolumeGuardTarget = nullptr;
+
     SettingsDialog(QWidget* parent = nullptr);
     ~SettingsDialog();
     Ui::SettingsDialog ui;

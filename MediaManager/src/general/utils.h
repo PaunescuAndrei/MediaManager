@@ -23,6 +23,9 @@
 #include <vector>
 
 class MainApp;
+class QWidget;
+class QMessageBox;
+class QTimer;
 
 namespace utils {
 	QString pathAppend(const QString& path1, const QString& path2);
@@ -62,6 +65,16 @@ namespace utils {
 	void bring_hwnd_to_foreground_console_method(HWND hwnd);
 	void bring_hwnd_to_foreground(HWND hwnd);
 	void bring_hwnd_to_foreground_all(HWND hwnd, IUIAutomation* uiAutomation);
+	// True when the player window (or one of its children) currently has foreground focus.
+	bool is_player_window_focused(HWND playerHwnd);
+	// One tick of the shared keep-in-front behavior: re-raise above the player/app when
+	// either is active, and drop below unrelated apps otherwise.
+	void keep_window_in_front_tick(QWidget* window, HWND playerHwnd, IUIAutomation* uiAutomation);
+	// Starts the periodic keep-in-front behavior for a window. The timer is parented to
+	// the window, so it stops when the window is destroyed. Callers choose their interval.
+	QTimer* start_keep_window_in_front(QWidget* window, HWND playerHwnd, IUIAutomation* uiAutomation, int intervalMs = 50);
+	void center_widget_on_active_screen(QWidget* widget);
+	void exec_topmost_message_box(QMessageBox& box, IUIAutomation* uiAutomation, HWND playerHwnd = nullptr, int intervalMs = 50);
 	bool is_hwnd_full_screen(HWND hwnd);
 	qreal volume_convert(int volume);
 	QString getParentDirectoryName(QString path, int depth);

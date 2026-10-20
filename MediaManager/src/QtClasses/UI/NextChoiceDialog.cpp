@@ -179,25 +179,13 @@ NextChoiceDialog::NextChoiceDialog(QWidget* parent) : QDialog(parent)
     if (auto buttonBox = this->findChild<QDialogButtonBox*>()) {
         connect(buttonBox, &QDialogButtonBox::rejected, this, &NextChoiceDialog::reject);
     }
-    this->bringToFrontTimer.setInterval(250);
-    connect(&this->bringToFrontTimer, &QTimer::timeout, this, [this] {
-        if (QGuiApplication::queryKeyboardModifiers() & Qt::AltModifier)
-            return;
-        utils::bring_hwnd_to_foreground_uiautomation_method((HWND)this->winId(), qMainApp->uiAutomation);
-        this->raise();
-        this->show();
-        this->activateWindow();
-        });
-    this->bringToFrontTimer.start();
+    const HWND playerHwnd = (qMainApp->VW && qMainApp->VW->mainPlayer) ? qMainApp->VW->mainPlayer->player_hwnd : nullptr;
+    utils::start_keep_window_in_front(this, playerHwnd, qMainApp->uiAutomation);
 
     this->rarityEnabled = qMainApp->config->get_bool("rarity_enabled");
     this->ssrColor = QColor(qMainApp->config->get("rarity_ssr_color"));
     this->srColor = QColor(qMainApp->config->get("rarity_sr_color"));
     this->rColor = QColor(qMainApp->config->get("rarity_r_color"));
-
-    connect(this, &QDialog::finished, this, [this](int) {
-        this->bringToFrontTimer.stop();
-        });
 }
 
 NextChoiceDialog::~NextChoiceDialog()

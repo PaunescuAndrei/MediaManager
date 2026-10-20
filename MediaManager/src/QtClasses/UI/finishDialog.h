@@ -24,7 +24,7 @@ public:
    MainWindow* MW = nullptr;
    QSharedPointer<BasePlayer> m_player;
    PlayerContext m_context = PlayerContext::MainPlayer;
-   QTimer timer;
+   QTimer* keepInFrontTimer = nullptr;
    QTimer countdownTimer;
    QTimer titleUpdateTimer;
    int countdownSeconds = 10;

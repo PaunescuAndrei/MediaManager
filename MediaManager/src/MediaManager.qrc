@@ -15,4 +15,7 @@
         <file>resources/star_border_half.png</file>
         <file>resources/star_half.png</file>
     </qresource>
+    <qresource prefix="/qml">
+        <file alias="PreviewVideo.qml">qml/PreviewVideo.qml</file>
+    </qresource>
 </RCC>

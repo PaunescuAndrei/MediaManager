@@ -197,6 +197,7 @@ void MainApp::toggleLogWindow() {
 	if (this->logDialog == nullptr) {
 		this->logDialog = new LogDialog();
 		this->logDialog->setAttribute(Qt::WA_DeleteOnClose);
+		utils::cloak_until_first_paint(this->logDialog);
 		this->logDialog->show();
 	}
 	else {

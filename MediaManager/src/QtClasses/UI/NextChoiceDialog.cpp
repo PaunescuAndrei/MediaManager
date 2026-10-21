@@ -330,6 +330,9 @@ void NextChoiceDialog::setChoices(const QList<NextVideoChoice>& newChoices)
     if (!this->previewLazyLoading && this->previewEnabled && !this->isVisible() && !this->pendingPreviews.isEmpty()) {
         this->waitForPreviewsOnShow = true;
         this->setWindowOpacity(0.0);
+        // Ask DWM not to compose the window at all until the previews are
+        // ready, so nothing can be presented while it loads.
+        utils::set_window_cloaked(this, true);
     }
 }
 
@@ -737,6 +740,8 @@ void NextChoiceDialog::revealDialog()
         return;
     this->waitForPreviewsOnShow = false;
     this->readyShowArmed = false;
+    // Uncloak first (still transparent), then make it opaque at the same spot.
+    utils::set_window_cloaked(this, false);
     this->setWindowOpacity(1.0);
     this->raise();
     this->activateWindow();

@@ -28,6 +28,11 @@
 #include <QCursor>
 #include <QMessageBox>
 #include <QWidget>
+
+#ifdef Q_OS_WIN
+#include <dwmapi.h>
+#pragma comment(lib, "dwmapi.lib")
+#endif
 #include <atomic>
 
 // SIMD intrinsics
@@ -639,6 +644,57 @@ QTimer* utils::start_keep_window_in_front(QWidget* window, HWND playerHwnd, IUIA
 	});
 	timer->start();
 	return timer;
+}
+
+void utils::set_window_cloaked(QWidget* window, bool cloaked)
+{
+#ifdef Q_OS_WIN
+	if (!window)
+		return;
+	// DWMWA_CLOAK keeps the window mapped but stops DWM from composing it,
+	// which is the only reliable way to suppress the origin ghost Windows
+	// presents when a top-level window is first shown.
+	BOOL value = cloaked ? TRUE : FALSE;
+	DwmSetWindowAttribute(reinterpret_cast<HWND>(window->winId()), DWMWA_CLOAK, &value, sizeof(value));
+#else
+	Q_UNUSED(window);
+	Q_UNUSED(cloaked);
+#endif
+}
+
+namespace {
+class FirstPaintUncloakFilter : public QObject
+{
+public:
+	explicit FirstPaintUncloakFilter(QWidget* window) : QObject(window), window(window) {}
+
+protected:
+	bool eventFilter(QObject* obj, QEvent* event) override
+	{
+		if (event->type() == QEvent::Paint) {
+			utils::set_window_cloaked(this->window, false);
+			this->deleteLater();
+		}
+		return QObject::eventFilter(obj, event);
+	}
+
+private:
+	QWidget* window;
+};
+}
+
+void utils::cloak_until_first_paint(QWidget* window)
+{
+#ifdef Q_OS_WIN
+	if (!window)
+		return;
+	utils::set_window_cloaked(window, true);
+	window->installEventFilter(new FirstPaintUncloakFilter(window));
+	// Safety net: never leave the window cloaked if it somehow never paints.
+	QTimer::singleShot(250, window, [window] { utils::set_window_cloaked(window, false); });
+#else
+	Q_UNUSED(window);
+#endif
 }
 
 void utils::center_widget_on_active_screen(QWidget* widget)

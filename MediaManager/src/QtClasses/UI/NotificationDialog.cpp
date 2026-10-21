@@ -489,6 +489,7 @@ void NotificationWidget::showNotification()
 		counterLabel_->setTextOpacity(contentOpacity);
 	}
 
+	utils::cloak_until_first_paint(this);
 	this->show();
 	this->timer->start(this->timerInterval);
 	this->timer2->start(250);

@@ -73,6 +73,13 @@ namespace utils {
 	// Starts the periodic keep-in-front behavior for a window. The timer is parented to
 	// the window, so it stops when the window is destroyed. Callers choose their interval.
 	QTimer* start_keep_window_in_front(QWidget* window, HWND playerHwnd, IUIAutomation* uiAutomation, int intervalMs = 50);
+	// Windows: cloak/uncloak a top-level window through DWM so it is not composed
+	// while it is being prepared. No-op on other platforms.
+	void set_window_cloaked(QWidget* window, bool cloaked);
+	// Windows: cloak a top-level window until it paints its first frame, then
+	// uncloak it. Prevents the one-frame ghost Windows presents at the origin
+	// when a window is first shown. No-op on other platforms.
+	void cloak_until_first_paint(QWidget* window);
 	void center_widget_on_active_screen(QWidget* widget);
 	void exec_topmost_message_box(QMessageBox& box, IUIAutomation* uiAutomation, HWND playerHwnd = nullptr, int intervalMs = 50);
 	bool is_hwnd_full_screen(HWND hwnd);

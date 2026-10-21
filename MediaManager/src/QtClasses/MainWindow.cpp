@@ -3654,6 +3654,7 @@ void MainWindow::showEndOfVideoDialog(QSharedPointer<BasePlayer> player, finishD
             // Show first: raising/activating before the native window exists
             // creates it at its unpositioned origin, which flashes the window
             // outline at the top-left before it moves into place.
+            utils::cloak_until_first_paint(this->finish_dialog);
             this->finish_dialog->open();
             this->finish_dialog->raise();
             this->finish_dialog->activateWindow();

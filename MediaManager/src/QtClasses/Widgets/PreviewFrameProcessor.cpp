@@ -1,14 +1,34 @@
 #include "stdafx.h"
 #include "PreviewFrameProcessor.h"
+#include <QByteArray>
 #include <QMetaType>
 #include <QThread>
 #include <QVideoSink>
+
+// Qt 6.12 turns a failed hardware-frame readback into a QImage that keeps the
+// full frame size but points at QByteArray's shared empty buffer
+// (qvideoframeconverter.cpp, qImageFromVideoFrame). Painting such an image reads
+// out of bounds, so treat it as an unusable frame instead.
+static bool hasPixelData(const QImage& image)
+{
+    if (image.isNull() || image.sizeInBytes() <= 0)
+        return false;
+
+    static const uchar* const emptyBuffer = reinterpret_cast<const uchar*>(QByteArray().constData());
+    return image.constBits() != emptyBuffer;
+}
 
 void FrameWorker::processFrame(const QVideoFrame& frame)
 {
     QImage image;
     if (frame.isValid()) {
         image = frame.toImage();
+        if (!hasPixelData(image)) {
+            static std::atomic<bool> warned = false;
+            if (!warned.exchange(true))
+                qWarning() << "FrameWorker: dropping frame without pixel data";
+            image = QImage();
+        }
     }
     emit frameReady(image);
 }

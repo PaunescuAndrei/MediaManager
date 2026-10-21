@@ -4,10 +4,16 @@
 #include "definitions.h"
 #include <QIcon>
 #include <QHash>
+#include <QList>
+#include <QPointer>
+#include <QSet>
+#include <QString>
 #include <functional>
 
 class VideoPreviewWidget;
 class QLabel;
+class QLayout;
+class QQuickWidget;
 
 class NextChoiceDialog : public QDialog
 {
@@ -42,6 +48,19 @@ public:
 signals:
     void replayRequested();
 private:
+    // Previews are created after the dialog is shown so the window paints its
+    // background immediately instead of flashing white while players load.
+    struct PendingPreview {
+        int index = -1;
+        QString path;
+        QPointer<QWidget> placeholder;
+        QLayout* layout = nullptr;
+    };
+    void schedulePreviewBuild(int delayMs = 0);
+    void buildPendingPreviews();
+    void connectPreviewReady(VideoPreviewWidget* preview);
+    void revealDialogIfReady();
+    void revealDialog();
     void rebuildCards(int startIndex = 0);
     QWidget* buildCard(const NextVideoChoice& choice, int index);
     void applySelection(int index);
@@ -59,6 +78,14 @@ private:
     QIcon* halfIcon = nullptr;
     QIcon* inactiveIcon = nullptr;
     QHash<int, VideoPreviewWidget*> previewWidgets;
+    QList<PendingPreview> pendingPreviews;
+    QQuickWidget* texturePrimer = nullptr;
+    QSet<VideoPreviewWidget*> readyPreviews;
+    bool previewBuildScheduled = false;
+    bool previewBuildInProgress = false;
+    bool previewLazyLoading = true;
+    bool waitForPreviewsOnShow = false;
+    bool readyShowArmed = false;
     bool previewAutoplayAllMute = false;
     bool previewEnabled = true;
     QLabel* counterLabel = nullptr;
@@ -79,4 +106,5 @@ private:
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
     void closeEvent(QCloseEvent* e) override;
+    void showEvent(QShowEvent* e) override;
 };

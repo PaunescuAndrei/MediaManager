@@ -40,6 +40,7 @@ signals:
     void previewStarted(const QString& path);
     void previewStopped(const QString& path);
     void videoSizeKnown(const QSize& size);
+    void firstFrameReady();
 private:
     void handleVideoSizeChanged();
 private:
@@ -73,6 +74,7 @@ private:
     qint64 lastPositionMs = 0;
     QString lastOverlayText;
     bool awaitingLoad = false;
+    bool firstFrameSeen = false;
     bool preloadActive = false;
     bool preloadPause = false;
     QMetaObject::Connection statusConn;

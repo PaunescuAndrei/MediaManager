@@ -201,9 +201,12 @@ finishDialog::finishDialog(MainWindow* MW, QSharedPointer<BasePlayer> player, Pl
 		}
 		QTimer::singleShot(100, [dialog] {
 			if (dialog) {
+				// Show before winId()/raise(): touching the native window before
+				// it is shown creates it at the origin, which flashes an outline
+				// at the top-left before it moves into place.
+				dialog->show();
 				utils::bring_hwnd_to_foreground_uiautomation_method((HWND)dialog->winId(), qMainApp->uiAutomation);
 				dialog->raise();
-				dialog->show();
 				dialog->activateWindow();
 			}
 		});

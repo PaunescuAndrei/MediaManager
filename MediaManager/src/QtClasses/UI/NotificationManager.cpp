@@ -47,7 +47,31 @@ void NotificationManager::insertNotification(NotificationWidget* dialog)
 	);
 
 	activeNotifications_.append(dialog);
-	// Reposition happens after showNotification() so layout is calculated
+
+	// Position the notification before it is shown. showNotification() shows
+	// the window immediately, and only the later repositionAll() moves it, so
+	// showing first makes the top-level flash at the origin for a frame.
+	QScreen* screen = QGuiApplication::primaryScreen();
+	if (screen && dialog) {
+		const QRect screenGeometry = screen->geometry();
+		const int topMargin = static_cast<int>(screenGeometry.height() * 0.03);
+		const int gap = 4;
+
+		dialog->adjustSize();
+		int currentY = topMargin;
+		for (NotificationWidget* notification : activeNotifications_) {
+			if (!notification || notification == dialog)
+				break;
+			if (!notification->isVisible())
+				continue;
+			currentY += notification->size().height() + gap;
+		}
+
+		const QSize hint = dialog->size();
+		QRect newRect = QStyle::alignedRect(Qt::LeftToRight, Qt::AlignHCenter, hint, screenGeometry);
+		newRect.moveTop(currentY);
+		dialog->setGeometry(newRect);
+	}
 }
 
 void NotificationManager::showVideoInfo()

@@ -974,6 +974,12 @@
               <property name="toolTip"><string>Jump to a new random position each time you hover a choice card</string></property>
              </widget>
             </item>
+            <item>
+             <widget class="QCheckBox" name="previewLazyLoading">
+              <property name="text"><string>Lazy-load previews (open the dialog immediately)</string></property>
+              <property name="toolTip"><string>Checked: the dialog opens right away and previews fill in shortly after. Unchecked: the window appears only once every preview has loaded its first frame, so it is complete but takes a bit longer to open.</string></property>
+             </widget>
+            </item>
            </layout>
           </widget>
          </item>

@@ -21,6 +21,7 @@ public:
     bool oldPreviewAutoplayAllMute = false;
     bool oldPreviewRememberPosition = false;
     bool oldPreviewRandomEachHover = false;
+    bool oldPreviewLazyLoading = true;
     bool oldPreviewNextChoicesEnabled = true;
     bool oldPreviewSeededRandom = false;
     int oldPreviewMainHistoryCount = 0;

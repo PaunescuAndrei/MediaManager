@@ -6,14 +6,39 @@
 #include <QVideoSink>
 #include <QUrl>
 #include <QQmlError>
+#include <QQmlEngine>
+#include <QQmlIncubationController>
+#include <QColor>
 #include <algorithm>
+
+namespace {
+// One QML engine shared by every preview. Each QQmlEngine loads the QtQuick and
+// QtMultimedia type sets, so a per-preview engine makes opening a grid of
+// previews take seconds. The engine is parented to the application, and the
+// incubation controller gets process lifetime because QQuickWidget otherwise
+// hands the engine its first offscreen window's controller.
+QQmlEngine* sharedPreviewEngine()
+{
+    static QQmlEngine* engine = nullptr;
+    if (!engine) {
+        static QQmlIncubationController incubationController;
+        engine = new QQmlEngine();
+        engine->setParent(qApp);
+        engine->setIncubationController(&incubationController);
+    }
+    return engine;
+}
+}
 
 OverlayGraphicsVideoWidget::OverlayGraphicsVideoWidget(QWidget* parent) : QWidget(parent)
 {
     this->setAttribute(Qt::WA_NoSystemBackground, true);
     this->setAutoFillBackground(false);
 
-    this->quick = new QQuickWidget(this);
+    this->quick = new QQuickWidget(sharedPreviewEngine(), this);
+    // Match the QML background so the scene graph does not clear to white
+    // before its first frame.
+    this->quick->setClearColor(QColor(17, 17, 17));
     // The video surface is not interactive: let clicks, wheel and hover events
     // reach the parent widgets (card selection, preview seeking) like they did
     // when this widget painted the frames itself.

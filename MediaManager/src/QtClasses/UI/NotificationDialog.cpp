@@ -44,8 +44,10 @@ NotificationWidget::NotificationWidget(NotificationType type, QWidget* parent)
 	this->timer2 = new QTimer(this);
 	connect(this->timer2, &QTimer::timeout, this, [this] {
 		if (!utils::IsMyWindowVisible(this)) {
-			this->raise();
+			// Show before raising: raising a hidden window creates its native
+			// handle at the origin, which flashes the outline at the top-left.
 			this->show();
+			this->raise();
 		}
 	});
 }

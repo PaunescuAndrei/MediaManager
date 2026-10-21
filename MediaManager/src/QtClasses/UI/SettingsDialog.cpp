@@ -564,6 +564,8 @@ void SettingsDialog::setupPlaybackPage(MainWindow* mw)
     this->oldPreviewAutoplayAllMute = this->ui.previewAutoplayAllMute->isChecked();
     setupCheckBox(this->ui.previewRandomEachHover, "preview_random_each_hover", mw);
     this->oldPreviewRandomEachHover = this->ui.previewRandomEachHover->isChecked();
+    setupCheckBox(this->ui.previewLazyLoading, "preview_lazy_loading", mw);
+    this->oldPreviewLazyLoading = this->ui.previewLazyLoading->isChecked();
 
     // --- Next Volume Guard ---
     QGroupBox* volumeGuardGroup = new QGroupBox(QStringLiteral("Next Volume Guard"));

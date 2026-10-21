@@ -13,6 +13,7 @@
 #include <QScreen>
 #include <QGuiApplication>
 #include <QDialogButtonBox>
+#include <QQuickWidget>
 #include <algorithm>
 #include <QWheelEvent>
 #include <QScrollBar>
@@ -135,6 +136,7 @@ protected:
 NextChoiceDialog::NextChoiceDialog(QWidget* parent) : QDialog(parent)
 {
     this->ui.setupUi(this);
+    this->setAutoFillBackground(true);
     this->setWindowModality(Qt::WindowModal);
     this->setWindowFlag(Qt::WindowStaysOnTopHint, true);
     connect(this->ui.refreshButton, &QPushButton::clicked, this, [this] {
@@ -298,6 +300,8 @@ void NextChoiceDialog::setChoices(const QList<NextVideoChoice>& newChoices)
     this->choices = newChoices;
     this->previewAutoplayAllMute = qMainApp->config->get_bool("preview_autoplay_all_mute");
     this->previewEnabled = qMainApp->config->get_bool("preview_next_choices_enabled");
+    this->previewLazyLoading = qMainApp->config->get_bool("preview_lazy_loading");
+    this->readyPreviews.clear();
     this->updateRefreshButtonText();
     if (doAppend) {
         this->rebuildCards(oldCount);
@@ -309,6 +313,24 @@ void NextChoiceDialog::setChoices(const QList<NextVideoChoice>& newChoices)
     }
 
     this->resizeToFit();
+
+    // A QQuickWidget marks its top-level window as a texture-child window when
+    // it is constructed. Creating the previews only after the dialog is visible
+    // makes the window switch to texture composition mid-life, which flashes
+    // the whole dialog; create a hidden primer before the first show instead.
+    // This runs after resizeToFit() so the window already has its final
+    // position if constructing the primer creates the native window.
+    if (this->previewEnabled && !this->isVisible() && !this->texturePrimer) {
+        this->texturePrimer = new QQuickWidget(this);
+        this->texturePrimer->hide();
+    }
+
+    // "Show when ready" mode: keep the dialog invisible until every preview has
+    // delivered its first frame, then reveal it fully populated.
+    if (!this->previewLazyLoading && this->previewEnabled && !this->isVisible() && !this->pendingPreviews.isEmpty()) {
+        this->waitForPreviewsOnShow = true;
+        this->setWindowOpacity(0.0);
+    }
 }
 
 void NextChoiceDialog::resizeToFit()
@@ -501,29 +523,19 @@ QWidget* NextChoiceDialog::buildCard(const NextVideoChoice& choice, int index)
     contentLayout->addLayout(infoLayout, 1);
 
     if (this->previewEnabled) {
-        VideoPreviewWidget* preview = new VideoPreviewWidget(card);
-        preview->setSource(choice.path);
-        preview->setStartDelay(0);
-        preview->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-        int previewVolume = qBound(0, qMainApp->config->get("preview_volume").toInt(), 100);
-        preview->setVolume(previewVolume);
-        bool randomHover = qMainApp->config->get_bool("preview_random_each_hover") && !this->previewAutoplayAllMute;
-        preview->setRandomStartEnabled(qMainApp->config->get_bool("preview_random_start"));
-        preview->setRememberPositionEnabled(qMainApp->config->get_bool("preview_remember_position"));
-        preview->setRandomOnHoverEnabled(randomHover);
-        bool seeded = qMainApp->config->get_bool("preview_seeded_random") && qMainApp->config->get_bool("random_use_seed");
-        preview->setSeededRandom(seeded, qMainApp->config->get("random_seed"));
-        double overlayScale = std::max(0.1, qMainApp->config->get("preview_overlay_scale").toDouble());
-        int overlayPadX = std::max(0, qMainApp->config->get("preview_overlay_pad_x").toInt());
-        int overlayPadY = std::max(0, qMainApp->config->get("preview_overlay_pad_y").toInt());
-        int overlayMargin = std::max(0, qMainApp->config->get("preview_overlay_margin").toInt());
-        preview->setOverlayStyle(overlayScale, overlayPadX, overlayPadY, overlayMargin);
-        preview->setMuted(true);
-        preview->prepareInitialFrame(this->previewAutoplayAllMute);
-        contentLayout->addWidget(preview, 1);
+        QWidget* placeholder = new QWidget(card);
+        placeholder->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        contentLayout->addWidget(placeholder, 1);
         contentLayout->setStretch(0, 1);
         contentLayout->setStretch(1, 1);
-        this->previewWidgets.insert(index, preview);
+
+        PendingPreview pending;
+        pending.index = index;
+        pending.path = choice.path;
+        pending.placeholder = placeholder;
+        pending.layout = contentLayout;
+        this->pendingPreviews.append(pending);
+        this->schedulePreviewBuild();
     } else {
         contentLayout->addStretch(1);
         contentLayout->setStretch(0, 1);
@@ -602,6 +614,8 @@ void NextChoiceDialog::rebuildCards(int startIndex)
     if (startIndex == 0) {
         this->stopAllPreviews();
         this->previewWidgets.clear();
+        this->pendingPreviews.clear();
+        this->readyPreviews.clear();
         while (QLayoutItem* item = grid->takeAt(0)) {
             if (QWidget* w = item->widget()) {
                 w->deleteLater();
@@ -622,6 +636,129 @@ void NextChoiceDialog::rebuildCards(int startIndex)
     if (usedColumns > maxColumns) usedColumns = maxColumns;
     for (int c = 0; c < maxColumns; ++c) {
         grid->setColumnStretch(c, c < usedColumns ? 1 : 0);
+    }
+}
+
+void NextChoiceDialog::schedulePreviewBuild(int delayMs)
+{
+    if (this->previewBuildScheduled || this->pendingPreviews.isEmpty() || !this->isVisible())
+        return;
+    this->previewBuildScheduled = true;
+    QTimer::singleShot(delayMs, this, [this] {
+        this->previewBuildScheduled = false;
+        this->buildPendingPreviews();
+    });
+}
+
+void NextChoiceDialog::buildPendingPreviews()
+{
+    if (this->pendingPreviews.isEmpty())
+        return;
+
+    // Build every preview in one go so all players start loading together
+    // instead of one after another. Updates stay disabled during the batch so
+    // the dialog is not repainted once per insertion.
+    const QList<PendingPreview> pendingList = this->pendingPreviews;
+    this->pendingPreviews.clear();
+    this->previewBuildInProgress = true;
+
+    this->setUpdatesEnabled(false);
+    for (const PendingPreview& pending : pendingList) {
+        QWidget* placeholder = pending.placeholder.data();
+        QWidget* card = placeholder ? placeholder->parentWidget() : nullptr;
+        if (!card || !pending.layout)
+            continue;
+        const int position = pending.layout->indexOf(placeholder);
+        if (position < 0)
+            continue;
+
+        pending.layout->removeWidget(placeholder);
+        placeholder->deleteLater();
+
+        VideoPreviewWidget* preview = new VideoPreviewWidget(card);
+        preview->setSource(pending.path);
+        preview->setStartDelay(0);
+        preview->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        int previewVolume = qBound(0, qMainApp->config->get("preview_volume").toInt(), 100);
+        preview->setVolume(previewVolume);
+        bool randomHover = qMainApp->config->get_bool("preview_random_each_hover") && !this->previewAutoplayAllMute;
+        preview->setRandomStartEnabled(qMainApp->config->get_bool("preview_random_start"));
+        preview->setRememberPositionEnabled(qMainApp->config->get_bool("preview_remember_position"));
+        preview->setRandomOnHoverEnabled(randomHover);
+        bool seeded = qMainApp->config->get_bool("preview_seeded_random") && qMainApp->config->get_bool("random_use_seed");
+        preview->setSeededRandom(seeded, qMainApp->config->get("random_seed"));
+        double overlayScale = std::max(0.1, qMainApp->config->get("preview_overlay_scale").toDouble());
+        int overlayPadX = std::max(0, qMainApp->config->get("preview_overlay_pad_x").toInt());
+        int overlayPadY = std::max(0, qMainApp->config->get("preview_overlay_pad_y").toInt());
+        int overlayMargin = std::max(0, qMainApp->config->get("preview_overlay_margin").toInt());
+        preview->setOverlayStyle(overlayScale, overlayPadX, overlayPadY, overlayMargin);
+        preview->setMuted(true);
+        preview->prepareInitialFrame(this->previewAutoplayAllMute);
+
+        if (auto* box = qobject_cast<QBoxLayout*>(pending.layout))
+            box->insertWidget(position, preview, 1);
+        else
+            pending.layout->addWidget(preview);
+        this->connectPreviewReady(preview);
+        this->previewWidgets.insert(pending.index, preview);
+    }
+    this->setUpdatesEnabled(true);
+    this->update();
+    this->previewBuildInProgress = false;
+
+    if (!this->pendingPreviews.isEmpty())
+        this->schedulePreviewBuild();
+}
+
+void NextChoiceDialog::connectPreviewReady(VideoPreviewWidget* preview)
+{
+    QObject::connect(preview, &VideoPreviewWidget::firstFrameReady, this, [this, preview] {
+        this->readyPreviews.insert(preview);
+        this->revealDialogIfReady();
+    });
+}
+
+void NextChoiceDialog::revealDialogIfReady()
+{
+    // Creating the preview widgets can re-enter showEvent (the window switches
+    // to texture composition); never reveal while the batch is still building.
+    if (this->previewBuildInProgress)
+        return;
+    if (!this->waitForPreviewsOnShow || !this->readyShowArmed)
+        return;
+    if (this->readyPreviews.size() < this->previewWidgets.size())
+        return;
+    this->revealDialog();
+}
+
+void NextChoiceDialog::revealDialog()
+{
+    if (!this->waitForPreviewsOnShow)
+        return;
+    this->waitForPreviewsOnShow = false;
+    this->readyShowArmed = false;
+    this->setWindowOpacity(1.0);
+    this->raise();
+    this->activateWindow();
+}
+
+void NextChoiceDialog::showEvent(QShowEvent* e)
+{
+    QDialog::showEvent(e);
+    if (this->waitForPreviewsOnShow) {
+        if (this->previewBuildInProgress)
+            return;
+        // Build the previews now, while the window is invisible, so their scene
+        // graphs and first frames are ready before the window is revealed.
+        this->buildPendingPreviews();
+        this->readyShowArmed = true;
+        // Safety net: reveal even if a preview never reports a first frame.
+        QTimer::singleShot(3000, this, [this] { this->revealDialog(); });
+        this->revealDialogIfReady();
+    } else {
+        // Give the window a chance to paint its palette background before the
+        // previews start loading; creating them up front kept the window white.
+        this->schedulePreviewBuild(0);
     }
 }
 

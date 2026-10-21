@@ -3,6 +3,7 @@
 #include <QMediaPlayer>
 #include <QAudioOutput>
 #include <QVideoSink>
+#include <QVideoFrame>
 #include <QUrl>
 #include <QFileInfo>
 #include <QRandomGenerator>
@@ -25,6 +26,7 @@ VideoPreviewWidget::VideoPreviewWidget(QWidget* parent) : QWidget(parent)
 void VideoPreviewWidget::setSource(const QString& path)
 {
     this->sourcePath = path;
+    this->firstFrameSeen = false;
     if (this->player && this->player->source().toLocalFile() != path) {
         this->player->stop();
         this->player->setPosition(0);
@@ -366,6 +368,12 @@ void VideoPreviewWidget::ensurePlayer()
     if (this->videoWidget && this->videoWidget->videoSink()) {
         this->player->setVideoOutput(this->videoWidget->videoSink());
         QObject::connect(this->videoWidget->videoSink(), &QVideoSink::videoSizeChanged, this, &VideoPreviewWidget::handleVideoSizeChanged);
+        QObject::connect(this->videoWidget->videoSink(), &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame&) {
+            if (!this->firstFrameSeen) {
+                this->firstFrameSeen = true;
+                emit this->firstFrameReady();
+            }
+        });
     }
     this->player->setLoops(QMediaPlayer::Infinite);
     this->statusConn = QObject::connect(this->player, &QMediaPlayer::mediaStatusChanged, this, &VideoPreviewWidget::onMediaStatusChanged);

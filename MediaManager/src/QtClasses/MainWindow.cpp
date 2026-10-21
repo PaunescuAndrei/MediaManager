@@ -2932,6 +2932,10 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         config->set("preview_autoplay_all_mute", dialog->ui.previewAutoplayAllMute->isChecked() ? "True" : "False");
         dialog->oldPreviewAutoplayAllMute = dialog->ui.previewAutoplayAllMute->isChecked();
     }
+    if (dialog->ui.previewLazyLoading->isChecked() != dialog->oldPreviewLazyLoading) {
+        config->set("preview_lazy_loading", dialog->ui.previewLazyLoading->isChecked() ? "True" : "False");
+        dialog->oldPreviewLazyLoading = dialog->ui.previewLazyLoading->isChecked();
+    }
     config->set("preview_seek_seconds", QString::number(dialog->ui.previewSeekSeconds->value()));
     double overlayScale = dialog->ui.previewOverlayScale->value();
     if (overlayScale != dialog->oldPreviewOverlayScale) {
@@ -3647,9 +3651,12 @@ void MainWindow::showEndOfVideoDialog(QSharedPointer<BasePlayer> player, finishD
             this->finish_dialog->setAttribute(Qt::WA_DeleteOnClose);
             this->finish_dialog->setWindowFlag(Qt::WindowStaysOnTopHint, true);
             this->finish_dialog->setWindowState((this->finish_dialog->windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
+            // Show first: raising/activating before the native window exists
+            // creates it at its unpositioned origin, which flashes the window
+            // outline at the top-left before it moves into place.
+            this->finish_dialog->open();
             this->finish_dialog->raise();
             this->finish_dialog->activateWindow();
-            this->finish_dialog->open();
             connect(this->finish_dialog, &finishDialog::finished, this, [this, player, context, resumeNotification](int result) mutable {
                 if (result == finishDialog::Accepted) {
                     // Next (MainPlayer) or End (WatchSelected/WatchExternal)
@@ -3985,8 +3992,6 @@ bool MainWindow::InsertVideoFiles(QStringList files, bool update_state, QString 
         dialog.ui.typeComboBox->setCurrentText(type_detected);
     }
     dialog.setWindowState((dialog.windowState() & ~Qt::WindowMinimized) | Qt::WindowActive);
-    dialog.raise();
-    dialog.activateWindow();
     dialog.ui.newfilesLabel->setText(dialog.ui.newfilesLabel->text() + QString::number(new_files_counter));
 
     QSet<QString> authors_names = QSet<QString>();

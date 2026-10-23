@@ -69,6 +69,11 @@ QVideoSink* OverlayGraphicsVideoWidget::videoSink() const
     return this->sink;
 }
 
+QQmlEngine* OverlayGraphicsVideoWidget::previewEngine()
+{
+    return sharedPreviewEngine();
+}
+
 void OverlayGraphicsVideoWidget::setOverlayText(const QString& text)
 {
     if (this->currentText == text)

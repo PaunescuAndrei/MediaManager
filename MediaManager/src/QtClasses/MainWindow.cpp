@@ -70,8 +70,7 @@
 #include "UpdatePathsDialog.h"
 #include "NextChoiceDialog.h"
 #include "TreeWidgetItem.h"
-#include "VideoPreviewWidget.h"
-#include "PreviewTooltipDialog.h"
+#include "PreviewVideoWindow.h"
 #include "MissingFilesDialog.h"
 #include <QCursor>
 #include <QFuture>
@@ -1241,8 +1240,8 @@ void MainWindow::closeEvent(QCloseEvent* event)
     event->ignore();
     if (this->trayIcon->isVisible() && this->isVisible()) {
         this->App->soundPlayer->playSoundEffect();
-        // The preview is a top-level Qt::Popup, so hiding the main window no longer
-        // hides it implicitly.
+        // The preview is a separate top-level window, so hiding the main window no
+        // longer hides it implicitly.
         this->closePreviewTooltip();
         this->hide();
     }
@@ -1402,45 +1401,38 @@ void MainWindow::openThumbnails(QString path) {
     }
 }
 
-PreviewTooltipDialog* MainWindow::createPreviewPopup(const QString& path, QWidget* parent, bool rememberPosition, bool randomHover)
+PreviewVideoWindow* MainWindow::createPreviewPopup(const QString& path, QWidget* parent, bool rememberPosition, bool randomHover)
 {
-    // Deliberately not a QWidget child of the parent window. QQuickWidget has no native
-    // popup support (QTBUG-88706 / QTBUG-69558): using it in a child window makes the
-    // parent recompose white when the first preview is created. A Qt::Popup is already a
-    // top-level, so it does not need a QWidget parent; NextChoiceDialog uses the same
-    // top-level topology.
-    Q_UNUSED(parent);
-    auto* popup = new PreviewTooltipDialog(this, nullptr);
+    // Native QQuickView popup, transient to the window that opened it. This avoids the
+    // QQuickWidget-as-popup white flicker (QTBUG-88706 / QTBUG-69558) while keeping a
+    // real window-level parent/owner relationship.
+    auto* popup = new PreviewVideoWindow(parent ? parent : this);
     popup->path = path;
-    // The popup is not owned through the QWidget hierarchy; close it if the main window
-    // is destroyed while it is open.
-    QObject::connect(this, &QObject::destroyed, popup, &QWidget::close);
+    popup->setSeekSeconds(this->App->config->get("preview_seek_seconds").toDouble());
 
-    auto* preview = new VideoPreviewWidget(popup);
-    preview->setSource(path);
-    preview->setStartDelay(0);
+    popup->setSource(path);
+    popup->setStartDelay(0);
     int previewVolume = qBound(0, this->App->config->get("preview_volume").toInt(), 100);
-    preview->setVolume(previewVolume);
-    preview->setRandomOnHoverEnabled(randomHover);
-    preview->setRandomStartEnabled(this->App->config->get_bool("preview_random_start"));
+    popup->setVolume(previewVolume);
+    popup->setRandomOnHoverEnabled(randomHover);
+    popup->setRandomStartEnabled(this->App->config->get_bool("preview_random_start"));
     bool useRemember = rememberPosition && !randomHover;
-    preview->setRememberPositionEnabled(useRemember);
+    popup->setRememberPositionEnabled(useRemember);
     bool seeded = this->App->config->get_bool("preview_seeded_random") && this->App->config->get_bool("random_use_seed");
-    preview->setSeededRandom(seeded, this->App->config->get("random_seed"));
+    popup->setSeededRandom(seeded, this->App->config->get("random_seed"));
     double overlayScale = std::max(0.1, this->App->config->get("preview_overlay_scale").toDouble());
     int overlayPadX = std::max(0, this->App->config->get("preview_overlay_pad_x").toInt());
     int overlayPadY = std::max(0, this->App->config->get("preview_overlay_pad_y").toInt());
     int overlayMargin = std::max(0, this->App->config->get("preview_overlay_margin").toInt());
-    preview->setOverlayStyle(overlayScale, overlayPadX, overlayPadY, overlayMargin);
-    preview->setMuted(false);
+    popup->setOverlayStyle(overlayScale, overlayPadX, overlayPadY, overlayMargin);
+    popup->setMuted(false);
 
     if (useRemember) {
         qint64 cached = this->cachedPreviewPosition(path);
         if (cached > 0)
-            preview->restoreLastPosition(cached);
+            popup->restoreLastPosition(cached);
     }
 
-    popup->setPreviewWidget(preview);
     return popup;
 }
 
@@ -1469,8 +1461,6 @@ void MainWindow::showPreviewTooltip(const QModelIndex& proxyIndex)
     auto* popup = this->createPreviewPopup(path, this, rememberPosition, randomHover);
     popup->setProperty("storeOnClose", true);
     this->previewTooltip = popup;
-
-    auto* preview = popup->previewWidget();
 
     QPoint globalPos = QCursor::pos();
     QRect screenRect;
@@ -1523,13 +1513,13 @@ void MainWindow::showPreviewTooltip(const QModelIndex& proxyIndex)
         return QPoint(clampedX, clampedY);
     };
 
-    popup->move(clampForSize(popupW, popupH));
+    popup->setPosition(clampForSize(popupW, popupH));
 
     auto popupSizeState = std::make_shared<QSize>(popupSize);
-    QObject::connect(preview, &VideoPreviewWidget::videoSizeKnown, popup, [popup, popupSizeState, clampForSize, screenMaxW, screenMaxH](const QSize& videoSize) {
+    QObject::connect(popup, &PreviewVideoWindow::videoSizeKnown, popup, [popup, popupSizeState, clampForSize, screenMaxW, screenMaxH](const QSize& videoSize) {
         if (!videoSize.isValid() || videoSize.height() == 0 || !popup)
             return;
-        const int nonPreviewHeight = 12; // layout margins top+bottom
+        const int nonPreviewHeight = 0; // QQuickView has no widget layout margins
         QSize baseSize = *popupSizeState;
         double aspect = static_cast<double>(videoSize.width()) / static_cast<double>(videoSize.height());
         QSize adjusted = utils::adjustSizeForAspect(baseSize, 1.0, nonPreviewHeight, { aspect });
@@ -1539,10 +1529,10 @@ void MainWindow::showPreviewTooltip(const QModelIndex& proxyIndex)
         popupSizeState->setHeight(newH);
         popup->resize(*popupSizeState);
         QPoint pos = clampForSize(newW, newH);
-        popup->move(pos);
+        popup->setPosition(pos);
     });
 
-    connect(popup, &QDialog::finished, this, [this, popup, rememberPosition](int) {
+    connect(popup, &PreviewVideoWindow::finished, this, [this, popup, rememberPosition]() {
         if (!popup->property("storeOnClose").toBool()) {
             this->previewTooltip = nullptr;
             return;
@@ -1555,17 +1545,15 @@ void MainWindow::showPreviewTooltip(const QModelIndex& proxyIndex)
         this->previewTooltip = nullptr;
     });
 
-    // Cloak the popup until its first paint to suppress the Windows first-show ghost.
-    utils::cloak_until_first_paint(popup);
     popup->show();
-    preview->prepareInitialFrame(true);
+    popup->prepareInitialFrame(true);
 }
 
 void MainWindow::closePreviewTooltip(bool storePosition)
 {
     if (!this->previewTooltip)
         return;
-    auto* popup = static_cast<PreviewTooltipDialog*>(this->previewTooltip.data());
+    auto* popup = this->previewTooltip.data();
     if (popup) {
         popup->setProperty("storeOnClose", storePosition);
     }
@@ -5769,8 +5757,8 @@ void MainWindow::dropEvent(QDropEvent* e) {
 bool MainWindow::event(QEvent* e)
 {
     if (e->type() == QEvent::WindowStateChange && this->isMinimized()) {
-        // The preview is top-level now; do not leave it floating over the desktop when
-        // the main window is minimized.
+        // The preview is a separate top-level window; do not leave it floating over the
+        // desktop when the main window is minimized.
         this->closePreviewTooltip();
     }
     if (e->type() == QEvent::WindowActivate && this->isActiveWindow()) {

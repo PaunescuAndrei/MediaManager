@@ -7,7 +7,7 @@
 #include "ui_InsertSettingsDialog.h"
 
 class MainWindow;
-class PreviewTooltipDialog;
+class PreviewVideoWindow;
 class QTreeWidgetItem;
 class QEvent;
 class QCloseEvent;
@@ -70,7 +70,7 @@ private:
     QString tagIdsDisplayText(const QSet<int>& ids) const;
     void setRowsTagIds(const QList<QTreeWidgetItem*>& items, const QSet<int>& ids);
     MainWindow* MW = nullptr;
-    QPointer<PreviewTooltipDialog> rowPreview;
+    QPointer<PreviewVideoWindow> rowPreview;
     // Stays true until the first full update_treewidget() pass, so rows added
     // during population are not mistaken for manual edits.
     bool updatingTree = true;

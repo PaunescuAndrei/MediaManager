@@ -35,7 +35,7 @@ class VideosModel;
 class VideosProxyModel;
 class VideosSortProxyModel;
 class NextChoiceDialog;
-class PreviewTooltipDialog;
+class PreviewVideoWindow;
 
 class MainWindow : public QMainWindow
 {
@@ -91,7 +91,7 @@ public:
     QMediaPlayer* special_effects_player = nullptr;
     QThreadPool* searchThreadPool;
     QTimer randomProbabilitiesUpdateTimer;
-    QPointer<QDialog> previewTooltip;
+    QPointer<PreviewVideoWindow> previewTooltip;
     QHash<QString, qint64> previewPositionCache;
     QList<QString> previewHistoryOrder;
     mutable QMutex saltSeedMutex;
@@ -306,7 +306,7 @@ public:
     void updateThemeHighlightColorFromMascot(customGraphicsView* mascot, bool weighted = true, bool regen_colors_if_missing = true);
     void setThemeHighlightColor(QColor color);
     void openThumbnails(QString path);
-    PreviewTooltipDialog* createPreviewPopup(const QString& path, QWidget* parent = nullptr, bool rememberPosition = false, bool randomHover = false);
+    PreviewVideoWindow* createPreviewPopup(const QString& path, QWidget* parent = nullptr, bool rememberPosition = false, bool randomHover = false);
     void showPreviewTooltip(const QModelIndex& proxyIndex);
     void closePreviewTooltip(bool storePosition = true);
     void updatePreviewPositionCache(const QString& path, qint64 positionMs);

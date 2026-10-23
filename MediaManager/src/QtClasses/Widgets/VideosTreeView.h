@@ -19,4 +19,13 @@ signals:
 
 protected:
     void mousePressEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseDoubleClickEvent(QMouseEvent* event) override;
+
+private:
+    // An Alt+click is the preview gesture, not a selection gesture. The press is
+    // intercepted below, so the matching release/move/double-click must not fall
+    // through to QTreeView's selection logic either.
+    bool altPreviewPressed = false;
 };

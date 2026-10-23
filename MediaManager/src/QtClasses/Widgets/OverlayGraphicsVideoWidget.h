@@ -5,6 +5,7 @@
 class QQuickWidget;
 class QQuickItem;
 class QVideoSink;
+class QQmlEngine;
 
 // Video widget backed by a QML VideoOutput (GPU texturing) with overlay text.
 class OverlayGraphicsVideoWidget : public QWidget
@@ -12,6 +13,9 @@ class OverlayGraphicsVideoWidget : public QWidget
     Q_OBJECT
 public:
     explicit OverlayGraphicsVideoWidget(QWidget* parent = nullptr);
+    // Shared QML engine for all preview surfaces (QQuickWidget cards and the native
+    // QQuickView popup), so Qt Quick/QtMultimedia resources are loaded once.
+    static QQmlEngine* previewEngine();
     QVideoSink* videoSink() const;
     void setOverlayText(const QString& text);
     void setOverlayStyle(double scaleMultiplier, int padX, int padY, int margin);

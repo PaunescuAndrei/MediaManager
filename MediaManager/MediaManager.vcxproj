@@ -95,7 +95,8 @@
     <ClCompile Include="src\QtClasses\Widgets\TreeWidgetItem.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\watchedFrame.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\WheelStrongFocusEventFilter.cpp" />
-    <ClCompile Include="src\QtClasses\Widgets\PreviewTooltipDialog.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\PreviewPlaybackController.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\PreviewVideoWindow.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\VideoPreviewWidget.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\ContributionHeatmapWidget.cpp" />
@@ -200,7 +201,8 @@
     <QtMoc Include="src\general\generateThumbnailRunnable.h" />
     <ClInclude Include="src\stdafx.h" />
     <ClInclude Include="src\QtClasses\stylesQt.h" />
-    <ClInclude Include="src\QtClasses\Widgets\PreviewTooltipDialog.h" />
+    <QtMoc Include="src\QtClasses\Widgets\PreviewPlaybackController.h" />
+    <QtMoc Include="src\QtClasses\Widgets\PreviewVideoWindow.h" />
     <ClInclude Include="src\QtClasses\Widgets\TreeWidgetItem.h" />
     <QtMoc Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.h" />
     <QtMoc Include="src\QtClasses\Widgets\ContributionHeatmapWidget.h" />

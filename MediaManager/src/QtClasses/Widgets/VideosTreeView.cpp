@@ -14,15 +14,50 @@ VideosTreeView::VideosTreeView(QWidget* parent) : QTreeView(parent) {
 
 void VideosTreeView::mousePressEvent(QMouseEvent* event) {
     if ((event->button() == Qt::LeftButton || event->button() == Qt::RightButton || event->button() == Qt::MiddleButton) && (event->modifiers() & Qt::AltModifier)) {
+        this->altPreviewPressed = true;
         const QModelIndex idx = indexAt(event->pos());
         if (idx.isValid()) emit itemAltClicked(idx);
+        event->accept();
         return;
     }
+    this->altPreviewPressed = false;
     QTreeView::mousePressEvent(event);
     if (event->button() == Qt::MiddleButton) {
         const QModelIndex idx = indexAt(event->pos());
         if (idx.isValid()) emit itemMiddleClicked(idx);
     }
+}
+
+void VideosTreeView::mouseReleaseEvent(QMouseEvent* event) {
+    if (this->altPreviewPressed) {
+        this->altPreviewPressed = false;
+        event->accept();
+        return;
+    }
+    QTreeView::mouseReleaseEvent(event);
+}
+
+void VideosTreeView::mouseMoveEvent(QMouseEvent* event) {
+    if (this->altPreviewPressed) {
+        if (event->buttons() == Qt::NoButton) {
+            // The release may have gone to the preview window; drop the stale guard on
+            // the first button-less move instead of swallowing hover forever.
+            this->altPreviewPressed = false;
+        }
+        else {
+            event->accept();
+            return;
+        }
+    }
+    QTreeView::mouseMoveEvent(event);
+}
+
+void VideosTreeView::mouseDoubleClickEvent(QMouseEvent* event) {
+    if (this->altPreviewPressed || (event->modifiers() & Qt::AltModifier)) {
+        event->accept();
+        return;
+    }
+    QTreeView::mouseDoubleClickEvent(event);
 }
 
 void VideosTreeView::findAndScrollToDelayed(QString value, bool select, QAbstractItemView::ScrollHint scrollhint) {

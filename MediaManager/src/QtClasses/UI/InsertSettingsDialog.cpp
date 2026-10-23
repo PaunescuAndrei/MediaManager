@@ -14,8 +14,7 @@
 #include "MainWindow.h"
 #include "MainApp.h"
 #include "VideosTagsDialog.h"
-#include "PreviewTooltipDialog.h"
-#include "VideoPreviewWidget.h"
+#include "PreviewVideoWindow.h"
 
 InsertSettingsDialog::InsertSettingsDialog(MainWindow* mainWindow, QWidget* parent) : QDialog(parent), MW(mainWindow) {
 	ui.setupUi(this);
@@ -507,13 +506,9 @@ void InsertSettingsDialog::showRowPreview(QTreeWidgetItem* item) {
 		x = std::clamp(x, screenRect.left(), std::max(screenRect.left(), screenRect.right() - popupW));
 		y = std::clamp(y, screenRect.top(), std::max(screenRect.top(), screenRect.bottom() - popupH));
 	}
-	popup->move(x, y);
-	// Cloak the popup until its first paint to suppress the Windows first-show ghost.
-	utils::cloak_until_first_paint(popup);
+	popup->setPosition(x, y);
 	popup->show();
-	if (VideoPreviewWidget* preview = popup->previewWidget()) {
-		preview->prepareInitialFrame(true);
-	}
+	popup->prepareInitialFrame(true);
 }
 
 void InsertSettingsDialog::resetRowOverrides(QTreeWidgetItem* item) {

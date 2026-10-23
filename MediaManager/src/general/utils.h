@@ -23,6 +23,7 @@
 #include <vector>
 
 class MainApp;
+class QWindow;
 class QWidget;
 class QMessageBox;
 class QTimer;
@@ -76,6 +77,7 @@ namespace utils {
 	// Windows: cloak/uncloak a top-level window through DWM so it is not composed
 	// while it is being prepared. No-op on other platforms.
 	void set_window_cloaked(QWidget* window, bool cloaked);
+	void set_window_cloaked(QWindow* window, bool cloaked);
 	// Windows: cloak a top-level window until it paints its first frame, then
 	// uncloak it. Prevents the one-frame ghost Windows presents at the origin
 	// when a window is first shown. No-op on other platforms.

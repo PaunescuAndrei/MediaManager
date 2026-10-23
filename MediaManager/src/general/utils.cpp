@@ -28,6 +28,7 @@
 #include <QCursor>
 #include <QMessageBox>
 #include <QWidget>
+#include <QWindow>
 
 #ifdef Q_OS_WIN
 #include <dwmapi.h>
@@ -654,6 +655,19 @@ void utils::set_window_cloaked(QWidget* window, bool cloaked)
 	// DWMWA_CLOAK keeps the window mapped but stops DWM from composing it,
 	// which is the only reliable way to suppress the origin ghost Windows
 	// presents when a top-level window is first shown.
+	BOOL value = cloaked ? TRUE : FALSE;
+	DwmSetWindowAttribute(reinterpret_cast<HWND>(window->winId()), DWMWA_CLOAK, &value, sizeof(value));
+#else
+	Q_UNUSED(window);
+	Q_UNUSED(cloaked);
+#endif
+}
+
+void utils::set_window_cloaked(QWindow* window, bool cloaked)
+{
+#ifdef Q_OS_WIN
+	if (!window)
+		return;
 	BOOL value = cloaked ? TRUE : FALSE;
 	DwmSetWindowAttribute(reinterpret_cast<HWND>(window->winId()), DWMWA_CLOAK, &value, sizeof(value));
 #else

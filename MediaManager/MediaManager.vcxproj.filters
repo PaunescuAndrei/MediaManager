@@ -178,6 +178,9 @@
     <ClCompile Include="src\general\SoundPlayer.cpp">
       <Filter>Source Files\general</Filter>
     </ClCompile>
+    <ClCompile Include="src\general\ThreadedMediaPlayer.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
     <ClCompile Include="src\general\sqliteDB.cpp">
       <Filter>Source Files\general</Filter>
     </ClCompile>
@@ -661,6 +664,9 @@
       <Filter>Header Files\general</Filter>
     </QtMoc>
     <QtMoc Include="src\general\BasePlayer.h">
+      <Filter>Header Files\general</Filter>
+    </QtMoc>
+    <QtMoc Include="src\general\ThreadedMediaPlayer.h">
       <Filter>Header Files\general</Filter>
     </QtMoc>
     <QtMoc Include="src\QtClasses\Widgets\WheelStrongFocusEventFilter.h">

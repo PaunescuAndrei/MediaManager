@@ -5,14 +5,15 @@
 #include <QSize>
 
 class QMediaPlayer;
+class ThreadedMediaPlayer;
 class OverlayGraphicsVideoWidget;
-class QAudioOutput;
 
 class VideoPreviewWidget : public QWidget
 {
     Q_OBJECT
 public:
     explicit VideoPreviewWidget(QWidget* parent = nullptr);
+    ~VideoPreviewWidget() override;
     void setSource(const QString& path);
     void setStartDelay(int ms);
     void setVolume(int percent);
@@ -52,9 +53,8 @@ private:
     qint64 computeTargetPosition(qint64 duration) const;
     qint64 pickRandomPosition(qint64 duration, quint64 nonce = 0) const;
     QString sourcePath;
-    QMediaPlayer* player = nullptr;
+    ThreadedMediaPlayer* player = nullptr;
     OverlayGraphicsVideoWidget* videoWidget = nullptr;
-    QAudioOutput* audioOutput = nullptr;
     QTimer startTimer;
     int startDelayMs = 0;
     int volumePercent = 20;

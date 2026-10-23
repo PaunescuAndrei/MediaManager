@@ -1,13 +1,12 @@
 #include "stdafx.h"
 #include "VideoPreviewWidget.h"
 #include <QMediaPlayer>
-#include <QAudioOutput>
 #include <QVideoSink>
 #include <QVideoFrame>
-#include <QUrl>
 #include <QFileInfo>
 #include <QRandomGenerator>
 #include "OverlayGraphicsVideoWidget.h"
+#include "ThreadedMediaPlayer.h"
 #include "utils.h"
 
 VideoPreviewWidget::VideoPreviewWidget(QWidget* parent) : QWidget(parent)
@@ -23,14 +22,24 @@ VideoPreviewWidget::VideoPreviewWidget(QWidget* parent) : QWidget(parent)
     QObject::connect(&this->startTimer, &QTimer::timeout, this, &VideoPreviewWidget::startPlayback);
 }
 
+VideoPreviewWidget::~VideoPreviewWidget()
+{
+    // The QQuickWidget and its QVideoSink are children, so they are destroyed after this
+    // destructor body. Detach the worker-thread player from the sink first: deleting a
+    // QMediaPlayer or a QVideoSink touches the other one, and neither may see a dead peer.
+    if (this->player) {
+        this->player->shutdown();
+    }
+}
+
 void VideoPreviewWidget::setSource(const QString& path)
 {
     this->sourcePath = path;
     this->firstFrameSeen = false;
-    if (this->player && this->player->source().toLocalFile() != path) {
-        this->player->stop();
-        this->player->setPosition(0);
-        this->player->setSource(QUrl::fromLocalFile(path));
+    if (this->player && this->player->currentSource() != path) {
+        // The wrapper keeps the same stop -> rewind -> setSource ordering on its worker
+        // thread that the player used to get directly here.
+        this->player->setSource(path);
     }
     this->lastPosition = 0;
     this->initialPosition = -1;
@@ -172,7 +181,7 @@ void VideoPreviewWidget::startAtPosition(qint64 target, bool pauseAfterSeek)
             this->player->pause();
             QObject::disconnect(this->pauseConn);
         };
-        this->pauseConn = QObject::connect(this->player, &QMediaPlayer::positionChanged, this, pauseCheck);
+        this->pauseConn = QObject::connect(this->player, &ThreadedMediaPlayer::positionChanged, this, pauseCheck);
         if (this->initialPosition > 0 || this->randomStart) {
             pauseCheck(this->player->position());
         }
@@ -187,7 +196,7 @@ void VideoPreviewWidget::startAtPosition(qint64 target, bool pauseAfterSeek)
     } else {
         this->player->play();
         if (pauseAfterSeek && this->initialPosition > 0) {
-            QMetaObject::invokeMethod(this->player, "pause", Qt::QueuedConnection);
+            this->player->pause();
         }
     }
 }
@@ -361,30 +370,33 @@ void VideoPreviewWidget::ensurePlayer()
     if (this->player)
         return;
 
-    this->player = new QMediaPlayer(this);
-    this->audioOutput = new QAudioOutput(this);
+    this->player = new ThreadedMediaPlayer(this);
+    // The player lives on its own worker thread. The wrapper marshals all of these back
+    // to this object's thread, so the slots below stay ordinary GUI-thread slots.
+    this->statusConn = QObject::connect(this->player, &ThreadedMediaPlayer::mediaStatusChanged, this, &VideoPreviewWidget::onMediaStatusChanged);
+    QObject::connect(this->player, &ThreadedMediaPlayer::positionChanged, this, &VideoPreviewWidget::onPositionChanged);
+    QObject::connect(this->player, &ThreadedMediaPlayer::durationChanged, this, [this](qint64 dur) {
+        this->currentDurationMs = dur;
+        this->updateOverlayText(this->lastPositionMs, dur);
+    });
+    QObject::connect(this->player, &ThreadedMediaPlayer::errorOccurred, this, [](QMediaPlayer::Error, const QString& errorString) {
+        qWarning() << "VideoPreviewWidget: player error:" << errorString;
+    });
     this->applyVolume();
-    this->player->setAudioOutput(this->audioOutput);
-    if (this->videoWidget && this->videoWidget->videoSink()) {
-        this->player->setVideoOutput(this->videoWidget->videoSink());
-        QObject::connect(this->videoWidget->videoSink(), &QVideoSink::videoSizeChanged, this, &VideoPreviewWidget::handleVideoSizeChanged);
-        QObject::connect(this->videoWidget->videoSink(), &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame&) {
+
+    QVideoSink* sink = this->videoWidget ? this->videoWidget->videoSink() : nullptr;
+    if (sink) {
+        QObject::connect(sink, &QVideoSink::videoSizeChanged, this, &VideoPreviewWidget::handleVideoSizeChanged);
+        QObject::connect(sink, &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame&) {
             if (!this->firstFrameSeen) {
                 this->firstFrameSeen = true;
                 emit this->firstFrameReady();
             }
         });
     }
-    this->player->setLoops(QMediaPlayer::Infinite);
-    this->statusConn = QObject::connect(this->player, &QMediaPlayer::mediaStatusChanged, this, &VideoPreviewWidget::onMediaStatusChanged);
-    QObject::connect(this->player, &QMediaPlayer::positionChanged, this, &VideoPreviewWidget::onPositionChanged);
-    QObject::connect(this->player, &QMediaPlayer::durationChanged, this, [this](qint64 dur) {
-        this->currentDurationMs = dur;
-        this->updateOverlayText(this->lastPositionMs, dur);
-    });
-    if (!this->sourcePath.isEmpty()) {
-        this->player->setSource(QUrl::fromLocalFile(this->sourcePath));
-    }
+    // Player, audio output, loop mode and the initial source are all created on the
+    // wrapper's worker thread, never here on the GUI thread.
+    this->player->start(sink, this->sourcePath, true);
 }
 
 void VideoPreviewWidget::startPlayback()
@@ -408,7 +420,7 @@ void VideoPreviewWidget::startPlayback()
             this->lastPosition = 0;
             this->player->setPosition(pos);
         } else {
-            this->randomHoverDurationConn = QObject::connect(this->player, &QMediaPlayer::durationChanged, this, [this](qint64) {
+            this->randomHoverDurationConn = QObject::connect(this->player, &ThreadedMediaPlayer::durationChanged, this, [this](qint64) {
                 if (!this->randomEachHover)
                     return;
                 if (this->player && this->player->duration() > 0) {
@@ -433,7 +445,7 @@ void VideoPreviewWidget::startPlayback()
                 this->lastPosition = pos;
             this->player->setPosition(pos);
         } else {
-            this->randomStartDurationConn = QObject::connect(this->player, &QMediaPlayer::durationChanged, this, [this](qint64) {
+            this->randomStartDurationConn = QObject::connect(this->player, &ThreadedMediaPlayer::durationChanged, this, [this](qint64) {
                 if (!this->randomStart)
                     return;
                 if (this->rememberPosition && this->lastPosition > 0)
@@ -460,10 +472,12 @@ void VideoPreviewWidget::startPlayback()
 
 void VideoPreviewWidget::applyVolume()
 {
-    if (!this->audioOutput)
+    if (!this->player)
         return;
-    this->audioOutput->setMuted(false);
-    this->audioOutput->setVolume(utils::volume_convert(this->muted ? 0 : this->volumePercent));
+    // Before start() the wrapper stores these and applies them when the audio output is
+    // created on its worker thread; afterwards they are queued like every other command.
+    this->player->setMuted(false);
+    this->player->setVolume(static_cast<float>(utils::volume_convert(this->muted ? 0 : this->volumePercent)));
 }
 
 void VideoPreviewWidget::onPositionChanged(qint64 positionMs)

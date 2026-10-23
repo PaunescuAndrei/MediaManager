@@ -40,6 +40,7 @@
     <ClCompile Include="src\general\shokoDB.cpp" />
     <ClCompile Include="src\general\shokoAPI.cpp" />
     <ClCompile Include="src\general\SoundPlayer.cpp" />
+    <ClCompile Include="src\general\ThreadedMediaPlayer.cpp" />
     <ClCompile Include="src\general\sqliteDB.cpp" />
     <ClCompile Include="src\general\WatchHistory.cpp" />
     <ClCompile Include="src\general\taskbar.cpp" />
@@ -135,6 +136,7 @@
   <ItemGroup>
     <ClInclude Include="src\general\asmOpenCV.h" />
     <QtMoc Include="src\general\BasePlayer.h" />
+    <QtMoc Include="src\general\ThreadedMediaPlayer.h" />
     <ClInclude Include="src\general\BlockingQueue.h" />
     <ClInclude Include="src\general\colorPaletteExtractor.h" />
     <ClInclude Include="src\general\config.h" />

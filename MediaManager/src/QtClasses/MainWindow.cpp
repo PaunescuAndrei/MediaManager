@@ -1241,6 +1241,9 @@ void MainWindow::closeEvent(QCloseEvent* event)
     event->ignore();
     if (this->trayIcon->isVisible() && this->isVisible()) {
         this->App->soundPlayer->playSoundEffect();
+        // The preview is a top-level Qt::Popup, so hiding the main window no longer
+        // hides it implicitly.
+        this->closePreviewTooltip();
         this->hide();
     }
     else {
@@ -1401,8 +1404,17 @@ void MainWindow::openThumbnails(QString path) {
 
 PreviewTooltipDialog* MainWindow::createPreviewPopup(const QString& path, QWidget* parent, bool rememberPosition, bool randomHover)
 {
-    auto* popup = new PreviewTooltipDialog(this, parent ? parent : this);
+    // Deliberately not a QWidget child of the parent window. QQuickWidget has no native
+    // popup support (QTBUG-88706 / QTBUG-69558): using it in a child window makes the
+    // parent recompose white when the first preview is created. A Qt::Popup is already a
+    // top-level, so it does not need a QWidget parent; NextChoiceDialog uses the same
+    // top-level topology.
+    Q_UNUSED(parent);
+    auto* popup = new PreviewTooltipDialog(this, nullptr);
     popup->path = path;
+    // The popup is not owned through the QWidget hierarchy; close it if the main window
+    // is destroyed while it is open.
+    QObject::connect(this, &QObject::destroyed, popup, &QWidget::close);
 
     auto* preview = new VideoPreviewWidget(popup);
     preview->setSource(path);
@@ -1543,6 +1555,8 @@ void MainWindow::showPreviewTooltip(const QModelIndex& proxyIndex)
         this->previewTooltip = nullptr;
     });
 
+    // Cloak the popup until its first paint to suppress the Windows first-show ghost.
+    utils::cloak_until_first_paint(popup);
     popup->show();
     preview->prepareInitialFrame(true);
 }
@@ -5754,6 +5768,11 @@ void MainWindow::dropEvent(QDropEvent* e) {
 
 bool MainWindow::event(QEvent* e)
 {
+    if (e->type() == QEvent::WindowStateChange && this->isMinimized()) {
+        // The preview is top-level now; do not leave it floating over the desktop when
+        // the main window is minimized.
+        this->closePreviewTooltip();
+    }
     if (e->type() == QEvent::WindowActivate && this->isActiveWindow()) {
         if (this->intro_played) {
             this->playSpecialSoundEffect();

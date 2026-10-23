@@ -22,6 +22,14 @@ void manageSegFailure(int signalCode)
 
 int main(int argc, char *argv[])
 {
+    // Force QRhi-backed composition for every QWidget top-level from the very start.
+    // The preview popups host QQuickWidgets; if the main window starts raster-backed,
+    // adding such a child window makes Qt recreate the main window's native window
+    // mid-life (a Hide/Show flash on the first preview). Starting every top-level on
+    // RHI means the popup's QQuickWidget matches from the beginning, so no switch and
+    // no recreation are needed. Must be set before the first widget window exists.
+    qputenv("QT_WIDGETS_RHI", "1");
+
     if (!SUCCEEDED(CoInitialize(nullptr)))
     {
         return 1;

@@ -508,6 +508,8 @@ void InsertSettingsDialog::showRowPreview(QTreeWidgetItem* item) {
 		y = std::clamp(y, screenRect.top(), std::max(screenRect.top(), screenRect.bottom() - popupH));
 	}
 	popup->move(x, y);
+	// Cloak the popup until its first paint to suppress the Windows first-show ghost.
+	utils::cloak_until_first_paint(popup);
 	popup->show();
 	if (VideoPreviewWidget* preview = popup->previewWidget()) {
 		preview->prepareInitialFrame(true);
@@ -539,5 +541,8 @@ void InsertSettingsDialog::resetRowsOverrides(const QList<QTreeWidgetItem*>& ite
 }
 
 InsertSettingsDialog::~InsertSettingsDialog() {
-
+	if (this->rowPreview) {
+		this->rowPreview->close();
+		this->rowPreview = nullptr;
+	}
 }

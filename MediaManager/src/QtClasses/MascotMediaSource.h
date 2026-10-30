@@ -56,16 +56,12 @@ public:
 	// the caller: this class reads no config.
 	void setWeightedChoice(bool weighted);
 
-	// The one path a video pick has to avoid: the file the main player holds, while
-	// `mascots_exclude_current` asks for it, and empty otherwise. §7.8's only exclusion.
-	void setExcludePath(const QString& path);
-
 	// The next mascot path, or an empty string when no mascot directory holds a file.
 	QString nextImagePath();
 
 	// The next video path out of the cached pool, or an empty string when the pool is empty (no
-	// row passed the filters). Never the excluded path unless the pool leaves no alternative; the
-	// pick itself walks no directory and runs no query.
+	// row passed the filters). The pick itself walks no directory and runs no query. Landing on
+	// the file the main player has is allowed: the pool does not know about it.
 	QString nextVideoPath();
 
 	// Drops the cached candidate list, so the next use re-reads the database once. Called on a
@@ -100,7 +96,6 @@ private:
 	// The video side. `weightedChoice` defaults to true, so a caller that never sets it picks the
 	// way the `Next` button does.
 	bool weightedChoice = true;
-	QString excludePath;
 	// The cached scan and its validity. Mutable because videoPoolSize() is const and still has to
 	// answer; nothing but ensureVideoPool()/invalidateVideoPool() writes them.
 	mutable QList<VideoWeightedData> videoPool;

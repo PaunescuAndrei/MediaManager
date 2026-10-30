@@ -8,11 +8,6 @@
 #include <QRandomGenerator>
 
 namespace {
-	// §7.8's only exclusion: a pick that lands on the file the main player holds is re-rolled, at
-	// most this many times, and the last draw is then accepted -- a one-file pool can only ever
-	// return that file, and showing it beats leaving the panel blank.
-	constexpr int VIDEO_REROLL_ATTEMPTS = 8;
-
 	// One draw from the pool. `weighted` false is a plain uniform pick over the candidate
 	// indices: no bias is read, so `mascots_weighted_random` off cannot inherit a weight by
 	// accident. (The weighted call takes the same uniform fast path when the general bias is 0 --
@@ -53,11 +48,6 @@ void MascotMediaSource::setSeedSource(const QString& seedString, bool useSeed)
 void MascotMediaSource::setWeightedChoice(bool weighted)
 {
 	this->weightedChoice = weighted;
-}
-
-void MascotMediaSource::setExcludePath(const QString& path)
-{
-	this->excludePath = path;
 }
 
 void MascotMediaSource::initPaths()
@@ -168,12 +158,10 @@ QString MascotMediaSource::nextVideoPath()
 			weightedSettings.bias_general = 0;
 	}
 
-	QString path = drawVideoPath(this->videoPool, this->weightedChoice, weightedSettings, generator);
-	for (int attempt = 0; attempt < VIDEO_REROLL_ATTEMPTS && !this->excludePath.isEmpty()
-		&& path == this->excludePath; ++attempt) {
-		path = drawVideoPath(this->videoPool, this->weightedChoice, weightedSettings, generator);
-	}
-	return path;
+	// One draw, no exclusion. A pick is allowed to land on the file the main player currently has
+	// -- the user's explicit call, and the panel is free to show what is already playing -- so
+	// nothing here re-rolls and nothing here reads the player's path. Do not "fix" that back in.
+	return drawVideoPath(this->videoPool, this->weightedChoice, weightedSettings, generator);
 }
 
 void MascotMediaSource::invalidateVideoPool()

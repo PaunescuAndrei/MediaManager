@@ -64,9 +64,10 @@ public:
 	void setMirror(bool mirror);
 
 	// ===== AMENDMENT Z: TEMPORARY TIMING INSTRUMENTATION - DELETE AFTER THE LATENCY GATE =====
-	// Inert unless the app was started with `-debug`, because that is the only flag under which
-	// beginSwapTiming() is ever called -- and the paint filter is not even installed until the
-	// first such call, so a run without the flag pays no filter call at all. To remove it:
+	// Inert unless debug mode is on (`-debug`, or the settings dialog's Debug Mode checkbox --
+	// both set the same flag), because that is the only condition under which beginSwapTiming()
+	// is ever called -- and the paint filter is not even installed until the first such call, so
+	// a run with debug mode off pays no filter call at all. To remove it:
 	// delete this block, the `#include <QElapsedTimer>` marked with AMENDMENT Z at the top of
 	// this file, the two definitions at the end of MascotSurface.cpp and the AMENDMENT Z blocks
 	// in MascotController.cpp. Nothing else refers to it.

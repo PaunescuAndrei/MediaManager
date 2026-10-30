@@ -461,8 +461,8 @@ int MascotSurface::slotAt(const QPointF& position) const
 // the latency gate has been run and its numbers recorded. Nothing else calls or emits any of this.
 void MascotSurface::beginSwapTiming(const QString& label)
 {
-	// Installed here, not in the constructor: a run without -debug never reaches this call, and a
-	// filter that was never installed costs nothing on the paint path.
+	// Installed here, not in the constructor: a run with debug mode off never reaches this call, and
+	// a filter that was never installed costs nothing on the paint path.
 	if (!this->swapTimingFilterInstalled && this->quick) {
 		this->quick->installEventFilter(this);
 		this->swapTimingFilterInstalled = true;

@@ -5,6 +5,9 @@
 // holds the surfaces and the prefetcher by QPointer for lifetime reasons (see SideState).
 #include "MascotPrefetcher.h"
 #include "MascotSurface.h"
+// M2, same reason as the three above: SideState holds one of these per panel by QPointer.
+#include "MascotVideoSlot.h"
+#include <QJsonObject>
 #include <QObject>
 #include <QPointer>
 #include <QString>
@@ -12,6 +15,7 @@
 
 class MainApp;
 class MascotImageCache;
+class QTimer;
 
 // Which panel a mascot lives on. Every entry point names a side instead of passing the widget
 // it used to act on; the left/right asymmetry (the side-directory flip rule) and the QML
@@ -31,6 +35,14 @@ enum class MascotSide { Left, Right };
 // Thread affinity: every member, signal and slot here runs on the GUI thread. The only
 // cross-thread input is MascotPrefetcher::mediaReady/mediaFailed, which the prefetcher emits
 // on the GUI thread after queueing a decode result back.
+//
+// M2 adds a second media kind to the same model, not a second model beside it: a panel's type
+// is decided per pick, a video pick is a panel waiting for a path exactly like an image pick is,
+// and the media that lands either way is committed through the same showMedia() -- so pins, the
+// mirror reset, highlightOnApply and the theme-colour emission keep working unchanged. What the
+// video branch adds is what an image does not have: the media does not exist until a frame of it
+// reaches the sink (so nothing is applied from a pick), its cadence is a clip timer rather than
+// the beat, its players are the panel's own, and `mascots_max_decoders` has to fit them.
 class MascotController : public QObject {
 	Q_OBJECT
 public:
@@ -123,6 +135,58 @@ private:
 		bool mirrorOverrideValue = false;
 		// Set by a request that wants the theme colour updated when its media lands.
 		bool highlightOnApply = false;
+
+		// ---- M2: the video half of one panel ----
+		// The panel's players: two outputs that take turns across a crossfade, a gate that only
+		// reports a clip once a frame of it is on screen, and a deadline. QPointer for the same
+		// reason the surface uses one: it is destroyed in releaseSurface() *because* it draws into
+		// sinks the surface owns, and a null pointer is answerable while a dangling one is not.
+		QPointer<MascotVideoSlot> video;
+		// The offset this panel asked its player for: -1 is the configured random start, and a
+		// mirror copy supplies the left panel's exact offset instead. Recorded so the log says
+		// which of the two a swap asked for, and so the mirror copy cannot invent its own.
+		qint64 wantedOffsetMs = -1;
+		// True while requestedPath names a video a player is loading rather than an image the
+		// prefetcher is decoding. Both waits share the one field because both mean "this panel is
+		// waiting for exactly that path", but only the delivery that matches may be applied.
+		bool requestedIsVideo = false;
+		// Set on the right panel while the left panel's pick -- the one the pair mirrors -- is
+		// still loading: the copy starts from the left panel's firstFrame(), which is where its
+		// offset finally exists.
+		bool mirrorCopyPending = false;
+		// Counts the video swaps this panel has asked for. A swap line and its first-frame line
+		// carry the same number, which is what lets the gate pair them and read the delta.
+		quint64 videoSeq = 0;
+		// When the outstanding swap was asked for (milliseconds since the epoch), for that delta.
+		qint64 requestedAtMs = 0;
+		// The clip timer, and the only cadence a video panel has: restarted on every committed
+		// video, never started for an image panel (M1's beat-driven cadence is untouched). Owned
+		// by the controller, so it survives the enable/disable cycles the surfaces do not.
+		QTimer* clipTimer = nullptr;
+		// The fill mode this panel's slot currently carries, and whether one has been written at
+		// all. M2 moved that write out of configureSurface() into applyDisplay(), where the mode
+		// follows the media type; keeping the last value here is what makes an image commit write
+		// no fill mode at all, so the image path costs exactly what it cost in M1.
+		MascotSurface::FillMode slotFillMode = MascotSurface::FillMode::HeightFit;
+		bool slotFillModeKnown = false;
+		// Whether the slot's video outputs are currently shown. `clearSlot()` does not hide them
+		// (Task 1's interface fact), so the flag both makes the hiding the controller's job and
+		// lets the image path leave the outputs alone entirely while it has never shown one.
+		bool videoOutputVisible = false;
+		// Failures since the last committed media, so a broken clip is not retried forever and a
+		// panel that cannot play anything stops asking rather than walking the whole library.
+		int videoFailures = 0;
+		// How many times this panel has re-asked for a video pick because its QML delegate (and
+		// therefore its sink) did not exist yet. A delegate created a turn later is normal; one
+		// that never appears has to fall back to images instead of asking forever.
+		int videoSinkRetries = 0;
+		// The last path this panel was told failed, and when it was reported, so one unusable
+		// file produces one line instead of one per swap.
+		QString lastFailedVideoPath;
+		qint64 lastFailedVideoLogMs = 0;
+		// When this panel last wrote a media-type line, for the rate-limited ones (pool empty,
+		// which branch picked).
+		qint64 lastTypeLogMs = 0;
 	};
 
 	SideState& stateFor(MascotSide side);
@@ -189,6 +253,65 @@ private:
 	void onMediaReady(const MascotMedia& media);
 	void onMediaFailed(const QString& path);
 
+	// ---- M2: the video branch ----
+	// What the panels can do with the configured decoder budget. Crossfade is the full design
+	// (two players per panel, so one clip fades in while the other fades out); SinglePlayer is
+	// the clamp below it (one player per panel, so a swap reloads the output already on screen
+	// and there is nothing to fade); Off is a budget too small to give both panels a player.
+	enum class VideoMode { Crossfade, SinglePlayer, Off };
+
+	// Which kind of media one panel displays for this pick. Decides from the value applyConfig()
+	// cached rather than from the config, for the same reason the source reads none: a settings
+	// change must not land one pick late. Its diagnostics are rate-limited per panel.
+	MascotMedia::Type pickType(SideState& state);
+	// True when the media setting wants video at all (Videos or Mixed). What keeps an images-only
+	// configuration free of video work, and what decides whether a clamp line is worth writing.
+	bool mediaSettingWantsVideo() const;
+	// True when the media setting wants video *and* the decoder budget allows a player.
+	bool mediaMayBeVideo() const;
+	// Re-reads the pool's invalidation fingerprint -- the database, the filter settings and the
+	// model's row count -- and drops the cached scan when any of them moved (§7.8's triggers).
+	void invalidateVideoPoolIfStale();
+
+	// Starts one load into `path` at `offsetMs` (-1 means the configured random start) and
+	// records the wait. The shared tail of a fresh pick and of a mirror copy.
+	void startVideoLoad(SideState& state, MascotSide side, const QString& path, qint64 offsetMs);
+	// The video branch of pickFor(). Started means a load is in flight and this pick is done;
+	// Skip means the panel already has a load in flight or is about to retry, so nothing must be
+	// picked at all; Fallback means video cannot serve this pick and the image path should.
+	enum class VideoPick { Started, Skip, Fallback };
+	VideoPick pickVideo(SideState& state, MascotSide side, bool updateHighlight);
+	void onVideoFirstFrame(MascotSide side, const QString& path, int ab, const QSize& frameSize,
+		qint64 offsetMs);
+	// A load -- or a clip already on screen -- that failed or timed out. Never blanks the panel:
+	// whatever it is drawing keeps playing, and the panel is armed for a replacement.
+	void onVideoFailed(MascotSide side, const QString& path, bool timedOut);
+	// Fades the output the new clip landed on in, the previous one out, and schedules the
+	// outgoing player's retirement for the end of the fade (immediately when there is no fade).
+	void fadeInVideo(SideState& state, MascotSide side, int ab);
+	// Copies the left panel's committed video onto the right panel: same file, same offset.
+	void startMirrorVideo(const QString& path, qint64 offsetMs);
+
+	void ensureVideoSlots();
+	void createVideoSlot(SideState& state, MascotSide side);
+	void destroyVideoSlot(SideState& state);
+	// Applies `mascots_max_decoders` and writes the clamp line once per change of budget.
+	void applyDecoderBudget();
+	void restartClipTimer(SideState& state, MascotSide side);
+	void onClipTimer(MascotSide side);
+	void stopClipTimers();
+
+	// Pauses or resumes both panels' players from the window's state and
+	// `mascots_pause_unfocused`. Idempotent, so the event filter can call it on every event.
+	void applyVideoPaused();
+	bool videoShouldPause() const;
+	// The one window whose visibility decides the pause state, watched by this object's filter.
+	void watchWindow(QWidget* window);
+
+	// Writes one MASCOT-VIDEO line, debug-gated the way MainApp's MASCOT-CACHE line is: an
+	// ordinary run pays nothing, and the gate (which runs with -debug) reads every line.
+	void logVideo(const QString& message) const;
+
 	MainApp* App = nullptr;
 	MascotImageCache* cache = nullptr;
 	// QPointer for the same reason the surfaces use one: the prefetcher is process-lifetime
@@ -205,5 +328,48 @@ private:
 	bool warnedUnsupportedMedia = false;
 	QMetaObject::Connection swapConnection;
 	QMetaObject::Connection flipConnection;
+
+	// ---- M2: the video configuration, all of it written by applyConfig() ----
+	// The `mascots_media` value, cached: pickType() decides from this instead of re-reading the
+	// config on every swap.
+	QString mediaSetting = QStringLiteral("Images");
+	// `mascots_clip_seconds`: how long one clip stays on screen. 0 disables the clip timer
+	// entirely, which leaves the clip looping and the panel advancing on the existing beat.
+	int clipSeconds = 30;
+	// `mascots_random_start`: a clip may start anywhere in the file that leaves a clip's worth of
+	// it after the offset.
+	bool randomStart = true;
+	// `mascots_crossfade_ms`, clamped to [0, 10000] as it is read.
+	int crossfadeMs = 600;
+	// `mascots_max_decoders`, the hard ceiling on live players, and the mode derived from it.
+	// The clamp degrades rather than fails: below what two players per panel want it is one
+	// player per panel with a hard cut, and below what two panels want it is no video at all.
+	int maxDecoders = 6;
+	VideoMode videoMode = VideoMode::Crossfade;
+	// The budget the clamp line was last written for, so it appears when the budget changes and
+	// not on every Apply.
+	int loggedDecoderBudget = -1;
+	// Set by the first pick that found the panel's video sink missing: a delegate that does not
+	// exist yet is a wiring fact, not a per-swap event.
+	bool warnedVideoSink = false;
+	// `mascots_pause_unfocused`, and the state it last produced: a burst of window events must
+	// not repeat the pause/resume lines.
+	bool pauseUnfocused = true;
+	bool videoPaused = false;
+	// `mascots_weighted_random`, pushed into the source with the seed before every video pick.
+	bool weightedRandom = true;
+	// The window whose Show/Hide/activation/minimize state drives the pause. Watched with an
+	// event filter installed from updateLayout(), which is where a surface learns its window.
+	QPointer<QWidget> watchedWindow;
+	// Set by the first activation: before it, "not active" is the startup state of a window on
+	// its way to being active, not the user having switched away.
+	bool sawWindowActivation = false;
+	// The video pool's invalidation fingerprint (§7.8): the database, the filter settings and
+	// the model's row count. All three are cheap to compare and all three are a reason for the
+	// cached scan to be stale, so the pool is dropped at the first pick that sees one move.
+	bool poolFingerprintValid = false;
+	QString poolDb;
+	int poolRowCount = -1;
+	QJsonObject poolFilterJson;
 
 };

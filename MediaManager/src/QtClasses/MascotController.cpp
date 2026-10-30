@@ -240,7 +240,7 @@ void MascotController::applyConfig()
 	// The player half follows the new media setting and the new budget: an `Images` setting, or a
 	// budget below what a panel needs, gives the panel back its memory instead of leaving idle
 	// players behind, and a setting that becomes video-capable builds them.
-	this->ensureVideoSlots();
+	const bool downgraded = this->ensureVideoSlots();
 	// A config apply can change `mascots_pause_unfocused` or the clip length under a running
 	// panel, so the new rules are applied to what is playing now.
 	this->applyVideoPaused();
@@ -253,6 +253,16 @@ void MascotController::applyConfig()
 		SideState& state = this->stateFor(side);
 		if (state.shown.type == MascotMedia::Video && !state.shown.path.isEmpty())
 			this->restartClipTimer(state, side);
+	}
+	// A panel that lost its players is drawing nothing, and nothing else will fill it: the beat
+	// skips a panel by what it shows (which is now nothing) and the clip timer belonged to players
+	// that no longer exist. So the apply owes the pair one pick -- queued, because this runs inside
+	// a settings handler and a pick walks the mascot directory and posts a decode. One pick for the
+	// pair rather than one per panel, so the mirror key keeps deciding whether the two panels show
+	// the same file.
+	if (downgraded && this->running) {
+		this->logVideo(QStringLiteral("panels downgraded from video to images; repainting them"));
+		QMetaObject::invokeMethod(this, [this]() { this->nextImages(false); }, Qt::QueuedConnection);
 	}
 }
 
@@ -306,11 +316,20 @@ void MascotController::nextImages(bool forcedMirror)
 		// to share is the file *and the start offset*, and the offset is only known once the left
 		// panel's load reports it. This branch therefore either waits for that report or starts
 		// the right panel from the media the left panel is already showing.
-		if (this->leftState.requestedIsVideo) {
+		if (this->leftState.requestedIsVideo || this->leftState.videoPickRetryPending) {
 			MascotVideoSlot* leftVideo = this->leftState.video.data();
 			if (leftVideo && leftVideo->isBusy()) {
 				// Still in flight: the right panel's copy is started from the left panel's
 				// firstFrame(), which carries the offset the pair has to agree on.
+				this->preparePick(this->rightState, false);
+				this->rightState.mirrorCopyPending = true;
+				return;
+			}
+			if (this->leftState.videoPickRetryPending) {
+				// The left panel's pick is waiting for its QML delegate. That retry will start a
+				// load, and that load's first frame is where the pair's offset exists -- so the copy
+				// is armed now. Without this the pair would be silently unpaired for a whole clip:
+				// under the mirror key nothing else ever advances the right panel.
 				this->preparePick(this->rightState, false);
 				this->rightState.mirrorCopyPending = true;
 				return;
@@ -565,6 +584,14 @@ void MascotController::releaseSurface(SideState& state)
 	if (!state.surface)
 		return;
 	state.surface->removeEventFilter(this);
+	// M2: the two caches below describe the *surface's own slot*, so they die with it. A rebuilt
+	// surface starts at MascotSurface's defaults (FillMode::Fit, video outputs hidden), and a
+	// surviving "the slot already carries HeightFit" would suppress the write in applyDisplay()
+	// forever after -- which is exactly the M1 image-layout regression this task may not cause
+	// (HeightFit is what makes an image scale to the panel's height instead of fitting inside it).
+	state.slotFillMode = MascotSurface::FillMode::Fit;
+	state.slotFillModeKnown = false;
+	state.videoOutputVisible = false;
 	// M2: the players go before the surface. They draw into QVideoSinks that belong to the
 	// surface's QML delegate, so destroying the surface first would leave them holding pointers
 	// into objects that no longer exist. shutdown() is the synchronous detach Task 2 asks for.
@@ -842,6 +869,14 @@ void MascotController::showMedia(SideState& state, MascotSide side, const Mascot
 	if (armCandidate)
 		this->armSpeculation(side);
 
+	// M2: the left panel is the one the pair follows, so when it commits an *image* there is no
+	// video offset coming for the right panel to copy -- it was armed by a video pick that has
+	// since degraded (its sink never appeared, its pool emptied). Dropped here rather than only in
+	// onVideoFailed(), because a give-up downgrade never produces a failure to hear about. A video
+	// commit is untouched: onVideoFirstFrame() reads the flag after this call.
+	if (side == MascotSide::Left && media.type == MascotMedia::Image)
+		this->rightState.mirrorCopyPending = false;
+
 	if (state.highlightOnApply) {
 		state.highlightOnApply = false;
 		emit this->themeColorChanged(this->colorFor(side, true));
@@ -989,6 +1024,10 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 				this->warnedVideoSink = true;
 				this->logVideo(QStringLiteral("no video sink for the panel yet; retrying the pick"));
 			}
+			// Recorded for nextImages(): while the pick is waiting, this panel is still the one the
+			// mirror pair follows, so the right panel's copy has to be armed from its firstFrame
+			// rather than left waiting for a commit that the right panel never sees.
+			state.videoPickRetryPending = true;
 			QTimer::singleShot(VIDEO_SINK_RETRY_MS, this, [this, side]() {
 				if (!this->running)
 					return;
@@ -998,12 +1037,21 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 			});
 			return VideoPick::Skip;
 		}
-		// The delegate never appeared: images are the honest degrade, and the log says why once.
-		this->logVideo(QStringLiteral("no video sink for the panel after %1 retries; showing images instead")
-			.arg(VIDEO_SINK_RETRY_LIMIT));
+		// The delegate never appeared: images are the honest degrade, and the log says why once --
+		// once per process, not once per episode, because the retry budget below is reset so a
+		// delegate that arrives later gets its own. The counter is reset here so a recovered
+		// delegate is not decided by an exhausted budget.
+		state.videoPickRetryPending = false;
+		state.videoSinkRetries = 0;
+		if (!this->warnedVideoSinkGiveUp) {
+			this->warnedVideoSinkGiveUp = true;
+			this->logVideo(QStringLiteral("no video sink for the panel after %1 retries; showing images instead")
+				.arg(VIDEO_SINK_RETRY_LIMIT));
+		}
 		return VideoPick::Fallback;
 	}
 	state.videoSinkRetries = 0;
+	state.videoPickRetryPending = false;
 	// The source reads no config, so the seed and the weighted switch are pushed before the pick
 	// rather than only when the settings are applied (a change made mid-run would otherwise land
 	// one video pick late).
@@ -1033,6 +1081,43 @@ void MascotController::startVideoLoad(SideState& state, MascotSide side, const Q
 	MascotVideoSlot* slot = state.video.data();
 	if (!surface || !slot || path.isEmpty())
 		return;
+	// The sink may be gone even though pickVideo() saw it: a mirror copy does not pick, it replays
+	// the left panel's file and offset, and its own delegate may be a turn behind. A load started
+	// without a sink fails against a live panel, so this exact load is retried -- the same file at
+	// the same offset, because that offset is the pair's invariant and a fresh pick would choose a
+	// different one. Nothing is recorded in the meantime, so the panel is not left "waiting" for a
+	// frame no player will ever paint.
+	if (!surface->slotSink(0, 0)) {
+		if (state.videoLoadRetries++ < VIDEO_SINK_RETRY_LIMIT) {
+			this->logVideo(QStringLiteral("%1 has no video sink yet; retrying the same load")
+				.arg(sideLabel(side)));
+			// The same flag a retried pick sets, because from outside this is the same situation:
+			// this panel is about to start a load, so a mirrored pair has to arm the other panel's
+			// copy from that load's first frame.
+			state.videoPickRetryPending = true;
+			QTimer::singleShot(VIDEO_SINK_RETRY_MS, this, [this, side, path, offsetMs]() {
+				if (!this->running)
+					return;
+				SideState& panel = this->stateFor(side);
+				if (panel.video)
+					this->startVideoLoad(panel, side, path, offsetMs);
+			});
+			return;
+		}
+		state.videoLoadRetries = 0;
+		state.videoPickRetryPending = false;
+		// Latched like the pick branch above: one copy per left commit would otherwise repeat this
+		// once per clip for as long as the right panel's delegate is missing.
+		if (!this->warnedVideoSinkGiveUp) {
+			this->warnedVideoSinkGiveUp = true;
+			this->logVideo(QStringLiteral("%1 could not start its load (%2 retries, no sink); the next swap re-pairs the panels")
+				.arg(sideLabel(side))
+				.arg(VIDEO_SINK_RETRY_LIMIT));
+		}
+		return;
+	}
+	state.videoLoadRetries = 0;
+	state.videoPickRetryPending = false;
 	// The sinks are bound as late as possible (Task 2's contract): they do not exist until QML has
 	// created the delegate, and a binding made when the slot was created would have bound null for
 	// the life of the panel.
@@ -1209,9 +1294,10 @@ void MascotController::onVideoFailed(MascotSide side, const QString& path, bool 
 	}, Qt::QueuedConnection);
 }
 
-void MascotController::ensureVideoSlots()
+bool MascotController::ensureVideoSlots()
 {
 	const bool wantVideo = this->mediaMayBeVideo();
+	bool downgraded = false;
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
 		SideState& state = this->stateFor(side);
 		if (!state.surface)
@@ -1220,20 +1306,30 @@ void MascotController::ensureVideoSlots()
 			this->createVideoSlot(state, side);
 		}
 		else if (!wantVideo && state.video) {
-			// The setting is images-only, or the budget cannot carry a panel: the players go, and so
-			// does anything they were drawing. The slot itself is repainted by the next pick, which
-			// is now an image pick.
+			// The setting is images-only, or the budget cannot carry a panel: the players go.
 			if (state.clipTimer)
 				state.clipTimer->stop();
-			if (state.videoOutputVisible) {
-				state.surface->setSlotVideoVisible(0, false);
-				state.videoOutputVisible = false;
+			// A clip that was on screen has no player behind it any more, so `shown` must stop
+			// saying it is one. That claim is what onSwapBeat() reads to decide a panel's cadence:
+			// a panel still claiming video would be skipped by the beat *and* have no clip timer,
+			// i.e. frozen on a frame nothing owns until the app is restarted. The output is left
+			// visible, so the QML VideoOutput keeps its last frame on screen until the first image
+			// lands -- that commit hides it through applyDisplay() like any other image.
+			if (state.shown.type == MascotMedia::Video) {
+				const QString previousShown = state.shown.path;
+				state.shown = MascotMedia();
+				// The owner field changed, so the pin invariant is re-established the way every
+				// other path does it (a video path was never in the image cache, so this is a
+				// no-op that keeps the rule uniform).
+				this->syncPin(previousShown);
+				downgraded = true;
 			}
 			this->destroyVideoSlot(state);
 		}
 		if (state.video)
 			state.video->setSinglePlayer(this->videoMode != VideoMode::Crossfade);
 	}
+	return downgraded;
 }
 
 void MascotController::createVideoSlot(SideState& state, MascotSide side)
@@ -1274,6 +1370,8 @@ void MascotController::destroyVideoSlot(SideState& state)
 	state.requestedIsVideo = false;
 	state.mirrorCopyPending = false;
 	state.wantedOffsetMs = -1;
+	state.videoPickRetryPending = false;
+	state.videoLoadRetries = 0;
 }
 
 void MascotController::applyDecoderBudget()

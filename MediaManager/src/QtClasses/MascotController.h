@@ -180,6 +180,14 @@ private:
 		// therefore its sink) did not exist yet. A delegate created a turn later is normal; one
 		// that never appears has to fall back to images instead of asking forever.
 		int videoSinkRetries = 0;
+		// Set while a pick is waiting for that retry. nextImages() reads it: a panel that is about
+		// to retry is still the panel whose pick the pair mirrors, so the right panel's copy has to
+		// be armed now rather than left unpaired.
+		bool videoPickRetryPending = false;
+		// The same count, for one *specific* load: a mirror copy's file at a fixed offset. A copy
+		// that cannot find its sink has to be retried as that same load, because its offset is the
+		// pair's invariant and a fresh pick would choose a different one.
+		int videoLoadRetries = 0;
 		// The last path this panel was told failed, and when it was reported, so one unusable
 		// file produces one line instead of one per swap.
 		QString lastFailedVideoPath;
@@ -292,7 +300,10 @@ private:
 	// Copies the left panel's committed video onto the right panel: same file, same offset.
 	void startMirrorVideo(const QString& path, qint64 offsetMs);
 
-	void ensureVideoSlots();
+	// Builds or drops the player half of each panel from the media setting and the decoder budget.
+	// Returns true when a panel that was showing a video lost its players: that panel is drawing
+	// nothing and nothing else will fill it, so applyConfig() owes it one pick.
+	bool ensureVideoSlots();
 	void createVideoSlot(SideState& state, MascotSide side);
 	void destroyVideoSlot(SideState& state);
 	// Applies `mascots_max_decoders` and writes the clamp line once per change of budget.
@@ -352,6 +363,10 @@ private:
 	// Set by the first pick that found the panel's video sink missing: a delegate that does not
 	// exist yet is a wiring fact, not a per-swap event.
 	bool warnedVideoSink = false;
+	// Set by the first pick that gave up waiting for that sink. Said once for the same reason, and
+	// because the retry budget is per episode: without the latch a panel whose delegate never
+	// appears would repeat the line once per episode for as long as it is on screen.
+	bool warnedVideoSinkGiveUp = false;
 	// `mascots_pause_unfocused`, and the state it last produced: a burst of window events must
 	// not repeat the pause/resume lines.
 	bool pauseUnfocused = true;

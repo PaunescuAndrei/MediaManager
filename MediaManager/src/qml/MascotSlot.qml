@@ -52,6 +52,12 @@ Item {
 		fillMode: slot.heightFill ? Image.Stretch : slot.fillMode
 		mirror: slot.mirrored
 		visible: slot.mediaIsImage
+		// Pinned, not left to Image's default: the pixels are already decoded and sitting in
+		// MascotImageCache, and the provider serves them from memory (no disk, no decoder), so an
+		// asynchronous load would only defer the texture by a frame and show the previous image
+		// in the meantime. Synchronous here means the frame painted after a swap carries that
+		// swap, which is also what the latency probe measures.
+		asynchronous: false
 		// The position is pinned by anchors, so the content shift has to be a transform.
 		transform: Translate { x: slot.contentOffsetX }
 	}

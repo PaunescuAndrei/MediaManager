@@ -33,7 +33,7 @@ void MascotMediaSource::refreshRng()
 {
 	// The retired generator's refreshRngFromConfig(), branch for branch. Seeding is only
 	// redone when the seed string or the seed switch changed, and a seed that hashes to 0 is
-	// bumped to 1 so it cannot mean "default-constructed generator".
+	// bumped to 1 so it cannot mean "default-constructed std::mt19937".
 	if (!this->App || !this->App->config) {
 		if (!this->rngInitialized) {
 			std::random_device rd;

@@ -65,10 +65,11 @@ public:
 
 	// ===== AMENDMENT Z: TEMPORARY TIMING INSTRUMENTATION - DELETE AFTER THE LATENCY GATE =====
 	// Inert unless the app was started with `-debug`, because that is the only flag under which
-	// beginSwapTiming() is ever called. To remove it: delete this block, the `#include
-	// <QElapsedTimer>` marked with AMENDMENT Z at the top of this file, the AMENDMENT Z blocks
-	// in MascotSurface.cpp (constructor install, and the two definitions at the end of the
-	// file) and the AMENDMENT Z blocks in MascotController.cpp. Nothing else refers to it.
+	// beginSwapTiming() is ever called -- and the paint filter is not even installed until the
+	// first such call, so a run without the flag pays no filter call at all. To remove it:
+	// delete this block, the `#include <QElapsedTimer>` marked with AMENDMENT Z at the top of
+	// this file, the two definitions at the end of MascotSurface.cpp and the AMENDMENT Z blocks
+	// in MascotController.cpp. Nothing else refers to it.
 	//
 	// A swap is committed by a property write; the frame that carries it is painted later, so
 	// that paint is where the commit becomes visible. swapFramePainted() is emitted once the
@@ -83,6 +84,7 @@ private:
 	QElapsedTimer swapTimer;
 	QString swapLabel;
 	bool swapTimingPending = false;
+	bool swapTimingFilterInstalled = false;
 public:
 	// ===== END AMENDMENT Z ===================================================================
 

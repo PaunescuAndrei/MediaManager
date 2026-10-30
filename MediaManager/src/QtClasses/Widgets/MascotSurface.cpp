@@ -113,10 +113,6 @@ MascotSurface::MascotSurface(MascotImageCache* cache, QWidget* parent) : QWidget
 		engine->addImageProvider(QStringLiteral("mascots"), new MascotImageProvider(cache));
 
 	this->quick = new QQuickWidget(engine, this);
-	// AMENDMENT Z (temporary timing instrumentation): the frame that carries a committed swap
-	// is painted by this widget, so the filter below is how this class sees that paint. Remove
-	// this line with the rest of the AMENDMENT Z code.
-	this->quick->installEventFilter(this);
 	// The panel sits on top of the window's own background; the scene graph must not clear to
 	// an opaque colour first.
 	this->quick->setClearColor(Qt::transparent);
@@ -461,11 +457,16 @@ int MascotSurface::slotAt(const QPointF& position) const
 }
 
 // ===== AMENDMENT Z: TEMPORARY TIMING INSTRUMENTATION - DELETE AFTER THE LATENCY GATE =========
-// Delete both definitions, the installEventFilter() call in the constructor above and the
-// matching blocks in MascotSurface.h / MascotController.cpp once the latency gate has been run
-// and its numbers recorded. Nothing else calls or emits any of this.
+// Delete both definitions and the matching blocks in MascotSurface.h / MascotController.cpp once
+// the latency gate has been run and its numbers recorded. Nothing else calls or emits any of this.
 void MascotSurface::beginSwapTiming(const QString& label)
 {
+	// Installed here, not in the constructor: a run without -debug never reaches this call, and a
+	// filter that was never installed costs nothing on the paint path.
+	if (!this->swapTimingFilterInstalled && this->quick) {
+		this->quick->installEventFilter(this);
+		this->swapTimingFilterInstalled = true;
+	}
 	this->swapLabel = label;
 	this->swapTimer.start();
 	this->swapTimingPending = true;

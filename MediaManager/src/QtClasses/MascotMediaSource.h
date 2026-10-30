@@ -26,9 +26,9 @@ public:
 
 	// What refreshRngFromConfig() reads from config, supplied by the caller: the raw
 	// `random_seed` value and whether seeding is on (`random_use_seed` && `mascots_use_seed`).
-	// The raw value is what the "seed changed" test compares, exactly as the generator did --
-	// a changed salt does not re-seed -- and the salted form is only what the RNG is seeded
-	// with.
+	// The raw value is what the "seed changed" test compares, exactly as the retired generator
+	// did -- a changed salt does not re-seed -- and the salted form is only what the RNG is
+	// seeded with.
 	void setSeedSource(const QString& seedString, bool useSeed);
 
 	// The next mascot path, or an empty string when no mascot directory holds a file.

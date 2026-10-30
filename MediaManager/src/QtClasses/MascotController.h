@@ -114,8 +114,8 @@ private:
 		// kept -- and both empty when nothing is armed.
 		QString prefetchPath;
 		MascotMedia candidate;
-		// The user's flip count parity since the media last changed (the old flipPixmap()
-		// transform was a toggle, and a new image reset it).
+		// The user's flip parity since the media last changed: a flip is a toggle, and a new
+		// image resets it.
 		bool flipToggled = false;
 		// Set by a dropped/debugged file, which bypasses the side-directory rule exactly as
 		// the old debug path did; cleared by the next pick.

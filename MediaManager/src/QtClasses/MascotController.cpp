@@ -106,9 +106,9 @@ void MascotController::applyConfig()
 		// The surface-wide default. The per-slot value written by applyDisplay() below is
 		// what is drawn, so the default can never disagree with the picture.
 		state->surface->setMirror(mirror);
-		// The retired renderer's resizeImage() used to re-render from the unflipped original
-		// whenever the settings were applied, which dropped a user flip; a config change does
-		// the same thing here so the two behave alike.
+		// Applying config drops a user flip, which is what the retired renderer did when the
+		// settings were applied: the side rule becomes authoritative and the repaint below draws
+		// what the settings say, never a leftover toggle.
 		state->flipToggled = false;
 	}
 	// A mode change repaints what is already on screen; the surface default alone would only
@@ -123,7 +123,7 @@ void MascotController::applySeedSource()
 	if (!this->App || !this->App->config)
 		return;
 	Config* config = this->App->config;
-	// The seed string and the two switches the generator read, with the same precedence:
+	// The seed string and the two switches the retired generator read, with the same precedence:
 	// seeding applies only while both `random_use_seed` and `mascots_use_seed` are on.
 	this->source.setSeedSource(config->get("random_seed"),
 		config->get_bool("random_use_seed") && config->get_bool("mascots_use_seed"));
@@ -175,8 +175,8 @@ void MascotController::nextImages(bool forcedMirror)
 void MascotController::flipSide(MascotSide side)
 {
 	SideState& state = this->stateFor(side);
-	// The old flipPixmap() transformed an empty pixmap into an empty pixmap: flipping a panel
-	// that shows nothing is not a state change.
+	// The retired renderer's flip was a no-op on an empty pixmap, so flipping a panel that shows
+	// nothing is not a state change here either.
 	if (!state.surface || state.shown.path.isEmpty())
 		return;
 	state.flipToggled = !state.flipToggled;
@@ -468,8 +468,8 @@ void MascotController::applyMirror(SideState& state, MascotSide side)
 		mirrored = this->flipForSide(state.shown.path, side);
 	else
 		mirrored = false;
-	// The old flipPixmap() was a toggle over whatever the side rule had produced, and a new
-	// image reset it. One authoritative value per slot, written here and nowhere else.
+	// The retired renderer toggled whatever the side rule had produced, and a new image reset that
+	// toggle. One authoritative value per slot, written here and nowhere else.
 	if (state.flipToggled)
 		mirrored = !mirrored;
 	state.surface->setSlotMirrored(0, mirrored);

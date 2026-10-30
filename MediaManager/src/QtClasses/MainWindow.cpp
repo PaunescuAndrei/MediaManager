@@ -2811,8 +2811,8 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     else if (dialog->ui.mascotsCenterContent->checkState() == Qt::CheckState::Unchecked)
         config->set("mascots_center_content", "False");
     if (this->ui.mascotLeftHost->isVisible()) {
-        // The panels re-centre and re-scale from the controller now; resizeImage() was the old
-        // renderer's re-scale.
+        // The panels re-centre and re-scale from the controller now, so this only has to
+        // re-lay them out.
         this->mascotController->updateLayout();
     }
     // Every mascot key this milestone consumes (all-files-random, mirror, centred content,

@@ -31,7 +31,10 @@ panels only render what they are handed. Images are scaled to the panel height w
 ratio kept, and each image is centred on its visible content (its alpha-weighted centre) rather
 than on its geometric middle.
 
-Settings live in `config.ini`; all of them can also be changed from the settings dialog:
+Settings live in `config.ini`. All but three of them also have a control in the settings dialog:
+`mascots_media`, `mascots_image_cache_mb` and `mascots_image_cache_max_items` are file-only (the
+cache bounds are applied at startup and again when the dialog is applied, so a hand-edited value
+needs the dialog's Apply or a restart).
 
 | Key | Meaning |
 | --- | --- |

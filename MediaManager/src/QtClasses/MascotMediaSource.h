@@ -1,6 +1,7 @@
 #pragma once
 #include "definitions.h"
 #include <QRandomGenerator>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <optional>
@@ -69,6 +70,12 @@ public:
 	// model reset, a filter apply and a database switch -- and by nothing else.
 	void invalidateVideoPool();
 
+	// Records a path the video backend could not use, so no later draw returns it (§7.8: "failed
+	// files are dropped for the session", and the plan's Review Focus 1: "the file is not retried
+	// on every swap"). Called by the owner, which is where a failure is known; nextVideoPath() is
+	// where the drop is applied.
+	void noteVideoFailure(const QString& path);
+
 	// How many files the cached pool holds. Answers by scanning the pool if that has not happened
 	// yet (see ensureVideoPool), and 0 when the source has no live app to scan against.
 	int videoPoolSize() const;
@@ -106,4 +113,9 @@ private:
 	// answer; nothing but ensureVideoPool()/invalidateVideoPool() writes them.
 	mutable QList<VideoWeightedData> videoPool;
 	mutable bool videoPoolInitialized = false;
+	// §7.8's session-long drop, as paths rather than pool indices: the pool is re-scanned by
+	// invalidateVideoPool() and an index would then name a different file. Bounded by the thing it
+	// records -- there are only so many unplayable files in a library -- so it cannot grow the way
+	// a retry history would.
+	QSet<QString> failedVideoPaths;
 };

@@ -195,6 +195,11 @@ private:
 		// When this panel last wrote a media-type line, for the rate-limited ones (pool empty,
 		// which branch picked).
 		qint64 lastTypeLogMs = 0;
+		// The same, for the line that says a preview tooltip is holding this panel's next clip
+		// back (§7.13). The rule is re-asked every PREVIEW_DEFER_MS while the tooltip plays, so
+		// the line needs its own rate limit: sharing one with the type line would let a deferral
+		// suppress the "which branch picked" line the gate reads.
+		qint64 lastPreviewDeferLogMs = 0;
 	};
 
 	SideState& stateFor(MascotSide side);
@@ -316,6 +321,11 @@ private:
 	// `mascots_pause_unfocused`. Idempotent, so the event filter can call it on every event.
 	void applyVideoPaused();
 	bool videoShouldPause() const;
+	// True while the preview tooltip the window owns is actually playing (§7.13: "no new clip
+	// starts while a preview tooltip is playing"). Read through MainWindow's own QPointer, so a
+	// closed or never-opened tooltip is a null pointer here rather than a stale flag; the preview
+	// keeps its player and its lifecycle, and this class only ever asks it a question.
+	bool previewTooltipBusy() const;
 	// The one window whose visibility decides the pause state, watched by this object's filter.
 	void watchWindow(QWidget* window);
 

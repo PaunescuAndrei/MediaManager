@@ -27,6 +27,15 @@ namespace {
 			weightedSettings.bias_general, weightedSettings.no_views_weight,
 			weightedSettings.no_rating_weight, weightedSettings.no_tags_weight);
 	}
+
+	// How many draws one pick may spend looking for a candidate that has not already failed. The
+	// skip is a re-draw rather than a filtered pool because the pool is the app's own candidate
+	// set and a copy minus the failures would be a second encoding of it (the same objection Task
+	// 3's review made to the duplicated empty-pool answer); a handful of unplayable files in a
+	// library is the case this serves. Each re-draw costs one advance of the seeded generator,
+	// which is why the loop is bounded: a pool where every candidate has failed answers "" and the
+	// caller falls back to images, which is §7.8's honest degrade rather than a retry forever.
+	constexpr int VIDEO_DRAW_ATTEMPTS = 8;
 }
 
 MascotMediaSource::MascotMediaSource(MainApp* App)
@@ -164,7 +173,32 @@ QString MascotMediaSource::nextVideoPath()
 	// One draw, no exclusion. A pick is allowed to land on the file the main player currently has
 	// -- the user's explicit call, and the panel is free to show what is already playing -- so
 	// nothing here re-rolls and nothing here reads the player's path. Do not "fix" that back in.
-	return drawVideoPath(this->videoPool, this->weightedChoice, weightedSettings, *this->videoGenerator);
+	// The one exclusion §7.8 does ask for is applied here, at the draw: a file that already failed
+	// is skipped with a bounded re-draw (VIDEO_DRAW_ATTEMPTS), so a broken clip cannot return every
+	// 1/pool swaps and cost a failure or a five-second timeout with the panel frozen on its last
+	// frame. A pick whose every attempt lands on a known-bad path answers "" rather than a path
+	// that is known to fail.
+	for (int attempt = 0; attempt < VIDEO_DRAW_ATTEMPTS; ++attempt) {
+		const QString path = drawVideoPath(this->videoPool, this->weightedChoice, weightedSettings,
+			*this->videoGenerator);
+		if (path.isEmpty() || !this->failedVideoPaths.contains(path))
+			return path;
+	}
+	return "";
+}
+
+void MascotMediaSource::noteVideoFailure(const QString& path)
+{
+	if (path.isEmpty())
+		return;
+	// Session-scoped, and deliberately not time-based: a file the backend cannot decode does not
+	// become decodable a minute later, so an interval would only put it back into the draw to fail
+	// again -- one failure line plus a frozen panel, or five seconds of timeout, each time it came
+	// round. That recurring cost is exactly what §7.8's rule removes. `invalidateVideoPool()` does
+	// not clear this set either: the file is the same file after a model reset, a filter apply or a
+	// database switch, and the only real recovery is a fix on disk, which the next process start
+	// sees because the set dies with this object.
+	this->failedVideoPaths.insert(path);
 }
 
 void MascotMediaSource::invalidateVideoPool()

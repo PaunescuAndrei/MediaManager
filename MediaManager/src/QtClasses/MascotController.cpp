@@ -2,6 +2,10 @@
 #include "MascotController.h"
 #include "MainApp.h"
 #include "MainWindow.h"
+// §7.13's preview rule asks the tooltip's own player whether it is playing. MainWindow holds it by
+// QPointer and its isPlaying() is public, so nothing about the preview's ownership changes: this
+// include is the whole cost of the question.
+#include "PreviewVideoWindow.h"
 #include "VideosModel.h"
 #include "utils.h"
 #include <QDateTime>
@@ -39,6 +43,12 @@ namespace {
 	// by the time the surface has applied its slot count, so this is the belt to that braces.
 	constexpr int VIDEO_SINK_RETRY_LIMIT = 5;
 	constexpr int VIDEO_SINK_RETRY_MS = 150;
+
+	// §7.13's preview rule is a deferral, not a skip: a tooltip plays for as long as the user keeps
+	// hovering, so the pick is re-asked at this interval until it stops. One `isPlaying()` on a
+	// QPointer is the whole cost of a tick, and the panel keeps the clip it is already showing --
+	// the rule gates a *start*, never playback.
+	constexpr int PREVIEW_DEFER_MS = 250;
 
 	// The rate limit on the two lines that can be produced by every swap (which branch picked and
 	// "the pool is empty"): the statement is about the configuration, and repeating it at swap
@@ -207,6 +217,14 @@ void MascotController::applyConfig()
 		this->warnedUnsupportedMedia = true;
 		this->logVideo(QStringLiteral("mascots_media=\"%1\" is not one of Images, Videos or Mixed; showing images.")
 			.arg(this->mediaSetting));
+		// The debug line above is not enough on its own: a typo here ("video", "Video ", "Mixed ")
+		// leaves both panels on images in every run, and a debug-gated line is invisible in exactly
+		// the run where the user needs it. So M1's ungated warning is restored beside the debug
+		// line rather than replaced by it, once per process like it was, with its wording moved to
+		// the values this milestone accepts. It is not routed through the Logger for the same
+		// reason: the Logger's OutputDebugString copy is the debug-only half.
+		qWarning() << "mascots_media:" << this->mediaSetting
+			<< "is not one of Images, Videos or Mixed; showing images.";
 	}
 
 	this->source.setAllFilesRandom(config->get_bool("mascots_allfiles_random"));
@@ -231,6 +249,16 @@ void MascotController::applyConfig()
 		// settings were applied: the side rule becomes authoritative and the repaint below draws
 		// what the settings say, never a leftover toggle.
 		state->flipToggled = false;
+		// The clip rules are live settings as much as the mirror is, and createVideoSlot() must not
+		// be their only reader: `mascots_clip_seconds` also re-arms the clip timer below, so a slot
+		// still holding the previous length picks its start offset from a range that length no
+		// longer means -- 30 s down to 5 s leaves a 30 s range, and a clip can then open 5 s before
+		// the end and visibly restart mid-clip. `mascots_random_start` off fails the other way: a
+		// slot created under `True` keeps randomising until it is rebuilt. Pushed here, so one
+		// Apply moves the timer and the offset range together instead of letting two consumers of
+		// one key disagree.
+		if (state->video)
+			state->video->setRandomStart(this->randomStart, this->clipSeconds);
 	}
 	// A mode change repaints what is already on screen; the surface default alone would only
 	// affect a slot created later.
@@ -697,6 +725,18 @@ void MascotController::applyDisplay(SideState& state, MascotSide side)
 		state.videoOutputVisible = false;
 		if (state.video)
 			state.video->stopAll();
+		// The "fresh panel -> opacity 0" premise startVideoLoad() re-shows the output on is about
+		// the *slot*, and the slot outlives this branch: hiding the outputs leaves their opacity
+		// where the last clip left it. After any video -> image -> video cycle on the same surface
+		// (a dropped image, a `mascots_media` / `max_decoders` round trip without a recreate) the
+		// next clip would then load at the previous clip's opacity -- revealing the old frozen
+		// frame for the whole load on A (which single-player mode always uses) and blending that
+		// dead frame into the new clip on B. Reset here, where the outputs are already hidden and
+		// therefore nothing of it can be seen. Duration 0 because this is a reset, not a fade:
+		// interpolating either opacity here would paint the old frame over the image this branch
+		// has just shown.
+		state.surface->setSlotVideoOpacity(0, 0, 0.0, 0);
+		state.surface->setSlotVideoOpacity(0, 1, 0.0, 0);
 	}
 	// An image panel has no cadence of its own: M1's beat-driven behaviour is the whole of it,
 	// and a clip timer left running would advance a panel the beat is already advancing.
@@ -1013,6 +1053,41 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 	// not fall through to an image either -- the panel is showing video and is merely busy.
 	if (slot->isBusy())
 		return VideoPick::Skip;
+	// §7.13's preview rule, and the only place a new clip is *chosen*: while the tooltip is
+	// playing, the pick waits. Nothing already on screen is disturbed -- the panel keeps its clip,
+	// its players and its cadence-less state; only a start is held back -- and no decoder is
+	// touched, so a tooltip that started mid-clip costs the panel nothing until the clip after it.
+	// Deferred rather than skipped, for the reason the sink retry below is: the clip timer that
+	// asked for this swap has already fired (it is single-shot and only a commit re-arms it), so a
+	// pick that simply returned would leave the panel on its old clip until the beat moved it --
+	// and under `mascots_clip_seconds > 0` the beat does not advance a video panel at all. The
+	// re-ask is this same pick path at PREVIEW_DEFER_MS for as long as the tooltip plays, so no
+	// path is drawn from the pool until the first retry that finds it silent -- one draw for the
+	// swap the deferral belongs to.
+	// Checked before the sink test so a deferral costs none of the sink-retry budget.
+	if (this->previewTooltipBusy()) {
+		const qint64 now = QDateTime::currentMSecsSinceEpoch();
+		if (state.lastPreviewDeferLogMs == 0
+			|| (now - state.lastPreviewDeferLogMs) >= VIDEO_LOG_INTERVAL_MS) {
+			state.lastPreviewDeferLogMs = now;
+			this->logVideo(QStringLiteral("%1 swap waits: a preview tooltip is playing").arg(sideLabel(side)));
+		}
+		// The same flag the sink retry sets, for the same reason: this panel is about to start a
+		// load, so under the mirror key the other panel's copy has to be armed from that load's
+		// first frame rather than left waiting for a commit it will not see on its own.
+		state.videoPickRetryPending = true;
+		QTimer::singleShot(PREVIEW_DEFER_MS, this, [this, side]() {
+			if (!this->running)
+				return;
+			SideState& panel = this->stateFor(side);
+			// A load that started in the meantime (a click, the other panel's pair) is newer than
+			// this deferral: it owns the panel's next frame.
+			if (!panel.video || panel.video->isBusy() || panel.requestedIsVideo)
+				return;
+			this->pickFor(panel, side, true);
+		});
+		return VideoPick::Skip;
+	}
 	// The sink belongs to the delegate, so it does not exist until QML has created it. A load
 	// started without one would fail against a live panel that is only a moment behind, so the
 	// pick is retried rather than reported: the surface has just been told its slot count, and the
@@ -1234,6 +1309,13 @@ void MascotController::onVideoFailed(MascotSide side, const QString& path, bool 
 	SideState& state = this->stateFor(side);
 	if (!state.surface || !state.video)
 		return;
+	// §7.8: "failed files are dropped for the session". Recorded here because this is where a
+	// failure is *known* -- a load the backend refused, a load that never painted, or a clip that
+	// died on screen -- and the drop is applied by the only thing that draws (the source). Without
+	// it the same unusable file comes back roughly every 1/pool swaps and costs a failure line or
+	// five seconds of frozen last frame each time, which is the cost this rule exists to remove.
+	// An empty path is a wiring report rather than a file, and the source ignores it.
+	this->source.noteVideoFailure(path);
 	// The panel keeps whatever it is drawing. A load that failed says nothing about the clip that
 	// is on screen, and a clip that died on screen has already stopped and released itself (Task
 	// 2 releases before emitting), so the frame it painted last is still in the slot: blanking
@@ -1480,6 +1562,23 @@ bool MascotController::videoShouldPause() const
 	return false;
 }
 
+bool MascotController::previewTooltipBusy() const
+{
+	// §7.13: "no new clip starts while a preview tooltip is playing; bands already playing
+	// continue." The tooltip is MainWindow's own popup (a QPointer, so a closed one is null here
+	// rather than a flag this class would have to keep in step), and its controller's isPlaying()
+	// is the honest answer to "is it playing" -- the popup's own visibility is not, because it is
+	// shown before its first frame and destroyed after its last.
+	// Asked of the preview, never imposed on it: nothing here pauses, seeks or sources it, and the
+	// panels' own players are not touched either, which is the "already playing continues" half of
+	// the clause.
+	MainWindow* window = this->App ? this->App->mainWindow : nullptr;
+	if (!window)
+		return false;
+	PreviewVideoWindow* tooltip = window->previewTooltip.data();
+	return tooltip && tooltip->isPlaying();
+}
+
 void MascotController::applyVideoPaused()
 {
 	if (!this->running)
@@ -1487,7 +1586,8 @@ void MascotController::applyVideoPaused()
 	const bool pause = this->videoShouldPause();
 	if (pause == this->videoPaused)
 		return;
-	this->videoPaused = pause;	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
+	this->videoPaused = pause;
+	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
 		SideState& state = this->stateFor(side);
 		if (state.video)
 			state.video->setPaused(pause);

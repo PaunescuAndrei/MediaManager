@@ -287,6 +287,18 @@ void MascotVideoSlot::handleMediaStatus(int ab, QMediaPlayer::MediaStatus status
 	if (status == QMediaPlayer::InvalidMedia) {
 		// A file that cannot be opened fails whoever holds it: the load in flight, or the clip
 		// that was already on screen.
+		// Same load-generation evidence handleError() below uses, applied to the same case: in
+		// clamped (single-player) mode one player is reloaded in place, so a late InvalidMedia from
+		// the previous source arrives with currentSource() already naming this load's path -- and
+		// failing that load here would abort a perfectly good file for a status that describes the
+		// clip before it. A load that has not reported Loading yet has produced no status of its
+		// own, and its own failure still arrives as InvalidMedia after that Loading. A backend that
+		// reports an unopenable file without ever emitting LoadingMedia ends as the 5 s timeout
+		// instead of a failure -- the same, louder-not-silent trade the error path below makes.
+		if (this->m_pending.serial != 0 && this->m_pending.ab == ab
+			&& player->currentSource() == this->m_pending.path && !this->m_pending.sawLoading) {
+			return;
+		}
 		this->failPlayer(ab);
 		return;
 	}

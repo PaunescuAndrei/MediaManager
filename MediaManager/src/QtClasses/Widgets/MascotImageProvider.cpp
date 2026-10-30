@@ -5,12 +5,18 @@
 #include <QUrl>
 
 namespace {
-	// The id MascotPrefetcher produces is percent-encoded (that is the cache key), but whether
-	// Qt 6.12 hands requestImage() the encoded or the decoded form is a Qt detail this class
-	// must not depend on: both are tried, so correctness holds either way (amendment M).
+	// The cache is keyed by the raw path (MascotPrefetcher::cacheIdForPath()), but which form of
+	// the id Qt hands requestImage() is a Qt detail this class must not depend on: Qt decodes it
+	// in the normal case (QUrl::path() percent-decodes), yet nothing promises it. Each candidate
+	// form is therefore tried, so correctness holds either way (amendment M).
 	QString decodedId(const QString& id)
 	{
 		return QUrl::fromPercentEncoding(id.toUtf8());
+	}
+
+	QString encodedId(const QString& id)
+	{
+		return QString::fromLatin1(QUrl::toPercentEncoding(id));
 	}
 }
 
@@ -25,11 +31,21 @@ QImage MascotImageProvider::requestImage(const QString& id, QSize* size, const Q
 
 	QImage image;
 	if (this->cache) {
+		// Step 1: the id as received -- the normal case, Qt already decoded it to the raw path
+		// the cache is keyed by.
 		image = this->cache->image(id);
+		// Step 2: Qt handed the id over still percent-encoded, so the raw key is its decoding.
 		if (image.isNull()) {
 			const QString decoded = decodedId(id);
 			if (decoded != id)
 				image = this->cache->image(decoded);
+		}
+		// Step 3: the id needs re-encoding to match a key (a path holding a literal percent
+		// escape, or a build that hands over an unescaped form of an escaped id).
+		if (image.isNull()) {
+			const QString encoded = encodedId(id);
+			if (encoded != id)
+				image = this->cache->image(encoded);
 		}
 	}
 

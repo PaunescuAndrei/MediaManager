@@ -250,12 +250,17 @@ void MascotPrefetcher::pruneUncachedMedia()
 
 QString MascotPrefetcher::providerIdForPath(const QString& path)
 {
-	return QStringLiteral("image://mascots/") + cacheIdForPath(path);
+	// The URL keeps the percent-encoded form: Qt parses this as a URL, so spaces, '#', '?' and
+	// non-ASCII names have to be escaped here. This form is a URL, not a key -- the cache is
+	// keyed by the raw path (see cacheIdForPath()).
+	return QStringLiteral("image://mascots/") + QString::fromLatin1(QUrl::toPercentEncoding(path));
 }
 
 QString MascotPrefetcher::cacheIdForPath(const QString& path)
 {
-	// The cache id is exactly what QQuickImageProvider passes to requestImage() as `id`, so a
-	// provider can look up the id it is handed without decoding it first.
-	return QString::fromLatin1(QUrl::toPercentEncoding(path));
+	// The cache is keyed by the raw path. Qt decodes the id before calling
+	// QQuickImageProvider::requestImage() -- QUrl::path() percent-decodes -- so the provider is
+	// handed the path itself, and that is the form it has to find in the cache. Percent-encoding
+	// belongs to the URL only, in providerIdForPath().
+	return path;
 }

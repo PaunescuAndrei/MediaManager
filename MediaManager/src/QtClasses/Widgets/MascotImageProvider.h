@@ -23,10 +23,12 @@ public:
 	// `cache` is not owned and must outlive the engine that owns this provider.
 	explicit MascotImageProvider(MascotImageCache* cache);
 
-	// `id` is the percent-encoded cache key MascotPrefetcher built, possibly already decoded
-	// by Qt: both forms are tried (amendment M). `requestedSize` is ignored on purpose -- the
-	// cache already holds the pixels at native size, and scaling them here would copy the
-	// whole image on the render thread for every request; Qt scales the texture on the GPU.
+	// `id` is the id Qt built from image://mascots/<encoded path>, in whatever form Qt passes
+	// it -- decoded to the raw path the cache is keyed by (the normal case), still encoded, or
+	// needing re-encoding. All three are tried (amendment M). `requestedSize` is ignored on
+	// purpose -- the cache already holds the pixels at native size, and scaling them here would
+	// copy the whole image on the render thread for every request; Qt scales the texture on the
+	// GPU.
 	QImage requestImage(const QString& id, QSize* size, const QSize& requestedSize) override;
 
 private:

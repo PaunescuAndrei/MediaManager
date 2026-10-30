@@ -48,8 +48,11 @@ public:
 	void setSlotMedia(int i, const MascotMedia& media);
 	void clearSlot(int i);
 	void clearSlots();
-	// Surface-wide mirror flag (from config, applied by the driver). A slot set individually
-	// through setSlotMirrored() stays mirrored when this clears it.
+	// Surface-wide mirror value (from config, applied by the driver). It is a bulk assignment
+	// over every slot and the value a slot created by a later setSlotCount() starts from; the
+	// per-slot flag stays the single authoritative value, so a setSlotMirrored() that comes
+	// after this one overrides that slot only. There is no separate root property to drift out
+	// of step with what is drawn.
 	void setMirror(bool mirror);
 
 signals:
@@ -60,6 +63,10 @@ signals:
 	void imageDropped(int slot, QString path);
 
 protected:
+	// Taken for a press over a slot so the matching release is routed here and the panel's host
+	// never sees half of a click pair; a press outside every slot is left to the base
+	// implementation, which ignores it and lets it propagate.
+	void mousePressEvent(QMouseEvent* event) override;
 	void mouseReleaseEvent(QMouseEvent* event) override;
 	void dragEnterEvent(QDragEnterEvent* event) override;
 	void dragMoveEvent(QDragMoveEvent* event) override;
@@ -109,5 +116,8 @@ private:
 	// QML object that could be destroyed under it.
 	QPointer<QQuickItem> root;
 	QVector<Slot> slotStates;
+	// The value last handed to setMirror(): the initial mirror state of a slot created later.
+	// What a slot draws is always its own Slot::mirrored, never this combined with it, so there
+	// is exactly one place the effective mirror comes from.
 	bool mirror = false;
 };

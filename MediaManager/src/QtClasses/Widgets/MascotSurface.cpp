@@ -121,8 +121,6 @@ MascotSurface::MascotSurface(MascotImageCache* cache, QWidget* parent) : QWidget
 	}
 
 	this->root = this->quick->rootObject();
-	if (this->root)
-		this->root->setProperty("mirrored", this->mirror);
 
 	auto* layout = new QVBoxLayout(this);
 	layout->setContentsMargins(0, 0, 0, 0);
@@ -135,12 +133,17 @@ void MascotSurface::setSlotCount(int n)
 		n = 0;
 	if (n == this->slotStates.size())
 		return;
+	const int previousCount = this->slotStates.size();
 	// Shrink first, then let QML destroy: the Slot entries (and the QPointers inside them) go
 	// away before the Repeater deletes the delegate they refer to, so nothing here can outlive
 	// an item. Growing is the same order: the Repeater creates the delegates during the
 	// property write below, and applyAllSlots() then resolves them and re-applies the state
 	// each slot already carries.
 	this->slotStates.resize(n);
+	// A slot that did not exist when setMirror() last ran starts from that value; a slot that
+	// already existed keeps whatever it was given, including a per-slot setSlotMirrored().
+	for (int i = previousCount; i < n; ++i)
+		this->slotStates[i].mirrored = this->mirror;
 	if (this->root)
 		this->root->setProperty("slotCount", n);
 	this->applyAllSlots();
@@ -242,23 +245,40 @@ void MascotSurface::clearSlots()
 void MascotSurface::setMirror(bool mirror)
 {
 	this->mirror = mirror;
-	// The root property is written for the QML side to read, and every slot is re-applied
-	// because the content shift depends on the effective mirror (a mirrored image's content
-	// centre ends up on the other side of the painted area).
-	if (this->root)
-		this->root->setProperty("mirrored", mirror);
+	// A bulk assignment over every slot, which is what makes the picture flip: the slot's
+	// `mirrored` is the value MascotSlot.qml reads (Image.mirror) and the value applySlot()
+	// derives the content shift from, so one write per slot keeps what is drawn and where it is
+	// drawn in step. A setSlotMirrored() that arrives later overrides that one slot, and a slot
+	// created later starts from this value (setSlotCount).
+	for (int i = 0; i < this->slotStates.size(); ++i)
+		this->slotStates[i].mirrored = mirror;
 	this->applyAllSlots();
+}
+
+void MascotSurface::mousePressEvent(QMouseEvent* event)
+{
+	// A press over a slot is consumed here for two reasons: Qt routes the matching release to
+	// the widget that took the press, and the panel's host should not see half of a click pair
+	// (a press whose release was swallowed by the slot). A press outside every slot goes to the
+	// base implementation, whose default ignores it, so it still propagates like any other
+	// widget's.
+	if (this->slotAt(event->position()) >= 0) {
+		event->accept();
+		return;
+	}
+	QWidget::mousePressEvent(event);
 }
 
 void MascotSurface::mouseReleaseEvent(QMouseEvent* event)
 {
 	const int slot = this->slotAt(event->position());
 	if (slot >= 0) {
-		// A release over a slot belongs to that slot: accepting it keeps the click from also
-		// reaching whatever this panel is embedded in, which is how the retired renderer's
-		// click signal behaved too.
+		// A release over a slot belongs to that slot, so it is accepted and not passed on. The
+		// base implementation is deliberately not called here: QWidget::mouseReleaseEvent()
+		// ignores the event, which would undo the accept and hand the click to the host anyway.
 		event->accept();
 		emit clicked(slot, event->button(), event->modifiers());
+		return;
 	}
 	QWidget::mouseReleaseEvent(event);
 }
@@ -333,7 +353,10 @@ void MascotSurface::applySlot(int i)
 	item->setHeight(slot.rect.height());
 	item->setOpacity(slot.opacity);
 
-	const bool mirrored = this->mirror || slot.mirrored;
+	// One authoritative value: the slot's own flag, which setMirror() and setSlotMirrored() both
+	// write. It flips the image (MascotSlot.qml reads it as Image.mirror) and it is the value
+	// the content shift is derived from, so the two can never disagree.
+	const bool mirrored = slot.mirrored;
 	item->setProperty("mirrored", mirrored);
 	item->setProperty("fillMode", qmlFillModeValue(slot.fillMode));
 	item->setProperty("mediaIsImage", slot.mediaIsImage);

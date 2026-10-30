@@ -9,16 +9,19 @@ import QtMultimedia
 Item {
 	id: slot
 
-	// The Repeater's index, injected into the delegate. Declaring it as required is what makes
-	// the dependency explicit instead of relying on an implicit context property.
-	required property int index
-
+	// `index` is the Repeater's delegate context property, which the Repeater always injects.
+	// Deliberately not declared as a required property: that form depends on the engine
+	// populating required properties of delegates, and a delegate that failed to be populated
+	// would leave every slot silently blank.
 	objectName: "mascotSlot" + index
 	clip: true
 
 	// Target of the FillMode -> Image.FillMode mapping that lives in MascotSurface (C++,
 	// amendment Q): the QML side maps nothing itself.
 	property int fillMode: Image.PreserveAspectFit
+	// Set by MascotSurface::setSlotMirrored and ::setMirror. This is the single authoritative
+	// mirror value: the C++ side derives the content shift from the same property it writes
+	// here, so the flip and the shift cannot disagree.
 	property bool mirrored: false
 	// Pixel shift that puts the media's visual content centre on the slot's centre.
 	// MascotSurface computes it from the source-pixel centre, the slot rectangle, the fill mode
@@ -29,7 +32,7 @@ Item {
 	Image {
 		id: img
 
-		objectName: "img" + slot.index
+		objectName: "img" + index
 		anchors.fill: parent
 		fillMode: slot.fillMode
 		mirror: slot.mirrored
@@ -40,6 +43,6 @@ Item {
 
 	// Video outputs for the video path. Named per index (amendment O) but not driven yet: this
 	// task's interface has nothing to hand them a QVideoSink.
-	VideoOutput { objectName: "videoA" + slot.index }
-	VideoOutput { objectName: "videoB" + slot.index }
+	VideoOutput { objectName: "videoA" + index }
+	VideoOutput { objectName: "videoB" + index }
 }

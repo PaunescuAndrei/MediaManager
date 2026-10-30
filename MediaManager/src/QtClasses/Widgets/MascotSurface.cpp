@@ -2,7 +2,7 @@
 #include "MascotSurface.h"
 #include "MascotImageProvider.h"
 #include "OverlayGraphicsVideoWidget.h"
-#include <QDir>
+#include <algorithm>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QFileInfo>
@@ -233,7 +233,8 @@ void MascotSurface::setSlotMedia(int i, const MascotMedia& media)
 	// against the sane range so a caller that breaks that contract cannot poison the shift.
 	slot.hasContentCenter = media.hasContentCenter && isSaneExtent(media.contentCenterX);
 	slot.contentCenterX = slot.hasContentCenter ? media.contentCenterX : 0.0;
-	this->applySlot(i);}
+	this->applySlot(i);
+}
 
 void MascotSurface::clearSlot(int i)
 {

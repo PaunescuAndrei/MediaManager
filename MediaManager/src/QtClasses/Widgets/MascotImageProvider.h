@@ -35,7 +35,9 @@ private:
 	MascotImageCache* cache = nullptr;
 	// A miss is reported once per id: an Image item asks again whenever its source is
 	// re-applied, and an id that was evicted would otherwise log on every frame. requestImage()
-	// is not promised to run on a single thread, so the set has its own mutex.
+	// is not promised to run on a single thread, so the set has its own mutex. The set stops
+	// growing past MAX_LOGGED_MISS_IDS (see the .cpp): these lines are best-effort, so an
+	// unbounded set would be a leak bought with nothing.
 	QMutex missLogMutex;
 	QSet<QString> loggedMissIds;
 };

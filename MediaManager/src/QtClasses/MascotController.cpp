@@ -40,8 +40,17 @@ void MascotController::setSurfaces(MascotSurface* left, MascotSurface* right)
 	}
 	// Whatever the old surfaces were showing is released first: their slots, their pins and
 	// their pending requests must not survive into the new ones.
+	const MascotSurface* previousLeft = this->leftState.surface.data();
+	const MascotSurface* previousRight = this->rightState.surface.data();
 	this->clearSide(this->leftState);
 	this->clearSide(this->rightState);
+	// A surface this call replaces is released exactly the way stop()/disable releases it: it is
+	// deleted, so a controller handed a fresh pair does not leave the previous panels alive --
+	// and still drawing -- inside their hosts. A surface that is passed again is kept.
+	if (previousLeft && previousLeft != left)
+		this->releaseSurface(this->leftState);
+	if (previousRight && previousRight != right)
+		this->releaseSurface(this->rightState);
 	this->leftState.surface = left;
 	this->rightState.surface = right;
 	this->configureSurface(this->leftState, MascotSide::Left);
@@ -91,10 +100,15 @@ void MascotController::applyConfig()
 	Config* config = this->App->config;
 
 	// Amendment D's `mascots_media` is read here so it is not a write-only key. M1 renders
-	// images only; a value this milestone cannot honour is reported rather than ignored.
+	// images only; a value this milestone cannot honour is reported rather than ignored. Said
+	// once per process: it is a statement about the configuration, not an event, so repeating it
+	// on every Apply would only bury the rest of the log.
 	const QString mediaKind = config->get("mascots_media");
-	if (!mediaKind.isEmpty() && mediaKind.compare(QStringLiteral("Images"), Qt::CaseInsensitive) != 0)
+	if (!this->warnedUnsupportedMedia && !mediaKind.isEmpty()
+		&& mediaKind.compare(QStringLiteral("Images"), Qt::CaseInsensitive) != 0) {
+		this->warnedUnsupportedMedia = true;
 		qWarning() << "mascots_media:" << mediaKind << "is not supported in this build; showing images.";
+	}
 
 	this->source.setAllFilesRandom(config->get_bool("mascots_allfiles_random"));
 	this->applySeedSource();

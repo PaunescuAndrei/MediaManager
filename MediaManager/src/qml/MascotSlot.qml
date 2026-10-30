@@ -56,7 +56,7 @@ Item {
 		// MascotImageCache, and the provider serves them from memory (no disk, no decoder), so an
 		// asynchronous load would only defer the texture by a frame and show the previous image
 		// in the meantime. Synchronous here means the frame painted after a swap carries that
-		// swap, which is also what the latency probe measures.
+		// swap: the provider answers from the cache inside the same property write.
 		asynchronous: false
 		// The position is pinned by anchors, so the content shift has to be a transform.
 		transform: Translate { x: slot.contentOffsetX }

@@ -34,6 +34,15 @@ public:
 	// configured values in through this call.
 	void setLimits(int maxItems, qint64 maxBytes);
 
+	// The palette switch (I2). Master ran palette extraction only while `mascots_color_theme`
+	// was on (App->MascotsExtractColor, `config.cpp` defaults it to False), and it is the most
+	// expensive part of a decode: 20-cluster k-means plus a QPixmap conversion on the same two
+	// workers that serve the miss path. This class reads no config (see setLimits), so MainApp
+	// -- which does read it -- pushes the flag in here at construction and wherever the setting
+	// is refreshed. Takes effect on the next decode; one already in flight keeps the value it
+	// started with. GUI thread only, like every other setter.
+	void setExtractColors(bool extract);
+
 	// Pins or unpins the cache entry for `path`. The path -> cache id mapping stays in this
 	// class (cacheIdForPath() is private for exactly that reason), so a consumer that must
 	// hold an id against eviction -- the controller, for the media a panel displays -- asks
@@ -66,8 +75,10 @@ signals:
 private:
 	struct DecodeResult; // defined in MascotPrefetcher.cpp: the worker's payload
 
-	// Runs on a decode worker. Static so it cannot reach this object's GUI-thread state.
-	static DecodeResult decode(const QString& path, const QString& providerId);
+	// Runs on a decode worker. Static so it cannot reach this object's GUI-thread state, which
+	// is also why the palette switch is a parameter: request() captures the member on the GUI
+	// thread and hands the value to the worker.
+	static DecodeResult decode(const QString& path, const QString& providerId, bool extractColors);
 	// Runs on the GUI thread, queued back from the worker: inserts into the cache, then
 	// announces. Discards the result when clear() happened while the decode was in flight.
 	void handleDecoded(DecodeResult result, quint64 requestGeneration);
@@ -81,6 +92,9 @@ private:
 
 	MascotImageCache* cache = nullptr;
 	QThreadPool* decodePool = nullptr;
+	// I2's switch. GUI thread only: request() copies it into the worker's payload, so no decode
+	// worker ever reads this member.
+	bool extractColors = false;
 	QSet<QString> pendingPaths;                  // GUI thread only
 	QSet<QString> failedPaths;                   // GUI thread only, so a failure logs once
 	QHash<QString, MascotMedia> rememberedMedia; // GUI thread only, keyed by path

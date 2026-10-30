@@ -73,6 +73,17 @@ qint64 MascotImageCache::byteCount() const
 	return this->byteCountLocked();
 }
 
+int MascotImageCache::pinnedCount() const
+{
+	const QMutexLocker locker(&this->cacheMutex);
+	int pinned = 0;
+	for (const Entry& entry : this->entries) {
+		if (entry.pinned)
+			++pinned;
+	}
+	return pinned;
+}
+
 qint64 MascotImageCache::byteCountLocked() const
 {
 	qint64 bytes = 0;

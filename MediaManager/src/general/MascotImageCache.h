@@ -18,9 +18,14 @@
 // reordering the LRU: a cache hit promotes the entry, which is a bookkeeping write, not an
 // observable change of the image content.
 //
-// Ids are the percent-encoded paths MascotPrefetcher derives (it is the only place a path
-// becomes an id), i.e. exactly the `id` QQuickImageProvider passes to requestImage(), so a
-// provider can look up the id it is handed without decoding it first.
+// Ids are the **raw** paths, not their percent-encoded form: MascotPrefetcher::cacheIdForPath()
+// returns the path unchanged and is the only place a path becomes an id. Qt percent-decodes the
+// id it parses out of image://mascots/... before calling QQuickImageProvider::requestImage(), so
+// the id that arrives is the path itself -- but that is a Qt detail, not a promise, so the
+// provider normalises whatever it is handed (as received, then percent-decoded, then
+// percent-encoded) instead of assuming one form (MascotImageProvider::requestImage()).
+// Percent-encoding belongs to the URL alone, which is what MascotPrefetcher::providerIdForPath()
+// builds.
 class MascotImageCache {
 public:
 	// A non-positive bound means "no bound on that axis", so a cache that was never
@@ -45,6 +50,10 @@ public:
 
 	int itemCount() const;
 	qint64 byteCount() const;
+	// Entries a visible slot still pins, i.e. what no eviction can reclaim. Reported next to
+	// itemCount()/byteCount() by MainApp's MASCOT-CACHE line (I4), so a cache that keeps growing
+	// can be told apart from a pin that was never released.
+	int pinnedCount() const;
 
 private:
 	struct Entry {

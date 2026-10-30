@@ -5,6 +5,12 @@
 #include <QUrl>
 
 namespace {
+	// A miss is logged once per id, which is only useful while the set stays small: the logging is
+	// best-effort, and an id that keeps missing (a path whose file is gone, say) would grow the set
+	// for the life of the process. Past this many distinct ids, new ones are no longer recorded --
+	// the misses themselves still return a null image, only their lines stop.
+	constexpr int MAX_LOGGED_MISS_IDS = 256;
+
 	// The cache is keyed by the raw path (MascotPrefetcher::cacheIdForPath()), but which form of
 	// the id Qt hands requestImage() is a Qt detail this class must not depend on: Qt decodes it
 	// in the normal case (QUrl::path() percent-decodes), yet nothing promises it. Each candidate
@@ -52,7 +58,7 @@ QImage MascotImageProvider::requestImage(const QString& id, QSize* size, const Q
 	if (image.isNull()) {
 		{
 			const QMutexLocker locker(&this->missLogMutex);
-			if (!this->loggedMissIds.contains(id)) {
+			if (this->loggedMissIds.size() < MAX_LOGGED_MISS_IDS && !this->loggedMissIds.contains(id)) {
 				this->loggedMissIds.insert(id);
 				qWarning() << "Mascot image provider cache miss for" << id;
 			}

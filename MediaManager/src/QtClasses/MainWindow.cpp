@@ -2806,6 +2806,11 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         config->set("mascots_color_theme", "False");
         this->resetPalette();
     }
+    // I2: the prefetcher reads no config, so the palette switch is pushed into it here as well
+    // as at construction. The next decode follows the setting; an image already decoded keeps
+    // the palette it was given, which is what the panel on screen is drawing from.
+    if (this->App->mascotPrefetcher)
+        this->App->mascotPrefetcher->setExtractColors(this->App->MascotsExtractColor);
     if (dialog->ui.mascotsCenterContent->checkState() == Qt::CheckState::Checked)
         config->set("mascots_center_content", "True");
     else if (dialog->ui.mascotsCenterContent->checkState() == Qt::CheckState::Unchecked)
@@ -2815,6 +2820,15 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         // re-lay them out.
         this->mascotController->updateLayout();
     }
+    // The seed switch is written before applyConfig(), not after it: the controller re-reads
+    // `mascots_use_seed` inside applySeedSource(), so a write that lands after the call is only
+    // seen by the next Apply -- a runtime toggle would apply one Apply late.
+    const bool oldMascotsUseSeed = config->get_bool("mascots_use_seed");
+    const bool newMascotsUseSeed = dialog->ui.mascotsUseSeed->checkState() == Qt::CheckState::Checked;
+    if (newMascotsUseSeed)
+        config->set("mascots_use_seed", "True");
+    else if (dialog->ui.mascotsUseSeed->checkState() == Qt::CheckState::Unchecked)
+        config->set("mascots_use_seed", "False");
     // Every mascot key this milestone consumes (all-files-random, mirror, centred content,
     // seed) is read by the controller, so a settings change has to reach it unconditionally:
     // with the panels hidden there is nothing to re-layout but the next start() would
@@ -2822,12 +2836,6 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     this->mascotController->applyConfig();
     // Amendment H3: the cache bounds are config too, so a settings change re-applies them.
     this->App->updateMascotCacheLimits();
-    const bool oldMascotsUseSeed = config->get_bool("mascots_use_seed");
-    const bool newMascotsUseSeed = dialog->ui.mascotsUseSeed->checkState() == Qt::CheckState::Checked;
-    if (newMascotsUseSeed)
-        config->set("mascots_use_seed", "True");
-    else if (dialog->ui.mascotsUseSeed->checkState() == Qt::CheckState::Unchecked)
-        config->set("mascots_use_seed", "False");
     if (oldMascotsUseSeed != newMascotsUseSeed) {
         if (this->ui.mascotLeftHost->isVisible()) {
             QTimer::singleShot(50, this, [this] {

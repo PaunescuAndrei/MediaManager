@@ -25,6 +25,29 @@ namespace {
 	// Overflow drops the oldest media, keeping the freshest: the dropped pixels are still in
 	// the cache, only the queue entry is lost.
 	constexpr int READY_QUEUE_LIMIT = 10;
+	// The long edge a decoded mascot is clamped to (I1). A 4000x6000 PNG is ~96 MB of pixels
+	// per panel, which fails in two different ways: above the driver's maxTextureSize the
+	// texture is never created, so the slot draws nothing at all (the floor among the tiers the
+	// spec names is 8192 -- FL10 / integrated / virtual machines -- with 16384 on FL11); and the
+	// scale into the slot becomes one bilinear tap instead of master's
+	// QPixmap::scaled(SmoothTransformation), which is the "different scaling" anti-goal.
+	// 4096 stays well under that 8192 floor with headroom for both panels' textures at once, and
+	// it is a fixed function of the file, so it is not part of the cache key (the key stays the
+	// path: MascotPrefetcher::cacheIdForPath()).
+	constexpr int MAX_DECODE_LONG_EDGE = 4096;
+
+	// Scales `image` down until its long edge is MAX_DECODE_LONG_EDGE at most, aspect ratio
+	// kept, smoothing like master's QPixmap::scaled(SmoothTransformation). An image already
+	// inside the bound is returned unchanged, sharing its buffer: scaled() would copy it.
+	QImage clampLongEdge(const QImage& image)
+	{
+		if (qMax(image.width(), image.height()) <= MAX_DECODE_LONG_EDGE)
+			return image;
+		// A square bounding size with KeepAspectRatio: Qt fits the image inside it, so the long
+		// edge lands exactly on the bound and the short edge follows the aspect ratio.
+		return image.scaled(QSize(MAX_DECODE_LONG_EDGE, MAX_DECODE_LONG_EDGE), Qt::KeepAspectRatio,
+			Qt::SmoothTransformation);
+	}
 }
 
 // The payload a decode worker produces. Kept out of the header: it is an implementation
@@ -65,6 +88,13 @@ void MascotPrefetcher::setLimits(int maxItems, qint64 maxBytes)
 	if (!this->cache)
 		return;
 	this->cache->setLimits(maxItems, maxBytes);
+}
+
+void MascotPrefetcher::setExtractColors(bool extract)
+{
+	// No lock: the flag is written and read on the GUI thread only. request() hands a copy to
+	// the worker, so a decode never touches this member.
+	this->extractColors = extract;
 }
 
 void MascotPrefetcher::pin(const QString& path, bool pinned)
@@ -115,12 +145,15 @@ void MascotPrefetcher::request(const QString& path)
 	this->pendingPaths.insert(path);
 	const quint64 requestGeneration = this->generation.load();
 	const QString providerId = providerIdForPath(path);
-	this->decodePool->start(QRunnable::create([this, path, providerId, requestGeneration]() {
+	// Captured on this thread, with the generation: decode() runs on a worker and must not read
+	// a member of this object (I2).
+	const bool extractColors = this->extractColors;
+	this->decodePool->start(QRunnable::create([this, path, providerId, requestGeneration, extractColors]() {
 		// Worker thread. The only shared state read here is the atomic generation, so a
 		// clear() on the GUI thread can cancel a decode that has not started yet.
 		if (requestGeneration != this->generation.load())
 			return;
-		DecodeResult result = decode(path, providerId);
+		DecodeResult result = decode(path, providerId, extractColors);
 		QMetaObject::invokeMethod(this, [this, result = std::move(result), requestGeneration]() {
 			this->handleDecoded(std::move(result), requestGeneration);
 		}, Qt::QueuedConnection);
@@ -152,7 +185,8 @@ void MascotPrefetcher::clear()
 	this->readyQueue.clear();
 }
 
-MascotPrefetcher::DecodeResult MascotPrefetcher::decode(const QString& path, const QString& providerId)
+MascotPrefetcher::DecodeResult MascotPrefetcher::decode(const QString& path, const QString& providerId,
+	bool extractColors)
 {
 	DecodeResult result;
 	result.path = path;
@@ -160,11 +194,20 @@ MascotPrefetcher::DecodeResult MascotPrefetcher::decode(const QString& path, con
 
 	// Everything below is the work this class exists to keep off the GUI thread: file
 	// decode, alpha centering (a two-pass distance transform) and k-means palette
-	// extraction. This function only ever runs on a decode worker.
+	// extraction. This function only ever runs on a decode worker. `extractColors` is a
+	// parameter rather than a member for the same reason the function is static.
 	const QPixmap pixmap = utils::openImage(path);
 	if (pixmap.isNull())
 		return result;
-	const QImage image = pixmap.toImage();
+	const QImage decoded = pixmap.toImage();
+	if (decoded.isNull() || decoded.width() <= 0 || decoded.height() <= 0)
+		return result;
+
+	// I1: clamp before a single pixel is measured, so the centre below is expressed in the same
+	// pixel space as the image that is actually drawn and uploaded as a texture. A file already
+	// within the bound is used as decoded.
+	const bool clamped = decoded.width() > MAX_DECODE_LONG_EDGE || decoded.height() > MAX_DECODE_LONG_EDGE;
+	const QImage image = clamped ? clampLongEdge(decoded) : decoded;
 	if (image.isNull() || image.width() <= 0 || image.height() <= 0)
 		return result;
 
@@ -180,10 +223,17 @@ MascotPrefetcher::DecodeResult MascotPrefetcher::decode(const QString& path, con
 	const double centerX = mascotMediaUtils::contentCenterX(image, ALPHA_THRESHOLD);
 	result.contentCenterX = result.hasContentCenter ? centerX : std::numeric_limits<double>::quiet_NaN();
 
-	const QPair<QList<color_area>, QList<color_area>> palette =
-		palette_extractor(pixmap, PALETTE_CLUSTERS, PALETTE_TARGET_SIZE);
-	result.acceptedColors = palette.first;
-	result.rejectedColors = palette.second;
+	// I2: skipped entirely while `mascots_color_theme` is off, which is its configured default.
+	// Both lists then stay empty, which is the "no palette" state MascotController::colorFor()
+	// already degrades from (an invalid QColor the theme-colour handler ignores).
+	if (extractColors) {
+		// palette_extractor() takes a QPixmap, so a clamped file pays for one conversion back.
+		const QPixmap paletteSource = clamped ? QPixmap::fromImage(image) : pixmap;
+		const QPair<QList<color_area>, QList<color_area>> palette =
+			palette_extractor(paletteSource, PALETTE_CLUSTERS, PALETTE_TARGET_SIZE);
+		result.acceptedColors = palette.first;
+		result.rejectedColors = palette.second;
+	}
 
 	result.loaded = true;
 	return result;

@@ -56,6 +56,11 @@ public:
     bool debug_mode = false;
     bool numlock_only_on = true;
     bool MascotsExtractColor = false;
+    // I4's throttle: the residency and the timestamp of the last MASCOT-CACHE line. A line is
+    // written only once both the bytes and the clock moved far enough (see
+    // logMascotCacheOccupancy()), so a swap every 400 ms cannot repeat the same numbers.
+    qint64 lastMascotCacheLogBytes = 0;
+    qint64 lastMascotCacheLogMs = 0;
     QString currentDB;
     Logger *logger;
     QErrorMessage* ErrorDialog = nullptr;
@@ -69,6 +74,13 @@ public:
     // cache, clamping a non-positive value to a sane minimum instead of leaving that axis
     // unbounded. Called at startup and whenever the settings are applied.
     void updateMascotCacheLimits();
+    // I4: the memory gate ("both bounds plateau while browsing, idle CPU/GPU sane") had no
+    // evidence, and MascotImageCache::itemCount()/byteCount() had no callers at all. This writes
+    // one MASCOT-CACHE line through the Logger -- entries, bytes and pinned entries -- whenever
+    // the residency actually moved, so the controller's 200-swap measurement has something to
+    // read. Debug-gated and throttled here rather than inside the cache, which stays free of any
+    // knowledge of the app or of debug mode.
+    void logMascotCacheOccupancy();
     void startSingleInstanceServer(QString appid);
     void stopSingleInstanceServer();
     void showErrorMessage(QString message);

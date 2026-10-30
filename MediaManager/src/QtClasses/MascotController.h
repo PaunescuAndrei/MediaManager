@@ -200,6 +200,9 @@ private:
 	SideState leftState;
 	SideState rightState;
 	bool running = false;
+	// Set by the first applyConfig() that finds an unsupported `mascots_media`: the warning is a
+	// statement about the configuration, so it is made once rather than on every Apply.
+	bool warnedUnsupportedMedia = false;
 	QMetaObject::Connection swapConnection;
 	QMetaObject::Connection flipConnection;
 

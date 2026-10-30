@@ -27,6 +27,11 @@ namespace {
 	constexpr int MASCOT_CACHE_MIN_ITEMS = 2;
 	constexpr qint64 MASCOT_CACHE_MIN_MB = 16;
 	constexpr qint64 BYTES_PER_MB = 1024 * 1024;
+	// I4's throttle. A MASCOT-CACHE line is written only when the residency has moved by at
+	// least this many bytes *and* at least this long has passed since the previous line, so an
+	// idle cache says nothing and a busy one speaks at a readable rate.
+	constexpr qint64 MASCOT_CACHE_LOG_DELTA_BYTES = 2 * BYTES_PER_MB;
+	constexpr qint64 MASCOT_CACHE_LOG_INTERVAL_MS = 2000;
 }
 
 MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
@@ -94,6 +99,14 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 	this->mascotImageCache = new MascotImageCache();
 	this->mascotPrefetcher = new MascotPrefetcher(this->mascotImageCache);
 	this->updateMascotCacheLimits();
+	// I2: palette extraction is master's `mascots_color_theme` switch, and the prefetcher reads
+	// no config, so the value is pushed in here (and again wherever the setting is refreshed).
+	this->mascotPrefetcher->setExtractColors(this->MascotsExtractColor);
+	// I4: mediaReady is emitted on the GUI thread directly after every cache insert, which is the
+	// only moment the residency moves, so this one connection covers the whole accounting surface
+	// -- miss-path decodes and speculative prefetches alike, since both go through that insert.
+	connect(this->mascotPrefetcher, &MascotPrefetcher::mediaReady, this,
+		[this](const MascotMedia&) { this->logMascotCacheOccupancy(); });
 
 	this->VW = new VideoWatcherQt(this);
 
@@ -320,6 +333,30 @@ void MainApp::updateMascotCacheLimits()
 	// setLimits() re-runs eviction, so lowering a bound bites immediately instead of at the
 	// next insert. Pins (the two panels' media) are the controller's, and are never evicted.
 	this->mascotPrefetcher->setLimits(maxItems, maxMb * BYTES_PER_MB);
+}
+
+void MainApp::logMascotCacheOccupancy()
+{
+	// I4: the one piece of evidence the memory gate has. Called from the prefetcher's mediaReady,
+	// i.e. on the GUI thread right after an insert, and only while debug mode is on, so an
+	// ordinary run pays nothing.
+	if (!this->debug_mode || !this->logger || !this->mascotImageCache)
+		return;
+	const qint64 bytes = this->mascotImageCache->byteCount();
+	const qint64 now = QDateTime::currentMSecsSinceEpoch();
+	// A same-value line is not repeated: both the residency and the clock have to have moved,
+	// and the very first line is always written.
+	const bool moved = qAbs(bytes - this->lastMascotCacheLogBytes) >= MASCOT_CACHE_LOG_DELTA_BYTES;
+	const bool cooled = (now - this->lastMascotCacheLogMs) >= MASCOT_CACHE_LOG_INTERVAL_MS;
+	if (this->lastMascotCacheLogMs != 0 && !(moved && cooled))
+		return;
+	this->lastMascotCacheLogBytes = bytes;
+	this->lastMascotCacheLogMs = now;
+	this->logger->log(QStringLiteral("Mascot cache: %1 entries, %2 bytes (%3 MB), %4 pinned")
+		.arg(this->mascotImageCache->itemCount())
+		.arg(bytes)
+		.arg(bytes / BYTES_PER_MB)
+		.arg(this->mascotImageCache->pinnedCount()), QStringLiteral("MASCOT-CACHE"));
 }
 
 void MainApp::stop_handle()

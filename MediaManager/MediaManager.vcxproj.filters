@@ -169,6 +169,12 @@
     <ClCompile Include="src\general\mascotMediaUtils.cpp">
       <Filter>Source Files\general</Filter>
     </ClCompile>
+    <ClCompile Include="src\general\MascotImageCache.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\MascotPrefetcher.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
     <ClCompile Include="src\general\mascotsGeneratorThread.cpp">
       <Filter>Source Files\general</Filter>
     </ClCompile>
@@ -354,6 +360,15 @@
     <ClInclude Include="src\general\mascotMediaUtils.h">
       <Filter>Header Files\general</Filter>
     </ClInclude>
+    <ClInclude Include="src\general\MascotMedia.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\MascotImageCache.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <QtMoc Include="src\general\MascotPrefetcher.h">
+      <Filter>Header Files\general</Filter>
+    </QtMoc>
     <ClInclude Include="src\general\MusicPlayer.h">
       <Filter>Header Files\general</Filter>
     </ClInclude>

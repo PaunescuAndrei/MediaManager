@@ -1,11 +1,12 @@
 #pragma once
 #include "definitions.h"
+#include <QRandomGenerator>
 #include <QString>
 #include <QStringList>
+#include <optional>
 #include <random>
 
 class MainApp;
-class QRandomGenerator;
 
 // Picks the next mascot file, with exactly the selection and seeding behaviour of the retired
 // generator's getRandomImagePath() / refreshRngFromConfig() -- same directory walk, same
@@ -96,6 +97,11 @@ private:
 	// The video side. `weightedChoice` defaults to true, so a caller that never sets it picks the
 	// way the `Next` button does.
 	bool weightedChoice = true;
+	// The video draw's generator. Seeded by refreshRng() beside the image RNG -- one seed value,
+	// one seeding, exactly as std::mt19937 above -- and from then on only advanced by a draw, so a
+	// seed makes the panel's sequence reproducible over picks instead of pinning it to one file.
+	// Empty only before the first refreshRng().
+	std::optional<QRandomGenerator> videoGenerator;
 	// The cached scan and its validity. Mutable because videoPoolSize() is const and still has to
 	// answer; nothing but ensureVideoPool()/invalidateVideoPool() writes them.
 	mutable QList<VideoWeightedData> videoPool;

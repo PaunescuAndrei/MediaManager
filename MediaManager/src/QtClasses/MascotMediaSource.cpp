@@ -63,11 +63,22 @@ void MascotMediaSource::refreshRng()
 	// The retired generator's refreshRngFromConfig(), branch for branch. Seeding is only
 	// redone when the seed string or the seed switch changed, and a seed that hashes to 0 is
 	// bumped to 1 so it cannot mean "default-constructed std::mt19937".
+	// The video draw's generator is seeded on the same branch and with the same value, so both
+	// pools have one seed lifecycle. It is seeded once per seed value and then only advanced: a
+	// timer-driven panel needs a reproducible *sequence*, and seeding per pick (what
+	// getRandomVideoPath() does for a single `Next` press) would return the identical file on
+	// every pick while a seed is on, pinning the panel to one clip.
 	if (!this->App || !this->App->config) {
 		if (!this->rngInitialized) {
 			std::random_device rd;
 			this->rng.seed(rd());
 			this->rngInitialized = true;
+		}
+		// No config means no seed to honour, so the video generator starts from entropy too --
+		// the same branch, one RNG earlier.
+		if (!this->videoGenerator) {
+			std::random_device rd;
+			this->videoGenerator.emplace(rd());
 		}
 		return;
 	}
@@ -82,12 +93,14 @@ void MascotMediaSource::refreshRng()
 				seed = 1;
 			this->rng.seed(seed);
 			this->rngInitialized = true;
+			this->videoGenerator.emplace(seed);
 		}
 	}
 	else if (!this->rngInitialized || this->lastUseSeed) {
 		std::random_device rd;
 		this->rng.seed(rd());
 		this->rngInitialized = true;
+		this->videoGenerator.emplace(rd());
 	}
 
 	this->lastUseSeed = this->seedEnabled;
@@ -126,25 +139,15 @@ QString MascotMediaSource::nextVideoPath()
 	if (this->videoPool.isEmpty())
 		return "";
 
-	// The image path's seed read, taken at the same point it takes it. refreshRng() is a no-op
-	// unless the seed string or the seed switch changed, and the video seed below is read from the
-	// same two members, so a changed `random_seed` lands on the next pick of both pools with no
-	// cached seed left over from a previous one.
+	// The seed lifecycle is refreshRng()'s, shared with the image pool: it seeds the video
+	// generator once per seed value, on the same branch and with the same value it seeds the image
+	// RNG with, and never inside a pick. Drawing therefore advances one persistent generator, so a
+	// seeded panel varies from pick to pick.
 	this->refreshRng();
-
-	// MainWindow::getRandomVideoPath()'s generator, seeded exactly as it seeded it: an empty seed
-	// (seeding off) draws fresh entropy, and a seed that is on is salted and hashed. There is no
-	// zero bump here -- the 0 -> 1 bump in refreshRng() exists for the default-constructed
-	// std::mt19937, and the original never applied it to this generator.
-	QRandomGenerator generator;
-	if (this->seedEnabled) {
-		QString salted = this->seedString;
-		if (this->App && this->App->mainWindow)
-			salted = this->App->mainWindow->saltSeed(this->seedString);
-		generator.seed(utils::stringToSeed(salted));
-	}
-	else {
-		generator.seed(QRandomGenerator::global()->generate());
+	if (!this->videoGenerator) {
+		// refreshRng() engages it on every path; dereferencing a disengaged optional would be UB,
+		// so the impossible case is answered instead of assumed.
+		return "";
 	}
 
 	// The bias settings are read once per pick and then adjusted the way getRandomVideoPath()
@@ -161,7 +164,7 @@ QString MascotMediaSource::nextVideoPath()
 	// One draw, no exclusion. A pick is allowed to land on the file the main player currently has
 	// -- the user's explicit call, and the panel is free to show what is already playing -- so
 	// nothing here re-rolls and nothing here reads the player's path. Do not "fix" that back in.
-	return drawVideoPath(this->videoPool, this->weightedChoice, weightedSettings, generator);
+	return drawVideoPath(this->videoPool, this->weightedChoice, weightedSettings, *this->videoGenerator);
 }
 
 void MascotMediaSource::invalidateVideoPool()
@@ -192,6 +195,10 @@ void MascotMediaSource::ensureVideoPool() const
 	// would overwrite `watched` with ["No"] when the key is false, and getVideos() never reads the
 	// key itself -- it is the `watched` array in this json that filters -- so forcing it here
 	// keeps the settings object saying what the pool means.
+	// A getVideos() that fails comes back as an empty list too (it logs the SQL error and returns
+	// the rows it collected, which is none), so videoPoolSize() == 0 means "no row passed the
+	// filters" *or* "the query failed" and the two are not distinguishable from here. Task 4's
+	// Mixed -> images fallback is built on that being written down.
 	QJsonObject settings = this->App->mainWindow->filterSettings.json;
 	settings.insert("ignore_defaults", "True");
 	this->videoPool = this->App->db->getVideos(this->App->currentDB, settings);

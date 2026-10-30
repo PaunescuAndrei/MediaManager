@@ -94,6 +94,12 @@ Item {
 		transform: Translate { x: slot.contentOffsetX }
 	}
 
+	// Video outputs for the video path. Named per index (amendment O) but not driven yet: this
+	// task's interface has nothing to hand them a QVideoSink.
+	// M2 drives them: MascotSurface::slotSink() hands each output's sink to a player, and
+	// setSlotVideoVisible()/setSlotVideoOpacity() write the properties used below. The two lines
+	// above are M1's statement of this file, kept unedited as the record of what it asserted.
+	//
 	// The two video surfaces a crossfade needs. Named per index (amendment O), so C++ finds each
 	// one by name and hands its sink to a player (MascotSurface::slotSink); this file creates no
 	// player, so nothing here knows what is playing or when it changes -- it draws and it

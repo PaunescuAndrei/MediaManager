@@ -144,6 +144,8 @@ private:
 	bool isValidSlot(int i) const;
 	// Resolves the slot item and its image child by object name and caches them; false while
 	// the delegate does not exist (the mirrored state is applied as soon as it does).
+	// Since M2 it resolves the slot's two video outputs the same way and by the same names, so
+	// the per-slot QVideoSink slotSink() reports is reachable from the slot index alone.
 	bool resolveSlot(int i);
 	void applySlot(int i);
 	void applyAllSlots();

@@ -12,8 +12,11 @@ class MainApp;
 //
 // It reads no config (amendment D's "a key nothing reads" cuts both ways: the reader is the
 // controller): the two config-derived inputs arrive through setSeedSource() and
-// setAllFilesRandom(), and every path is re-read from the directory tree on the same terms
-// the retired generator used, so a folder added while the app runs is picked up the same way.
+// setAllFilesRandom(). Paths are not all re-read: the directory list and the flat file list are
+// scanned once, at the first pick and again only while the directory list is empty (so a mascots
+// folder created after startup is still found) -- which is the retired generator's behaviour,
+// staleness for files added to the mascot root included. The files inside the chosen
+// subdirectory are re-read on every pick, so a file added to an existing subfolder is seen.
 class MascotMediaSource {
 public:
 	// `App` is used only for the seed salt (MainWindow::saltSeed) and may be null, in which

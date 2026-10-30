@@ -107,8 +107,11 @@ private:
 		QString requestedPath;
 		// What the panel displays, including the palette and content centre it came with.
 		MascotMedia shown;
-		// The path whose cache entry this panel keeps pinned.
-		QString pinnedPath;
+		// The speculative pick: the path requested ahead of the next swap, and the decoded
+		// media it produced once it arrives. Exactly one deep -- a queue is deliberately not
+		// kept -- and both empty when nothing is armed.
+		QString prefetchPath;
+		MascotMedia candidate;
 		// The user's flip count parity since the media last changed (the old flipPixmap()
 		// transform was a toggle, and a new image reset it).
 		bool flipToggled = false;
@@ -129,31 +132,48 @@ private:
 	// Feeds the seed string and the two switches into the source. Called when config is
 	// applied and again before every pick, because a settings change can land in between.
 	void applySeedSource();
+	// Feeds the source and returns the next path. The one place a pick is made, so the seed is
+	// always as fresh as the config.
+	QString nextSourcePath();
 
 	void createSurfaces();
 	void configureSurface(SideState& state, MascotSide side);
 	void releaseSurface(SideState& state);
-	// Clears the slot, releases the pin and forgets the state of one side. Every path that
+	// Clears the slot, releases the pins and forgets the state of one side. Every path that
 	// replaces or drops a displayed media goes through here, which is what keeps a pin from
 	// outliving what it protects (amendment H2).
-	void clearSide(SideState& state, MascotSide side);
+	void clearSide(SideState& state);
 	// A pinned cache entry protects the id against eviction, and the flag is one per entry
-	// while both panels can show the same media (mirror mode). These two are the only places
-	// the controller touches the pin, and they keep one flag in step with two panels: the entry
-	// is pinned when the first panel takes it and unpinned when the last one lets it go.
-	void holdPin(SideState& state, MascotSide side, const QString& path);
-	void releasePin(SideState& state, MascotSide side);
+	// while two panels (and their speculative candidates) can reference the same id. A path is
+	// pinned exactly while some owner field still names it, so these two keep that invariant:
+	// the owner fields are mutated first and every path whose ownership may have changed is
+	// then re-evaluated -- which is why a candidate becoming the displayed media never passes
+	// through an unpinned moment.
+	bool pinReferenced(const QString& path) const;
+	void syncPin(const QString& path);
 	// Writes the mirror, the media and the centred-content override the config asks for into
 	// one slot. Shared by a fresh media and by a config change, so a mode change repaints
 	// what is already on screen.
 	void applyDisplay(SideState& state, MascotSide side);
 	void applyMirror(SideState& state, MascotSide side);
 	void requestPath(SideState& state, const QString& path);
-	void applyMedia(SideState& state, MascotSide side, const MascotMedia& media);
-	// Picks a new path for one panel and requests it. Returns false when there was nothing to
-	// pick (no mascot folder, or the panel does not exist), which is what lets nextImages()
-	// tell "the left panel is about to show something" from "it is not".
-	bool pickFor(SideState& state, bool useCache, bool updateHighlight);
+	// Commits a media to one panel: pins it, writes the slot, arms the next speculative pick
+	// and pushes the theme colour when the swap asked for it. `fromReady` means the media came
+	// out of this panel's own candidate, which is then consumed.
+	void showMedia(SideState& state, MascotSide side, const MascotMedia& media, bool fromReady,
+		bool armCandidate);
+	// Stores a decoded speculative media, pinned, until the next swap takes it.
+	void holdCandidate(SideState& state, const MascotMedia& media);
+	// Requests the path for the panel's *next* swap. Exactly one deep per panel; does nothing
+	// while a candidate is held or its decode is in flight.
+	void speculate(SideState& state, MascotSide side);
+	// Arms that speculation at the end of the current turn, so the swap path itself never walks
+	// the mascot directory.
+	void armSpeculation(MascotSide side);
+	// Serves one panel's next media. Returns the media when the pick could be committed at once
+	// (a ready candidate), i.e. with no decode and no request on this path; an empty media means
+	// the pick is in flight and will be shown through mediaReady (amendment H1).
+	MascotMedia pickFor(SideState& state, MascotSide side, bool useCache, bool updateHighlight);
 	// The state a fresh pick starts from, also used when a pick is copied to the other panel.
 	void preparePick(SideState& state, bool updateHighlight);
 

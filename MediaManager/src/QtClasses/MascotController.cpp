@@ -40,8 +40,8 @@ void MascotController::setSurfaces(MascotSurface* left, MascotSurface* right)
 	}
 	// Whatever the old surfaces were showing is released first: their slots, their pins and
 	// their pending requests must not survive into the new ones.
-	this->clearSide(this->leftState, MascotSide::Left);
-	this->clearSide(this->rightState, MascotSide::Right);
+	this->clearSide(this->leftState);
+	this->clearSide(this->rightState);
 	this->leftState.surface = left;
 	this->rightState.surface = right;
 	this->configureSurface(this->leftState, MascotSide::Left);
@@ -73,8 +73,8 @@ void MascotController::stop()
 	MascotPrefetcher* source = this->prefetcher.data();
 	if (source)
 		source->clear();
-	this->clearSide(this->leftState, MascotSide::Left);
-	this->clearSide(this->rightState, MascotSide::Right);
+	this->clearSide(this->leftState);
+	this->clearSide(this->rightState);
 	this->releaseSurface(this->leftState);
 	this->releaseSurface(this->rightState);
 }
@@ -142,25 +142,33 @@ void MascotController::updateLayout()
 
 void MascotController::nextImage(MascotSide side, bool useCache, bool updateHighlight)
 {
-	this->pickFor(this->stateFor(side), useCache, updateHighlight);
+	this->pickFor(this->stateFor(side), side, useCache, updateHighlight);
 }
 
 void MascotController::nextImages(bool useCache, bool forcedMirror)
 {
 	if (!this->running)
 		return;
-	const bool picked = this->pickFor(this->leftState, useCache, true);
+	const MascotMedia left = this->pickFor(this->leftState, MascotSide::Left, useCache, true);
 	if (this->mirrorEnabled() || forcedMirror) {
-		// Both panels show the same media, each drawn by its own side rule. The path copied is
-		// the one the left panel is about to show, not the one it still shows: the media has
-		// not arrived yet (H1), and copying the old one would leave the panels apart.
-		if (!picked || this->leftState.requestedPath.isEmpty() || !this->rightState.surface)
+		if (!this->rightState.surface)
+			return;
+		if (!left.path.isEmpty()) {
+			// Both panels show the same media, each drawn by its own side rule, and the right
+			// panel gets it from the commit that just happened: no request, no decode.
+			this->preparePick(this->rightState, false);
+			this->showMedia(this->rightState, MascotSide::Right, left, false, true);
+			return;
+		}
+		// The left panel's pick is still in flight (H1): copy the path it is about to show, not
+		// the one it still shows, and the single delivery fills both panels.
+		if (this->leftState.requestedPath.isEmpty())
 			return;
 		this->preparePick(this->rightState, false);
 		this->requestPath(this->rightState, this->leftState.requestedPath);
 	}
 	else {
-		this->pickFor(this->rightState, useCache, false);
+		this->pickFor(this->rightState, MascotSide::Right, useCache, false);
 	}
 }
 
@@ -330,10 +338,12 @@ void MascotController::configureSurface(SideState& state, MascotSide side)
 		return;
 	MascotSurface* surface = state.surface.data();
 	surface->setSlotCount(1);
-	// A mascot panel is a tall strip: the old renderer scaled the image to the panel's height
-	// and cropped it horizontally, which is Crop's behaviour for the images a mascot folder
-	// holds. Fit would letterbox the strip instead.
-	surface->setSlotFillMode(0, MascotSurface::FillMode::Crop);
+	// The image path's mode (M1): the media is scaled to the panel's height with its aspect
+	// ratio kept, which is what the old renderer's scaled(width, height, KeepAspectRatio)
+	// produced -- a tall panel keeps a narrow image's side margins and crops a wide one
+	// horizontally. The surface owns that geometry (amendment R); the controller only picks the
+	// mode. A later milestone that shows video picks its own mode here.
+	surface->setSlotFillMode(0, MascotSurface::FillMode::HeightFit);
 	surface->setMirror(this->mirrorEnabled());
 	this->applyMirror(state, side);
 	surface->installEventFilter(this);
@@ -359,49 +369,45 @@ void MascotController::releaseSurface(SideState& state)
 	state.surface = nullptr;
 }
 
-void MascotController::clearSide(SideState& state, MascotSide side)
+void MascotController::clearSide(SideState& state)
 {
+	const QString previousShown = state.shown.path;
+	const QString previousCandidate = state.candidate.path;
 	if (state.surface)
 		state.surface->clearSlot(0);
-	// Amendment H2: the pin follows the slot, so it is dropped exactly when the last panel
-	// showing that media stops showing it. A pinned entry is never evicted, which is why a
-	// missed unpin is invisible until the cache has grown past every bound.
-	this->releasePin(state, side);
 	state.requestedPath.clear();
+	state.prefetchPath.clear();
 	state.shown = MascotMedia();
+	state.candidate = MascotMedia();
 	state.flipToggled = false;
 	state.mirrorOverrideEnabled = false;
 	state.mirrorOverrideValue = false;
 	state.highlightOnApply = false;
+	// Amendment H2: the owner fields are gone before the pins are re-evaluated, so a path that
+	// only this panel referenced is unpinned and one another panel still references is not.
+	// A pinned entry is never evicted, which is why a missed unpin is invisible until the
+	// cache has grown past every bound.
+	this->syncPin(previousShown);
+	this->syncPin(previousCandidate);
 }
 
-void MascotController::holdPin(SideState& state, MascotSide side, const QString& path)
+bool MascotController::pinReferenced(const QString& path) const
+{
+	if (path.isEmpty())
+		return false;
+	// Every field that keeps a media alive on screen or in reserve. A cache entry is pinned
+	// exactly while one of them still names its path.
+	return this->leftState.shown.path == path || this->leftState.candidate.path == path
+		|| this->rightState.shown.path == path || this->rightState.candidate.path == path;
+}
+
+void MascotController::syncPin(const QString& path)
 {
 	if (path.isEmpty())
 		return;
-	state.pinnedPath = path;
-	// One flag per cache entry, two panels that can show the same media: if the other panel
-	// already holds this id, the entry is pinned and pinning it again would only lose the
-	// distinction between "one owner" and "two".
-	if (this->stateFor(other(side)).pinnedPath == path)
-		return;
 	MascotPrefetcher* source = this->prefetcher.data();
 	if (source)
-		source->pin(path, true);
-}
-
-void MascotController::releasePin(SideState& state, MascotSide side)
-{
-	const QString path = state.pinnedPath;
-	state.pinnedPath.clear();
-	if (path.isEmpty())
-		return;
-	// The other panel still shows it, so the entry stays pinned for that panel.
-	if (this->stateFor(other(side)).pinnedPath == path)
-		return;
-	MascotPrefetcher* source = this->prefetcher.data();
-	if (source)
-		source->pin(path, false);
+		source->pin(path, this->pinReferenced(path));
 }
 
 void MascotController::applyDisplay(SideState& state, MascotSide side)
@@ -444,32 +450,43 @@ void MascotController::requestPath(SideState& state, const QString& path)
 		source->request(path);
 }
 
-bool MascotController::pickFor(SideState& state, bool useCache, bool updateHighlight)
+MascotMedia MascotController::pickFor(SideState& state, MascotSide side, bool useCache, bool updateHighlight)
 {
 	if (!this->running || !state.surface)
-		return false;
+		return MascotMedia();
 
-	// MascotPrefetcher::takeReady() is deliberately not used. The old "use cache" path popped
-	// a pre-decoded image because decoding used to block the GUI thread; the prefetcher
-	// decodes off-thread and announces every result through mediaReady, which is what drives
-	// the swap (amendment H1). Pulling the same media here would apply what mediaReady has
-	// already applied -- showing every image twice -- and could re-show a media whose pixels
-	// the cache has since evicted. Both values therefore behave identically at this level: a
-	// request is served from memory when the prefetcher still holds the pixels, and neither
-	// value ever waits for a decode.
+	// A ready candidate *is* the "use cache" path: the media was chosen and decoded before the
+	// swap was due, so committing it is a property write -- no decode, no directory walk and no
+	// request on this path. `useCache` no longer separates two behaviours at this level, and it
+	// is kept for the call sites that carry it.
 	Q_UNUSED(useCache);
 
-	// mascotsGeneratorThread::refreshRngFromConfig() re-read the seed on every pick, and a
-	// settings change can land between two picks, so the source is fed at the same point
-	// rather than only when applyConfig() runs.
-	this->applySeedSource();
-	const QString path = this->source.nextImagePath();
+	if (!state.candidate.path.isEmpty()) {
+		const MascotMedia media = state.candidate;
+		this->preparePick(state, updateHighlight);
+		this->showMedia(state, side, media, true, true);
+		return media;
+	}
+
+	// Nothing ready: the first swap after enable, or a candidate whose decode failed or was
+	// dropped (amendment H1). Pick, request, and show it when it arrives -- degraded by one
+	// decode, never blocked, and the next commit arms a candidate again.
+	const QString path = this->nextSourcePath();
 	if (path.isEmpty())
-		return false;
+		return MascotMedia();
 
 	this->preparePick(state, updateHighlight);
 	this->requestPath(state, path);
-	return true;
+	return MascotMedia();
+}
+
+QString MascotController::nextSourcePath()
+{
+	// mascotsGeneratorThread::refreshRngFromConfig() re-read the seed on every pick, and a
+	// settings change can land between two picks, so the source is fed at the same point rather
+	// than only when applyConfig() runs.
+	this->applySeedSource();
+	return this->source.nextImagePath();
 }
 
 void MascotController::preparePick(SideState& state, bool updateHighlight)
@@ -482,26 +499,79 @@ void MascotController::preparePick(SideState& state, bool updateHighlight)
 	state.highlightOnApply = updateHighlight;
 }
 
-void MascotController::applyMedia(SideState& state, MascotSide side, const MascotMedia& media)
+void MascotController::showMedia(SideState& state, MascotSide side, const MascotMedia& media,
+	bool fromReady, bool armCandidate)
 {
-	if (!state.surface)
+	if (!state.surface || media.path.isEmpty())
 		return;
 
-	// Amendment H2: the id this slot is about to display is pinned, and the id it stops
-	// displaying is released. Pinning happens after the prefetcher inserted the pixels (it
-	// inserts before it announces), so the pin always lands on an existing entry.
-	if (state.pinnedPath != media.path)
-		this->releasePin(state, side);
-	this->holdPin(state, side, media.path);
-
+	// Amendment H2: the owner fields change first and the pins are re-evaluated afterwards, so a
+	// path that stays referenced -- the candidate becoming the displayed media, or the other
+	// panel showing the same file -- is never unpinned even for one statement, which would let
+	// eviction take the pixels between the two.
+	const QString previousShown = state.shown.path;
+	const QString previousCandidate = state.candidate.path;
+	if (fromReady)
+		state.candidate = MascotMedia(); // consumed by this commit
 	state.shown = media;
 	state.flipToggled = false;
 	this->applyDisplay(state, side);
+	this->syncPin(previousShown);
+	this->syncPin(previousCandidate);
+	this->syncPin(media.path);
+
+	// The next swap is armed after this turn: the swap path must not walk the mascot directory.
+	if (armCandidate)
+		this->armSpeculation(side);
 
 	if (state.highlightOnApply) {
 		state.highlightOnApply = false;
 		emit this->themeColorChanged(this->colorFor(side, true));
 	}
+}
+
+void MascotController::holdCandidate(SideState& state, const MascotMedia& media)
+{
+	if (media.path.isEmpty())
+		return;
+	const QString previous = state.candidate.path;
+	state.candidate = media;
+	// Pinned as soon as it exists: a candidate whose pixels were evicted before its swap would
+	// put a blank id in the slot, and the pin costs nothing while the entry is not evicted.
+	this->syncPin(previous);
+	this->syncPin(media.path);
+}
+
+void MascotController::armSpeculation(MascotSide side)
+{
+	// Queued rather than called: the pick walks the mascot directory and posts a decode, and
+	// neither may sit on the swap path (the swap must stay a property write). Queued to `this`,
+	// so a stopped or destroyed controller simply never runs it; speculate() is idempotent, so
+	// several commits in one turn collapse into one pick.
+	QMetaObject::invokeMethod(this, [this, side] { this->speculate(this->stateFor(side), side); },
+		Qt::QueuedConnection);
+}
+
+void MascotController::speculate(SideState& state, MascotSide side)
+{
+	if (!this->running || !state.surface)
+		return;
+	// Exactly one deep, per panel: while a candidate is held or its decode is in flight there is
+	// nothing to do, and no queue is kept.
+	if (!state.candidate.path.isEmpty() || !state.prefetchPath.isEmpty())
+		return;
+	// With the mirror key on, the right panel always shows what the left panel shows, so a
+	// speculative pick for it would spend a draw nobody displays (and would shift a seeded
+	// sequence). It arms itself again the moment it is updated on its own.
+	if (side == MascotSide::Right && this->mirrorEnabled())
+		return;
+	const QString path = this->nextSourcePath();
+	if (path.isEmpty())
+		return;
+	state.prefetchPath = path;
+	MascotPrefetcher* source = this->prefetcher.data();
+	if (source)
+		source->request(path);
 }
 
 void MascotController::connectBeats()
@@ -559,26 +629,41 @@ void MascotController::onMediaReady(const MascotMedia& media)
 {
 	if (!this->running || media.path.isEmpty())
 		return;
-	// A media is applied only to a panel that is waiting for exactly that path. A delivery
-	// nobody asked for (a republish of a media another panel pulled, or one that arrived
-	// while stopped) is dropped rather than shown, which is what makes a request a request and
-	// not a promise (amendment H1).
+	// A media belongs to a panel only while that panel is waiting for exactly that path, either
+	// as its own next swap (`requestedPath`) or as its speculative pick (`prefetchPath`). A
+	// delivery nobody asked for (a republish for another panel, or one that arrived while
+	// stopped) is dropped rather than shown, which is what makes a request a request and not a
+	// promise (amendment H1).
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
 		SideState& state = this->stateFor(side);
-		if (!state.surface || state.requestedPath != media.path)
+		if (!state.surface)
 			continue;
-		state.requestedPath.clear();
-		this->applyMedia(state, side, media);
+		const bool awaited = state.requestedPath == media.path;
+		const bool speculative = state.prefetchPath == media.path;
+		if (awaited) {
+			state.requestedPath.clear();
+			// It is about to be on screen, so it is not also a candidate for a later swap.
+			if (speculative)
+				state.prefetchPath.clear();
+			this->showMedia(state, side, media, false, true);
+		}
+		else if (speculative) {
+			state.prefetchPath.clear();
+			this->holdCandidate(state, media);
+		}
 	}
 }
 
 void MascotController::onMediaFailed(const QString& path)
 {
-	// Nothing arrives for this path, so nothing is applied: the panel keeps what it has and
-	// the next beat re-rolls. Clearing the wait is what keeps a later successful delivery of
-	// the same path from being applied to a panel that has moved on.
+	// Nothing arrives for this path, so nothing is applied: the panel keeps what it has and the
+	// next swap re-rolls. Clearing both waits is what keeps a later successful delivery of the
+	// same path from landing on a panel that has moved on, and what lets the next commit arm a
+	// fresh candidate instead of waiting for one that will never come.
 	for (SideState* state : { &this->leftState, &this->rightState }) {
 		if (state->requestedPath == path)
 			state->requestedPath.clear();
+		if (state->prefetchPath == path)
+			state->prefetchPath.clear();
 	}
 }

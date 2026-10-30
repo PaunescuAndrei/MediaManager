@@ -19,6 +19,12 @@ Item {
 	// Target of the FillMode -> Image.FillMode mapping that lives in MascotSurface (C++,
 	// amendment Q): the QML side maps nothing itself.
 	property int fillMode: Image.PreserveAspectFit
+	// True for the height-normalised mode (MascotSurface::FillMode::HeightFit): the media is
+	// scaled to this slot's height with its aspect ratio kept, and `paintedWidth` is the width
+	// that produces. Both are written by MascotSurface, which is the only place the geometry is
+	// computed -- this file draws what it is told.
+	property bool heightFill: false
+	property real paintedWidth: 0.0
 	// Set by MascotSurface::setSlotMirrored and ::setMirror. This is the single authoritative
 	// mirror value: the C++ side derives the content shift from the same property it writes
 	// here, so the flip and the shift cannot disagree.
@@ -33,11 +39,20 @@ Item {
 		id: img
 
 		objectName: "img" + index
-		anchors.fill: parent
-		fillMode: slot.fillMode
+		// Explicit geometry instead of anchors.fill, because in height-normalised mode the
+		// painted width is not the slot's width. Centring after that keeps the other three
+		// modes on exactly the rectangle they filled before (same size, same origin), which is
+		// the rectangle the content shift is derived from. In height-normalised mode the slot's
+		// own clip is the whole crop: vertically the image is always the slot's height.
+		width: slot.heightFill ? slot.paintedWidth : parent.width
+		height: parent.height
+		anchors.centerIn: parent
+		// The Image is already the painted size in height-normalised mode, so Stretch has
+		// nothing to do; the other modes keep their Qt Quick meaning.
+		fillMode: slot.heightFill ? Image.Stretch : slot.fillMode
 		mirror: slot.mirrored
 		visible: slot.mediaIsImage
-		// anchors.fill pins the position, so the content shift has to be a transform.
+		// The position is pinned by anchors, so the content shift has to be a transform.
 		transform: Translate { x: slot.contentOffsetX }
 	}
 

@@ -25,7 +25,14 @@ class MascotSurface : public QWidget {
 public:
 	// How the media is drawn inside its slot rectangle. This enum is the only source of the
 	// mapping onto Qt Quick's Image.FillMode (amendment Q).
-	enum class FillMode { Crop, Fit, Stretch };
+	//
+	// HeightFit is the image path's mode (Static, M1): the media is scaled to the slot's height
+	// with its aspect ratio kept -- the old renderer's `pixmap.scaled(w, height,
+	// KeepAspectRatio)` -- so the vertical extent always equals the slot height and the slot's
+	// width is the only axis that can crop (a wide image) or leave margins (a narrow one).
+	// Crop, Fit and Stretch keep Qt Quick's meanings for the milestones that need them, and the
+	// painted width that HeightFit produces is computed here, never in QML.
+	enum class FillMode { Crop, Fit, Stretch, HeightFit };
 
 	// `cache` is used to construct the image provider and is not stored; it must outlive the
 	// shared QML engine, which owns the provider.
@@ -109,6 +116,10 @@ private:
 	void applyAllSlots();
 	// Pixel shift for the mirrored content centre, computed from the slot's own scale.
 	double contentShiftFor(const Slot& slot, bool mirrored) const;
+	// Width the media is painted at: the slot's width for Stretch, the height-normalised width
+	// for HeightFit, and the fit/crop scale of the slot for Fit/Crop. The single place the
+	// painted width is derived, so the shift and the QML geometry cannot disagree.
+	double paintedWidthFor(const Slot& slot) const;
 	int slotAt(const QPointF& position) const;
 
 	QQuickWidget* quick = nullptr;

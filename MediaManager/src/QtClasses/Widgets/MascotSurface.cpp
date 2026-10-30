@@ -84,6 +84,12 @@ namespace {
 			return 1; // Image.PreserveAspectFit
 		case MascotSurface::FillMode::Stretch:
 			return 0; // Image.Stretch
+		case MascotSurface::FillMode::HeightFit:
+			// No Qt Quick fill mode means "scale to the slot's height, keep the aspect ratio":
+			// the slot's QML sizes the image from the painted width applySlot() writes, so the
+			// Image is already exactly the right size and has nothing left to fit or crop.
+			// Stretch is therefore the honest value rather than a substitute.
+			return 0; // Image.Stretch
 		}
 		return 1;
 	}
@@ -359,6 +365,11 @@ void MascotSurface::applySlot(int i)
 	const bool mirrored = slot.mirrored;
 	item->setProperty("mirrored", mirrored);
 	item->setProperty("fillMode", qmlFillModeValue(slot.fillMode));
+	// The height-normalised mode needs two values QML has no way to derive on its own without
+	// repeating this arithmetic: the flag that selects it, and the width the media is painted
+	// at. Both come from the one place that owns the geometry.
+	item->setProperty("heightFill", slot.fillMode == FillMode::HeightFit);
+	item->setProperty("paintedWidth", this->paintedWidthFor(slot));
 	item->setProperty("mediaIsImage", slot.mediaIsImage);
 	item->setProperty("contentOffsetX", slot.hasExplicitContentOffset
 		? slot.explicitContentOffsetX
@@ -378,6 +389,32 @@ void MascotSurface::applyAllSlots()
 {
 	for (int i = 0; i < this->slotStates.size(); ++i)
 		this->applySlot(i);
+}
+
+double MascotSurface::paintedWidthFor(const Slot& slot) const
+{
+	const double nativeWidth = static_cast<double>(slot.nativeSize.width());
+	const double nativeHeight = static_cast<double>(slot.nativeSize.height());
+	const double slotWidth = slot.rect.width();
+	const double slotHeight = slot.rect.height();
+	// No media, or nothing to scale by: fall back to the slot's width, which is what an empty
+	// slot draws anyway.
+	if (nativeWidth <= 0.0 || nativeHeight <= 0.0 || slotWidth <= 0.0 || slotHeight <= 0.0)
+		return slotWidth;
+
+	switch (slot.fillMode) {
+	case FillMode::Stretch:
+		return slotWidth; // no aspect ratio to preserve
+	case FillMode::HeightFit:
+		// The old renderer's scaling: the height is the slot's, the width follows the aspect
+		// ratio, so a narrow image keeps side margins and a wide one overflows horizontally.
+		return nativeWidth * (slotHeight / nativeHeight);
+	case FillMode::Fit:
+		return nativeWidth * std::min(slotWidth / nativeWidth, slotHeight / nativeHeight);
+	case FillMode::Crop:
+		return nativeWidth * std::max(slotWidth / nativeWidth, slotHeight / nativeHeight);
+	}
+	return slotWidth;
 }
 
 double MascotSurface::contentShiftFor(const Slot& slot, bool mirrored) const
@@ -400,12 +437,9 @@ double MascotSurface::contentShiftFor(const Slot& slot, bool mirrored) const
 	if (nativeWidth <= 0.0 || nativeHeight <= 0.0 || slotWidth <= 0.0 || slotHeight <= 0.0)
 		return 0.0;
 
-	double paintedWidth = slotWidth; // FillMode::Stretch: no aspect ratio to preserve
-	if (slot.fillMode != FillMode::Stretch) {
-		const double fitScale = std::min(slotWidth / nativeWidth, slotHeight / nativeHeight);
-		const double cropScale = std::max(slotWidth / nativeWidth, slotHeight / nativeHeight);
-		paintedWidth = nativeWidth * (slot.fillMode == FillMode::Fit ? fitScale : cropScale);
-	}
+	const double paintedWidth = this->paintedWidthFor(slot);
+	if (paintedWidth <= 0.0)
+		return 0.0;
 	const double shift = paintedWidth / 2.0 - slot.contentCenterX * (paintedWidth / nativeWidth);
 	return mirrored ? -shift : shift;
 }

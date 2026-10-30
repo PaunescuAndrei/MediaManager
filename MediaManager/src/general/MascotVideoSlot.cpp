@@ -335,6 +335,22 @@ void MascotVideoSlot::handleError(int ab, QMediaPlayer::Error error)
 	// treating it as one would fail the swap that follows a bad file.
 	if (error == QMediaPlayer::NoError)
 		return;
+
+	ThreadedMediaPlayer* player = this->m_players[ab];
+	if (!player)
+		return;
+
+	// An error names no source, so it gets the same load-generation evidence the status path uses.
+	// currentSource() alone cannot tell the previous source's error from this load's -- in
+	// single-player mode the player is reloaded in place, and currentSource() already names the new
+	// path when a late error of the old clip arrives. A load that has not reported Loading yet has
+	// therefore produced no error of its own, and failing it here would drop a file that is still
+	// opening. Its own failure still arrives, as InvalidMedia or as an error after its Loading.
+	if (this->m_pending.serial != 0 && this->m_pending.ab == ab
+		&& player->currentSource() == this->m_pending.path && !this->m_pending.sawLoading) {
+		return;
+	}
+
 	this->failPlayer(ab);
 }
 
@@ -438,7 +454,12 @@ void MascotVideoSlot::failPlayer(int ab)
 	const QString path = this->m_activePath;
 	this->m_activeAb = -1;
 	this->m_activePath.clear();
-	this->m_timer->stop();
+	// Only when nothing is waiting: a pending load on the other output owns this deadline, and
+	// stopping it here would cancel the only thing that can report that load -- leaving it busy
+	// forever, with no timedOut() and retireInactive() skipping its player. With no pending load
+	// this is already a no-op, so it is kept for the plain "active clip failed" case only.
+	if (this->m_pending.serial == 0)
+		this->m_timer->stop();
 	player->stop();
 	player->setSource(QString());
 	emit this->failed(path);

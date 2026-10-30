@@ -47,9 +47,10 @@ public:
 	// media were also announced through mediaReady.
 	MascotMedia takeReady();
 
-	// Drops queued notifications and makes every in-flight decode unpublishable, so a decode
-	// that finishes after this call cannot resurrect a slot that was just cleared. Pixels
-	// already in the cache stay there; their entries age out through the cache's own LRU.
+	// Drops queued notifications and makes every in-flight decode and every already-posted
+	// republication unpublishable, so work that finishes after this call cannot resurrect a
+	// slot that was just cleared. Pixels already in the cache stay there; their entries age
+	// out through the cache's own LRU.
 	void clear();
 
 signals:

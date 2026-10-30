@@ -78,8 +78,25 @@ void MascotPrefetcher::request(const QString& path)
 		// decoding again. Without this a consumer that revisits a path would get no
 		// mediaReady at all, because the pixels are in the cache but the decoration
 		// (content centre, palette) is not exposed by the cache.
+		//
+		// Posted rather than emitted so request() never runs a consumer's slot code
+		// synchronously, which means the announcement has to survive the event-loop turn:
+		// it carries the generation it was made in, exactly like a decoded result, so a
+		// clear() in the same turn drops it instead of resurrecting a cleared slot.
 		const MascotMedia media = *remembered;
-		QMetaObject::invokeMethod(this, [this, media]() { this->publish(media); }, Qt::QueuedConnection);
+		const quint64 republishGeneration = this->generation.load();
+		QMetaObject::invokeMethod(this, [this, media, republishGeneration]() {
+			if (republishGeneration != this->generation.load())
+				return;
+			// An insert between the post and this turn may have evicted the pixels; never
+			// announce an id the provider cannot serve. This is the only publish path that
+			// can be separated from its cache entry by a turn boundary, because
+			// handleDecoded() inserts and publishes in one turn and eviction protects the
+			// entry it just added.
+			if (!this->cache->contains(cacheIdForPath(media.path)))
+				return;
+			this->publish(media);
+		}, Qt::QueuedConnection);
 		return;
 	}
 
@@ -115,9 +132,10 @@ MascotMedia MascotPrefetcher::takeReady()
 
 void MascotPrefetcher::clear()
 {
-	// Invalidating the generation is what makes clear() safe: a decode that is still in
-	// flight belongs to the old generation and handleDecoded() drops it on arrival, so it
-	// cannot repopulate a slot the caller has just cleared. Bumping the counter before
+	// Invalidating the generation is what makes clear() safe: work that is still in flight
+	// belongs to the old generation, so both completion paths drop it on arrival -- the
+	// decoded result in handleDecoded() and the queued republication posted by request().
+	// Neither can repopulate a slot the caller has just cleared. Bumping the counter before
 	// dropping the queue keeps the two consistent from the GUI thread's point of view.
 	this->generation.fetch_add(1);
 	this->decodePool->clear();

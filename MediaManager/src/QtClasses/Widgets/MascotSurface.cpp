@@ -116,6 +116,17 @@ MascotSurface::MascotSurface(MascotImageCache* cache, QWidget* parent) : QWidget
 	// The panel sits on top of the window's own background; the scene graph must not clear to
 	// an opaque colour first.
 	this->quick->setClearColor(Qt::transparent);
+	// The clearing colour alone is not enough: without this the quick widget blits its offscreen
+	// buffer as an opaque rectangle, so every transparent pixel of a mascot PNG turns black
+	// instead of showing the window behind it. Both the wrapper and the quick widget carry the
+	// attribute; the wrapper's own background is already suppressed above.
+	this->setAttribute(Qt::WA_TranslucentBackground, true);
+	this->quick->setAttribute(Qt::WA_TranslucentBackground, true);
+	// Draw last, so this widget's alpha composites over whatever the window painted beneath.
+	// This is the documented way to get a see-through quick widget over ordinary widgets:
+	// QQuickWidget otherwise blits its offscreen buffer opaquely, turning every transparent
+	// pixel of a mascot PNG black (verified at runtime: without this the panel reads #000000).
+	this->quick->setAttribute(Qt::WA_AlwaysStackOnTop, true);
 	this->quick->setAttribute(Qt::WA_TransparentForMouseEvents, true);
 	this->quick->setResizeMode(QQuickWidget::SizeRootObjectToView);
 	this->quick->setSource(QUrl(QStringLiteral("qrc:/qml/MascotSurface.qml")));
@@ -324,6 +335,28 @@ bool MascotSurface::isValidSlot(int i) const
 	return i >= 0 && i < this->slotStates.size();
 }
 
+namespace {
+	// Finds a QML item by object name through the *visual* hierarchy. QObject::findChild()
+	// cannot do this: a QML item's QObject parent is not the item it is drawn inside, so
+	// findChild() on the root never reaches a Repeater delegate even though childItems() shows
+	// it. Names still carry the slot index (amendment O), so the lookup stays order-independent.
+	QQuickItem* findItemByObjectName(QQuickItem* parent, const QString& name)
+	{
+		if (!parent)
+			return nullptr;
+		const QList<QQuickItem*> children = parent->childItems();
+		for (QQuickItem* child : children) {
+			if (child && child->objectName() == name)
+				return child;
+		}
+		for (QQuickItem* child : children) {
+			if (QQuickItem* found = findItemByObjectName(child, name))
+				return found;
+		}
+		return nullptr;
+	}
+}
+
 bool MascotSurface::resolveSlot(int i)
 {
 	if (!this->isValidSlot(i) || !this->root)
@@ -333,12 +366,21 @@ bool MascotSurface::resolveSlot(int i)
 	// by the name that carries its index, so a sink can never be matched to the wrong
 	// rectangle. A null QPointer means "not resolved yet" or "the delegate was destroyed",
 	// and both cases resolve the same way.
-	if (slot.item.isNull())
-		slot.item = this->root->findChild<QQuickItem*>(QStringLiteral("mascotSlot%1").arg(i));
+	//
+	// The visual walk comes first because that is where QML items live; findChild() is kept as
+	// a fallback for a build that parents the delegate as a QObject child instead.
+	if (slot.item.isNull()) {
+		slot.item = findItemByObjectName(this->root, QStringLiteral("mascotSlot%1").arg(i));
+		if (slot.item.isNull())
+			slot.item = this->root->findChild<QQuickItem*>(QStringLiteral("mascotSlot%1").arg(i));
+	}
 	if (slot.item.isNull())
 		return false;
-	if (slot.image.isNull())
-		slot.image = slot.item->findChild<QQuickItem*>(QStringLiteral("img%1").arg(i));
+	if (slot.image.isNull()) {
+		slot.image = findItemByObjectName(slot.item, QStringLiteral("img%1").arg(i));
+		if (slot.image.isNull())
+			slot.image = slot.item->findChild<QQuickItem*>(QStringLiteral("img%1").arg(i));
+	}
 	return true;
 }
 

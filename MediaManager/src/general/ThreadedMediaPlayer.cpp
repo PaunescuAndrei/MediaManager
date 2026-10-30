@@ -8,6 +8,20 @@
 #include <QDebug>
 #include <utility>
 
+namespace {
+	// The one place the intent is written onto a player. QMediaPlayer applies playback options as
+	// a whole object, so the current ones are read back first and only the intent is replaced:
+	// asking for low latency must not reset a probe size or network timeout set elsewhere.
+	void applyPlaybackIntent(QMediaPlayer* player, QPlaybackOptions::PlaybackIntent intent)
+	{
+		if (!player)
+			return;
+		QPlaybackOptions options = player->playbackOptions();
+		options.setPlaybackIntent(intent);
+		player->setPlaybackOptions(options);
+	}
+}
+
 ThreadedMediaPlayer::ThreadedMediaPlayer(QObject* parent)
 	: QObject(parent)
 {
@@ -41,13 +55,14 @@ void ThreadedMediaPlayer::start(QVideoSink* sink, const QString& source, bool lo
 	QObject* context = this->m_context;
 	const float volume = this->m_volume;
 	const bool muted = this->m_muted;
+	const QPlaybackOptions::PlaybackIntent intent = this->m_playbackIntent;
 
 	this->m_thread->start();
 
 	// Creating the player on the worker thread is the whole point: QMediaPlayer's
 	// constructor, its FFmpeg playback engine, its 50 ms position timer and setSource()
 	// all stay off the GUI thread from here on.
-	QMetaObject::invokeMethod(context, [this, state, sink, initialSource, loop, volume, muted]() {
+	QMetaObject::invokeMethod(context, [this, state, sink, initialSource, loop, volume, muted, intent]() {
 		// The wrapper may have been destroyed before this thread started; in that case it
 		// has set cancel and must never see the (possibly destroyed) sink or wrapper.
 		if (state->cancel.load(std::memory_order_acquire))
@@ -67,6 +82,10 @@ void ThreadedMediaPlayer::start(QVideoSink* sink, const QString& source, bool lo
 		}
 		if (loop)
 			state->player->setLoops(QMediaPlayer::Infinite);
+
+		// Before the source: the backend reads the intent when it opens the media, so an intent
+		// written after the first load would only affect the second one.
+		applyPlaybackIntent(state->player, intent);
 
 		// Queued, because the player now lives in this thread and the wrapper in the
 		// GUI thread. The wrapper slots only update cached state and re-emit.
@@ -201,6 +220,17 @@ void ThreadedMediaPlayer::setMuted(bool muted)
 	this->post([muted](QMediaPlayer*, QAudioOutput* audio) {
 		if (audio)
 			audio->setMuted(muted);
+	});
+}
+
+void ThreadedMediaPlayer::setPlaybackIntent(QPlaybackOptions::PlaybackIntent intent)
+{
+	this->m_playbackIntent = intent;
+
+	// Before start() the init lambda reads the stored value, so the first load already has it;
+	// afterwards this runs in the worker thread, which is where the player and its options live.
+	this->post([intent](QMediaPlayer* player, QAudioOutput*) {
+		applyPlaybackIntent(player, intent);
 	});
 }
 

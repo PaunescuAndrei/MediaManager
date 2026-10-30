@@ -40,6 +40,7 @@
     <ClCompile Include="src\general\mascotMediaUtils.cpp" />
     <ClCompile Include="src\general\MascotImageCache.cpp" />
     <ClCompile Include="src\general\MascotPrefetcher.cpp" />
+    <ClCompile Include="src\general\MascotVideoSlot.cpp" />
     <ClCompile Include="src\general\MusicPlayer.cpp" />
     <ClCompile Include="src\general\RawInputKeyboard.cpp" />
     <ClCompile Include="src\general\shokoDB.cpp" />
@@ -162,6 +163,7 @@
     <ClInclude Include="src\general\MascotMedia.h" />
     <ClInclude Include="src\general\MascotImageCache.h" />
     <QtMoc Include="src\general\MascotPrefetcher.h" />
+    <QtMoc Include="src\general\MascotVideoSlot.h" />
     <ClInclude Include="src\QtClasses\MascotMediaSource.h" />
     <ClInclude Include="src\general\MusicPlayer.h" />
     <ClInclude Include="src\general\RawInputKeyboard.h" />

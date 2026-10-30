@@ -2,6 +2,7 @@
 #include <QObject>
 #include <QString>
 #include <QMediaPlayer>
+#include <QPlaybackOptions>
 #include <functional>
 #include <memory>
 #include <atomic>
@@ -42,6 +43,12 @@ public:
 	void setPosition(qint64 positionMs);
 	void setVolume(float volume);
 	void setMuted(bool muted);
+	// Playback intent of the player (Qt 6.12: QMediaPlayer no longer carries the enum itself, it
+	// takes it through QPlaybackOptions). It is remembered here and applied in the worker before
+	// the first setSource(), because the backend reads it when it opens the media -- setting it
+	// afterwards would leave the first load at the default intent. A call after start() posts the
+	// same write to the worker, where the player and its options live.
+	void setPlaybackIntent(QPlaybackOptions::PlaybackIntent intent);
 
 	QString currentSource() const { return m_source; }
 	qint64 position() const { return m_positionMs; }
@@ -82,6 +89,8 @@ private:
 	bool m_shutdown = false;
 	float m_volume = 0.0f;
 	bool m_muted = false;
+	// Qt's own default, so a caller that never asks for an intent gets unchanged behaviour.
+	QPlaybackOptions::PlaybackIntent m_playbackIntent = QPlaybackOptions::PlaybackIntent::Playback;
 	QString m_source;
 	qint64 m_positionMs = 0;
 	qint64 m_durationMs = 0;

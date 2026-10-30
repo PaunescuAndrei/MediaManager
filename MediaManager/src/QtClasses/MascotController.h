@@ -63,12 +63,13 @@ public:
 	// surface that hosts it. Called on enable, once per host resize and on a mode change.
 	void updateLayout();
 
-	// Replaces what `side` shows. The selected path is requested from the prefetcher and the
-	// slot is written when -- and only when -- mediaReady delivers it (amendment H1).
-	void nextImage(MascotSide side, bool useCache, bool updateHighlight = false);
+	// Replaces what `side` shows: served from the panel's speculative candidate when it has one
+	// (a committed MascotMedia, no decode), otherwise picked, requested and written when
+	// mediaReady delivers it (amendment H1).
+	void nextImage(MascotSide side, bool updateHighlight = false);
 	// The both-panel swap: a new left media plus either the same media on the right (the
 	// mirror key, or `forcedMirror` from the click map) or an independently picked one.
-	void nextImages(bool useCache, bool forcedMirror);
+	void nextImages(bool forcedMirror);
 
 	void flipSide(MascotSide side);
 	void flipBoth();
@@ -80,7 +81,7 @@ public:
 
 	// A file dropped on (or debugged into) one panel: shows it unflipped, and with the mirror
 	// key on copies it onto the other panel mirrored, which is what setMascotDebug() did with
-	// setImage(path) / setImage(path, true).
+	// setImage(path) / setImage(path, true). Gated on debug mode like that entry point was.
 	void showDroppedImage(MascotSide side, const QString& path);
 
 signals:
@@ -157,9 +158,10 @@ private:
 	void applyDisplay(SideState& state, MascotSide side);
 	void applyMirror(SideState& state, MascotSide side);
 	void requestPath(SideState& state, const QString& path);
-	// Commits a media to one panel: pins it, writes the slot, arms the next speculative pick
-	// and pushes the theme colour when the swap asked for it. `fromReady` means the media came
-	// out of this panel's own candidate, which is then consumed.
+	// Commits a media to one panel: pins it, writes the slot, drops whatever that panel was still
+	// waiting for, arms the next speculative pick and pushes the theme colour when the swap asked
+	// for it. `fromReady` means the media came out of this panel's own candidate, which is then
+	// consumed.
 	void showMedia(SideState& state, MascotSide side, const MascotMedia& media, bool fromReady,
 		bool armCandidate);
 	// Stores a decoded speculative media, pinned, until the next swap takes it.
@@ -173,7 +175,7 @@ private:
 	// Serves one panel's next media. Returns the media when the pick could be committed at once
 	// (a ready candidate), i.e. with no decode and no request on this path; an empty media means
 	// the pick is in flight and will be shown through mediaReady (amendment H1).
-	MascotMedia pickFor(SideState& state, MascotSide side, bool useCache, bool updateHighlight);
+	MascotMedia pickFor(SideState& state, MascotSide side, bool updateHighlight);
 	// The state a fresh pick starts from, also used when a pick is copied to the other panel.
 	void preparePick(SideState& state, bool updateHighlight);
 

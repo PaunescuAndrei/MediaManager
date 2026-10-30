@@ -60,7 +60,7 @@ void MascotController::start()
 	this->connectBeats();
 	// Both panels were empty when the old code ran updateMascots() right before
 	// showMascots(); one seeding swap does both jobs now.
-	this->nextImages(true, false);
+	this->nextImages(false);
 }
 
 void MascotController::stop()
@@ -140,16 +140,16 @@ void MascotController::updateLayout()
 	}
 }
 
-void MascotController::nextImage(MascotSide side, bool useCache, bool updateHighlight)
+void MascotController::nextImage(MascotSide side, bool updateHighlight)
 {
-	this->pickFor(this->stateFor(side), side, useCache, updateHighlight);
+	this->pickFor(this->stateFor(side), side, updateHighlight);
 }
 
-void MascotController::nextImages(bool useCache, bool forcedMirror)
+void MascotController::nextImages(bool forcedMirror)
 {
 	if (!this->running)
 		return;
-	const MascotMedia left = this->pickFor(this->leftState, MascotSide::Left, useCache, true);
+	const MascotMedia left = this->pickFor(this->leftState, MascotSide::Left, true);
 	if (this->mirrorEnabled() || forcedMirror) {
 		if (!this->rightState.surface)
 			return;
@@ -168,7 +168,7 @@ void MascotController::nextImages(bool useCache, bool forcedMirror)
 		this->requestPath(this->rightState, this->leftState.requestedPath);
 	}
 	else {
-		this->pickFor(this->rightState, MascotSide::Right, useCache, false);
+		this->pickFor(this->rightState, MascotSide::Right, false);
 	}
 }
 
@@ -232,6 +232,12 @@ color_area MascotController::colorFor(MascotSide side, bool weighted)
 void MascotController::showDroppedImage(MascotSide side, const QString& path)
 {
 	if (!this->running || path.isEmpty())
+		return;
+	// The old entry point (MainWindow::setMascotDebug) was gated on debug mode, and a drop is the
+	// same action: a user dragging a PNG onto a panel must not replace it unless the app was
+	// started with -debug. Parity wins here -- replacing a panel by drag is not a feature anyone
+	// asked for.
+	if (!this->App || !this->App->debug_mode)
 		return;
 	SideState& state = this->stateFor(side);
 	if (!state.surface)
@@ -450,17 +456,15 @@ void MascotController::requestPath(SideState& state, const QString& path)
 		source->request(path);
 }
 
-MascotMedia MascotController::pickFor(SideState& state, MascotSide side, bool useCache, bool updateHighlight)
+MascotMedia MascotController::pickFor(SideState& state, MascotSide side, bool updateHighlight)
 {
 	if (!this->running || !state.surface)
 		return MascotMedia();
 
-	// A ready candidate *is* the "use cache" path: the media was chosen and decoded before the
-	// swap was due, so committing it is a property write -- no decode, no directory walk and no
-	// request on this path. `useCache` no longer separates two behaviours at this level, and it
-	// is kept for the call sites that carry it.
-	Q_UNUSED(useCache);
-
+	// A ready candidate: the media was chosen and decoded before the swap was due, so committing
+	// it is a property write -- no decode, no directory walk and no request on this path. Any
+	// older request this panel still had in flight is dropped by showMedia (Important #1), so a
+	// late delivery for it can no longer overwrite what is shown here.
 	if (!state.candidate.path.isEmpty()) {
 		const MascotMedia media = state.candidate;
 		this->preparePick(state, updateHighlight);
@@ -469,8 +473,19 @@ MascotMedia MascotController::pickFor(SideState& state, MascotSide side, bool us
 	}
 
 	// Nothing ready: the first swap after enable, or a candidate whose decode failed or was
-	// dropped (amendment H1). Pick, request, and show it when it arrives -- degraded by one
-	// decode, never blocked, and the next commit arms a candidate again.
+	// dropped (amendment H1). One request in flight per panel, though: while the prefetcher is
+	// still decoding the path this panel asked for, another swap must not walk the mascot
+	// directory and post a second decode, because a decode slower than the beat interval would
+	// then grow the pool's queue on every beat. `isPending` is asked rather than
+	// `requestedPath` alone so that a request that produced nothing at all (a republish
+	// dropped because its pixels had been evicted) falls through to a fresh pick instead of
+	// wedging the panel.
+	if (!state.requestedPath.isEmpty()) {
+		MascotPrefetcher* source = this->prefetcher.data();
+		if (!source || source->isPending(state.requestedPath))
+			return MascotMedia();
+	}
+
 	const QString path = this->nextSourcePath();
 	if (path.isEmpty())
 		return MascotMedia();
@@ -515,10 +530,19 @@ void MascotController::showMedia(SideState& state, MascotSide side, const Mascot
 		state.candidate = MascotMedia(); // consumed by this commit
 	state.shown = media;
 	state.flipToggled = false;
+	// A commit supersedes whatever this panel was still waiting for: a delivery for an older pick
+	// must not overwrite what is on screen a beat later (Important #1). This is the one place it
+	// is dropped, so every commit path -- a candidate, the mirror copy, an awaited delivery --
+	// drops it, and the panel is armed for a fresh candidate below instead.
+	state.requestedPath.clear();
+	state.prefetchPath.clear();
+	// The media that just became visible is pinned *before* the two paths it replaced are
+	// re-evaluated: each syncPin() can run eviction, and at the configured floor the entry eviction
+	// would then be free to take is exactly this one (M1).
+	this->syncPin(media.path);
 	this->applyDisplay(state, side);
 	this->syncPin(previousShown);
 	this->syncPin(previousCandidate);
-	this->syncPin(media.path);
 
 	// The next swap is armed after this turn: the swap path must not walk the mascot directory.
 	if (armCandidate)
@@ -536,10 +560,11 @@ void MascotController::holdCandidate(SideState& state, const MascotMedia& media)
 		return;
 	const QString previous = state.candidate.path;
 	state.candidate = media;
-	// Pinned as soon as it exists: a candidate whose pixels were evicted before its swap would
-	// put a blank id in the slot, and the pin costs nothing while the entry is not evicted.
-	this->syncPin(previous);
+	// Pinned as soon as it exists, and before the candidate it replaces is re-evaluated: a
+	// candidate whose pixels were evicted before its swap would put a blank id in the slot, and
+	// the unpin below can run eviction.
 	this->syncPin(media.path);
+	this->syncPin(previous);
 }
 
 void MascotController::armSpeculation(MascotSide side)
@@ -603,7 +628,7 @@ void MascotController::onSwapBeat()
 {
 	if (!this->running || !this->beatsAllowed())
 		return;
-	this->nextImages(true, false);
+	this->nextImages(false);
 }
 
 void MascotController::onFlipBeat()
@@ -641,10 +666,8 @@ void MascotController::onMediaReady(const MascotMedia& media)
 		const bool awaited = state.requestedPath == media.path;
 		const bool speculative = state.prefetchPath == media.path;
 		if (awaited) {
-			state.requestedPath.clear();
-			// It is about to be on screen, so it is not also a candidate for a later swap.
-			if (speculative)
-				state.prefetchPath.clear();
+			// showMedia() drops both waits: the media is on screen, so it is not also a candidate
+			// for a later swap, and any older pick is stale.
 			this->showMedia(state, side, media, false, true);
 		}
 		else if (speculative) {

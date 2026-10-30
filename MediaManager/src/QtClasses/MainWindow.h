@@ -300,8 +300,8 @@ public:
     void closeEvent(QCloseEvent* event) override;
     void initMascotAnimation();
     void setMascotDebug(QString path, MascotSide side);
-    void updateMascot(MascotSide mascot, bool use_cache, bool update_highlight_color);
-    void updateMascots(bool use_cache = true, bool forced_mirror = false);
+    void updateMascot(MascotSide mascot, bool update_highlight_color);
+    void updateMascots(bool forced_mirror = false);
     void updateThemeHighlightColorFromMascot(MascotSide mascot, bool weighted = true);
     void setThemeHighlightColor(QColor color);
     void openThumbnails(QString path);

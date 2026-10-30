@@ -1291,17 +1291,17 @@ void MainWindow::setMascotDebug(QString path, MascotSide side) {
     }
 }
 
-void MainWindow::updateMascot(MascotSide mascot, bool use_cache, bool update_highlight_color) {
-    // The side-directory flip rule and the theme colour move with the media now: the
-    // controller picks the path, implements flipForSide() and emits themeColorChanged() when
-    // the media it picked has landed.
-    this->mascotController->nextImage(mascot, use_cache, update_highlight_color);
+void MainWindow::updateMascot(MascotSide mascot, bool update_highlight_color) {
+    // The side-directory flip rule, the swap latency and the theme colour move with the media
+    // now: the controller commits from its own prefetched candidate, implements flipForSide()
+    // and emits themeColorChanged() when the media it picked has landed.
+    this->mascotController->nextImage(mascot, update_highlight_color);
 }
 
-void MainWindow::updateMascots(bool use_cache, bool forced_mirror)
+void MainWindow::updateMascots(bool forced_mirror)
 {
     try {
-        this->mascotController->nextImages(use_cache, forced_mirror);
+        this->mascotController->nextImages(forced_mirror);
     }
     catch (...) {
         this->hideMascots();
@@ -1539,6 +1539,9 @@ void MainWindow::showMascots()
     // seeds it. leftImg/rightImg stay hidden and inert (amendment C).
     this->ui.mascotLeftHost->show();
     this->ui.mascotRightHost->show();
+    // Before the surfaces exist: the hosts start at the .ui's min 0 / max 16777215, so without
+    // this the width of the first frame would depend on an unrelated later resize.
+    this->applyMascotWidth(this->width(), this->App->config->get_double("mascots_width_percent", 15.0));
     this->mascotController->start();
     //QTimer::singleShot(20, [this] {this->resize_center(1300, this->height()); });
 }
@@ -2675,15 +2678,15 @@ void MainWindow::handleMascotClickEvents(MascotSide mascot, Qt::MouseButton butt
         case Qt::MiddleButton:
             if (this->App->config->get_bool("mascots_mirror")) {
                 if (modifiers.testFlag(Qt::ShiftModifier))
-                    this->updateMascot(mascot, true, true);
+                    this->updateMascot(mascot, true);
                 else 
-                    this->updateMascots(true, false);
+                    this->updateMascots(false);
             }
             else {
                 if (modifiers.testFlag(Qt::ShiftModifier))
-                    this->updateMascots(true, true);
+                    this->updateMascots(true);
                 else
-                    this->updateMascot(mascot, true, true);
+                    this->updateMascot(mascot, true);
             }
             break;
         default:

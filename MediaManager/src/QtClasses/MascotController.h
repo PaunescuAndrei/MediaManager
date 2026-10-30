@@ -203,10 +203,4 @@ private:
 	QMetaObject::Connection swapConnection;
 	QMetaObject::Connection flipConnection;
 
-	// ===== AMENDMENT Z: TEMPORARY TIMING INSTRUMENTATION - DELETE AFTER THE LATENCY GATE =====
-	// The counters behind the swap-latency log line. Delete with the AMENDMENT Z blocks in this
-	// file's .cpp and in MascotSurface.{h,cpp}; this class is otherwise exactly as it was.
-	double swapTimingWorstMs = 0.0;
-	int swapTimingSamples = 0;
-	// ===== END AMENDMENT Z ===================================================================
 };

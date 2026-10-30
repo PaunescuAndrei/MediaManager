@@ -497,37 +497,3 @@ int MascotSurface::slotAt(const QPointF& position) const
 	}
 	return -1;
 }
-
-// ===== AMENDMENT Z: TEMPORARY TIMING INSTRUMENTATION - DELETE AFTER THE LATENCY GATE =========
-// Delete both definitions and the matching blocks in MascotSurface.h / MascotController.cpp once
-// the latency gate has been run and its numbers recorded. Nothing else calls or emits any of this.
-void MascotSurface::beginSwapTiming(const QString& label)
-{
-	// Installed here, not in the constructor: a run with debug mode off never reaches this call, and
-	// a filter that was never installed costs nothing on the paint path.
-	if (!this->swapTimingFilterInstalled && this->quick) {
-		this->quick->installEventFilter(this);
-		this->swapTimingFilterInstalled = true;
-	}
-	this->swapLabel = label;
-	this->swapTimer.start();
-	this->swapTimingPending = true;
-}
-
-bool MascotSurface::eventFilter(QObject* watched, QEvent* event)
-{
-	if (this->swapTimingPending && watched == this->quick && event->type() == QEvent::Paint) {
-		// The first paint after the commit is the frame that carries the new media. The probe
-		// measures after that handler has run -- a queued call is delivered once the paint
-		// event is fully handled -- so the interval covers the render of the frame and not only
-		// the moment it started. Queued with `this` as the context object, so a surface that
-		// dies before the call runs simply never reports.
-		this->swapTimingPending = false;
-		QMetaObject::invokeMethod(this, [this] {
-			emit this->swapFramePainted(this->swapLabel,
-				static_cast<double>(this->swapTimer.nsecsElapsed()) / 1.0e6);
-		}, Qt::QueuedConnection);
-	}
-	return QWidget::eventFilter(watched, event);
-}
-// ===== END AMENDMENT Z ========================================================================

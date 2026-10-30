@@ -4,11 +4,13 @@
 #include <Qt>
 #include <QPainter>
 #include "utils.h"
+#include "mascotMediaUtils.h"
 #include <QScrollBar>
 #include <QMimeData>
 #include <QDir>
 #include <QGraphicsSceneDragDropEvent>
 #include <QtMath>
+#include <cmath>
 #include "MainApp.h"
 
 class QGraphicsScene_custom : public QGraphicsScene {
@@ -191,99 +193,11 @@ void customGraphicsView::clearColors() {
 }
 
 bool customGraphicsView::findAlphaBoundsX(const QImage& image, int alphaThreshold, int* minX, int* maxX) {
-    if (image.isNull())
-        return false;
-    int min_bound = image.width();
-    int max_bound = -1;
-    for (int y = 0; y < image.height(); ++y) {
-        const QRgb* line = reinterpret_cast<const QRgb*>(image.constScanLine(y));
-        for (int x = 0; x < image.width(); ++x) {
-            if (qAlpha(line[x]) > alphaThreshold) {
-                if (x < min_bound)
-                    min_bound = x;
-                if (x > max_bound)
-                    max_bound = x;
-            }
-        }
-    }
-    if (max_bound < 0)
-        return false;
-    *minX = min_bound;
-    *maxX = max_bound;
-    return true;
+    return mascotMediaUtils::findAlphaBoundsX(image, alphaThreshold, minX, maxX);
 }
 
 bool customGraphicsView::computeWeightedCenterXFromAlpha(const QImage& image, int alphaThreshold, double* centerX) {
-    if (image.isNull())
-        return false;
-    const int width = image.width();
-    const int height = image.height();
-    if (width <= 0 || height <= 0)
-        return false;
-
-    const int inf = width + height + 10;
-    const int size = width * height;
-    QVector<int> dist(size, inf);
-
-    auto index = [width](int x, int y) { return y * width + x; };
-
-    for (int y = 0; y < height; ++y) {
-        const QRgb* line = reinterpret_cast<const QRgb*>(image.constScanLine(y));
-        for (int x = 0; x < width; ++x) {
-            if (qAlpha(line[x]) <= alphaThreshold)
-                dist[index(x, y)] = 0;
-        }
-    }
-
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
-            int& d = dist[index(x, y)];
-            if (d == 0)
-                continue;
-            if (x > 0)
-                d = std::min(d, dist[index(x - 1, y)] + 1);
-            if (y > 0)
-                d = std::min(d, dist[index(x, y - 1)] + 1);
-            if (x > 0 && y > 0)
-                d = std::min(d, dist[index(x - 1, y - 1)] + 2);
-            if (x + 1 < width && y > 0)
-                d = std::min(d, dist[index(x + 1, y - 1)] + 2);
-        }
-    }
-
-    for (int y = height - 1; y >= 0; --y) {
-        for (int x = width - 1; x >= 0; --x) {
-            int& d = dist[index(x, y)];
-            if (d == 0)
-                continue;
-            if (x + 1 < width)
-                d = std::min(d, dist[index(x + 1, y)] + 1);
-            if (y + 1 < height)
-                d = std::min(d, dist[index(x, y + 1)] + 1);
-            if (x + 1 < width && y + 1 < height)
-                d = std::min(d, dist[index(x + 1, y + 1)] + 2);
-            if (x > 0 && y + 1 < height)
-                d = std::min(d, dist[index(x - 1, y + 1)] + 2);
-        }
-    }
-
-    double sumW = 0.0;
-    double sumX = 0.0;
-    for (int y = 0; y < height; ++y) {
-        for (int x = 0; x < width; ++x) {
-            int d = dist[index(x, y)];
-            if (d > 0 && d < inf) {
-                double weight = static_cast<double>(d);
-                sumW += weight;
-                sumX += weight * static_cast<double>(x);
-            }
-        }
-    }
-
-    if (sumW <= 0.0)
-        return false;
-    *centerX = sumX / sumW;
-    return true;
+    return mascotMediaUtils::computeWeightedCenterXFromAlpha(image, alphaThreshold, centerX);
 }
 
 bool customGraphicsView::scaledCenterForPixmap(const QPixmap& pixmap, double* scaledCenter) const {
@@ -303,18 +217,11 @@ void customGraphicsView::updateContentCenterFromOriginal() {
         return;
     QImage image = this->original_pixmap.toImage().convertToFormat(QImage::Format_ARGB32_Premultiplied);
     const int alphaThreshold = 77; // 30% alpha
-    double centerX = 0.0;
-    if (computeWeightedCenterXFromAlpha(image, alphaThreshold, &centerX)) {
-        this->has_content_center = true;
-        this->content_center_x = centerX;
+    const double centerX = mascotMediaUtils::contentCenterX(image, alphaThreshold);
+    if (std::isnan(centerX))
         return;
-    }
-    int minX = 0;
-    int maxX = 0;
-    if (findAlphaBoundsX(image, alphaThreshold, &minX, &maxX)) {
-        this->has_content_center = true;
-        this->content_center_x = (static_cast<double>(minX) + static_cast<double>(maxX)) / 2.0;
-    }
+    this->has_content_center = true;
+    this->content_center_x = centerX;
 }
 
 int customGraphicsView::horizontalScrollForContent(const QPixmap& pixmap) const {

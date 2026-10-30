@@ -34,6 +34,7 @@
     <ClCompile Include="src\general\generateThumbnailRunnable.cpp" />
     <ClCompile Include="src\general\IconChanger.cpp" />
     <ClCompile Include="src\general\mascotsAnimationsThread.cpp" />
+    <ClCompile Include="src\general\mascotMediaUtils.cpp" />
     <ClCompile Include="src\general\mascotsGeneratorThread.cpp" />
     <ClCompile Include="src\general\MusicPlayer.cpp" />
     <ClCompile Include="src\general\RawInputKeyboard.cpp" />
@@ -150,6 +151,7 @@
     <QtMoc Include="src\general\MpcPlayer.h" />
     <ClInclude Include="src\general\PlayerCommands.h" />
     <ClInclude Include="src\general\utils.h" />
+    <ClInclude Include="src\general\mascotMediaUtils.h" />
     <ClInclude Include="src\general\MusicPlayer.h" />
     <ClInclude Include="src\general\RawInputKeyboard.h" />
     <ClInclude Include="src\general\shokoDB.h" />

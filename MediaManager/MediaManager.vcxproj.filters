@@ -166,6 +166,9 @@
     <ClCompile Include="src\general\mascotsAnimationsThread.cpp">
       <Filter>Source Files\general</Filter>
     </ClCompile>
+    <ClCompile Include="src\general\mascotMediaUtils.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
     <ClCompile Include="src\general\mascotsGeneratorThread.cpp">
       <Filter>Source Files\general</Filter>
     </ClCompile>
@@ -346,6 +349,9 @@
       <Filter>Header Files\general</Filter>
     </ClInclude>
     <ClInclude Include="src\general\utils.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\mascotMediaUtils.h">
       <Filter>Header Files\general</Filter>
     </ClInclude>
     <ClInclude Include="src\general\MusicPlayer.h">

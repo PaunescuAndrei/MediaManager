@@ -14,6 +14,7 @@
 #include <QQuickWidget>
 #include <QUrl>
 #include <QVBoxLayout>
+#include <QVideoSink>
 
 namespace {
 	// Slot rectangles live inside a window, so a sane coordinate is far below this. The test
@@ -236,6 +237,55 @@ void MascotSurface::setSlotMedia(int i, const MascotMedia& media)
 	this->applySlot(i);
 }
 
+QVideoSink* MascotSurface::slotSink(int i, int ab) const
+{
+	// An out-of-range index or output selector has no sink to return. The caller's own
+	// bookkeeping should never produce one, but answering null costs one comparison and keeps an
+	// out-of-range read from deciding anything.
+	if (!this->isValidSlot(i) || (ab != 0 && ab != 1))
+		return nullptr;
+	const Slot& slot = this->slotStates.at(i);
+	QQuickItem* video = (ab == 0 ? slot.videoA : slot.videoB).data();
+	// A delegate that does not exist yet (or was destroyed by a slot count change) has no item,
+	// and an item without the property has no sink: both are null, and neither is something this
+	// call can repair -- the caller is told to ask again after the delegate exists.
+	if (!video)
+		return nullptr;
+	// Read straight off the item: videoSink is CONSTANT and the VideoOutput creates the sink in
+	// its constructor, so this neither allocates nor changes any state. What comes back is the
+	// item's own QQuickVideoSink, which re-emits videoFrameChanged on the GUI thread.
+	return video->property("videoSink").value<QVideoSink*>();
+}
+
+void MascotSurface::setSlotVideoVisible(int i, bool visible)
+{
+	if (!this->isValidSlot(i))
+		return;
+	this->slotStates[i].videoVisible = visible;
+	this->applySlot(i);
+}
+
+void MascotSurface::setSlotVideoOpacity(int i, int ab, double opacity, int crossfadeMs)
+{
+	// The same contract as setSlotOpacity(): a NaN fails the ordered comparison below and so
+	// never reaches QML, and a value above 1 is clamped because Qt Quick clamps opacity itself
+	// anyway -- the mirrored value should be the one the item ends up with. The selector is
+	// checked here for the reason given in slotSink(): there is no third output to write.
+	if (!this->isValidSlot(i) || (ab != 0 && ab != 1) || !(opacity >= 0.0))
+		return;
+	Slot& slot = this->slotStates[i];
+	// QML hands this to a NumberAnimation as its duration, so a negative value is clamped away
+	// rather than passed on. 0 already means what a negative duration would be asked to mean
+	// (the hard cut), so nothing is lost by refusing to let a bad value through.
+	slot.crossfadeMs = crossfadeMs > 0 ? crossfadeMs : 0;
+	const double clamped = opacity > 1.0 ? 1.0 : opacity;
+	if (ab == 0)
+		slot.videoOpacityA = clamped;
+	else
+		slot.videoOpacityB = clamped;
+	this->applySlot(i);
+}
+
 void MascotSurface::clearSlot(int i)
 {
 	if (!this->isValidSlot(i))
@@ -381,6 +431,20 @@ bool MascotSurface::resolveSlot(int i)
 		if (slot.image.isNull())
 			slot.image = slot.item->findChild<QQuickItem*>(QStringLiteral("img%1").arg(i));
 	}
+	// The two video outputs are found the same three ways and by the same index-carrying names,
+	// which is what lets slotSink() answer a caller that only knows the slot number. Looking
+	// them up here, rather than in that accessor, keeps the accessor const and makes every
+	// delegate applySlot() has touched reachable for its sinks in the same call.
+	if (slot.videoA.isNull()) {
+		slot.videoA = findItemByObjectName(slot.item, QStringLiteral("videoA%1").arg(i));
+		if (slot.videoA.isNull())
+			slot.videoA = slot.item->findChild<QQuickItem*>(QStringLiteral("videoA%1").arg(i));
+	}
+	if (slot.videoB.isNull()) {
+		slot.videoB = findItemByObjectName(slot.item, QStringLiteral("videoB%1").arg(i));
+		if (slot.videoB.isNull())
+			slot.videoB = slot.item->findChild<QQuickItem*>(QStringLiteral("videoB%1").arg(i));
+	}
 	return true;
 }
 
@@ -416,6 +480,19 @@ void MascotSurface::applySlot(int i)
 	item->setProperty("contentOffsetX", slot.hasExplicitContentOffset
 		? slot.explicitContentOffsetX
 		: this->contentShiftFor(slot, mirrored));
+
+	// The video path's state, written from the slot for the same reason as everything above: a
+	// delegate QML recreated after a slot count change comes back with the outputs the caller
+	// already drove. QML owns the animating (one Behavior per opacity), so each of these is a
+	// single target value and no animation state is kept on this side.
+	//
+	// The duration goes first on purpose: the Behavior reads crossfadeMs when the opacity write
+	// arrives, and the normal call -- one half of a crossfade -- changes both at once. Writing
+	// the opacity first would animate it with the previous duration, i.e. not at all.
+	item->setProperty("crossfadeMs", slot.crossfadeMs);
+	item->setProperty("videoVisible", slot.videoVisible);
+	item->setProperty("videoOpacityA", slot.videoOpacityA);
+	item->setProperty("videoOpacityB", slot.videoOpacityB);
 
 	if (image) {
 		// The id is already percent-encoded by MascotPrefetcher, and QUrl keeps a percent-escape

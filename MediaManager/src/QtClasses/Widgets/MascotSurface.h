@@ -11,6 +11,7 @@
 class MascotImageCache;
 class QQuickItem;
 class QQuickWidget;
+class QVideoSink;
 
 // The mascot panel: N clipped QML slots rendered by one QQuickWidget, each showing whatever
 // MascotMedia it was handed through image://mascots/... .
@@ -53,6 +54,23 @@ public:
 	// Writes the slot's image source, fill mode and content shift. A media without a usable
 	// provider id (or a video) leaves the image hidden rather than pointing it nowhere.
 	void setSlotMedia(int i, const MascotMedia& media);
+	// The sink one of a slot's two video outputs owns, so a player can be pointed at it without
+	// knowing anything about QML: `ab` selects the output (0 = A, 1 = B, the two halves of a
+	// crossfade). The sink belongs to the VideoOutput item, not to this class, and dies with the
+	// delegate -- so null is the honest answer both while the delegate does not exist and for
+	// any pointer a caller kept across a setSlotCount() that shrank the panel. Query it again
+	// after such a call; never hold it past one.
+	QVideoSink* slotSink(int i, int ab) const;
+	// Whether the slot's video outputs draw at all. The image path and the video path are
+	// exclusive per slot, so the caller hides one when it shows the other; the slot's media
+	// properties are left alone, because switching back must not cost a reload.
+	void setSlotVideoVisible(int i, bool visible);
+	// Opacity of one video output (`ab` as in slotSink()) and the duration, in milliseconds,
+	// over which QML animates that change. Writing the two outputs with the same duration is a
+	// crossfade; a duration of 0 leaves QML animating for no time at all, which is the hard cut,
+	// so there is no second code path to keep in step. Both values are mirrored in Slot so a
+	// delegate recreated by a slot count change comes back at the opacity last asked for.
+	void setSlotVideoOpacity(int i, int ab, double opacity, int crossfadeMs);
 	void clearSlot(int i);
 	void clearSlots();
 	// Surface-wide mirror value (from config, applied by the driver). It is a bulk assignment
@@ -89,11 +107,26 @@ private:
 		// one again by its object name (amendment O), so the pointer can never survive its item.
 		QPointer<QQuickItem> item;
 		QPointer<QQuickItem> image;
+		// The two VideoOutput items, resolved with the rest of the slot for the same reason and
+		// nulled the same way. They are resolved here rather than inside slotSink() because
+		// that accessor is const and because a delegate applySlot() has touched must already be
+		// reachable for its sinks.
+		QPointer<QQuickItem> videoA;
+		QPointer<QQuickItem> videoB;
 
 		QRectF rect;
 		double opacity = 1.0;
 		FillMode fillMode = FillMode::Fit;
 		bool mirrored = false;
+		// The video path's own state. It is mirrored here for the same reason as everything
+		// above: applySlot() writes it back into a delegate QML recreated.
+		bool videoVisible = false;
+		// Two values, not one: a crossfade is one output fading in while the other fades out,
+		// and only the caller knows which player sits on which output.
+		double videoOpacityA = 0.0;
+		double videoOpacityB = 0.0;
+		// Duration of the animation QML runs on either opacity above. 0 is the hard cut.
+		int crossfadeMs = 0;
 
 		QString providerId;
 		bool mediaIsImage = false;

@@ -35,6 +35,38 @@ Item {
 	property real contentOffsetX: 0.0
 	property bool mediaIsImage: false
 
+	// Video path state, all of it written by MascotSurface. The image above and the two video
+	// outputs below are exclusive per slot: videoVisible is what makes the swap, and the outputs
+	// keep their geometry the whole time so showing one costs no relayout.
+	property bool videoVisible: false
+	// One opacity per output, because a crossfade is one player fading in while the other fades
+	// out; MascotSurface::setSlotVideoOpacity writes them one half at a time and never both.
+	property real videoOpacityA: 0.0
+	property real videoOpacityB: 0.0
+	// Duration of the animations below, written together with the opacity it applies to. The
+	// caller that wants a cut passes 0, which is a zero-duration animation and not a second
+	// code path: C++ has no "instant" branch and QML no special case.
+	property int crossfadeMs: 0
+
+	// The animation lives here, not in C++. C++ writes one target opacity per half of a
+	// crossfade and QML interpolates, so the swap costs a property write instead of a per-frame
+	// timer on the GUI thread, and an interrupted crossfade continues from the value currently
+	// on screen (that is what Behavior means by animating from the current value). A duration of
+	// 0 completes on the next animation tick, which runs before that frame is painted, so the
+	// picture only ever shows the old or the new opacity.
+	Behavior on videoOpacityA {
+		NumberAnimation {
+			duration: slot.crossfadeMs
+			easing.type: Easing.InOutQuad
+		}
+	}
+	Behavior on videoOpacityB {
+		NumberAnimation {
+			duration: slot.crossfadeMs
+			easing.type: Easing.InOutQuad
+		}
+	}
+
 	Image {
 		id: img
 
@@ -62,8 +94,42 @@ Item {
 		transform: Translate { x: slot.contentOffsetX }
 	}
 
-	// Video outputs for the video path. Named per index (amendment O) but not driven yet: this
-	// task's interface has nothing to hand them a QVideoSink.
-	VideoOutput { objectName: "videoA" + index }
-	VideoOutput { objectName: "videoB" + index }
+	// The two video surfaces a crossfade needs. Named per index (amendment O), so C++ finds each
+	// one by name and hands its sink to a player (MascotSurface::slotSink); this file creates no
+	// player, so nothing here knows what is playing or when it changes -- it draws and it
+	// crossfades.
+	//
+	// Geometry is the Image's, member for member, so a video occupies exactly the pixels of the
+	// still it replaces: without that, a swap would also move and resize the picture. The fill
+	// mode values agree because MascotSurface (qmlFillModeValue) writes Qt Quick's Image.FillMode
+	// numbers, and VideoOutput.FillMode spells the three modes that mapping produces -- Stretch,
+	// PreserveAspectFit, PreserveAspectCrop -- with the same values.
+	VideoOutput {
+		id: videoA
+
+		objectName: "videoA" + index
+		width: slot.heightFill ? slot.paintedWidth : parent.width
+		height: parent.height
+		anchors.centerIn: parent
+		fillMode: slot.heightFill ? VideoOutput.Stretch : slot.fillMode
+		// mirrored is a real property since Qt 6.9 (REVISION(6, 9)), so the output flips the
+		// frame itself: this is the video path's `mirror:` and needs no Scale transform, which
+		// would also have to be undone for the clip and the content shift.
+		mirrored: slot.mirrored
+		visible: slot.videoVisible
+		opacity: slot.videoOpacityA
+	}
+
+	VideoOutput {
+		id: videoB
+
+		objectName: "videoB" + index
+		width: slot.heightFill ? slot.paintedWidth : parent.width
+		height: parent.height
+		anchors.centerIn: parent
+		fillMode: slot.heightFill ? VideoOutput.Stretch : slot.fillMode
+		mirrored: slot.mirrored
+		visible: slot.videoVisible
+		opacity: slot.videoOpacityB
+	}
 }

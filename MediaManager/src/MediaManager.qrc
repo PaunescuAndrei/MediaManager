@@ -17,5 +17,7 @@
     </qresource>
     <qresource prefix="/qml">
         <file alias="PreviewVideo.qml">qml/PreviewVideo.qml</file>
+        <file alias="MascotSurface.qml">qml/MascotSurface.qml</file>
+        <file alias="MascotSlot.qml">qml/MascotSlot.qml</file>
     </qresource>
 </RCC>

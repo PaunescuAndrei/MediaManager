@@ -310,6 +310,12 @@
     <ClCompile Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\MascotImageProvider.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\MascotSurface.cpp">
+      <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
     <ClCompile Include="src\thirdparty\beat_this\beat_this_api.cpp">
       <Filter>Source Files\thirdparty\beat_this</Filter>
     </ClCompile>
@@ -723,6 +729,12 @@
     <QtMoc Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\MascotImageProvider.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\MascotSurface.h">
+      <Filter>Header Files\QtClasses\Widgets</Filter>
+    </QtMoc>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="src\MediaManager.rc">
@@ -732,6 +744,17 @@
   <ItemGroup>
     <None Include="src\MediaManager.rc2">
       <Filter>Resource Files</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="src\qml\PreviewVideo.qml">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\qml\MascotSurface.qml">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="src\qml\MascotSlot.qml">
+      <Filter>Source Files</Filter>
     </None>
   </ItemGroup>
 </Project>

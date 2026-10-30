@@ -18,6 +18,8 @@
     <QtMoc Include="src\QtClasses\Models\VideosModel.h" />
     <QtMoc Include="src\QtClasses\Models\VideosProxyModel.h" />
     <QtMoc Include="src\QtClasses\Models\VideosSortProxyModel.h" />
+    <QtMoc Include="src\QtClasses\Widgets\MascotImageProvider.h" />
+    <QtMoc Include="src\QtClasses\Widgets\MascotSurface.h" />
     <QtMoc Include="src\QtClasses\Widgets\VideosTreeView.h" />
     <ClInclude Include="src\general\VideoData.h" />
     <ClCompile Include="src\general\BasePlayer.cpp" />
@@ -102,6 +104,8 @@
     <ClCompile Include="src\QtClasses\Widgets\PreviewVideoWindow.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\VideoPreviewWidget.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\MascotImageProvider.cpp" />
+    <ClCompile Include="src\QtClasses\Widgets\MascotSurface.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\ContributionHeatmapWidget.cpp" />
     <ClCompile Include="src\thirdparty\beat_this\beat_this_api.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
@@ -241,6 +245,8 @@
   <ItemGroup>
     <QtRcc Include="src\MediaManager.qrc" />
     <None Include="src\qml\PreviewVideo.qml" />
+    <None Include="src\qml\MascotSurface.qml" />
+    <None Include="src\qml\MascotSlot.qml" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="src\resources\icon.ico" />

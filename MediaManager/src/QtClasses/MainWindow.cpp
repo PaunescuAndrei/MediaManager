@@ -127,6 +127,20 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     //this->ui.leftImg->setMinimumWidth(newWidth / 6.6);
     //this->ui.rightImg->setMinimumWidth(newWidth / 6.6);
 
+    // The one renderer: the controller owns the QML surfaces inside the two hosts (built on
+    // enable) and is the only thing that writes what a panel displays. The cache and the
+    // prefetcher are MainApp's, process-lifetime, so nothing here can outlive them.
+    this->mascotController = new MascotController(this->App, this->App->mascotImageCache,
+        this->App->mascotPrefetcher, this->ui.mascotLeftHost, this->ui.mascotRightHost, this);
+    connect(this->mascotController, &MascotController::clicked, this,
+        [this](MascotSide side, Qt::MouseButton button, Qt::KeyboardModifiers modifiers) {
+            this->handleMascotClickEvents(side, button, modifiers);
+        });
+    connect(this->mascotController, &MascotController::themeColorChanged, this, [this](const color_area& color) {
+        if (this->App->MascotsExtractColor and color.color.isValid())
+            this->setThemeHighlightColor(color.color);
+    });
+
     this->ui.searchWidget->hide();
     new QShortcut(QKeySequence("F1"), this, [this] {this->switchCurrentDB(); });
     new QShortcut(QKeySequence("F2"), this, [this] {this->toggleSearchBar(); });
@@ -294,8 +308,11 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
                 return;
             }
             if (guess_type.name().startsWith("image/", Qt::CaseInsensitive)) {
+                // Inert after the cutover: leftImg/rightImg are hidden, and a drop on a panel
+                // now lands on its MascotSurface, which emits imageDropped to the controller.
                 if (widget and (widget->objectName() == "leftImg" or widget->objectName() == "rightImg")) {
-                    this->setMascotDebug(files[0], (customGraphicsView*)widget);
+                    const MascotSide side = widget->objectName() == "leftImg" ? MascotSide::Left : MascotSide::Right;
+                    this->setMascotDebug(files[0], side);
                 }
                 return;
             }
@@ -448,14 +465,13 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     }, Qt::QueuedConnection);
     if (this->App->config->get_bool("mascots")) {
         QMetaObject::invokeMethod(this, [this] {
-            if (this->App->MascotsGenerator)
-                this->updateMascots();
+            // showMascots() starts the controller, which seeds both panels itself. The old
+            // code needed updateMascots() here because leftImg/rightImg were already visible.
+            this->showMascots();
         }, Qt::QueuedConnection);
     } else {
         this->hideMascots();
     }
-    connect(this->ui.leftImg, &customGraphicsView::mouseClicked, this, [this](Qt::MouseButton button, Qt::KeyboardModifiers modifiers) { this->handleMascotClickEvents(this->ui.leftImg, button, modifiers); });
-    connect(this->ui.rightImg, &customGraphicsView::mouseClicked, this, [this](Qt::MouseButton button, Qt::KeyboardModifiers modifiers) { this->handleMascotClickEvents(this->ui.rightImg, button, modifiers); });
 
     connect(&this->update_title_timer, &QTimer::timeout, this, [this] {
         this->UpdateWindowTitle();
@@ -1265,104 +1281,27 @@ void MainWindow::initMascotAnimation()
     }
 }
 
-void MainWindow::setMascotDebug(QString path, customGraphicsView* sender) {
+void MainWindow::setMascotDebug(QString path, MascotSide side) {
     if (this->App->debug_mode) {
-        sender->setImage(path);
-        if (this->App->config->get_bool("mascots_mirror")) {
-            if (sender == this->ui.leftImg)
-                this->ui.rightImg->setImage(path, true);
-            else
-                this->ui.leftImg->setImage(path, true);
-        }
-        if (this->App->MascotsExtractColor) {
-            this->updateThemeHighlightColorFromMascot(sender);
-        }
+        // Drops now arrive through MascotSurface::imageDropped, which the controller binds
+        // itself; this entry point is kept for the old widget's drag path (inert once
+        // leftImg/rightImg are hidden) and delegates so there is exactly one implementation
+        // of "show this file on that panel".
+        this->mascotController->showDroppedImage(side, path);
     }
 }
 
-void MainWindow::setLeftMascot(QString path, QPixmap pixmap) {
-    if (utils::getParentDirectoryName(path, 1) == "right")
-        this->ui.leftImg->setImage(path, pixmap, true);
-    else
-        this->ui.leftImg->setImage(path, pixmap);
-}
-
-void MainWindow::setRightMascot(QString path, QPixmap pixmap) {
-    if (utils::getParentDirectoryName(path, 1) == "left")
-        this->ui.rightImg->setImage(path, pixmap, true);
-    else
-        this->ui.rightImg->setImage(path, pixmap);
-}
-
-void MainWindow::setLeftMascot(QString path) {
-    if (utils::getParentDirectoryName(path, 1) == "right")
-        this->ui.leftImg->setImage(path, true);
-    else
-        this->ui.leftImg->setImage(path);
-}
-
-void MainWindow::setRightMascot(QString path) {
-    if (utils::getParentDirectoryName(path, 1) == "left")
-        this->ui.rightImg->setImage(path, true);
-    else
-        this->ui.rightImg->setImage(path);
-}
-
-void MainWindow::setLeftMascot(ImageData data) {
-    if (utils::getParentDirectoryName(data.path, 1) == "right")
-        this->ui.leftImg->setImage(data, true);
-    else
-        this->ui.leftImg->setImage(data);
-}
-
-void MainWindow::setRightMascot(ImageData data) {
-    if (utils::getParentDirectoryName(data.path, 1) == "left")
-        this->ui.rightImg->setImage(data, true);
-    else
-        this->ui.rightImg->setImage(data);
-}
-
-void MainWindow::updateMascot(customGraphicsView* mascot, bool use_cache, bool update_highlight_color) {
-    if (this->App->MascotsGenerator->mascots_paths.isEmpty()) {
-        this->App->MascotsGenerator->initMascotsPaths(MASCOTS_PATH);
-    }
-    ImageData img_data;
-    if (use_cache)
-        img_data = this->App->MascotsGenerator->getImage();
-    else
-        img_data = this->App->MascotsGenerator->getRandomImagePath();
-
-    if (!img_data.pixmap.isNull()) {
-        if(mascot == this->ui.leftImg)
-            this->setLeftMascot(img_data);
-        if (mascot == this->ui.rightImg)
-            this->setRightMascot(img_data);
-    }
-    else if (!img_data.path.isEmpty()) {
-        if (mascot == this->ui.leftImg)
-            this->setLeftMascot(img_data.path);
-        if (mascot == this->ui.rightImg)
-            this->setRightMascot(img_data.path);
-    }
-    if (update_highlight_color and this->App->MascotsExtractColor) {
-        this->updateThemeHighlightColorFromMascot(mascot);
-    }
+void MainWindow::updateMascot(MascotSide mascot, bool use_cache, bool update_highlight_color) {
+    // The side-directory flip rule and the theme colour move with the media now: the
+    // controller picks the path, implements flipForSide() and emits themeColorChanged() when
+    // the media it picked has landed.
+    this->mascotController->nextImage(mascot, use_cache, update_highlight_color);
 }
 
 void MainWindow::updateMascots(bool use_cache, bool forced_mirror)
 {
     try {
-        this->updateMascot(this->ui.leftImg, use_cache, false);
-        if (this->App->config->get_bool("mascots_mirror") or forced_mirror) {
-            ImageData img_data = {this->ui.leftImg->imgpath, this->ui.leftImg->original_pixmap, this->ui.leftImg->accepted_colors, this->ui.leftImg->rejected_colors };
-            this->setRightMascot(img_data);
-        }
-        else {
-            this->updateMascot(this->ui.rightImg, use_cache, false);
-        }
-        if (this->App->MascotsExtractColor) {
-            this->updateThemeHighlightColorFromMascot(this->ui.leftImg);
-        }
+        this->mascotController->nextImages(use_cache, forced_mirror);
     }
     catch (...) {
         this->hideMascots();
@@ -1370,13 +1309,10 @@ void MainWindow::updateMascots(bool use_cache, bool forced_mirror)
     }
 }
 
-void MainWindow::updateThemeHighlightColorFromMascot(customGraphicsView* mascot, bool weighted, bool regen_colors_if_missing) {
-    if (mascot->accepted_colors.isEmpty() and mascot->rejected_colors.isEmpty() and regen_colors_if_missing) {
-        auto colors_pair = mascotsGeneratorThread::extractColors(mascot->original_pixmap);
-        mascot->accepted_colors = colors_pair.first;
-        mascot->rejected_colors = colors_pair.second;
-    }
-    color_area color = mascot->getColor(weighted);
+void MainWindow::updateThemeHighlightColorFromMascot(MascotSide mascot, bool weighted) {
+    // The palette comes from the MascotMedia the controller received (amendment H5): the
+    // decode already extracted it, so there is nothing to re-extract and no cache accessor.
+    color_area color = this->mascotController->colorFor(mascot, weighted);
     if (color.color.isValid())
         this->setThemeHighlightColor(color.color);
 }
@@ -1594,22 +1530,32 @@ int MainWindow::previewHistoryLimit() const
 
 void MainWindow::flipMascots()
 {
-    this->ui.leftImg->flipPixmap();
-    this->ui.rightImg->flipPixmap();
+    this->mascotController->flipBoth();
 }
 
 void MainWindow::showMascots()
 {
-    this->ui.leftImg->show();
-    this->ui.rightImg->show();
+    // The hosts are the visible panels now; the controller builds a surface inside each and
+    // seeds it. leftImg/rightImg stay hidden and inert (amendment C).
+    this->ui.mascotLeftHost->show();
+    this->ui.mascotRightHost->show();
+    this->mascotController->start();
     //QTimer::singleShot(20, [this] {this->resize_center(1300, this->height()); });
 }
 
 void MainWindow::hideMascots()
 {
-    this->ui.leftImg->hide();
-    this->ui.rightImg->hide();
+    this->mascotController->stop();
+    this->ui.mascotLeftHost->hide();
+    this->ui.mascotRightHost->hide();
     //QTimer::singleShot(20, [this] {this->resize_center(800, this->height()); });
+}
+
+void MainWindow::shutdownMascots()
+{
+    // Same teardown as hideMascots() without touching the host visibility: the window is going
+    // away, and the pins this releases are what keeps the cache inside its bounds until then.
+    this->mascotController->stop();
 }
 
 bool MainWindow::initMusic()
@@ -2716,7 +2662,7 @@ void MainWindow::cleanMissingFilesDialog(QWidget* parent) {
     }
 }
 
-void MainWindow::handleMascotClickEvents(customGraphicsView* mascot, Qt::MouseButton button, Qt::KeyboardModifiers modifiers) {
+void MainWindow::handleMascotClickEvents(MascotSide mascot, Qt::MouseButton button, Qt::KeyboardModifiers modifiers) {
     if (modifiers.testFlag(Qt::ControlModifier)) {
         switch (button)
         {
@@ -2745,7 +2691,7 @@ void MainWindow::handleMascotClickEvents(customGraphicsView* mascot, Qt::MouseBu
         }
     }else if (this->App->debug_mode or modifiers.testFlag(Qt::ShiftModifier)) {
         if (button == Qt::LeftButton)
-            mascot->flipPixmap();
+            this->mascotController->flipSide(mascot);
         else if (button == Qt::RightButton)
             this->flipMascots();
     }
@@ -2816,15 +2762,16 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     }
     if (dialog->ui.mascotsOnOff->checkState() == Qt::CheckState::Checked) {
         config->set("mascots", "True");
-        if (this->ui.leftImg->isHidden()) {
-            this->updateMascots();
+        if (this->ui.mascotLeftHost->isHidden()) {
+            // showMascots() starts the controller, which seeds both panels: updateMascots()
+            // here would be a second swap.
             this->showMascots();
             this->App->MascotsAnimation->start_running();
         }
     }
     else if (dialog->ui.mascotsOnOff->checkState() == Qt::CheckState::Unchecked) {
         config->set("mascots", "False");
-        if (this->ui.leftImg->isVisible()) {
+        if (this->ui.mascotLeftHost->isVisible()) {
             this->hideMascots();
             this->App->MascotsAnimation->stop_running();
         }
@@ -2879,10 +2826,18 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         config->set("mascots_center_content", "True");
     else if (dialog->ui.mascotsCenterContent->checkState() == Qt::CheckState::Unchecked)
         config->set("mascots_center_content", "False");
-    if (this->ui.leftImg->isVisible()) {
-        this->ui.leftImg->resizeImage();
-        this->ui.rightImg->resizeImage();
+    if (this->ui.mascotLeftHost->isVisible()) {
+        // The panels re-centre and re-scale from the controller now; resizeImage() was the old
+        // renderer's re-scale.
+        this->mascotController->updateLayout();
     }
+    // Every mascot key this milestone consumes (all-files-random, mirror, centred content,
+    // seed) is read by the controller, so a settings change has to reach it unconditionally:
+    // with the panels hidden there is nothing to re-layout but the next start() would
+    // otherwise pick with stale values.
+    this->mascotController->applyConfig();
+    // Amendment H3: the cache bounds are config too, so a settings change re-applies them.
+    this->App->updateMascotCacheLimits();
     const bool oldMascotsUseSeed = config->get_bool("mascots_use_seed");
     const bool newMascotsUseSeed = dialog->ui.mascotsUseSeed->checkState() == Qt::CheckState::Checked;
     if (newMascotsUseSeed)
@@ -2891,10 +2846,13 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         config->set("mascots_use_seed", "False");
     if (this->App->MascotsGenerator && oldMascotsUseSeed != newMascotsUseSeed) {
         this->App->MascotsGenerator->clearCache();
-        if (this->ui.leftImg->isVisible()) {
+        if (this->ui.mascotLeftHost->isVisible()) {
             QTimer::singleShot(50, this, [this] {
-                if (this->ui.leftImg->isVisible())
+                if (this->ui.mascotLeftHost->isVisible()) {
+                    // The seed switch changed: the controller re-reads it before it picks.
+                    this->mascotController->applyConfig();
                     this->updateMascots();
+                }
             });
         }
     }
@@ -5778,10 +5736,16 @@ bool MainWindow::event(QEvent* e)
 
 void MainWindow::applyMascotWidth(int windowWidth, double percent) {
     int width = static_cast<int>(windowWidth * percent / 100.0);
-    this->ui.leftImg->setMinimumWidth(width);
-    this->ui.leftImg->setMaximumWidth(width);
-    this->ui.rightImg->setMinimumWidth(width);
-    this->ui.rightImg->setMaximumWidth(width);
+    this->ui.mascotLeftHost->setMinimumWidth(width);
+    this->ui.mascotLeftHost->setMaximumWidth(width);
+    this->ui.mascotRightHost->setMinimumWidth(width);
+    this->ui.mascotRightHost->setMaximumWidth(width);
+    // Amendment V: slot geometry is the controller's job, and this is also the resize path
+    // (MainWindow::event -> applyMascotWidth). The host only reaches its new width after the
+    // layout runs, so the controller is told now and the surface's own resize event settles
+    // the final rectangle.
+    if (this->mascotController)
+        this->mascotController->updateLayout();
 }
 
 void MainWindow::playSpecialSoundEffect(bool force_play) {

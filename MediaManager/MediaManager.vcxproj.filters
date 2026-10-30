@@ -79,6 +79,12 @@
     <ClCompile Include="src\QtClasses\MainWindow.cpp">
       <Filter>Source Files\QtClasses</Filter>
     </ClCompile>
+    <ClCompile Include="src\QtClasses\MascotController.cpp">
+      <Filter>Source Files\QtClasses</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\MascotMediaSource.cpp">
+      <Filter>Source Files\QtClasses</Filter>
+    </ClCompile>
     <ClCompile Include="src\QtClasses\stylesQt.cpp">
       <Filter>Source Files\QtClasses</Filter>
     </ClCompile>
@@ -549,6 +555,12 @@
     <QtMoc Include="src\QtClasses\MainWindow.h">
       <Filter>Header Files\QtClasses</Filter>
     </QtMoc>
+    <QtMoc Include="src\QtClasses\MascotController.h">
+      <Filter>Header Files\QtClasses</Filter>
+    </QtMoc>
+    <ClInclude Include="src\QtClasses\MascotMediaSource.h">
+      <Filter>Header Files\QtClasses</Filter>
+    </ClInclude>
     <QtMoc Include="src\QtClasses\UI\StatsDialog.h">
       <Filter>Header Files\QtClasses\UI</Filter>
     </QtMoc>

@@ -20,6 +20,7 @@
     <QtMoc Include="src\QtClasses\Models\VideosSortProxyModel.h" />
     <QtMoc Include="src\QtClasses\Widgets\MascotImageProvider.h" />
     <QtMoc Include="src\QtClasses\Widgets\MascotSurface.h" />
+    <QtMoc Include="src\QtClasses\MascotController.h" />
     <QtMoc Include="src\QtClasses\Widgets\VideosTreeView.h" />
     <ClInclude Include="src\general\VideoData.h" />
     <ClCompile Include="src\general\BasePlayer.cpp" />
@@ -106,6 +107,8 @@
     <ClCompile Include="src\QtClasses\Widgets\OverlayGraphicsVideoWidget.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\MascotImageProvider.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\MascotSurface.cpp" />
+    <ClCompile Include="src\QtClasses\MascotController.cpp" />
+    <ClCompile Include="src\QtClasses\MascotMediaSource.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\ContributionHeatmapWidget.cpp" />
     <ClCompile Include="src\thirdparty\beat_this\beat_this_api.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
@@ -161,6 +164,7 @@
     <ClInclude Include="src\general\MascotMedia.h" />
     <ClInclude Include="src\general\MascotImageCache.h" />
     <QtMoc Include="src\general\MascotPrefetcher.h" />
+    <ClInclude Include="src\QtClasses\MascotMediaSource.h" />
     <ClInclude Include="src\general\MusicPlayer.h" />
     <ClInclude Include="src\general\RawInputKeyboard.h" />
     <ClInclude Include="src\general\shokoDB.h" />

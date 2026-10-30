@@ -23,6 +23,8 @@ class TooltipEventFilter;
 class LogDialog;
 class QErrorMessage;
 class shokoAPI;
+class MascotImageCache;
+class MascotPrefetcher;
 
 class MainApp : public QApplication
 {
@@ -41,6 +43,12 @@ public:
     SoundPlayer* soundPlayer = nullptr;
     mascotsGeneratorThread* MascotsGenerator = nullptr;
     mascotsAnimationsThread* MascotsAnimation = nullptr;
+    // Process-lifetime mascot media pipeline (amendment U): the QML engine that owns the image
+    // provider outlives every window, so the cache it reads through must too. The prefetcher is
+    // created and destroyed by this object; the cache is deliberately never destroyed while the
+    // engine can still ask for an image.
+    MascotImageCache* mascotImageCache = nullptr;
+    MascotPrefetcher* mascotPrefetcher = nullptr;
     QuitEater* quitEater = nullptr;
     generalEventFilter* genEventFilter = nullptr;
     TooltipEventFilter* tooltipFilter = nullptr;
@@ -59,6 +67,10 @@ public:
     void toggleLogWindow();
     void initTaskbar();
     void stop_handle();
+    // Amendment H3: pushes `mascots_image_cache_mb` / `mascots_image_cache_max_items` into the
+    // cache, clamping a non-positive value to a sane minimum instead of leaving that axis
+    // unbounded. Called at startup and whenever the settings are applied.
+    void updateMascotCacheLimits();
     void startSingleInstanceServer(QString appid);
     void stopSingleInstanceServer();
     void showErrorMessage(QString message);

@@ -34,6 +34,12 @@ public:
 	// configured values in through this call.
 	void setLimits(int maxItems, qint64 maxBytes);
 
+	// Pins or unpins the cache entry for `path`. The path -> cache id mapping stays in this
+	// class (cacheIdForPath() is private for exactly that reason), so a consumer that must
+	// hold an id against eviction -- the controller, for the media a panel displays -- asks
+	// here instead of rebuilding the id. GUI thread only, like every other mutation.
+	void pin(const QString& path, bool pinned);
+
 	// Asks for `path`. Never decodes inline. Does nothing while the path is already pending,
 	// republishes the remembered media (no re-decode) while its pixels are still cached, and
 	// announces a file that cannot be decoded through mediaFailed.

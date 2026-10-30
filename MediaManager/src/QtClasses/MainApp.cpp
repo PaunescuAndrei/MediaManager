@@ -17,6 +17,17 @@
 #include "shokoAPI.h"
 #include "BasePlayer.h"
 #include "definitions.h"
+#include "MascotImageCache.h"
+#include "MascotPrefetcher.h"
+
+namespace {
+	// Amendment H3. MascotImageCache treats a non-positive bound as "no bound on that axis",
+	// so a config value of 0 or less is clamped to a minimum rather than passed through: an
+	// unbounded cache is a leak, not a policy.
+	constexpr int MASCOT_CACHE_MIN_ITEMS = 2;
+	constexpr qint64 MASCOT_CACHE_MIN_MB = 16;
+	constexpr qint64 BYTES_PER_MB = 1024 * 1024;
+}
 
 MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 {
@@ -77,6 +88,13 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 
 	this->MascotsExtractColor = this->config->get_bool("mascots_color_theme");
 
+	// Mascot media pipeline, created before the window that drives it and kept for the life of
+	// the process (amendment U). The prefetcher is constructed on the GUI thread, which is the
+	// thread every one of its methods is called from (amendment H4).
+	this->mascotImageCache = new MascotImageCache();
+	this->mascotPrefetcher = new MascotPrefetcher(this->mascotImageCache);
+	this->updateMascotCacheLimits();
+
 	this->VW = new VideoWatcherQt(this);
 
 	this->BpmManager = new CalculateBpmManager(this->config->get("bpm_threads").toInt(), this);
@@ -103,14 +121,9 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 	this->MascotsAnimation = new mascotsAnimationsThread(this,this->config->get_bool("mascots_random_change"),this->config->get("mascots_random_chance").toInt()/100.0);
 	this->MascotsAnimation->start();
 
-	connect(this->MascotsAnimation, &mascotsAnimationsThread::updateMascotsSignal, this, [this] {
-		if(this->mainWindow->ui.leftImg->isVisible() and utils::IsMyWindowVisible(this->mainWindow))
-			this->mainWindow->updateMascots();
-	});
-	connect(this->MascotsAnimation, &mascotsAnimationsThread::updateMascotsAnimationSignal, this, [this] {
-		if (this->mainWindow->ui.leftImg->isVisible() and utils::IsMyWindowVisible(this->mainWindow))
-			this->mainWindow->flipMascots();
-	});
+	// The beat signals are wired by MascotController itself (amendment W): its handlers used to
+	// live here and were gated on leftImg->isVisible(), a widget that is hidden after the
+	// mascot cutover, so no branch taken here could ever have run.
 
 	QTimer::singleShot(0, [this] {this->initTaskbar(); });
 
@@ -300,8 +313,31 @@ static void armShutdownWatchdog()
 	}).detach();
 }
 
+void MainApp::updateMascotCacheLimits()
+{
+	if (!this->mascotPrefetcher || !this->config)
+		return;
+	const int maxItems = std::max(MASCOT_CACHE_MIN_ITEMS, this->config->get("mascots_image_cache_max_items").toInt());
+	const qint64 maxMb = std::max<qint64>(MASCOT_CACHE_MIN_MB, this->config->get("mascots_image_cache_mb").toLongLong());
+	// setLimits() re-runs eviction, so lowering a bound bites immediately instead of at the
+	// next insert. Pins (the two panels' media) are the controller's, and are never evicted.
+	this->mascotPrefetcher->setLimits(maxItems, maxMb * BYTES_PER_MB);
+}
+
 void MainApp::stop_handle()
 {
+	// The mascot panels come down first, before anything below waits on a thread: stopping the
+	// controller unpins everything it holds (amendment H2), deletes the QML surfaces and drops
+	// the decodes still in flight, so no queued media can be applied to a window that is on its
+	// way out. The cache itself is not destroyed here -- the shared QML engine owns the image
+	// provider that reads it, and that engine outlives the window (amendment U).
+	if (this->mainWindow) {
+		this->mainWindow->shutdownMascots();
+	}
+	if (this->mascotPrefetcher) {
+		this->mascotPrefetcher->clear();
+	}
+
 	// Stop BPM manager first - this will cancel ongoing audio processing
 	// and wait for thread pool to finish
 	if (this->BpmManager) {
@@ -429,6 +465,12 @@ MainApp::~MainApp()
 	this->VW->deleteLater();
 	this->MascotsAnimation->deleteLater();
 	this->MascotsGenerator->deleteLater();
+	// Stops the decode pool deterministically. The cache is deliberately left alive: the image
+	// provider on the shared (process-lifetime) QML engine holds a borrowed pointer to it, and
+	// destroying it here would leave requestImage() reading freed memory for the rest of
+	// teardown (amendment U).
+	delete this->mascotPrefetcher;
+	this->mascotPrefetcher = nullptr;
 	if (this->BpmManager)
 		this->BpmManager->deleteLater();
 	this->logger->log("MainApp cleanup finished.", "INFO");

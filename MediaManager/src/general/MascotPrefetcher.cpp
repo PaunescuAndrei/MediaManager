@@ -67,6 +67,15 @@ void MascotPrefetcher::setLimits(int maxItems, qint64 maxBytes)
 	this->cache->setLimits(maxItems, maxBytes);
 }
 
+void MascotPrefetcher::pin(const QString& path, bool pinned)
+{
+	if (!this->cache || path.isEmpty())
+		return;
+	// The id is derived here and nowhere else, which is why this call exists instead of the
+	// consumer building the id itself.
+	this->cache->pin(cacheIdForPath(path), pinned);
+}
+
 void MascotPrefetcher::request(const QString& path)
 {
 	if (!this->cache || path.isEmpty())

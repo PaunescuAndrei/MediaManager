@@ -28,6 +28,7 @@
 #include <QHash>
 #include "VideoData.h"
 #include "definitions.h"
+#include "MascotController.h"
 #include <QMutex>
 
 class MainApp;
@@ -92,6 +93,10 @@ public:
     QThreadPool* searchThreadPool;
     QTimer randomProbabilitiesUpdateTimer;
     QPointer<PreviewVideoWindow> previewTooltip;
+    // Decides what each mascot panel shows and owns the QML surfaces that render it. The
+    // retired leftImg/rightImg widgets stay in the .ui, hidden and inert, until Task 5
+    // deletes them (amendment C).
+    MascotController* mascotController = nullptr;
     QHash<QString, qint64> previewPositionCache;
     QList<QString> previewHistoryOrder;
     mutable QMutex saltSeedMutex;
@@ -243,7 +248,7 @@ public:
     bool backupDB(QWidget* parent = nullptr);
     void resetWatchedDB(QWidget* parent = nullptr);
     void cleanMissingFilesDialog(QWidget* parent = nullptr);
-    void handleMascotClickEvents(customGraphicsView* mascot, Qt::MouseButton button, Qt::KeyboardModifiers modifiers);
+    void handleMascotClickEvents(MascotSide mascot, Qt::MouseButton button, Qt::KeyboardModifiers modifiers);
     void applySettings(SettingsDialog* dialog);
     void applyMascotWidth(int windowWidth, double percent);
     void setDebugMode(bool debug);
@@ -294,16 +299,10 @@ public:
     void setIcon(QIcon icon);
     void closeEvent(QCloseEvent* event) override;
     void initMascotAnimation();
-    void setMascotDebug(QString path, customGraphicsView* sender);
-    void setLeftMascot(QString path, QPixmap pixmap);
-    void setRightMascot(QString path, QPixmap pixmap);
-    void setLeftMascot(QString path);
-    void setRightMascot(QString path);
-    void setLeftMascot(ImageData data);
-    void setRightMascot(ImageData data);
-    void updateMascot(customGraphicsView* mascot, bool use_cache, bool update_highlight_color);
+    void setMascotDebug(QString path, MascotSide side);
+    void updateMascot(MascotSide mascot, bool use_cache, bool update_highlight_color);
     void updateMascots(bool use_cache = true, bool forced_mirror = false);
-    void updateThemeHighlightColorFromMascot(customGraphicsView* mascot, bool weighted = true, bool regen_colors_if_missing = true);
+    void updateThemeHighlightColorFromMascot(MascotSide mascot, bool weighted = true);
     void setThemeHighlightColor(QColor color);
     void openThumbnails(QString path);
     PreviewVideoWindow* createPreviewPopup(const QString& path, QWidget* parent = nullptr, bool rememberPosition = false, bool randomHover = false);
@@ -315,6 +314,10 @@ public:
     void flipMascots();
     void showMascots();
     void hideMascots();
+    // Tears the mascot renderer down for good: stops the controller (unpinning everything it
+    // holds) so no panel outlives the window. Called from MainApp::stop_handle before the
+    // threads it waits on are signalled.
+    void shutdownMascots();
     bool initMusic();
     void bringWindowToFront();
     void center();

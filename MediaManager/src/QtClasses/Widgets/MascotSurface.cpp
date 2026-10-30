@@ -113,6 +113,10 @@ MascotSurface::MascotSurface(MascotImageCache* cache, QWidget* parent) : QWidget
 		engine->addImageProvider(QStringLiteral("mascots"), new MascotImageProvider(cache));
 
 	this->quick = new QQuickWidget(engine, this);
+	// AMENDMENT Z (temporary timing instrumentation): the frame that carries a committed swap
+	// is painted by this widget, so the filter below is how this class sees that paint. Remove
+	// this line with the rest of the AMENDMENT Z code.
+	this->quick->installEventFilter(this);
 	// The panel sits on top of the window's own background; the scene graph must not clear to
 	// an opaque colour first.
 	this->quick->setClearColor(Qt::transparent);
@@ -455,3 +459,32 @@ int MascotSurface::slotAt(const QPointF& position) const
 	}
 	return -1;
 }
+
+// ===== AMENDMENT Z: TEMPORARY TIMING INSTRUMENTATION - DELETE AFTER THE LATENCY GATE =========
+// Delete both definitions, the installEventFilter() call in the constructor above and the
+// matching blocks in MascotSurface.h / MascotController.cpp once the latency gate has been run
+// and its numbers recorded. Nothing else calls or emits any of this.
+void MascotSurface::beginSwapTiming(const QString& label)
+{
+	this->swapLabel = label;
+	this->swapTimer.start();
+	this->swapTimingPending = true;
+}
+
+bool MascotSurface::eventFilter(QObject* watched, QEvent* event)
+{
+	if (this->swapTimingPending && watched == this->quick && event->type() == QEvent::Paint) {
+		// The first paint after the commit is the frame that carries the new media. The probe
+		// measures after that handler has run -- a queued call is delivered once the paint
+		// event is fully handled -- so the interval covers the render of the frame and not only
+		// the moment it started. Queued with `this` as the context object, so a surface that
+		// dies before the call runs simply never reports.
+		this->swapTimingPending = false;
+		QMetaObject::invokeMethod(this, [this] {
+			emit this->swapFramePainted(this->swapLabel,
+				static_cast<double>(this->swapTimer.nsecsElapsed()) / 1.0e6);
+		}, Qt::QueuedConnection);
+	}
+	return QWidget::eventFilter(watched, event);
+}
+// ===== END AMENDMENT Z ========================================================================

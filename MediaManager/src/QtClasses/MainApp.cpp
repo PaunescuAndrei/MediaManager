@@ -116,14 +116,12 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 
 	this->mainWindow = new MainWindow(nullptr,this);
 
-	this->MascotsGenerator = new mascotsGeneratorThread(this, MASCOTS_PATH, this->config->get_bool("mascots_allfiles_random"));
-	this->MascotsGenerator->start();
 	this->MascotsAnimation = new mascotsAnimationsThread(this,this->config->get_bool("mascots_random_change"),this->config->get("mascots_random_chance").toInt()/100.0);
 	this->MascotsAnimation->start();
 
 	// The beat signals are wired by MascotController itself (amendment W): its handlers used to
-	// live here and were gated on leftImg->isVisible(), a widget that is hidden after the
-	// mascot cutover, so no branch taken here could ever have run.
+	// live here and were gated on the old image widget's isVisible(), a widget the mascot
+	// cutover had already hidden, so no branch taken here could ever have run.
 
 	QTimer::singleShot(0, [this] {this->initTaskbar(); });
 
@@ -344,16 +342,14 @@ void MainApp::stop_handle()
 		this->BpmManager->stop();
 	}
 	
-	// Each stop() also releases whatever can park its thread - the pixmap queue, the icon
-	// and animation event locks - because a parked thread never re-reads its running
-	// flag, which is what used to deadlock the joins at the end of this function.
+	// Each stop() also releases whatever can park its thread - the icon and animation event
+	// locks - because a parked thread never re-reads its running flag, which is what used to
+	// deadlock the joins at the end of this function.
 	this->VW->running = false;
 	this->mainWindow->animatedIcon->stop();
-	this->MascotsGenerator->stop();
 	this->MascotsAnimation->stop();
 	this->mainWindow->animatedIcon->quit();
 	this->VW->quit();
-	this->MascotsGenerator->quit();
 	this->MascotsAnimation->quit();
 	
 	if (this->musicPlayer) {
@@ -406,17 +402,15 @@ void MainApp::stop_handle()
 	// that these waits were blocking.
 	const bool vwStopped = this->VW->wait(QDeadlineTimer(SHUTDOWN_THREAD_WAIT_MS));
 	const bool iconStopped = this->mainWindow->animatedIcon->wait(QDeadlineTimer(SHUTDOWN_THREAD_WAIT_MS));
-	// Wait for mascots threads to exit before deleteLater() destroys them -
+	// Wait for the mascots animation thread to exit before deleteLater() destroys it -
 	// deleting a running QThread (Qt 6.8 docs) results in a program crash.
-	const bool generatorStopped = this->MascotsGenerator->wait(QDeadlineTimer(SHUTDOWN_THREAD_WAIT_MS));
 	const bool animationStopped = this->MascotsAnimation->wait(QDeadlineTimer(SHUTDOWN_THREAD_WAIT_MS));
 
-	if (!(vwStopped && iconStopped && generatorStopped && animationStopped)) {
+	if (!(vwStopped && iconStopped && animationStopped)) {
 		// The destructor would race a thread that is still touching this object, so
 		// leave the process instead of tearing the app down around it.
 		const QString stuck = (vwStopped ? QString() : QStringLiteral("VideoWatcherQt "))
 			+ (iconStopped ? QString() : QStringLiteral("IconChanger "))
-			+ (generatorStopped ? QString() : QStringLiteral("mascotsGenerator "))
 			+ (animationStopped ? QString() : QStringLiteral("mascotsAnimations "));
 		writeShutdownTrace(QStringLiteral("stop_handle: thread(s) did not stop within %1 ms (%2) - forcing exit")
 			.arg(SHUTDOWN_THREAD_WAIT_MS).arg(stuck.trimmed()));
@@ -464,7 +458,6 @@ MainApp::~MainApp()
 	delete this->keyboard_hook;
 	this->VW->deleteLater();
 	this->MascotsAnimation->deleteLater();
-	this->MascotsGenerator->deleteLater();
 	// Stops the decode pool deterministically. The cache is deliberately left alive: the image
 	// provider on the shared (process-lifetime) QML engine holds a borrowed pointer to it, and
 	// destroying it here would leave requestImage() reading freed memory for the rest of

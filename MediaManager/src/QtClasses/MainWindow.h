@@ -93,9 +93,8 @@ public:
     QThreadPool* searchThreadPool;
     QTimer randomProbabilitiesUpdateTimer;
     QPointer<PreviewVideoWindow> previewTooltip;
-    // Decides what each mascot panel shows and owns the QML surfaces that render it. The
-    // retired leftImg/rightImg widgets stay in the .ui, hidden and inert, until Task 5
-    // deletes them (amendment C).
+    // Decides what each mascot panel shows and owns the QML surfaces that render it. The two
+    // retired image widgets are gone from the .ui: these hosts are the only mascot panels.
     MascotController* mascotController = nullptr;
     QHash<QString, qint64> previewPositionCache;
     QList<QString> previewHistoryOrder;
@@ -299,7 +298,6 @@ public:
     void setIcon(QIcon icon);
     void closeEvent(QCloseEvent* event) override;
     void initMascotAnimation();
-    void setMascotDebug(QString path, MascotSide side);
     void updateMascot(MascotSide mascot, bool update_highlight_color);
     void updateMascots(bool forced_mirror = false);
     void updateThemeHighlightColorFromMascot(MascotSide mascot, bool weighted = true);

@@ -14,13 +14,42 @@ MediaManager is a feature-rich desktop application built with C++ and Qt 6 for o
   - Animated video thumbnails on hover.
   - Automatic thumbnail generation using `mtn`.
 - **Customizable UI**:
-  - Animated desktop mascots (system tray and overlay integration).
+  - Animated mascots in two in-window QML panels (mirroring, side-directory flipping, beat-driven swaps).
   - Dynamic layouts and themes.
   - Taskbar progress and state integration.
 - **Utilities**: 
   - File tagging and categorization.
   - Playlist import/export.
   - Automatic backup of database and configuration.
+
+## Mascot Panels
+
+The two mascot panels are Qt Quick surfaces hosted in the main window (`MascotSurface` +
+`MascotImageProvider`), driven by `MascotController`. The controller picks the image, the
+prefetcher (`MascotPrefetcher` + `MascotImageCache`) decodes it off the GUI thread, and the
+panels only render what they are handed. Images are scaled to the panel height with the aspect
+ratio kept, and each image is centred on its visible content (its alpha-weighted centre) rather
+than on its geometric middle.
+
+Settings live in `config.ini`; all of them can also be changed from the settings dialog:
+
+| Key | Meaning |
+| --- | --- |
+| `mascots` | Show the two panels. |
+| `mascots_media` | Media kind. `Images` is the only kind this build renders; any other value logs a warning and falls back to images. |
+| `mascots_width_percent` | Width of each panel as a percentage of the window width (default `15`). |
+| `mascots_mirror` | Both panels show the same image, the right one mirrored. |
+| `mascots_center_content` | Centre on the image's visible content (`True`) or on its geometric middle (`False`). |
+| `mascots_allfiles_random` | Pick from every file under the mascots directory instead of one subdirectory at a time. |
+| `mascots_color_theme` | Recolour the window's highlight from the palette of the image on screen. |
+| `mascots_animated` | Let the beat loop swap and flip the panels. |
+| `mascots_frequency` | Milliseconds between beat checks (default `400`). |
+| `mascots_random_change` / `mascots_random_chance` | Whether a beat may swap, and the chance in percent (default `10`). |
+| `mascots_use_seed` | Deterministic picks; combined with `random_use_seed` and `random_seed`. |
+| `mascots_image_cache_mb` / `mascots_image_cache_max_items` | Decoded-image cache bounds (default `128` MB and `12` items; values below 16 MB / 2 items are clamped). |
+
+A file whose parent directory is `right` is drawn mirrored on the left panel, and one from `left`
+is drawn mirrored on the right panel.
 
 ## Prerequisites
 
@@ -80,11 +109,14 @@ This will download and place the following into `MediaManager/src/`:
 
 ## Project Structure
 
-- **src/general/**: Core logic (Database, Player interfaces, Config, Utilities).
+- **src/general/**: Core logic (Database, Player interfaces, Config, Utilities) and the mascot
+  media pipeline (`MascotPrefetcher`, `MascotImageCache`, `mascotMediaUtils`).
 - **src/QtClasses/**: UI implementation (Windows, Dialogs, Models, Widgets).
   - **Models/**: `VideosModel` and proxy models for filtering/sorting.
   - **UI/**: Dialog implementations and `.ui` forms.
-  - **Widgets/**: Custom widgets like the video previewer and mascot renderers.
+  - **Widgets/**: Custom widgets, including the video previewer and the mascot panel
+    (`MascotSurface`) with its image provider (`MascotImageProvider`).
+- **src/qml/**: QML used by the video preview popup and the mascot panels.
 - **src/thirdparty/**: External libraries (Beat This, ONNX Runtime, etc.).
 - **src/resources/**: Assets (Icons, Models, Defaults).
 

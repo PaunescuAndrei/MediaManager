@@ -2,7 +2,7 @@
 #include <QImage>
 
 // Horizontal centering helpers for mascot content. They live as free functions
-// so the QML-backed mascot renderer and the legacy customGraphicsView widget
+// so the QML-backed mascot renderer and the retired widget renderer could
 // share one implementation and therefore produce an identical content center.
 namespace mascotMediaUtils {
 	// Bounds of the columns that contain pixels with alpha above the threshold.

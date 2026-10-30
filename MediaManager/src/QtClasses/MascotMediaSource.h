@@ -5,16 +5,15 @@
 
 class MainApp;
 
-// Picks the next mascot file, with exactly the selection and seeding behaviour of
-// mascotsGeneratorThread::getRandomImagePath() / refreshRngFromConfig() -- same directory
-// walk, same shuffle scope, same seed derivation -- and nothing else: no decoding, no queue,
-// no thread. The generator thread still exists for the parts of the app that have not moved,
-// but from Task 4 on this class is the only thing that chooses what the panels show.
+// Picks the next mascot file, with exactly the selection and seeding behaviour of the retired
+// generator's getRandomImagePath() / refreshRngFromConfig() -- same directory walk, same
+// shuffle scope, same seed derivation -- and nothing else: no decoding, no queue, no thread.
+// This class is the only thing that chooses what the panels show.
 //
 // It reads no config (amendment D's "a key nothing reads" cuts both ways: the reader is the
 // controller): the two config-derived inputs arrive through setSeedSource() and
 // setAllFilesRandom(), and every path is re-read from the directory tree on the same terms
-// the generator used, so a folder added while the app runs is picked up the same way.
+// the retired generator used, so a folder added while the app runs is picked up the same way.
 class MascotMediaSource {
 public:
 	// `App` is used only for the seed salt (MainWindow::saltSeed) and may be null, in which
@@ -36,9 +35,9 @@ public:
 	QString nextImagePath();
 
 private:
-	// mascotsGeneratorThread::initMascotsPaths().
+	// The retired generator's initMascotsPaths().
 	void initPaths();
-	// mascotsGeneratorThread::refreshRngFromConfig().
+	// The retired generator's refreshRngFromConfig().
 	void refreshRng();
 
 	MainApp* App = nullptr;

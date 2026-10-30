@@ -40,7 +40,6 @@
     <ClCompile Include="src\general\mascotMediaUtils.cpp" />
     <ClCompile Include="src\general\MascotImageCache.cpp" />
     <ClCompile Include="src\general\MascotPrefetcher.cpp" />
-    <ClCompile Include="src\general\mascotsGeneratorThread.cpp" />
     <ClCompile Include="src\general\MusicPlayer.cpp" />
     <ClCompile Include="src\general\RawInputKeyboard.cpp" />
     <ClCompile Include="src\general\shokoDB.cpp" />
@@ -88,7 +87,6 @@
     <ClCompile Include="src\QtClasses\Widgets\noRightClickEventFilter.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\ProgressBarQLabel.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\currentVideoQLabel.cpp" />
-    <ClCompile Include="src\QtClasses\Widgets\customGraphicsView.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\generalEventFilter.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\TooltipEventFilter.cpp" />
     <ClCompile Include="src\QtClasses\Widgets\videosTreeWidget.cpp" />
@@ -210,7 +208,6 @@
     <ClInclude Include="src\thirdparty\sqlite3\sqlite3.h" />
     <ClInclude Include="src\version.h" />
     <QtMoc Include="src\general\VideoWatcherQt.h" />
-    <QtMoc Include="src\general\mascotsGeneratorThread.h" />
     <QtMoc Include="src\general\mascotsAnimationsThread.h" />
     <QtMoc Include="src\general\IconChanger.h" />
     <QtMoc Include="src\general\generateThumbnailRunnable.h" />
@@ -227,7 +224,6 @@
     <QtMoc Include="src\QtClasses\Widgets\customQPushButton.h" />
     <QtMoc Include="src\QtClasses\Widgets\customQToolButton.h" />
     <QtMoc Include="src\QtClasses\Widgets\videosTreeWidget.h" />
-    <QtMoc Include="src\QtClasses\Widgets\customGraphicsView.h" />
     <QtMoc Include="src\QtClasses\Widgets\ProgressBarQLabel.h" />
     <QtMoc Include="src\QtClasses\Widgets\AutoToolTipDelegate.h" />
     <QtMoc Include="src\QtClasses\Widgets\VideoPreviewWidget.h" />

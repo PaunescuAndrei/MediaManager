@@ -30,7 +30,6 @@
 #include "InsertDialog.h"
 #include "setCounterDialog.h"
 #include "IconChanger.h"
-#include "BlockingQueue.h"
 #include <QTimer>
 #include <QEventLoop>
 #include <QElapsedTimer>
@@ -123,9 +122,6 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         newWidth, // Set the new width
         newHeight  // Set the new height
     );
-    //scale mascots
-    //this->ui.leftImg->setMinimumWidth(newWidth / 6.6);
-    //this->ui.rightImg->setMinimumWidth(newWidth / 6.6);
 
     // The one renderer: the controller owns the QML surfaces inside the two hosts (built on
     // enable) and is the only thing that writes what a panel displays. The cache and the
@@ -308,12 +304,9 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
                 return;
             }
             if (guess_type.name().startsWith("image/", Qt::CaseInsensitive)) {
-                // Inert after the cutover: leftImg/rightImg are hidden, and a drop on a panel
-                // now lands on its MascotSurface, which emits imageDropped to the controller.
-                if (widget and (widget->objectName() == "leftImg" or widget->objectName() == "rightImg")) {
-                    const MascotSide side = widget->objectName() == "leftImg" ? MascotSide::Left : MascotSide::Right;
-                    this->setMascotDebug(files[0], side);
-                }
+                // A drop on a mascot panel never reaches this handler: it lands on that panel's
+                // MascotSurface, whose own dropEvent emits imageDropped to the controller. An
+                // image dropped anywhere else is still not something this window imports.
                 return;
             }
         }
@@ -466,7 +459,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     if (this->App->config->get_bool("mascots")) {
         QMetaObject::invokeMethod(this, [this] {
             // showMascots() starts the controller, which seeds both panels itself. The old
-            // code needed updateMascots() here because leftImg/rightImg were already visible.
+            // code needed updateMascots() here because its panels were already visible.
             this->showMascots();
         }, Qt::QueuedConnection);
     } else {
@@ -1281,16 +1274,6 @@ void MainWindow::initMascotAnimation()
     }
 }
 
-void MainWindow::setMascotDebug(QString path, MascotSide side) {
-    if (this->App->debug_mode) {
-        // Drops now arrive through MascotSurface::imageDropped, which the controller binds
-        // itself; this entry point is kept for the old widget's drag path (inert once
-        // leftImg/rightImg are hidden) and delegates so there is exactly one implementation
-        // of "show this file on that panel".
-        this->mascotController->showDroppedImage(side, path);
-    }
-}
-
 void MainWindow::updateMascot(MascotSide mascot, bool update_highlight_color) {
     // The side-directory flip rule, the swap latency and the theme colour move with the media
     // now: the controller commits from its own prefetched candidate, implements flipForSide()
@@ -1535,8 +1518,8 @@ void MainWindow::flipMascots()
 
 void MainWindow::showMascots()
 {
-    // The hosts are the visible panels now; the controller builds a surface inside each and
-    // seeds it. leftImg/rightImg stay hidden and inert (amendment C).
+    // The hosts are the panels: the controller builds a surface inside each and seeds it. There
+    // is no other mascot widget left in the form.
     this->ui.mascotLeftHost->show();
     this->ui.mascotRightHost->show();
     // Before the surfaces exist: the hosts start at the .ui's min 0 / max 16777215, so without
@@ -2782,11 +2765,9 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     }
     if (dialog->ui.mascotsAllFilesRandom->checkState() == Qt::CheckState::Checked) {
         config->set("mascots_allfiles_random", "True");
-        this->App->MascotsGenerator->allfiles_random = true;
     }
     else if (dialog->ui.mascotsAllFilesRandom->checkState() == Qt::CheckState::Unchecked) {
         config->set("mascots_allfiles_random", "False");
-        this->App->MascotsGenerator->allfiles_random = false;
     }
     if (dialog->ui.mascotsMirror->checkState() == Qt::CheckState::Checked) {
         bool mascot_mirror_flag = config->get_bool("mascots_mirror");
@@ -2847,8 +2828,7 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
         config->set("mascots_use_seed", "True");
     else if (dialog->ui.mascotsUseSeed->checkState() == Qt::CheckState::Unchecked)
         config->set("mascots_use_seed", "False");
-    if (this->App->MascotsGenerator && oldMascotsUseSeed != newMascotsUseSeed) {
-        this->App->MascotsGenerator->clearCache();
+    if (oldMascotsUseSeed != newMascotsUseSeed) {
         if (this->ui.mascotLeftHost->isVisible()) {
             QTimer::singleShot(50, this, [this] {
                 if (this->ui.mascotLeftHost->isVisible()) {
@@ -5698,13 +5678,6 @@ void MainWindow::dropEvent(QDropEvent* e) {
         foreach(const QUrl & url, e->mimeData()->urls()) {
             QString fileName = QDir::toNativeSeparators(url.toLocalFile());
             pathList.append(fileName);
-            if (widget) {
-                if (widget->objectName() == "customGraphicsView_viewport") {
-                    widget = widget->parentWidget();
-                    if (not widget)
-                        return;
-                }
-            }
         }
         if (!pathList.isEmpty()) {
             emit fileDropped(pathList,widget);

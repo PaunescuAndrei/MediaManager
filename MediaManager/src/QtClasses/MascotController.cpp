@@ -106,7 +106,7 @@ void MascotController::applyConfig()
 		// The surface-wide default. The per-slot value written by applyDisplay() below is
 		// what is drawn, so the default can never disagree with the picture.
 		state->surface->setMirror(mirror);
-		// customGraphicsView::resizeImage() used to re-render from the unflipped original
+		// The retired renderer's resizeImage() used to re-render from the unflipped original
 		// whenever the settings were applied, which dropped a user flip; a config change does
 		// the same thing here so the two behave alike.
 		state->flipToggled = false;
@@ -202,7 +202,7 @@ bool MascotController::flipForSide(const QString& path, MascotSide side) const
 color_area MascotController::colorFor(MascotSide side, bool weighted)
 {
 	const SideState& state = this->stateFor(side);
-	// customGraphicsView::getColor()'s semantics, unchanged, on the palette the decode already
+	// The retired renderer's getColor() semantics, unchanged, on the palette the decode already
 	// extracted (amendment H5): weight by area when asked, otherwise take the dominant area
 	// out of both lists. An invalid QColor means "no palette", which the caller ignores.
 	color_area color;
@@ -233,7 +233,7 @@ void MascotController::showDroppedImage(MascotSide side, const QString& path)
 {
 	if (!this->running || path.isEmpty())
 		return;
-	// The old entry point (MainWindow::setMascotDebug) was gated on debug mode, and a drop is the
+	// The retired MainWindow drop entry point was gated on debug mode, and a drop is the
 	// same action: a user dragging a PNG onto a panel must not replace it unless the app was
 	// started with -debug. Parity wins here -- replacing a panel by drag is not a feature anyone
 	// asked for.
@@ -242,8 +242,8 @@ void MascotController::showDroppedImage(MascotSide side, const QString& path)
 	SideState& state = this->stateFor(side);
 	if (!state.surface)
 		return;
-	// MainWindow::setMascotDebug()'s behaviour: the dropped file is drawn unflipped on this
-	// panel (setImage(path)), and with the mirror key on it is copied onto the other panel
+	// That entry point's behaviour: the dropped file is drawn unflipped on this panel
+	// (setImage(path)), and with the mirror key on it is copied onto the other panel
 	// flipped (setImage(path, true)) rather than through the side-directory rule.
 	state.mirrorOverrideEnabled = true;
 	state.mirrorOverrideValue = false;
@@ -360,6 +360,33 @@ void MascotController::configureSurface(SideState& state, MascotSide side)
 	connect(surface, &MascotSurface::imageDropped, this, [this, side](int, QString path) {
 		this->showDroppedImage(side, path);
 	});
+	// ===== AMENDMENT Z: TEMPORARY TIMING INSTRUMENTATION - DELETE AFTER THE LATENCY GATE =====
+	// One log line per measured swap, with the running maximum, so the latency gate only has to
+	// read the last of them. It writes a log entry and nothing else: no media, no pin, no state
+	// here is touched.
+	connect(surface, &MascotSurface::swapFramePainted, this,
+		[this](const QString& label, double msecs) {
+			if (!this->App || !this->App->logger)
+				return;
+			// A panel that is hidden or minimised never repaints, so its measurement would be
+			// the interval until some unrelated paint. Those are reported and not counted
+			// rather than folded into the maximum.
+			static constexpr double SWAP_TIMING_NO_FRAME_MS = 2000.0;
+			this->swapTimingSamples += 1;
+			if (msecs > SWAP_TIMING_NO_FRAME_MS) {
+				this->App->logger->log(QStringLiteral("MASCOT-TIMING-Z sample=%1 commit->painted=no frame within %2 ms, not counted (%3)")
+					.arg(this->swapTimingSamples).arg(SWAP_TIMING_NO_FRAME_MS, 0, 'f', 0).arg(label),
+					QStringLiteral("MASCOT-TIMING-Z"));
+				return;
+			}
+			if (msecs > this->swapTimingWorstMs)
+				this->swapTimingWorstMs = msecs;
+			this->App->logger->log(QStringLiteral("MASCOT-TIMING-Z sample=%1 commit->painted=%2 ms max=%3 ms (%4)")
+				.arg(this->swapTimingSamples).arg(msecs, 0, 'f', 2)
+				.arg(this->swapTimingWorstMs, 0, 'f', 2).arg(label),
+				QStringLiteral("MASCOT-TIMING-Z"));
+		});
+	// ===== END AMENDMENT Z ===================================================================
 }
 
 void MascotController::releaseSurface(SideState& state)
@@ -497,7 +524,7 @@ MascotMedia MascotController::pickFor(SideState& state, MascotSide side, bool up
 
 QString MascotController::nextSourcePath()
 {
-	// mascotsGeneratorThread::refreshRngFromConfig() re-read the seed on every pick, and a
+	// The retired generator's refreshRngFromConfig() re-read the seed on every pick, and a
 	// settings change can land between two picks, so the source is fed at the same point rather
 	// than only when applyConfig() runs.
 	this->applySeedSource();
@@ -519,6 +546,14 @@ void MascotController::showMedia(SideState& state, MascotSide side, const Mascot
 {
 	if (!state.surface || media.path.isEmpty())
 		return;
+
+	// ===== AMENDMENT Z: TEMPORARY TIMING INSTRUMENTATION - DELETE AFTER THE LATENCY GATE =====
+	// The clock starts at the commit; the surface reports when the frame carrying this media has
+	// been painted, which is what "commit -> visible" means for a widget-hosted Qt Quick panel.
+	if (this->App && this->App->debug_mode)
+		state.surface->beginSwapTiming(QStringLiteral("%1 %2")
+			.arg(side == MascotSide::Left ? QStringLiteral("left") : QStringLiteral("right"), media.path));
+	// ===== END AMENDMENT Z ===================================================================
 
 	// Amendment H2: the owner fields change first and the pins are re-evaluated afterwards, so a
 	// path that stays referenced -- the candidate becoming the displayed media, or the other
@@ -606,8 +641,8 @@ void MascotController::connectBeats()
 	if (!this->App || !this->App->MascotsAnimation)
 		return;
 	// Amendment W: the controller takes the beat connections itself. MainApp's old handlers
-	// were gated on leftImg->isVisible(), and that widget is hidden after the cutover, so a
-	// branch inside them could never run.
+	// were gated on the retired widgets' isVisible(), and those widgets were hidden after the
+	// cutover, so a branch inside them could never run.
 	this->swapConnection = connect(this->App->MascotsAnimation, &mascotsAnimationsThread::updateMascotsSignal,
 		this, &MascotController::onSwapBeat);
 	this->flipConnection = connect(this->App->MascotsAnimation, &mascotsAnimationsThread::updateMascotsAnimationSignal,
@@ -640,8 +675,9 @@ void MascotController::onFlipBeat()
 
 bool MascotController::beatsAllowed() const
 {
-	// MainApp's handlers used to test `leftImg->isVisible() && utils::IsMyWindowVisible()`;
-	// the surface is that widget's replacement, so the same two conditions apply to it.
+	// MainApp's handlers used to test the old image widget's `isVisible()` together with
+	// utils::IsMyWindowVisible(); the surface is that widget's replacement, so the same two
+	// conditions apply to it.
 	MascotSurface* surface = this->leftState.surface ? this->leftState.surface.data()
 		: this->rightState.surface.data();
 	if (!surface || !surface->isVisible())

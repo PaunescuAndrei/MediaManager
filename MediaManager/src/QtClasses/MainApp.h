@@ -6,7 +6,6 @@
 #include "VideoWatcherQt.h"
 #include "MusicPlayer.h"
 #include "SoundPlayer.h"
-#include "mascotsGeneratorThread.h"
 #include "mascotsAnimationsThread.h"
 #include "RawInputKeyboard.h"
 #include "quitEaterEventFilter.h"
@@ -41,7 +40,6 @@ public:
     VideoWatcherQt* VW = nullptr;
     MusicPlayer* musicPlayer = nullptr;
     SoundPlayer* soundPlayer = nullptr;
-    mascotsGeneratorThread* MascotsGenerator = nullptr;
     mascotsAnimationsThread* MascotsAnimation = nullptr;
     // Process-lifetime mascot media pipeline (amendment U): the QML engine that owns the image
     // provider outlives every window, so the cache it reads through must too. The prefetcher is

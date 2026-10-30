@@ -1,5 +1,6 @@
 #pragma once
 #include "MascotMedia.h"
+#include <QElapsedTimer> // AMENDMENT Z (temporary timing instrumentation) - remove with its block
 #include <QPointF>
 #include <QPointer>
 #include <QRectF>
@@ -61,6 +62,29 @@ public:
 	// after this one overrides that slot only. There is no separate root property to drift out
 	// of step with what is drawn.
 	void setMirror(bool mirror);
+
+	// ===== AMENDMENT Z: TEMPORARY TIMING INSTRUMENTATION - DELETE AFTER THE LATENCY GATE =====
+	// Inert unless the app was started with `-debug`, because that is the only flag under which
+	// beginSwapTiming() is ever called. To remove it: delete this block, the `#include
+	// <QElapsedTimer>` marked with AMENDMENT Z at the top of this file, the AMENDMENT Z blocks
+	// in MascotSurface.cpp (constructor install, and the two definitions at the end of the
+	// file) and the AMENDMENT Z blocks in MascotController.cpp. Nothing else refers to it.
+	//
+	// A swap is committed by a property write; the frame that carries it is painted later, so
+	// that paint is where the commit becomes visible. swapFramePainted() is emitted once the
+	// paint handler that drew that frame has returned.
+	void beginSwapTiming(const QString& label);
+	// Public in QObject, so the override can sit inside this block instead of next to the other
+	// event handlers below.
+	bool eventFilter(QObject* watched, QEvent* event) override;
+signals:
+	void swapFramePainted(const QString& label, double msecs);
+private:
+	QElapsedTimer swapTimer;
+	QString swapLabel;
+	bool swapTimingPending = false;
+public:
+	// ===== END AMENDMENT Z ===================================================================
 
 signals:
 	// Emitted for a release over a slot; `slot` is always a valid index, so a release outside

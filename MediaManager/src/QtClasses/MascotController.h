@@ -80,8 +80,9 @@ public:
 	color_area colorFor(MascotSide side, bool weighted);
 
 	// A file dropped on (or debugged into) one panel: shows it unflipped, and with the mirror
-	// key on copies it onto the other panel mirrored, which is what setMascotDebug() did with
-	// setImage(path) / setImage(path, true). Gated on debug mode like that entry point was.
+	// key on copies it onto the other panel mirrored, which is what the retired MainWindow drop
+	// entry point did with setImage(path) / setImage(path, true). Gated on debug mode like that
+	// entry point was.
 	void showDroppedImage(MascotSide side, const QString& path);
 
 signals:
@@ -201,4 +202,11 @@ private:
 	bool running = false;
 	QMetaObject::Connection swapConnection;
 	QMetaObject::Connection flipConnection;
+
+	// ===== AMENDMENT Z: TEMPORARY TIMING INSTRUMENTATION - DELETE AFTER THE LATENCY GATE =====
+	// The counters behind the swap-latency log line. Delete with the AMENDMENT Z blocks in this
+	// file's .cpp and in MascotSurface.{h,cpp}; this class is otherwise exactly as it was.
+	double swapTimingWorstMs = 0.0;
+	int swapTimingSamples = 0;
+	// ===== END AMENDMENT Z ===================================================================
 };

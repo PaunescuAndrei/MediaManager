@@ -37,41 +37,10 @@
      <number>0</number>
     </property>
     <item>
-     <layout class="QHBoxLayout" name="MainContainer" stretch="0,0,1,0,0">
+     <layout class="QHBoxLayout" name="MainContainer" stretch="0,1,0">
       <property name="spacing">
        <number>0</number>
       </property>
-      <item>
-       <widget class="customGraphicsView" name="leftImg">
-        <property name="visible">
-         <bool>false</bool>
-        </property>
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="minimumSize">
-         <size>
-          <width>0</width>
-          <height>0</height>
-         </size>
-        </property>
-        <property name="maximumSize">
-         <size>
-          <width>16777215</width>
-          <height>16777215</height>
-         </size>
-        </property>
-        <property name="baseSize">
-         <size>
-          <width>250</width>
-          <height>0</height>
-         </size>
-        </property>
-       </widget>
-      </item>
       <item>
        <widget class="QWidget" name="mascotLeftHost" native="true">
         <property name="sizePolicy">
@@ -890,37 +859,6 @@ Right-click: Cycle between modes
         </property>
        </widget>
       </item>
-      <item>
-       <widget class="customGraphicsView" name="rightImg">
-        <property name="visible">
-         <bool>false</bool>
-        </property>
-        <property name="sizePolicy">
-         <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-          <horstretch>0</horstretch>
-          <verstretch>0</verstretch>
-         </sizepolicy>
-        </property>
-        <property name="minimumSize">
-         <size>
-          <width>0</width>
-          <height>0</height>
-         </size>
-        </property>
-        <property name="maximumSize">
-         <size>
-          <width>16777215</width>
-          <height>16777215</height>
-         </size>
-        </property>
-        <property name="baseSize">
-         <size>
-          <width>250</width>
-          <height>0</height>
-         </size>
-        </property>
-       </widget>
-      </item>
      </layout>
     </item>
    </layout>
@@ -932,11 +870,6 @@ Right-click: Cycle between modes
    <extends>QFrame</extends>
    <header>watchedFrame.h</header>
    <container>1</container>
-  </customwidget>
-  <customwidget>
-   <class>customGraphicsView</class>
-   <extends>QGraphicsView</extends>
-   <header>customGraphicsView.h</header>
   </customwidget>
   <customwidget>
    <class>shokoButton</class>

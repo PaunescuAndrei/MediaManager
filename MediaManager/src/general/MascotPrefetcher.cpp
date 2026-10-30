@@ -14,14 +14,14 @@ namespace {
 	// bounds probe below and the centre calculation must agree on what counts as content,
 	// otherwise hasContentCenter could disagree with the value it describes.
 	constexpr int ALPHA_THRESHOLD = 77;
-	// palette_extractor() arguments exactly as mascotsGeneratorThread::extractColors() used
+	// palette_extractor() arguments exactly as the retired generator's extractColors() used
 	// them, so the replacement pipeline produces the palette the old one did.
 	constexpr int PALETTE_CLUSTERS = 20;
 	constexpr int PALETTE_TARGET_SIZE = 300;
 	// Decode threads, never QThreadPool::globalInstance(): a burst of prefetches must not
 	// occupy every core or delay unrelated work.
 	constexpr int DECODE_THREAD_COUNT = 2;
-	// Depth of the pull queue, matching the legacy mascotsGeneratorThread queue depth of 10.
+	// Depth of the pull queue, matching the retired generator's queue depth of 10.
 	// Overflow drops the oldest media, keeping the freshest: the dropped pixels are still in
 	// the cache, only the queue entry is lost.
 	constexpr int READY_QUEUE_LIMIT = 10;

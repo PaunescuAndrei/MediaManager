@@ -124,9 +124,6 @@
     <ClCompile Include="src\QtClasses\Widgets\ProgressBarQLabel.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
-    <ClCompile Include="src\QtClasses\Widgets\customGraphicsView.cpp">
-      <Filter>Source Files\QtClasses\Widgets</Filter>
-    </ClCompile>
     <ClCompile Include="src\QtClasses\Widgets\videosTreeWidget.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
@@ -179,9 +176,6 @@
       <Filter>Source Files\general</Filter>
     </ClCompile>
     <ClCompile Include="src\general\MascotPrefetcher.cpp">
-      <Filter>Source Files\general</Filter>
-    </ClCompile>
-    <ClCompile Include="src\general\mascotsGeneratorThread.cpp">
       <Filter>Source Files\general</Filter>
     </ClCompile>
     <ClCompile Include="src\general\MusicPlayer.cpp">
@@ -597,9 +591,6 @@
     <QtMoc Include="src\QtClasses\Widgets\ProgressBarQLabel.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
-    <QtMoc Include="src\QtClasses\Widgets\customGraphicsView.h">
-      <Filter>Header Files\QtClasses\Widgets</Filter>
-    </QtMoc>
     <QtMoc Include="src\QtClasses\Widgets\videosTreeWidget.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
@@ -640,9 +631,6 @@
       <Filter>Header Files\general</Filter>
     </QtMoc>
     <QtMoc Include="src\general\mascotsAnimationsThread.h">
-      <Filter>Header Files\general</Filter>
-    </QtMoc>
-    <QtMoc Include="src\general\mascotsGeneratorThread.h">
       <Filter>Header Files\general</Filter>
     </QtMoc>
     <QtMoc Include="src\general\VideoWatcherQt.h">
@@ -759,9 +747,6 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <None Include="src\qml\PreviewVideo.qml">
-      <Filter>Source Files</Filter>
-    </None>
     <None Include="src\qml\MascotSurface.qml">
       <Filter>Source Files</Filter>
     </None>

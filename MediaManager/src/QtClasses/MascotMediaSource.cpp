@@ -23,7 +23,7 @@ void MascotMediaSource::setSeedSource(const QString& seedString, bool useSeed)
 
 void MascotMediaSource::initPaths()
 {
-	// mascotsGeneratorThread::initMascotsPaths(), unchanged: one level of subdirectories for
+	// The retired generator's initMascotsPaths(), unchanged: one level of subdirectories for
 	// the per-directory pick, and every file below the mascots root for the flat pick.
 	this->mascotsPaths = utils::getDirsQt(MASCOTS_PATH);
 	this->mascotsAllPaths = utils::getFilesQt(MASCOTS_PATH, true);
@@ -31,7 +31,7 @@ void MascotMediaSource::initPaths()
 
 void MascotMediaSource::refreshRng()
 {
-	// mascotsGeneratorThread::refreshRngFromConfig(), branch for branch. Seeding is only
+	// The retired generator's refreshRngFromConfig(), branch for branch. Seeding is only
 	// redone when the seed string or the seed switch changed, and a seed that hashes to 0 is
 	// bumped to 1 so it cannot mean "default-constructed generator".
 	if (!this->App || !this->App->config) {

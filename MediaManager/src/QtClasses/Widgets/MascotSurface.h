@@ -173,6 +173,12 @@ private:
 	// Since M2 it resolves the slot's two video outputs the same way and by the same names, so
 	// the per-slot QVideoSink slotSink() reports is reachable from the slot index alone.
 	bool resolveSlot(int i);
+	// Writes every mirrored value into the slot's delegate, unconditionally, and that is the
+	// contract: a delegate QML has just created carries none of these values yet, so a change
+	// test inside this function would skip exactly the restore it exists to perform (M3 Task 3
+	// review: do not "optimise" these writes away). A commit is not a tick -- the writes of an
+	// unchanged value are stores with no binding churn and no allocation -- and the per-tick
+	// budget is met by setSlotScrollOffset(), which writes only the axis that moved.
 	void applySlot(int i);
 	void applyAllSlots();
 	// Pixel shift for the mirrored content centre, computed from the slot's own scale.

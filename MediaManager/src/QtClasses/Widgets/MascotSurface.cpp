@@ -214,6 +214,12 @@ void MascotSurface::setSlotScrollOffset(int i, double dx, double dy)
 	if (!this->isValidSlot(i) || !isSaneExtent(dx) || !isSaneExtent(dy))
 		return;
 	Slot& slot = this->slotStates[i];
+	// (M3 Task 3 fix: the per-axis test below is where an unchanged axis is filtered out now. The
+	// sentence above stays as the record of what this setter asserted when it wrote both axes on
+	// every call. The *mirror* is still written unconditionally, unchanged axes included, because
+	// that is what applySlot() restores into a delegate QML recreates.)
+	const bool xMoved = slot.scrollOffsetX != dx;
+	const bool yMoved = slot.scrollOffsetY != dy;
 	slot.scrollOffsetX = dx;
 	slot.scrollOffsetY = dy;
 	// Two property writes, not an applySlot(): a tick moves the content and changes nothing else,
@@ -221,10 +227,15 @@ void MascotSurface::setSlotScrollOffset(int i, double dx, double dy)
 	// re-resolve the delegate and rewrite every other property on the GUI thread). A delegate
 	// that does not exist yet has nothing to move; the mirrored value is applied by applySlot()
 	// when QML creates it.
-	if (QQuickItem* item = slot.item.data()) {
+	// (M3 Task 3 fix: "two property writes" is one for the axis that moved and none when neither
+	// did, which is what keeps a horizontal band's tick at one write per slot per frame.)
+	QQuickItem* item = slot.item.data();
+	if (!item)
+		return;
+	if (xMoved)
 		item->setProperty("scrollOffsetX", dx);
+	if (yMoved)
 		item->setProperty("scrollOffsetY", dy);
-	}
 }
 
 void MascotSurface::setSlotOpacity(int i, double opacity)

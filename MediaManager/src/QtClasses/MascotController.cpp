@@ -3072,6 +3072,9 @@ void MascotController::requestPath(PanelState& state, const QString& path, int b
 MascotMedia MascotController::pickFor(PanelState& state, MascotPanel panel, int bandIndex,
 	bool updateHighlight)
 {
+	// (M5 item 1 probe: which panel asked for a pick. In mirror mode the right band must never pick on its
+	// own -- one commit feeds both columns -- so a right pick with no left one beside it names the bypass.)
+	this->logVideo(QStringLiteral("MASCOT-PICK %1 band=%2").arg(panelLabel(panel)).arg(bandIndex));
 	if (!this->running || !state.surface)
 		return MascotMedia();
 	MascotBand* band = state.band(bandIndex);

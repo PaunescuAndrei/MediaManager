@@ -866,17 +866,6 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "smooth playback at a slower first frame. Applies to the next player a panel builds.");
     playbackLayout->addWidget(mascotLowLatencyCheckBox);
 
-
-
-
-
-
-
-
-
-
-
-
     // (M5 Task 9: the label follows the rule the fix gave it. It said "not focused", which is exactly what
     // it must not do any more.)
     mascotPauseUnfocusedCheckBox = new QCheckBox("Pause when the window cannot be seen");

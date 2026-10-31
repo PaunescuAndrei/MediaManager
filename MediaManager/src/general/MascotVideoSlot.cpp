@@ -369,8 +369,11 @@ void MascotVideoSlot::setLowLatency(bool lowLatency)
 	if (this->lowLatency == lowLatency)
 		return;
 	this->lowLatency = lowLatency;
-	// The intent is read when the backend opens the media, so a running player is re-opened under the new
-	// one the next time it swaps; nothing is torn down here. A player that is idle gets it on creation.
+	// (M5: applied live, and only when it actually changed -- the early return above is that test, so an
+	// Apply that leaves the value alone touches no player. A player with media open keeps its clip; the
+	// intent is read when the backend opens the next one.)
+	for (ThreadedMediaPlayer* player : this->m_players)
+		this->applyPlaybackIntent(player);
 }
 
 void MascotVideoSlot::applyPlaybackIntent(ThreadedMediaPlayer* player) const

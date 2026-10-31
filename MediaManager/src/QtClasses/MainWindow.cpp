@@ -689,6 +689,33 @@ void MainWindow::applyBackgroundVeil() {
     // express a translucent list that also alternates -- see VideosTreeView::setTranslucentRows(). With
     // the layer off this hands the view back to Qt, which is what keeps that rendering identical.)
     this->ui.videosWidget->setTranslucentRows(backgroundEnabled);
+    // (M5 Task 8e: the scrollbars' own opacity. Two mechanisms were tried and one of them works: the
+    // palette does not, because a scrollbar's groove is drawn from a style that resolves its colours
+    // through the style sheet machinery the view already has -- measured, the groove stayed at the list
+    // alpha whatever palette was set on the bar. A style sheet is what that machinery reads, so while the
+    // value is below 1.00 the bar is drawn from these two rules; at 1.00 the style sheet is cleared and
+    // the bar is the stock one again, which is what it has always been.)
+    int scrollbarAlpha = 255;
+    if (backgroundEnabled && this->App->config) {
+        const double configured = this->App->config->get_double(
+            "mascots_background_scrollbar_alpha", 1.0);
+        scrollbarAlpha = qBound(0, qRound(configured * 255.0), 255);
+    }
+    for (QScrollBar* bar : { this->ui.videosWidget->verticalScrollBar(),
+                             this->ui.videosWidget->horizontalScrollBar() }) {
+        if (scrollbarAlpha >= 255) {
+            bar->setStyleSheet(QString());
+            continue;
+        }
+        const QColor groove = appPalette.color(QPalette::Window);
+        const QColor handle = appPalette.color(QPalette::Button);
+        bar->setStyleSheet(QStringLiteral(
+            "QScrollBar { background: rgba(%1,%2,%3,%4); }"
+            "QScrollBar::handle { background: rgba(%5,%6,%7,%4); }"
+            "QScrollBar::add-page, QScrollBar::sub-page { background: none; }")
+            .arg(groove.red()).arg(groove.green()).arg(groove.blue()).arg(scrollbarAlpha)
+            .arg(handle.red()).arg(handle.green()).arg(handle.blue()));
+    }
     // (M5 fix: an alpha-0 palette is not enough. A polish after this call resets the viewport's
     // palette to the view's, so the viewport paints a second row scrim underneath the rows and the
     // media is held back twice -- 0.85 over 0.85 is 0.9775 opaque, which is what a flat #FF8000 layer

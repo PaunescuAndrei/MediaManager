@@ -33,6 +33,9 @@ protected:
     // the theme's own two colours.)
     void drawRow(QPainter* painter, const QStyleOptionViewItem& options,
         const QModelIndex& index) const override;
+    // (M5 Task 8e: the space under a short list, painted with the Base row colour at the list's alpha --
+    // Qt leaves it unpainted, and over the layer that reads as a hole in the list.)
+    void paintEvent(QPaintEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;

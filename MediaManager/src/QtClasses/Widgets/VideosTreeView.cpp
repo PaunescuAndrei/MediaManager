@@ -45,6 +45,34 @@ void VideosTreeView::drawRow(QPainter* painter, const QStyleOptionViewItem& opti
     QTreeView::drawRow(painter, opt, index);
 }
 
+void VideosTreeView::paintEvent(QPaintEvent* event) {
+    QTreeView::paintEvent(event);
+    if (!this->translucentRows)
+        return;
+    // (M5 Task 8e: the space under a short list. Qt paints nothing there -- the viewport's autofill is
+    // off while the layer is on -- so the media showed through at full strength below the last row, which
+    // reads as a hole cut in the list rather than as the list's own colour. The fill is the Base row's
+    // colour at the list's alpha, the same surface the strip above the list gets, so a short list ends
+    // the way a full one does.
+    //
+    // The scroll range is the cheap test for "there is nothing to fill": with one, the rows reach the
+    // bottom of the viewport and the walk below would be over every row for nothing.
+    if (this->verticalScrollBar()->maximum() > 0)
+        return;
+    int used = 0;
+    if (this->model() && this->model()->rowCount() > 0) {
+        const QRect lastRow = this->visualRect(this->model()->index(this->model()->rowCount() - 1, 0));
+        if (lastRow.isValid())
+            used = lastRow.bottom() + 1;
+    }
+    const int height = this->viewport()->height();
+    if (used >= height)
+        return;
+    QPainter painter(this->viewport());
+    painter.fillRect(QRect(0, used, this->viewport()->width(), height - used),
+        this->palette().color(QPalette::Base));
+}
+
 void VideosTreeView::mousePressEvent(QMouseEvent* event) {
     if ((event->button() == Qt::LeftButton || event->button() == Qt::RightButton || event->button() == Qt::MiddleButton) && (event->modifiers() & Qt::AltModifier)) {
         this->altPreviewPressed = true;

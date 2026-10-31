@@ -131,6 +131,9 @@ public:
     // (M5 Task 8d: the alternate rows' own alpha -- the row colour that does not match the window's
     // background, so it is the one that decides readability over the layer.)
     QDoubleSpinBox* mascotAltAlphaSpinBox = nullptr;
+    // (M5 Task 8e: the list's scrollbars, which are opaque today because a scrollbar's groove paints
+    // with the Window role and the row palette only gestures at Base and AlternateBase.)
+    QDoubleSpinBox* mascotScrollbarAlphaSpinBox = nullptr;
     QComboBox* mascotColumnsZCombo = nullptr;
     QComboBox* mascotBackgroundModeCombo = nullptr;
     QComboBox* mascotBackgroundFillCombo = nullptr;

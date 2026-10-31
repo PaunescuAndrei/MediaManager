@@ -104,6 +104,8 @@ void Config::init_defaults() {
 		{"mascots_scroll_pingpong", "False"},
 		{"mascots_stripes_left", "2"},
 		{"mascots_stripes_right", "2"},
+		{"mascots_stripes_orientation", "Horizontal"},
+		{"mascots_stripes_alternate", "True"},
 		{"mascots_pause_unfocused", "True"},
 		{"mascots_weighted_random", "True"},
 		{"mascots_preload", "True"},

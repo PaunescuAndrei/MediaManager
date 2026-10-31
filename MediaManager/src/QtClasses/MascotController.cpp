@@ -107,6 +107,10 @@ namespace {
 	// panel's bands are. `stackVertically` is the horizontal-stripe axis: `Static`, `Scroll` and
 	// `Stripes` all stack top to bottom for now, and Task 5's `mascots_stripes_orientation` is
 	// what adds the column variant -- it changes this one argument, not the slicing below.
+	// (M3 Task 5: that argument is stripesStackVertically() now. `Horizontal` stripes and every
+	// single-band mode stack top to bottom (`true`); `Vertical` stripes stack left to right
+	// (`false`) and the branch below slices the panel's width instead of its height. The rounding
+	// rule is the same on either axis, so the slices still sum to the panel exactly.)
 	//
 	// A slice's end is the *next* slice's start, derived from the panel's own edges and rounded
 	// to whole pixels, so the slices always sum to the panel exactly. Computing a height by
@@ -424,12 +428,26 @@ void MascotController::applyConfig()
 	// `mascots_stripes_orientation` and `mascots_stripes_alternate` are deliberately *not* read
 	// yet: Task 5 owns both, and until then a Stripes panel stacks horizontally (the documented
 	// default) with no phase stagger, which is the shape the two counts alone describe.
+	// (M3 Task 5: both are read below now, under the same "one reader" rule: the orientation is
+	// cached with the counts and the axis, fill mode and scroll direction all answer from it, so
+	// a settings change cannot turn one of the three without the others.)
 	bool modeOk = false;
 	const QString modeValue = config->get(QStringLiteral("mascots_mode"));
 	const MascotMode parsedMode = MascotController::modeFromString(modeValue, &modeOk);
 	this->mascotMode = modeOk ? parsedMode : MascotMode::Static;
 	this->stripesLeftBands = clampedConfigInt(config, QStringLiteral("mascots_stripes_left"), 2, 1, 8);
 	this->stripesRightBands = clampedConfigInt(config, QStringLiteral("mascots_stripes_right"), 2, 1, 8);
+	// M3 Task 5: the stacking axis and the alternate flag, read here and cached for the reason the
+	// counts above are. An unreadable orientation is not clamped into one of the two names (there
+	// is no sensible floor between them): it falls back to `Horizontal`, the documented default,
+	// and is reported by the latch below.
+	bool orientationOk = false;
+	const QString orientationValue = config->get(QStringLiteral("mascots_stripes_orientation"));
+	const StripesOrientation parsedOrientation =
+		MascotController::stripesOrientationFromString(orientationValue, &orientationOk);
+	this->stripesOrientation =
+		orientationOk ? parsedOrientation : StripesOrientation::Horizontal;
+	this->stripesAlternate = config->get_bool(QStringLiteral("mascots_stripes_alternate"));
 	// M3 Task 3: the fill mode. Read here under the same "one reader" rule as every key above:
 	// effectiveFillMode() answers from this cached value, so a settings change cannot land one
 	// repaint late and no repaint path re-reads the config. The documented default is
@@ -495,6 +513,22 @@ void MascotController::applyConfig()
 			<< "is not one of Crop, Fit, Stretch, HeightFit or WidthFit; using HeightFit.";
 	}
 
+	// M3 Task 5: the same one-warning latch as the three blocks above, for the same reason -- an
+	// unsupported value is a statement about the configuration, not an event. The fallback is
+	// `Horizontal` rather than a guess: it is the documented default and the axis a Stripes panel
+	// had before the key existed, so a typo leaves the layout alone instead of turning it on its
+	// side. An empty value is not reported: that is the key simply not being written, which
+	// `Config` answers with the default.
+	if (!this->warnedUnsupportedStripesOrientation && !orientationValue.isEmpty() && !orientationOk) {
+		this->warnedUnsupportedStripesOrientation = true;
+		this->logVideo(QStringLiteral("mascots_stripes_orientation=\"%1\" is not one of Horizontal or Vertical; using Horizontal")
+			.arg(orientationValue));
+		// The ungated warning beside the debug line, exactly as the blocks above have it: a typo
+		// here stacks every Stripe panel along an axis the user did not ask for.
+		qWarning() << "mascots_stripes_orientation:" << orientationValue
+			<< "is not one of Horizontal or Vertical; using Horizontal.";
+	}
+
 	// M3 Task 4: the scroll driver's three keys, read here under the same "one reader" rule as
 	// every key above: the tick answers from these cached values, so a settings change cannot land
 	// one frame late and no tick reads the config. `mascots_scroll_speed` is clamped in px/s with 0
@@ -556,16 +590,24 @@ void MascotController::applyConfig()
 	// the panel already has -- the surface is the thing drawing, so it is never replaced here --
 	// and a panel whose mode and band count did not move is left completely alone.
 	this->applyMode();
+	// M3 Task 5: the budget is spent across the bands the layout has just produced, and the answer
+	// has to exist before ensureVideoSlots() below creates or drops any player. It runs after
+	// applyMode() because that is what has settled each panel's band count, and before the loop
+	// that pushes the live player settings because that loop now reaches every band's players.
+	this->applyBandBudget();
 
 	const bool mirror = this->mirrorEnabled();
 	// M3 Task 2: the player half below stays on `band(0)` for now. The extra bands a `Stripes`
 	// panel has are image-only until Task 5 gives each one a player inside the decoder budget, so
 	// there is no second band whose players these live settings could have to reach -- which is
 	// why the loop reads the panel's policy band and not every band.
+	// (M3 Task 5: a `Stripes` panel's extra bands inside the budget own players now, so the three
+	// live settings are pushed to every band's players. The panel-level writes above them -- the
+	// surface mirror and the flip parity -- stay once per panel, because they are the panel's, not
+	// a band's. `Static` is one band and makes exactly the calls it made before.)
 	for (SideState* state : { &this->leftState, &this->rightState }) {
 		if (!state->surface)
 			continue;
-		MascotBand* band = state->band(0);
 		// The surface-wide default. The per-slot value written by applyDisplay() below is
 		// what is drawn, so the default can never disagree with the picture.
 		state->surface->setMirror(mirror);
@@ -573,31 +615,34 @@ void MascotController::applyConfig()
 		// settings were applied: the side rule becomes authoritative and the repaint below draws
 		// what the settings say, never a leftover toggle.
 		state->flipToggled = false;
-		// The clip rules are live settings as much as the mirror is, and createVideoSlot() must not
-		// be their only reader: `mascots_clip_seconds` also re-arms the clip timer below, so a slot
-		// still holding the previous length picks its start offset from a range that length no
-		// longer means -- 30 s down to 5 s leaves a 30 s range, and a clip can then open 5 s before
-		// the end and visibly restart mid-clip. `mascots_random_start` off fails the other way: a
-		// slot created under `True` keeps randomising until it is rebuilt. Pushed here, so one
-		// Apply moves the timer and the offset range together instead of letting two consumers of
-		// one key disagree.
-		if (band && band->video())
+		for (auto& owned : state->bands) {
+			MascotBand* band = owned.get();
+			if (!band || !band->video())
+				continue;
+			// The clip rules are live settings as much as the mirror is, and createVideoSlot() must not
+			// be their only reader: `mascots_clip_seconds` also re-arms the clip timer below, so a slot
+			// still holding the previous length picks its start offset from a range that length no
+			// longer means -- 30 s down to 5 s leaves a 30 s range, and a clip can then open 5 s before
+			// the end and visibly restart mid-clip. `mascots_random_start` off fails the other way: a
+			// slot created under `True` keeps randomising until it is rebuilt. Pushed here, so one
+			// Apply moves the timer and the offset range together instead of letting two consumers of
+			// one key disagree.
 			band->video()->setRandomStart(this->randomStart, this->clipSeconds);
-		// The same "one key, one reader" rule for the waits: a slot created earlier has to hear the
-		// new deadline and the new retry budget, or the two consumers of `mascots_swap_timeout_ms`
-		// (this class's retry timers and the slot's own deadline) would disagree until the panel was
-		// rebuilt. Pushed here rather than only in createVideoSlot() for exactly the reason
-		// setRandomStart() is.
-		if (band && band->video())
+			// The same "one key, one reader" rule for the waits: a slot created earlier has to hear the
+			// new deadline and the new retry budget, or the two consumers of `mascots_swap_timeout_ms`
+			// (this class's retry timers and the slot's own deadline) would disagree until the panel was
+			// rebuilt. Pushed here rather than only in createVideoSlot() for exactly the reason
+			// setRandomStart() is.
 			band->video()->setTimings(this->swapTimeoutMs, this->retryIntervalMs, this->retryAttempts);
-		// The preload switch is a live setting too, and turning it *off* has to be more than a guard
-		// on the next preload: a clip parked before the Apply would still be there, hold its paused
-		// decoder, and be served by the next swap as `preloaded=yes` -- i.e. the switch would only
-		// take effect one clip later, and the panel would show behaviour the user had just turned
-		// off. Discarded here so "off" means off from the next swap, exactly as it does from
-		// startup. An armed preload goes with it: discardPreload() drops both states.
-		if (band && band->video() && !this->preloadEnabled)
-			band->video()->discardPreload();
+			// The preload switch is a live setting too, and turning it *off* has to be more than a guard
+			// on the next preload: a clip parked before the Apply would still be there, hold its paused
+			// decoder, and be served by the next swap as `preloaded=yes` -- i.e. the switch would only
+			// take effect one clip later, and the panel would show behaviour the user had just turned
+			// off. Discarded here so "off" means off from the next swap, exactly as it does from
+			// startup. An armed preload goes with it: discardPreload() drops both states.
+			if (!this->preloadEnabled)
+				band->video()->discardPreload();
+		}
 	}
 	// A mode change repaints what is already on screen; the surface default alone would only
 	// affect a slot created later.
@@ -667,6 +712,23 @@ MascotMode MascotController::modeFromString(const QString& value, bool* ok)
 	return MascotMode::Static;
 }
 
+StripesOrientation MascotController::stripesOrientationFromString(const QString& value, bool* ok)
+{
+	// M3 Task 5: the same shape as modeFromString(), for the same reason -- one place turns the
+	// configured text into the value every layout path reads, so no path parses a string and a
+	// value this class cannot read cannot reach the geometry. The fallback is `Horizontal`, the
+	// documented default and the axis every Stripe panel stacked along before the key existed.
+	if (ok)
+		*ok = true;
+	if (value.compare(QStringLiteral("Horizontal"), Qt::CaseInsensitive) == 0)
+		return StripesOrientation::Horizontal;
+	if (value.compare(QStringLiteral("Vertical"), Qt::CaseInsensitive) == 0)
+		return StripesOrientation::Vertical;
+	if (ok)
+		*ok = false;
+	return StripesOrientation::Horizontal;
+}
+
 MascotSurface::FillMode MascotController::fillModeFromString(const QString& value, bool* ok)
 {
 	if (ok)
@@ -724,8 +786,15 @@ MascotSurface::FillMode MascotController::effectiveFillMode() const
 	// whose width is the only axis that overflows. M3 Task 5 makes the `Stripes` answer follow
 	// `mascots_stripes_orientation`, where a vertical stripe stacks along the other axis and
 	// therefore needs `WidthFit`; no `Stripes` panel this task can produce does.
+	// (M3 Task 5: the last sentence is superseded. A vertical `Stripes` panel is columns, its bands
+	// are normalised to their width and the *height* is what overflows, so it answers `WidthFit`.
+	// `Scroll` keeps `HeightFit`: §7.6 defines it as content sized wider than the panel, and Ruling
+	// M3-4 keeps it on the horizontal axis, so it has no vertical variant to follow.)
 	if (this->mascotMode == MascotMode::Static)
 		return this->fillModeSetting;
+	if (this->mascotMode == MascotMode::Stripes
+		&& this->stripesOrientation == StripesOrientation::Vertical)
+		return MascotSurface::FillMode::WidthFit;
 	return MascotSurface::FillMode::HeightFit;
 }
 
@@ -748,7 +817,21 @@ QVector<QRectF> MascotController::bandRects(MascotSide side) const
 	// `Stripes` default orientation, because Task 5 owns the key that would choose otherwise), so
 	// a band's rectangle is a horizontal slice of the panel. Slicing the surface's own rectangle
 	// is what keeps every band inside the panel and their sum equal to the panel itself.
-	return slicedBandRects(QRectF(state.surface->rect()), this->bandCount(side), true);
+	// (M3 Task 5: the key is read and the axis comes from stripesStackVertically(). A `Vertical`
+	// `Stripes` panel is sliced into columns instead, and every single-band mode still asks for the
+	// top-to-bottom answer -- which `slicedBandRects()` answers with the panel itself.)
+	return slicedBandRects(QRectF(state.surface->rect()), this->bandCount(side),
+		this->stripesStackVertically());
+}
+
+bool MascotController::stripesStackVertically() const
+{
+	// M3 Task 5: the stacking axis, not the panning axis. `Horizontal` stripes are strips stacked
+	// top to bottom, which is `slicedBandRects()`'s `stackVertically` true; `Vertical` stripes are
+	// columns stacked left to right. A single-band mode (`Static`, `Scroll`) is the panel itself
+	// either way, so the top-to-bottom answer is also the shipped default there.
+	return this->mascotMode != MascotMode::Stripes
+		|| this->stripesOrientation == StripesOrientation::Horizontal;
 }
 
 void MascotController::applyMode()
@@ -769,7 +852,15 @@ void MascotController::applyMode()
 		if (state.surface && state.configuredBandCount != this->bandCount(side))
 			countChanged = true;
 	}
-	if (this->modeApplied && !modeChanged && !countChanged)
+	// M3 Task 5: an orientation change alters the stacking axis without changing the band count,
+	// so it has to be part of the relayout condition or a `Horizontal` -> `Vertical` switch would
+	// leave the old rectangles in place. It is only a `Stripes` question: no other mode derives a
+	// rectangle from the orientation, and asking it while `Static`/`Scroll` is up would make an
+	// orientation key nothing draws from re-lay the panels out.
+	const bool orientationChanged = this->modeApplied
+		&& this->mascotMode == MascotMode::Stripes
+		&& this->stripesOrientation != this->appliedStripesOrientation;
+	if (this->modeApplied && !modeChanged && !countChanged && !orientationChanged)
 		return;
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
 		SideState& state = this->stateFor(side);
@@ -777,6 +868,7 @@ void MascotController::applyMode()
 			this->syncBands(state, side);
 	}
 	this->appliedMode = this->mascotMode;
+	this->appliedStripesOrientation = this->stripesOrientation;
 	this->modeApplied = true;
 	// M3 Task 4: a mode change starts a fresh pass -- the phase is a fraction of a travel whose
 	// meaning has just changed -- and re-arms the per-band zero-travel line, which is a statement
@@ -792,8 +884,36 @@ void MascotController::applyMode()
 		// before modes existed, so the last pan position is taken off the slots here rather than
 		// left for the surface to replay (applySlot() restores every mirrored value, the scroll
 		// offset among them).
-		if (this->mascotMode == MascotMode::Static)
-			this->resetScrollOffsets();
+		// (M3 Task 5: the call is unconditional now. A mode change resets the phase above and the
+		// offsets below, so a new layout starts from the near end instead of inheriting a position
+		// measured on the previous one -- and a band entering a vertically panning layout cannot
+		// keep an offset that was written on the horizontal axis, which no tick would clear while
+		// the speed is 0. `Static` is the case the original sentence describes and is unchanged.)
+		this->resetScrollOffsets();
+	}
+	// M3 Task 5: an orientation change keeps the phase -- the fraction is axis-agnostic, so the
+	// bands keep their place in the pass instead of snapping to the near end (Review Focus 8's
+	// rule, applied to the other quantity that changes a travel) -- but the offsets were written
+	// on the old axis. Clearing them is what stops a band drawing a horizontal pan while it is
+	// stacked vertically; without it a non-zero offset would survive whenever no tick writes the
+	// other axis, and a speed of 0 would leave it there for good. The zero-travel latch re-arms
+	// because the layout it described has just moved under it.
+	if (orientationChanged) {
+		for (SideState* state : { &this->leftState, &this->rightState }) {
+			MascotSurface* surface = state->surface.data();
+			if (surface) {
+				for (auto& owned : state->bands) {
+					MascotBand* band = owned.get();
+					if (!band || band->scrollOffset() == 0.0)
+						continue;
+					// The one-write path, not an applySlot(): the slot's other values are untouched
+					// and the surface's mirror keeps 0, so a recreated delegate comes back centred.
+					surface->setSlotScrollOffset(band->slotIndex(), 0.0, 0.0);
+					band->setScrollOffset(0.0);
+				}
+			}
+			state->scrollZeroTravelLogged.fill(false);
+		}
 	}
 	// The rectangles follow a count or a mode change, and the surface is resized in place rather
 	// than replaced: a band that survives the change keeps its media and its players (Review
@@ -807,7 +927,9 @@ void MascotController::applyMode()
 	// applyConfig() has already written, and a settings Apply would then reach each band's
 	// setSlotRect twice. M3 Task 5 adds `mascots_stripes_orientation`: that key changes the axis
 	// without changing the count, so its own relayout has to be added to this condition.)
-	if (countChanged)
+	// (M3 Task 5: added, as `orientationChanged`. The condition is exactly "the rectangles may have
+	// moved": a count change or an axis change, never the mode alone.)
+	if (countChanged || orientationChanged)
 		this->updateLayout();
 	// Bands the change added have no content. Queued, because this runs inside a settings handler
 	// and a pick walks the mascot directory and posts a decode; a controller that was stopped in
@@ -899,6 +1021,11 @@ void MascotController::fillEmptyBands()
 			// until the next layout change. The degradation has a known end, and the alternative
 			// this task could have offered is a band with no media at all, which is worse than a
 			// still.
+			// (M3 Task 5: a band past the first inside the decoder budget may own a player now, but
+			// this fill is still an image on purpose: the pick that would load a video into it is
+			// Task 6's per-band cadence. The budget decides which of these bands may later show
+			// video; until then they draw what this path gives them, which is the "band never
+			// blank" floor.)
 			//
 			// Drawing the path here rather than calling pickFor() is deliberate: pickFor() owns
 			// the panel's single candidate slot, its speculation and its video sequence, all of
@@ -1058,7 +1185,12 @@ bool MascotController::scrollPanIsVertical() const
 	// ever exposes one strip of the picture. `Stripes` stacks horizontally too until Task 5 reads
 	// `mascots_stripes_orientation`; that key is the one place this answer changes, and no other
 	// line in the driver needs to know which axis it got.
-	return false;
+	// (M3 Task 5: read and cached now. A `Vertical` `Stripes` panel is columns, so each band's
+	// overflow is its height and the pan runs down it; every other case stays horizontal. This is
+	// the *panning* axis, perpendicular to stripesStackVertically()'s stacking axis, and
+	// effectiveFillMode() must answer the matching normalised mode or the travel here is 0.)
+	return this->mascotMode == MascotMode::Stripes
+		&& this->stripesOrientation == StripesOrientation::Vertical;
 }
 
 bool MascotController::scrollDirectionReverses() const
@@ -1083,7 +1215,29 @@ double MascotController::scrollPhaseOffset(const MascotBand& band) const
 	// phase in the same travel-length units, so a staggered band is a band whose pass starts
 	// later. Nothing in this task staggers anything -- a single-band mode has one phase and no
 	// second band to disagree with it -- and the driver reads this per band per tick either way.
-	Q_UNUSED(band);
+	// (M3 Task 5: the stagger is `index / count` of the band's own panel, and the index is the
+	// band's slot index, which is its position along the stacking axis. The lookup is how a band
+	// that carries only its slot index finds the count of the panel it belongs to; a single-band
+	// mode returns 0 without asking.
+	//
+	// Under pingpong the offsets are accepted as they are, not normalised: the triangle fold maps a
+	// phase x and 2-x to the same drawn position, so two staggered bands do coincide for an
+	// instant as their legs cross -- with count 3, offsets 0 and 2/3 meet at phase 2/3. That is
+	// inherent to a reflection: every band traverses the same segment twice per cycle, so any two
+	// distinct offsets on it meet somewhere. Only the sawtooth (wrap) mode keeps them apart
+	// forever, and wrap mode is what a non-pingpong panel uses. The offsets are still distinct, so
+	// the bands never lock together; a momentary crossing is the woven look the stagger is for.
+	// Shortening the phase to dodge the fold was rejected: it would halve the stagger and still
+	// leave a collision for some count, because the fold is 2-to-1 whatever the offsets are.)
+	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
+		const SideState& state = this->stateFor(side);
+		if (state.band(band.slotIndex()) != &band)
+			continue;
+		const int count = this->bandCount(side);
+		if (count <= 1)
+			return 0.0;
+		return static_cast<double>(band.slotIndex()) / static_cast<double>(count);
+	}
 	return 0.0;
 }
 
@@ -1093,8 +1247,11 @@ bool MascotController::scrollReversed(const MascotBand& band) const
 	// per-band sign applied on top of the configured direction rather than folded into it, so the
 	// two can be changed independently, and it is false here because nothing in this task
 	// reverses a band.
-	Q_UNUSED(band);
-	return false;
+	// (M3 Task 5: odd `Stripes` bands when the key is on; `Static` and `Scroll` have one band and
+	// no odd index, so they answer false whatever the key says.)
+	return this->mascotMode == MascotMode::Stripes
+		&& this->stripesAlternate
+		&& (band.slotIndex() % 2) != 0;
 }
 
 void MascotController::resetScrollOffsets()
@@ -1117,6 +1274,9 @@ void MascotController::resetScrollOffsets()
 	// The phase goes with the offsets it produced. A mode that stops panning has no pass to be
 	// halfway through, so a later return to a panning mode starts from the near end rather than
 	// from where the previous one happened to stop.
+	// (M3 Task 5: the same reasoning covers a change *between* two panning layouts -- a `Scroll`
+	// band's horizontal position means nothing on a column of a vertical `Stripes` panel -- which
+	// is why applyMode() now calls this on every mode change and not only into `Static`.)
 	for (SideState* state : { &this->leftState, &this->rightState })
 		state->scrollPhase = 0.0;
 }
@@ -1145,6 +1305,17 @@ void MascotController::onScrollTick()
 	if (elapsedMs <= 0)
 		return;
 	const double dtSeconds = static_cast<double>(elapsedMs) / 1000.0;
+	// M3 Task 5: one tick's pan in pixels at the configured rate -- the step the panel's widest
+	// band takes, since the phase is normalised against that band's travel (Task 4). For that band
+	// a tick advances by more than its whole travel exactly when its travel is shorter than this,
+	// and the drawn position would be effectively random per frame rather than moving. Such a band
+	// takes the still branch below instead (the same answer Ruling M3-6 gives content that fits its
+	// band, for the adjacent case where it barely overflows). A band narrower than its panel's
+	// widest shares that phase, so its own step is proportionally smaller and this test is
+	// conservative for it; the error is toward standing still on a travel measured in pixels,
+	// which is invisible at the default 40 px/s.
+	const double tickStep = static_cast<double>(this->scrollSpeed)
+		* static_cast<double>(SCROLL_TICK_MS) / 1000.0;
 	const bool vertical = this->scrollPanIsVertical();
 	const bool reverse = this->scrollDirectionReverses();
 	const bool pingpong = this->scrollPingpong;
@@ -1176,7 +1347,14 @@ void MascotController::onScrollTick()
 			if (!band)
 				continue;
 			const double travel = this->scrollTravel(*band);
-			if (travel <= 0.0) {
+			// M3 Task 5: a positive travel shorter than one tick's step is the aliasing case, and
+			// it takes the still branch too. It cannot pan at frame rate, so it is centred and
+			// left there -- the same answer, and the same once-per-layout line (with a wording
+			// that names the travel instead of the content), as content that fits its band.
+			// A queued wrap-point commit has no seam on such a band either, exactly as for a band
+			// with travel 0; the caller that queued it (Task 6) has to handle "no pass is running".
+			const bool subTickTravel = travel > 0.0 && travel < tickStep;
+			if (travel <= 0.0 || subTickTravel) {
 				// Nothing to pan: the band is centred and still (Ruling M3-6), and per tick it
 				// writes nothing at all. The one write it can owe is the transition off a previous
 				// offset -- a band whose content became narrower than its band would otherwise be
@@ -1194,14 +1372,24 @@ void MascotController::onScrollTick()
 				// would silence the line for the narrow picture that is the actual case.
 				if (!band->media().path.isEmpty() && !state.scrollZeroTravelLogged.value(i, false)) {
 					state.scrollZeroTravelLogged[i] = true;
-					const QSizeF content = surface->slotContentSize(band->slotIndex());
-					this->logScroll(QStringLiteral("%1 band %2 stands still: its content is %3x%4 and its band is %5x%6")
-						.arg(sideLabel(side))
-						.arg(i)
-						.arg(content.width(), 0, 'f', 0)
-						.arg(content.height(), 0, 'f', 0)
-						.arg(band->rect().width(), 0, 'f', 0)
-						.arg(band->rect().height(), 0, 'f', 0));
+					if (subTickTravel) {
+						this->logScroll(QStringLiteral("%1 band %2 stands still: its travel is %3px, under one %4ms tick's %5px step")
+							.arg(sideLabel(side))
+							.arg(i)
+							.arg(travel, 0, 'f', 1)
+							.arg(SCROLL_TICK_MS)
+							.arg(tickStep, 0, 'f', 1));
+					}
+					else {
+						const QSizeF content = surface->slotContentSize(band->slotIndex());
+						this->logScroll(QStringLiteral("%1 band %2 stands still: its content is %3x%4 and its band is %5x%6")
+							.arg(sideLabel(side))
+							.arg(i)
+							.arg(content.width(), 0, 'f', 0)
+							.arg(content.height(), 0, 'f', 0)
+							.arg(band->rect().width(), 0, 'f', 0)
+							.arg(band->rect().height(), 0, 'f', 0));
+					}
 				}
 				continue;
 			}
@@ -2017,7 +2205,48 @@ bool MascotController::mediaMayBeVideo() const
 {
 	// Both halves are needed: a budget below two players leaves no panel a player at all, and an
 	// images-only setting has no use for the pool. Everything video costs hangs off this answer.
-	return this->videoMode != VideoMode::Off && this->mediaSettingWantsVideo();
+	// (M3 Task 5: "a budget below two players leaves no panel a player" is M2's two-players-per-
+	// panel verdict, which only `Static` still uses. A panning mode gives one player per band, so
+	// the answer is whether the allocation gave either panel a band with one; a panel that got
+	// none falls through pickVideo()'s no-slot branch to the image path.)
+	if (!this->mediaSettingWantsVideo())
+		return false;
+	return this->videoBandsFor(MascotSide::Left) > 0
+		|| this->videoBandsFor(MascotSide::Right) > 0;
+}
+
+int MascotController::videoBandsFor(MascotSide side) const
+{
+	// M3 Task 5: the panel's player entitlement. `Static` is M2's model: one band, and whether it
+	// gets two players (crossfade) or one (the clamp) is applyDecoderBudget()'s decision -- this
+	// answer only says the band may own players at all. A panning mode gives each band its own
+	// single player, and applyBandBudget() has already spent the budget across the two panels.
+	if (!this->mediaSettingWantsVideo())
+		return 0;
+	if (this->mascotMode == MascotMode::Static)
+		return this->videoMode != VideoMode::Off ? 1 : 0;
+	return side == MascotSide::Left ? this->leftBandPlayers : this->rightBandPlayers;
+}
+
+bool MascotController::bandMayOwnPlayer(MascotSide side, int bandIndex) const
+{
+	// The allocation is a prefix of each panel's bands, so "may own" is one comparison. The band
+	// count is re-checked because a caller between a count change and the next applyBandBudget()
+	// could still be asking about an index the panel no longer has.
+	return bandIndex >= 0
+		&& bandIndex < this->bandCount(side)
+		&& bandIndex < this->videoBandsFor(side);
+}
+
+bool MascotController::videoCrossfades() const
+{
+	// §7.5: a crossfade is the two-player design, and only `Static` keeps it. `Scroll` and
+	// `Stripes` give a band one player, so a swap reloads the output already on screen and there
+	// is nothing to blend; they take the hard cut and never consult `mascots_crossfade_ms`. This
+	// is the one question fadeInVideo() and setSinglePlayer() both ask, so the two cannot disagree
+	// about a mode that has no fade to show.
+	return this->mascotMode == MascotMode::Static
+		&& this->videoMode == VideoMode::Crossfade;
 }
 
 void MascotController::invalidateVideoPoolIfStale()
@@ -2373,7 +2602,11 @@ void MascotController::fadeInVideo(SideState& state, MascotSide side, int ab)
 	// A crossfade needs two players. In the clamped mode a swap reloads the output that is on
 	// screen, so there is nothing to blend and the duration is 0 -- the hard cut the clamp
 	// promises -- rather than a second fade path to keep in step with the first.
-	const int fade = this->videoMode == VideoMode::Crossfade ? this->crossfadeMs : 0;
+	// (M3 Task 5: "the clamped mode" is now every mode without the crossfade, and a panning mode
+	// never has it whatever the decoder count: one player per band means nothing can blend, so the
+	// duration is 0 there too. videoCrossfades() is the single answer both this and
+	// setSinglePlayer() read, so a mode cannot pay for a fade it cannot show.)
+	const int fade = this->videoCrossfades() ? this->crossfadeMs : 0;
 	band->setVideoOpacity(ab, 1.0, fade);
 	band->setVideoOpacity(1 - ab, 0.0, fade);
 	if (fade <= 0) {
@@ -2617,8 +2850,10 @@ void MascotController::onVideoFailed(MascotSide side, const QString& path,
 
 bool MascotController::ensureVideoSlots()
 {
-	const bool wantVideo = this->mediaMayBeVideo();
 	bool downgraded = false;
+	// A band past the first that lost a player while showing a video has no cadence of its own
+	// yet (Task 6 owns it), so it is re-filled through the image path once this method is done.
+	bool refillExtraBands = false;
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
 		SideState& state = this->stateFor(side);
 		if (!state.surface)
@@ -2627,44 +2862,60 @@ bool MascotController::ensureVideoSlots()
 		// this task -- that is Task 5's per-band decoder budget -- and they show images instead, by
 		// design (fillEmptyBands() says so where the fill happens). Once Task 5 generalises this
 		// loop over `state.bands` inside the budget, the calls below are already per band.
-		MascotBand* band = state.band(0);
-		if (!band)
-			continue;
-		if (wantVideo && !band->video()) {
-			this->createVideoSlot(state, side);
-		}
-		else if (!wantVideo && band->video()) {
-			// The setting is images-only, or the budget cannot carry a panel: the players go.
-			if (state.clipTimer)
-				state.clipTimer->stop();
-			// A clip that was on screen has no player behind it any more, so `shown` must stop
-			// saying it is one. That claim is what onSwapBeat() reads to decide a panel's cadence:
-			// a panel still claiming video would be skipped by the beat *and* have no clip timer,
-			// i.e. frozen on a frame nothing owns until the app is restarted. The output is left
-			// visible, so the QML VideoOutput keeps its last frame on screen until the first image
-			// lands -- that commit hides it through applyDisplay() like any other image.
-			// (M3 Task 1: `shown` is the band's `media()`, and forgetMedia() is what drops the
-			// claim without touching the slot -- the output keeps its frame for the reason above.)
-			if (band->media().type == MascotMedia::Video) {
-				const QString previousShown = band->media().path;
-				band->forgetMedia();
-				// The owner field changed, so the pin invariant is re-established the way every
-				// other path does it (a video path was never in the image cache, so this is a
-				// no-op that keeps the rule uniform).
-				this->syncPin(previousShown);
-				downgraded = true;
+		// (M3 Task 5: the loop runs per band now, and `bandMayOwnPlayer()` is the budget's answer
+		// for each of them. The policy band's downgrade still returns through `downgraded` so
+		// applyConfig() repaints the pair; an extra band's is re-filled through the image path,
+		// because the cadence that would re-pick a multi-band panel is Task 6's.)
+		for (int i = 0; i < static_cast<int>(state.bands.size()); ++i) {
+			MascotBand* band = state.band(i);
+			if (!band)
+				continue;
+			const bool mayOwnPlayer = this->bandMayOwnPlayer(side, i);
+			if (mayOwnPlayer && !band->video()) {
+				this->createVideoSlot(state, side, i);
 			}
-			this->destroyVideoSlot(state);
+			else if (!mayOwnPlayer && band->video()) {
+				// The setting is images-only, or the budget cannot carry a panel: the players go.
+				if (i == 0 && state.clipTimer)
+					state.clipTimer->stop();
+				// A clip that was on screen has no player behind it any more, so `shown` must stop
+				// saying it is one. That claim is what onSwapBeat() reads to decide a panel's cadence:
+				// a panel still claiming video would be skipped by the beat *and* have no clip timer,
+				// i.e. frozen on a frame nothing owns until the app is restarted. The output is left
+				// visible, so the QML VideoOutput keeps its last frame on screen until the first image
+				// lands -- that commit hides it through applyDisplay() like any other image.
+				// (M3 Task 1: `shown` is the band's `media()`, and forgetMedia() is what drops the
+				// claim without touching the slot -- the output keeps its frame for the reason above.)
+				if (band->media().type == MascotMedia::Video) {
+					const QString previousShown = band->media().path;
+					band->forgetMedia();
+					// The owner field changed, so the pin invariant is re-established the way every
+					// other path does it (a video path was never in the image cache, so this is a
+					// no-op that keeps the rule uniform).
+					this->syncPin(previousShown);
+					if (i == 0)
+						downgraded = true;
+					else
+						refillExtraBands = true;
+				}
+				this->destroyVideoSlot(state, i);
+			}
+			if (MascotVideoSlot* slot = band->video())
+				slot->setSinglePlayer(!this->videoCrossfades());
 		}
-		if (band->video())
-			band->video()->setSinglePlayer(this->videoMode != VideoMode::Crossfade);
+	}
+	if (refillExtraBands) {
+		// Queued for the same reason applyMode()'s fill is: this runs inside a settings handler and
+		// a pick walks the mascot directory. fillEmptyBands() gives the band an image, which is the
+		// degradation the budget promises -- never a blank band.
+		QMetaObject::invokeMethod(this, [this]() { this->fillEmptyBands(); }, Qt::QueuedConnection);
 	}
 	return downgraded;
 }
 
-void MascotController::createVideoSlot(SideState& state, MascotSide side)
+void MascotController::createVideoSlot(SideState& state, MascotSide side, int bandIndex)
 {
-	MascotBand* band = state.band(0);
+	MascotBand* band = state.band(bandIndex);
 	if (!state.surface || !band || band->video())
 		return;
 	// A child of this controller, not of the surface: releaseSurface() destroys it *before* the
@@ -2672,6 +2923,10 @@ void MascotController::createVideoSlot(SideState& state, MascotSide side)
 	// (M3 Task 1: a child of the band now, which the controller owns through SideState. The
 	// destruction order the sentence above describes is unchanged: destroyVideo() still runs from
 	// releaseSurface() before the surface is deleted.)
+	// (M3 Task 5: `bandIndex` is the band inside the budget this slot belongs to. Only the policy
+	// band's reports are connected below: the per-band cadence that gives the other bands' players
+	// work and a commit path is Task 6's, and wiring them to the panel-level handlers now would
+	// attribute another band's frame to band 0.)
 	band->ensureVideo(0);
 	MascotVideoSlot* slot = band->video();
 	if (!slot)
@@ -2679,35 +2934,53 @@ void MascotController::createVideoSlot(SideState& state, MascotSide side)
 	// The decoder budget and the clip rules are applied here as well as when they change, so a
 	// slot created later (an Images -> Videos settings apply) starts from the current
 	// configuration instead of from the class defaults.
-	slot->setSinglePlayer(this->videoMode != VideoMode::Crossfade);
+	slot->setSinglePlayer(!this->videoCrossfades());
 	slot->setRandomStart(this->randomStart, this->clipSeconds);
 	// The waits come from config, not from the slot's defaults: a slot created after an Apply has to
 	// start from the configured values, or a panel enabled later would use a deadline the user had
 	// already changed.
 	slot->setTimings(this->swapTimeoutMs, this->retryIntervalMs, this->retryAttempts);
-	connect(slot, &MascotVideoSlot::firstFrame, this,
-		[this, side](const QString& path, int ab, const QSize& frameSize, qint64 offsetMs) {
-			this->onVideoFirstFrame(side, path, ab, frameSize, offsetMs);
-		});
-	connect(slot, &MascotVideoSlot::failed, this,
-		[this, side](const QString& path, MascotVideoSlot::FailKind kind) {
-			this->onVideoFailed(side, path, kind, false);
-		});
-	connect(slot, &MascotVideoSlot::timedOut, this,
-		[this, side](const QString& path) {
-			// A deadline passed. `kind` is only read when the log words the line, and the ruled
-			// rule never drops a file for a timeout, so the shipped value is the honest one.
-			this->onVideoFailed(side, path, MascotVideoSlot::FailKind::Decode, true);
-		});
-	// A parked clip is not a commit: nothing of it is on screen, so the only thing the controller
-	// does with the report is start the mirror pair's copy of the same file at the same offset.
-	connect(slot, &MascotVideoSlot::preloaded, this,
-		[this, side](const QString& path, qint64 offsetMs, const QSize& frameSize) {
-			this->onVideoPreloaded(side, path, offsetMs, frameSize);
-		});
+	if (bandIndex == 0) {
+		connect(slot, &MascotVideoSlot::firstFrame, this,
+			[this, side](const QString& path, int ab, const QSize& frameSize, qint64 offsetMs) {
+				this->onVideoFirstFrame(side, path, ab, frameSize, offsetMs);
+			});
+		connect(slot, &MascotVideoSlot::failed, this,
+			[this, side](const QString& path, MascotVideoSlot::FailKind kind) {
+				this->onVideoFailed(side, path, kind, false);
+			});
+		connect(slot, &MascotVideoSlot::timedOut, this,
+			[this, side](const QString& path) {
+				// A deadline passed. `kind` is only read when the log words the line, and the ruled
+				// rule never drops a file for a timeout, so the shipped value is the honest one.
+				this->onVideoFailed(side, path, MascotVideoSlot::FailKind::Decode, true);
+			});
+		// A parked clip is not a commit: nothing of it is on screen, so the only thing the controller
+		// does with the report is start the mirror pair's copy of the same file at the same offset.
+		connect(slot, &MascotVideoSlot::preloaded, this,
+			[this, side](const QString& path, qint64 offsetMs, const QSize& frameSize) {
+				this->onVideoPreloaded(side, path, offsetMs, frameSize);
+			});
+	}
 	// A panel built while the window cannot be seen starts paused, exactly like one that was
 	// already running when the window went away.
 	slot->setPaused(this->videoPaused);
+}
+
+void MascotController::destroyVideoSlot(SideState& state, int bandIndex)
+{
+	MascotBand* band = state.band(bandIndex);
+	if (!band || !band->video())
+		return;
+	band->destroyVideo();
+	band->setRequestIsVideo(false);
+	band->setWantedOffsetMs(-1);
+	// The panel-level waits are the policy band's, exactly as the requests they guard are.
+	if (bandIndex == 0) {
+		state.mirrorCopyPending = false;
+		state.videoPickRetryPending = false;
+		state.videoLoadRetries = 0;
+	}
 }
 
 void MascotController::destroyVideoSlot(SideState& state)
@@ -2719,13 +2992,10 @@ void MascotController::destroyVideoSlot(SideState& state)
 	// in this task) is skipped by the guard inside destroyVideo().
 	// Synchronous, like the surface: the players are detached from the sinks they draw into (which
 	// still exist at this point) and then deleted.
-	for (auto& owned : state.bands) {
-		if (!owned->video())
-			continue;
-		owned->destroyVideo();
-		owned->setRequestIsVideo(false);
-		owned->setWantedOffsetMs(-1);
-	}
+	// (M3 Task 5: the per-band body is the single-band overload; this loop keeps the teardown of a
+	// whole panel in one place, which is what releaseSurface() calls.)
+	for (int i = 0; i < static_cast<int>(state.bands.size()); ++i)
+		this->destroyVideoSlot(state, i);
 	state.mirrorCopyPending = false;
 	state.videoPickRetryPending = false;
 	state.videoLoadRetries = 0;
@@ -2745,6 +3015,15 @@ void MascotController::applyDecoderBudget()
 	else
 		mode = VideoMode::Off;
 	this->videoMode = mode;
+	// M3 Task 5: a panning mode never crossfades -- it gives every band one player and cuts at the
+	// wrap -- so M2's two-players-per-panel verdict is not what its budget means. The budget
+	// question there is how many *bands* keep a player, which applyBandBudget() spends and logs;
+	// this method only records that no crossfade is possible, so nothing here writes the M2 line,
+	// which would describe a fade these modes do not have.
+	if (this->mascotMode != MascotMode::Static) {
+		this->videoMode = this->maxDecoders > 0 ? VideoMode::SinglePlayer : VideoMode::Off;
+		return;
+	}
 	// One line per budget rather than per Apply: the clamp is a statement about the configuration,
 	// and the gate needs to read which mode a run was in. Nothing is written for an images-only
 	// setting, so that run's log stays what merged master's was.
@@ -2768,6 +3047,88 @@ void MascotController::applyDecoderBudget()
 			.arg(VIDEO_PANEL_COUNT));
 		break;
 	}
+}
+
+void MascotController::applyBandBudget()
+{
+	// M3 Task 5: how many bands of each panel keep a player under `mascots_max_decoders`. `Static`
+	// is M2's model and this method does not touch it: one band per panel, and whether it gets two
+	// players (crossfade) or one (the clamp) is applyDecoderBudget()'s answer. That also means a
+	// default `Static` config writes nothing and allocates nothing.
+	if (this->mascotMode == MascotMode::Static) {
+		this->leftBandPlayers = 0;
+		this->rightBandPlayers = 0;
+		return;
+	}
+	// Panning modes: one player per band, so the bands are the players that are wanted.
+	const int wantedLeft = this->bandCount(MascotSide::Left);
+	const int wantedRight = this->bandCount(MascotSide::Right);
+	const int wanted = wantedLeft + wantedRight;
+	int allowedLeft = wantedLeft;
+	int allowedRight = wantedRight;
+	if (wanted > this->maxDecoders) {
+		// Short budget: spend it one player at a time, alternating the panels and taking each
+		// panel's bands from index 0. That keeps both panels on video for as long as the budget
+		// lasts instead of letting the left panel spend it all, and the left panel takes the odd
+		// spare -- it is the band the mirror pair follows, and it is also what a floor split of the
+		// budget between two equal panels gives it. The bands past each panel's allocation show
+		// images, so a short budget never leaves a band blanker than "no media at all".
+		allowedLeft = 0;
+		allowedRight = 0;
+		int remaining = std::max(0, this->maxDecoders);
+		for (int round = 0; remaining > 0; ++round) {
+			bool took = false;
+			const MascotSide first = (round % 2 == 0) ? MascotSide::Left : MascotSide::Right;
+			for (MascotSide side : { first, other(first) }) {
+				if (remaining <= 0)
+					break;
+				int& allowed = side == MascotSide::Left ? allowedLeft : allowedRight;
+				const int want = side == MascotSide::Left ? wantedLeft : wantedRight;
+				if (allowed < want) {
+					++allowed;
+					--remaining;
+					took = true;
+				}
+			}
+			if (!took)
+				break;
+		}
+	}
+	this->leftBandPlayers = allowedLeft;
+	this->rightBandPlayers = allowedRight;
+	// An images-only setting has nothing to clamp and nothing to say: its run's log has to stay
+	// what merged master's was, exactly as applyDecoderBudget()'s line does.
+	if (!this->mediaSettingWantsVideo())
+		return;
+	const int allowed = allowedLeft + allowedRight;
+	// One line per change of the budget, the bands that ask or the bands that keep a player -- the
+	// M2 clamp-line pattern. A count change with the same budget is a different clamp, so it says
+	// its piece rather than leaving the last line describing a layout that no longer exists.
+	if (this->loggedBandBudgetDecoders == this->maxDecoders
+		&& this->loggedBandBudgetWanted == wanted
+		&& this->loggedBandBudgetAllowed == allowed
+		&& this->loggedBandBudgetMode == this->mascotMode)
+		return;
+	this->loggedBandBudgetDecoders = this->maxDecoders;
+	this->loggedBandBudgetWanted = wanted;
+	this->loggedBandBudgetAllowed = allowed;
+	this->loggedBandBudgetMode = this->mascotMode;
+	if (allowed < wanted) {
+		this->logVideo(QStringLiteral("mascots_max_decoders=%1 is below what %2 %3 bands ask for (one player each); %4 bands keep a player (left %5, right %6) and the rest show images")
+			.arg(this->maxDecoders)
+			.arg(wanted)
+			.arg(modeLabel(this->mascotMode))
+			.arg(allowed)
+			.arg(allowedLeft)
+			.arg(allowedRight));
+		return;
+	}
+	this->logVideo(QStringLiteral("mascots_max_decoders=%1 covers %2 %3 bands, one player each (left %4, right %5), hard cut")
+		.arg(this->maxDecoders)
+		.arg(wanted)
+		.arg(modeLabel(this->mascotMode))
+		.arg(allowedLeft)
+		.arg(allowedRight));
 }
 
 void MascotController::restartClipTimer(SideState& state, MascotSide side)
@@ -2869,6 +3230,19 @@ void MascotController::applyVideoPaused()
 		MascotVideoSlot* slot = band ? band->video() : nullptr;
 		if (slot)
 			slot->setPaused(pause);
+		// M3 Task 5: the pause rule reaches every band's players, not only the policy band's. A
+		// band given a player by the decoder budget is playing (or parked) just as the policy band
+		// is, and a paused panel must hold no decoder on any of them. `Static` has one band and
+		// makes exactly the calls it made before.
+		for (int i = 1; i < static_cast<int>(state.bands.size()); ++i) {
+			MascotBand* extra = state.band(i);
+			MascotVideoSlot* extraSlot = extra ? extra->video() : nullptr;
+			if (!extraSlot)
+				continue;
+			extraSlot->setPaused(pause);
+			if (pause)
+				extraSlot->discardPreload();
+		}
 		if (!state.clipTimer) {
 			// A panel that is being paused still has to give up a parked clip: the decoder it holds
 			// is open for a panel nobody can see, which is the cost this rule removes. The resume

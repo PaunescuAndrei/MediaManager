@@ -56,6 +56,19 @@ enum class MascotMode { Static, Scroll, Stripes };
 //     `mascots_mode` and `mascots_fill` are: no tick reads the config.
 enum class ScrollDirection { LeftToRight, RightToLeft, TopToBottom, BottomToTop };
 
+// The axis a `Stripes` panel stacks its bands along (M3 Task 5), from
+// `mascots_stripes_orientation`.
+//   - `Horizontal` is the shipped default: the panel is sliced top to bottom into horizontal
+//     strips, so a band's panning axis is the horizontal one (its content is normalised to the
+//     band's height and the width is what overflows -- `HeightFit`).
+//   - `Vertical` slices the panel left to right into columns, so a band's panning axis is the
+//     vertical one (normalised to the band's width, the height overflows -- `WidthFit`).
+// The stacking axis and the panning axis are perpendicular, which is why the orientation, the
+// fill mode and the scroll axis are three answers derived from this one value rather than three
+// independent settings. Read in applyConfig() and cached there for the reason `mascots_mode` is:
+// no layout path may read the config one Apply late.
+enum class StripesOrientation { Horizontal, Vertical };
+
 // Decides what each mascot panel shows and the wiring that turns the old entry points into
 // calls on it. One controller drives two surfaces, each of which renders a single slot.
 // (M3 Task 2: "renders a single slot" is the M1/M2 shape. A panel now renders one slot per band
@@ -128,6 +141,11 @@ public:
 	// is not one of the three names, and the returned mode is then `Static` -- the panel's
 	// historical shape and the documented default -- so a caller can fall back in one step.
 	static MascotMode modeFromString(const QString& value, bool* ok);
+	// M3 Task 5: `mascots_stripes_orientation` as this class reads it, case-insensitively. `ok`
+	// is false for anything that is not `Horizontal` or `Vertical`, and the returned value is then
+	// `Horizontal` -- the documented default and the axis every Stripes panel stacked along before
+	// the key existed -- so a caller that ignores `ok` still gets a layout that draws.
+	static StripesOrientation stripesOrientationFromString(const QString& value, bool* ok);
 
 	// How many bands `side` has in the current mode: one for `Static` and `Scroll`, the
 	// configured `mascots_stripes_left`/`_right` for `Stripes`. The number both panels' layouts
@@ -136,6 +154,14 @@ public:
 	// `bandCount()` equal slices of that panel's rectangle along the mode's stacking axis,
 	// rounded so they sum to the panel exactly. Empty while `side` has no surface.
 	QVector<QRectF> bandRects(MascotSide side) const;
+	// M3 Task 5: how many of `side`'s bands may own a player right now. One per band in `Scroll`
+	// and `Stripes`, clamped by `mascots_max_decoders` across both panels; one band per panel in
+	// `Static`, where `applyDecoderBudget()` decides whether that band gets two players (crossfade)
+	// or one (the M2 clamp). 0 means the panel shows images, which is the degradation a short
+	// budget promises: a band is never left blank, it shows a picture.
+	// This is the question Task 6's cadence will ask per band; it is the one place a band's
+	// player entitlement is recorded.
+	int videoBandsFor(MascotSide side) const;
 	// Applies the current mode to both panels: resizes each existing surface's slot count,
 	// creates or destroys band objects from the tail, applies the rectangles and leaves every
 	// surviving band's slot state in place (setSlotCount() re-applies it, so what a surviving
@@ -240,6 +266,10 @@ private:
 		// line is a statement about the content, so it is written once per band per mode change
 		// rather than once per tick (the M2 rate-limit pattern); it is sized with `bands` by
 		// syncBands(), and reset by applyMode() on a change of mode.
+		// (M3 Task 5: the same latch covers the band whose travel is positive but shorter than one
+		// tick's step. Such a band takes the still branch too -- it cannot pan at a frame rate --
+		// so it owes the same once-per-layout statement, and the line it writes says which of the
+		// two reasons made it stand still.)
 		QVector<bool> scrollZeroTravelLogged;
 		// The speculative pick: the path requested ahead of the next swap, and the decoded
 		// media it produced once it arrives. Exactly one deep -- a queue is deliberately not
@@ -354,6 +384,10 @@ private:
 	// effectiveFillMode() forces the matching HeightFit for it -- and `Stripes` stacks the same way
 	// until Task 5 reads `mascots_stripes_orientation`. That key is the only thing this answer
 	// ever needs to follow, and nothing else in the driver knows which axis it got.
+	// (M3 Task 5: the key is read and cached now. `Stripes` answers vertical when the orientation
+	// is `Vertical` -- bands are columns, so the pan runs down each column -- and horizontal
+	// otherwise; `Scroll` stays horizontal. The panning axis is perpendicular to the stacking axis,
+	// which is why this is not the same question as stripesStackVertically().)
 	bool scrollPanIsVertical() const;
 	// Whether the configured direction is one of the two that runs the pass backwards. Read by the
 	// tick once per frame rather than once per band, and by the axis check in applyConfig().
@@ -364,15 +398,24 @@ private:
 	bool scrollDirectionIsVertical() const;
 	// A band's share of a pass, in the same travel-length units as the phase (Task 5's
 	// `index / count` stagger). 0 is the single-band case and the only value this task produces.
+	// (M3 Task 5: `index / count` for every band of a `Stripes` panel, and 0 for the one band of
+	// `Static`/`Scroll`. The offsets stay distinct under pingpong even though the reflected path
+	// makes two staggered bands coincide for an instant at the fold; scrollPhaseOffset()'s body
+	// says why that is accepted rather than normalised.)
 	double scrollPhaseOffset(const MascotBand& band) const;
 	// Whether this band pans the other way (Task 5's `mascots_stripes_alternate` reversing odd
 	// bands). False for every band this task produces, and the global direction is applied on top
 	// of it rather than folded into it, so the two can be changed independently.
+	// (M3 Task 5: odd `Stripes` bands when the key is on, false everywhere else. The sign is XORed
+	// with the configured direction in the tick, so two reversals cancel.)
 	bool scrollReversed(const MascotBand& band) const;
 	// Writes 0 to every band that still carries an offset, and records it. The one path that takes
 	// a pan off the slots when the mode stops panning (`Scroll` -> `Static`): the surface's mirror
 	// keeps the last offset and applySlot() would replay it, so a `Static` panel would otherwise
 	// draw the picture the pan left it at.
+	// (M3 Task 5: applyMode() also calls it on every mode change, not only into `Static`, because
+	// the phase is reset there too and a new layout must not start from an offset measured on the
+	// old one. Its phase half is then a second write of the 0 applyMode() has just written.)
 	void resetScrollOffsets();
 	// Writes one MASCOT-SCROLL line, debug-gated exactly like logVideo(): an ordinary run pays
 	// nothing, and the gate (which runs with -debug) reads every line. A separate tag from
@@ -401,6 +444,11 @@ private:
 	// `HeightFit` for the horizontal axis both of them stack along in this task. M3 Task 5 moves
 	// the `Stripes` answer onto `mascots_stripes_orientation` (a vertical stripe stacks along the
 	// other axis, so its normalised mode is `WidthFit`).
+	// (M3 Task 5: the answer now follows the orientation -- `WidthFit` for a vertical `Stripes`
+	// panel, `HeightFit` for a horizontal one -- and `Scroll` stays `HeightFit` because it pans
+	// horizontally by definition (Ruling M3-4). Doing only the axis change without this one pins
+	// the pan axis: every vertical band would keep `HeightFit`, its content would fit the band's
+	// height exactly, and the travel would be 0 on every band.)
 	MascotSurface::FillMode effectiveFillMode() const;
 	// Writes the mirror, the media and the centred-content override the config asks for into
 	// one slot. Shared by a fresh media and by a config change, so a mode change repaints
@@ -516,11 +564,34 @@ private:
 	// Builds or drops the player half of each panel from the media setting and the decoder budget.
 	// Returns true when a panel that was showing a video lost its players: that panel is drawing
 	// nothing and nothing else will fill it, so applyConfig() owes it one pick.
+	// (M3 Task 5: every band of the panel is considered, not only its policy band. A band's player
+	// is created when bandMayOwnPlayer() says the budget carries it and destroyed when it does not;
+	// a band that loses a player while showing video is downgraded to an image rather than left on
+	// a frozen frame.)
 	bool ensureVideoSlots();
-	void createVideoSlot(SideState& state, MascotSide side);
+	void createVideoSlot(SideState& state, MascotSide side, int bandIndex);
+	void destroyVideoSlot(SideState& state, int bandIndex);
 	void destroyVideoSlot(SideState& state);
 	// Applies `mascots_max_decoders` and writes the clamp line once per change of budget.
 	void applyDecoderBudget();
+	// M3 Task 5: spends the decoder budget across the bands of a panning mode and records the
+	// answer videoBandsFor() reports. `Static` is left exactly as M2 had it -- one band per panel,
+	// whose one or two players applyDecoderBudget() decides -- so a default config writes nothing
+	// and a `Static` run's log stays what merged master's was. The shortfall line is written once
+	// per change of budget, band count or allocation (the M2 clamp-line pattern).
+	void applyBandBudget();
+	// Whether `bandIndex` of `side` may own a player under the current mode and budget: the guard
+	// ensureVideoSlots() creates from and the answer Task 6's pick path will ask before it lets a
+	// band become a video. `Static` is band 0 only.
+	bool bandMayOwnPlayer(MascotSide side, int bandIndex) const;
+	// Whether a mode fades between two players at all. Only `Static` does (§7.5): `Scroll` and
+	// `Stripes` give a band one player, so a swap reloads the output on screen and there is nothing
+	// to blend -- they take the hard cut and never consult `mascots_crossfade_ms`.
+	bool videoCrossfades() const;
+	// Whether `Stripes` stacks its bands top to bottom (horizontal strips). True for every mode
+	// that has one band per panel, where the answer only selects which equivalent slice of the
+	// panel `slicedBandRects()` returns. This is the stacking axis; the pan axis is the other one.
+	bool stripesStackVertically() const;
 	void restartClipTimer(SideState& state, MascotSide side);
 	void onClipTimer(MascotSide side);
 	void stopClipTimers();
@@ -561,6 +632,10 @@ private:
 	// The same latch for `mascots_fill` (M3 Task 3): an unreadable value is reported once, and the
 	// fallback is `HeightFit` -- the mode M1 shipped, not the spec table's original `Crop`.
 	bool warnedUnsupportedFill = false;
+	// The same latch for `mascots_stripes_orientation` (M3 Task 5): an unreadable value is reported
+	// once, and the fallback is `Horizontal` -- the axis every Stripes panel stacked along before
+	// the key existed -- so a typo cannot turn the bands on their side.
+	bool warnedUnsupportedStripesOrientation = false;
 	QMetaObject::Connection swapConnection;
 	QMetaObject::Connection flipConnection;
 
@@ -579,12 +654,45 @@ private:
 	// reads them; `Static` and `Scroll` are one band regardless of what they say.
 	// (M3 Task 5 owns `mascots_stripes_orientation` and `_alternate`; this task assumes the
 	// default stacking axis and no phase stagger, which is what the counts alone describe.)
+	// (M3 Task 5: both keys are read now, below. The sentence above stays as the record of what
+	// Task 2 asserted; the counts remain the only per-panel difference, and the orientation and
+	// the alternate flag apply to both panels alike.)
 	int stripesLeftBands = 2;
 	int stripesRightBands = 2;
+	// ---- M3 Task 5: the stripes configuration, written by applyConfig() ----
+	// `mascots_stripes_orientation`, cached: bandRects(), scrollPanIsVertical() and
+	// effectiveFillMode() answer from this one value, so the three cannot disagree about the axis.
+	// `Horizontal` is the documented default and the axis every Stripe panel had before the key
+	// existed, so it is also the fallback for a value this class cannot read.
+	StripesOrientation stripesOrientation = StripesOrientation::Horizontal;
+	// `mascots_stripes_alternate`: odd bands pan the other way (the woven look). `True` is the
+	// documented default; it is a per-band sign on top of `mascots_scroll_direction`, not a second
+	// direction setting.
+	bool stripesAlternate = true;
 	// The mode applyMode() last applied, and whether it has applied one at all. applyMode() is
 	// idempotent: an Apply that changed neither the mode nor a panel's band count does nothing.
 	MascotMode appliedMode = MascotMode::Static;
+	// The orientation the last layout was derived with (M3 Task 5). An orientation change alters
+	// the stacking axis without changing the band count, so applyMode() has to compare this too or
+	// a `Horizontal` -> `Vertical` switch would leave the old rectangles in place.
+	StripesOrientation appliedStripesOrientation = StripesOrientation::Horizontal;
 	bool modeApplied = false;
+	// ---- M3 Task 5: the per-band decoder allocation, written by applyBandBudget() ----
+	// How many bands of each panel may own a player in a panning mode. 0 means the panel shows
+	// images; the bands at indices below the count are the ones that keep (or get) a player, so the
+	// allocation is a prefix of each panel's band list rather than an arbitrary set. `Static` does
+	// not use these -- its one band's players are applyDecoderBudget()'s business.
+	int leftBandPlayers = 0;
+	int rightBandPlayers = 0;
+	// The budget, the mode, the bands that asked and the bands that kept a player when the clamp
+	// line was last written, so the line appears once per change of any of them (the M2 clamp-line
+	// pattern) rather than once per Apply or once per band. The mode is part of the key because it
+	// is part of the sentence: a `Scroll` panel's one band and a `Stripes` panel's one band are the
+	// same count but not the same statement.
+	int loggedBandBudgetDecoders = -1;
+	int loggedBandBudgetWanted = -1;
+	int loggedBandBudgetAllowed = -1;
+	MascotMode loggedBandBudgetMode = MascotMode::Static;
 
 	// ---- M3 Task 4: the scroll configuration and the driver, all written by applyConfig() ----
 	// `mascots_scroll_speed`, in px/s, clamped to [0, MAX_SCROLL_SPEED] where it is read. A

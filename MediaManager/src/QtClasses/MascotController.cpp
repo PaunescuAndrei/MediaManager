@@ -41,14 +41,18 @@ namespace {
 	// into nothing would be reported as a failure of the file. The pick is retried this many
 	// times, this far apart, before the panel falls back to images: a delegate is normally there
 	// by the time the surface has applied its slot count, so this is the belt to that braces.
-	constexpr int VIDEO_SINK_RETRY_LIMIT = 5;
-	constexpr int VIDEO_SINK_RETRY_MS = 150;
+	// (Task 6: the two numbers this comment introduced are `mascots_retry_attempts` and
+	// `mascots_retry_interval_ms` now, read and clamped in applyConfig() and pushed with
+	// MascotVideoSlot::setTimings(). The prose above is why those are the defaults -- the constants
+	// it described are gone because the values are the user's to set (§7.11).)
 
 	// §7.13's preview rule is a deferral, not a skip: a tooltip plays for as long as the user keeps
-	// hovering, so the pick is re-asked at this interval until it stops. One `isPlaying()` on a
-	// QPointer is the whole cost of a tick, and the panel keeps the clip it is already showing --
-	// the rule gates a *start*, never playback.
-	constexpr int PREVIEW_DEFER_MS = 250;
+	// hovering, so the pick is re-asked at this interval until it stops. One `isPlaying()`
+	// on a QPointer is the whole cost of a tick, and the panel keeps the clip it is already showing
+	// -- the rule gates a *start*, never playback.
+	// (Task 6: "this interval" is `mascots_busy_defer_ms` now, and the constant this comment used to
+	// name is gone with it. The rate limit below is unchanged and still exists for the reason it
+	// gives -- a per-deferral log line would fight the swap lines the gate reads.)
 
 	// The rate limit on the two lines that can be produced by every swap (which branch picked and
 	// "the pool is empty"): the statement is about the configuration, and repeating it at swap
@@ -206,6 +210,30 @@ void MascotController::applyConfig()
 	this->maxDecoders = std::max(0, config->get(QStringLiteral("mascots_max_decoders")).toInt());
 	this->pauseUnfocused = config->get_bool(QStringLiteral("mascots_pause_unfocused"));
 	this->weightedRandom = config->get_bool(QStringLiteral("mascots_weighted_random"));
+	// Task 6: the preload is a setting, not a decision made for the user. On a machine where a
+	// parked extra frame costs more than it saves, the pre-Task-6 behaviour (choose and load at the
+	// swap) is the better trade, and it is the same path a panel falls back to whenever a preload
+	// cannot be made -- so turning the key off cannot be a different code path, only a different
+	// starting point.
+	this->preloadEnabled = config->get_bool(QStringLiteral("mascots_preload"));
+	// The waits that gate a user-visible wait (§7.11), clamped here so a config file cannot produce
+	// a deadline that abandons clips that are merely opening. Each floor and ceiling is the range
+	// within which the value still means what the key says:
+	//  - the swap deadline [500, 60000]: 500 ms is already outside every measured warm load (49-300
+	//    ms in the M2 gate), so a shorter one would drop good clips, and above a minute it is not a
+	//    deadline any more -- `isBusy()` would hold a dead file's panel for that long. It has no
+	//    "off" value on purpose: this timer is the only thing that releases a load that neither
+	//    paints nor errors.
+	//  - the retry interval [20, 2000]: under a frame at any refresh rate there is nothing new to
+	//    find, and over two seconds the retry is slower than the delegate it waits for.
+	//  - the retry budget [0, 50]: 0 is a supported "do not retry, give up at once"; 50 is above any
+	//    count a human would configure and bounds the churn a missing delegate can cause.
+	//  - the preview deferral [50, 5000]: a shorter interval re-asks a player that cannot have
+	//    started, a longer one leaves the panel waiting on a tooltip that may already be over.
+	this->swapTimeoutMs = std::clamp(config->get(QStringLiteral("mascots_swap_timeout_ms")).toInt(), 500, 60000);
+	this->retryIntervalMs = std::clamp(config->get(QStringLiteral("mascots_retry_interval_ms")).toInt(), 20, 2000);
+	this->retryAttempts = std::clamp(config->get(QStringLiteral("mascots_retry_attempts")).toInt(), 0, 50);
+	this->busyDeferMs = std::clamp(config->get(QStringLiteral("mascots_busy_defer_ms")).toInt(), 50, 5000);
 
 	// A value that is none of the three is reported once per process rather than ignored: it is a
 	// statement about the configuration, not an event, so repeating it on every Apply would only
@@ -259,6 +287,13 @@ void MascotController::applyConfig()
 		// one key disagree.
 		if (state->video)
 			state->video->setRandomStart(this->randomStart, this->clipSeconds);
+		// The same "one key, one reader" rule for the waits: a slot created earlier has to hear the
+		// new deadline and the new retry budget, or the two consumers of `mascots_swap_timeout_ms`
+		// (this class's retry timers and the slot's own deadline) would disagree until the panel was
+		// rebuilt. Pushed here rather than only in createVideoSlot() for exactly the reason
+		// setRandomStart() is.
+		if (state->video)
+			state->video->setTimings(this->swapTimeoutMs, this->retryIntervalMs, this->retryAttempts);
 	}
 	// A mode change repaints what is already on screen; the surface default alone would only
 	// affect a slot created later.
@@ -1051,7 +1086,11 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 	// One load in flight per panel, the video analogue of the image path's request-in-flight test:
 	// a beat or a second timer tick must not supersede a clip that is still opening, and it must
 	// not fall through to an image either -- the panel is showing video and is merely busy.
-	if (slot->isBusy())
+	// A preload in flight is not that case: it is the *next* clip being made ready, so a swap that
+	// arrives while it is still opening may simply take over (swapTo() supersedes it) instead of
+	// making the panel wait -- and waiting would stall the cadence, because the single-shot clip
+	// timer only re-arms on a commit.
+	if (slot->isBusy() && !slot->preloading())
 		return VideoPick::Skip;
 	// §7.13's preview rule, and the only place a new clip is *chosen*: while the tooltip is
 	// playing, the pick waits. Nothing already on screen is disturbed -- the panel keeps its clip,
@@ -1064,6 +1103,7 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 	// re-ask is this same pick path at PREVIEW_DEFER_MS for as long as the tooltip plays, so no
 	// path is drawn from the pool until the first retry that finds it silent -- one draw for the
 	// swap the deferral belongs to.
+	// (Task 6: PREVIEW_DEFER_MS is `mascots_busy_defer_ms` now; the interval below is that value.)
 	// Checked before the sink test so a deferral costs none of the sink-retry budget.
 	if (this->previewTooltipBusy()) {
 		const qint64 now = QDateTime::currentMSecsSinceEpoch();
@@ -1076,7 +1116,7 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 		// load, so under the mirror key the other panel's copy has to be armed from that load's
 		// first frame rather than left waiting for a commit it will not see on its own.
 		state.videoPickRetryPending = true;
-		QTimer::singleShot(PREVIEW_DEFER_MS, this, [this, side]() {
+		QTimer::singleShot(this->busyDeferMs, this, [this, side]() {
 			if (!this->running)
 				return;
 			SideState& panel = this->stateFor(side);
@@ -1092,9 +1132,12 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 	// started without one would fail against a live panel that is only a moment behind, so the
 	// pick is retried rather than reported: the surface has just been told its slot count, and the
 	// delegate it creates in answer to that is what owns the sink.
+	// Task 6: the budget and the interval are `mascots_retry_attempts` / `mascots_retry_interval_ms`
+	// (§7.11): a delegate is normally there by the time the surface has applied its slot count, so
+	// this is the belt to that braces.
 	MascotSurface* surface = state.surface.data();
 	if (!surface || !surface->slotSink(0, 0)) {
-		if (state.videoSinkRetries++ < VIDEO_SINK_RETRY_LIMIT) {
+		if (state.videoSinkRetries++ < this->retryAttempts) {
 			if (!this->warnedVideoSink) {
 				this->warnedVideoSink = true;
 				this->logVideo(QStringLiteral("no video sink for the panel yet; retrying the pick"));
@@ -1103,7 +1146,7 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 			// mirror pair follows, so the right panel's copy has to be armed from its firstFrame
 			// rather than left waiting for a commit that the right panel never sees.
 			state.videoPickRetryPending = true;
-			QTimer::singleShot(VIDEO_SINK_RETRY_MS, this, [this, side]() {
+			QTimer::singleShot(this->retryIntervalMs, this, [this, side]() {
 				if (!this->running)
 					return;
 				SideState& panel = this->stateFor(side);
@@ -1121,12 +1164,33 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 		if (!this->warnedVideoSinkGiveUp) {
 			this->warnedVideoSinkGiveUp = true;
 			this->logVideo(QStringLiteral("no video sink for the panel after %1 retries; showing images instead")
-				.arg(VIDEO_SINK_RETRY_LIMIT));
+				.arg(this->retryAttempts));
 		}
 		return VideoPick::Fallback;
 	}
 	state.videoSinkRetries = 0;
 	state.videoPickRetryPending = false;
+	// The clip this swap will show may already be chosen and opened: a preload decides the next
+	// path when the previous clip commits, so consuming it here is what makes the swap an opacity
+	// change. Drawing again would skip the parked file and shift the seeded sequence by one draw per
+	// swap, which is why the parked path wins over a fresh one and why nothing is re-validated
+	// against the pool: the pool was read when the preload was made, by this same code path.
+	const QString parkedPath = slot->preloadedPath();
+	if (!parkedPath.isEmpty()) {
+		const qint64 parkedOffsetMs = slot->preloadedOffsetMs();
+		// A video pick owns the panel exactly as it does below, for the same reasons.
+		if (!state.candidate.path.isEmpty()) {
+			const QString dropped = state.candidate.path;
+			state.candidate = MascotMedia();
+			this->syncPin(dropped);
+		}
+		state.prefetchPath.clear();
+		this->preparePick(state, updateHighlight);
+		// The offset is passed rather than left as -1: it is the number that was actually seeked to,
+		// and passing it is what lets the log print it and a mirrored pair agree on it.
+		this->startVideoLoad(state, side, parkedPath, parkedOffsetMs);
+		return VideoPick::Started;
+	}
 	// The source reads no config, so the seed and the weighted switch are pushed before the pick
 	// rather than only when the settings are applied (a change made mid-run would otherwise land
 	// one video pick late).
@@ -1163,14 +1227,14 @@ void MascotController::startVideoLoad(SideState& state, MascotSide side, const Q
 	// different one. Nothing is recorded in the meantime, so the panel is not left "waiting" for a
 	// frame no player will ever paint.
 	if (!surface->slotSink(0, 0)) {
-		if (state.videoLoadRetries++ < VIDEO_SINK_RETRY_LIMIT) {
+		if (state.videoLoadRetries++ < this->retryAttempts) {
 			this->logVideo(QStringLiteral("%1 has no video sink yet; retrying the same load")
 				.arg(sideLabel(side)));
 			// The same flag a retried pick sets, because from outside this is the same situation:
 			// this panel is about to start a load, so a mirrored pair has to arm the other panel's
 			// copy from that load's first frame.
 			state.videoPickRetryPending = true;
-			QTimer::singleShot(VIDEO_SINK_RETRY_MS, this, [this, side, path, offsetMs]() {
+			QTimer::singleShot(this->retryIntervalMs, this, [this, side, path, offsetMs]() {
 				if (!this->running)
 					return;
 				SideState& panel = this->stateFor(side);
@@ -1181,13 +1245,16 @@ void MascotController::startVideoLoad(SideState& state, MascotSide side, const Q
 		}
 		state.videoLoadRetries = 0;
 		state.videoPickRetryPending = false;
+		// A parked clip this panel cannot start is not going to become startable: it is dropped so
+		// the next swap draws a fresh one instead of retrying a clip whose output has no sink.
+		slot->discardPreload();
 		// Latched like the pick branch above: one copy per left commit would otherwise repeat this
 		// once per clip for as long as the right panel's delegate is missing.
 		if (!this->warnedVideoSinkGiveUp) {
 			this->warnedVideoSinkGiveUp = true;
 			this->logVideo(QStringLiteral("%1 could not start its load (%2 retries, no sink); the next swap re-pairs the panels")
 				.arg(sideLabel(side))
-				.arg(VIDEO_SINK_RETRY_LIMIT));
+				.arg(this->retryAttempts));
 		}
 		return;
 	}
@@ -1205,17 +1272,40 @@ void MascotController::startVideoLoad(SideState& state, MascotSide side, const Q
 		surface->setSlotVideoVisible(0, true);
 		state.videoOutputVisible = true;
 	}
+	// Was this clip already chosen, opened and parked? If so the swap is the slot's play() plus the
+	// fade below -- no load, and the offset that was actually seeked to is the slot's, not a value
+	// this call would have had to invent. A preload that is not for exactly this file is a miss (a
+	// superseding pick, a mirror copy whose parked clip was dropped) and falls through to swapTo(),
+	// which is the path that existed before preload did.
+	const bool fromPreload = slot->preloadedPath() == path && slot->hasPreload();
+	const qint64 effectiveOffsetMs = fromPreload ? slot->preloadedOffsetMs() : offsetMs;
 	state.requestedPath = path;
 	state.requestedIsVideo = true;
-	state.wantedOffsetMs = offsetMs;
+	state.wantedOffsetMs = effectiveOffsetMs;
 	state.requestedAtMs = QDateTime::currentMSecsSinceEpoch();
 	++state.videoSeq;
-	this->logVideo(QStringLiteral("%1 swap #%2 pool=%3 offset=%4 path=\"%5\"")
+	// A left-panel video load is what the pair follows, so the right panel's copy is armed here
+	// rather than only in nextImages(): a swap served from a preload completes *inside*
+	// pickVideo(), which is before nextImages() could have armed anything, and the pair would then
+	// never be copied. Arming it at the start of every left video load covers both timings with one
+	// rule -- from this moment the right panel owes a copy of this panel's next commit.
+	if (side == MascotSide::Left && this->mirrorEnabled())
+		this->rightState.mirrorCopyPending = true;
+	// The `preloaded=` field is how the log tells the two apart: a swap served from a parked clip
+	// prints the offset it was parked at and can be paired with the "preloaded" line that preceded
+	// it, while `preloaded=no` is a swap that paid for its own load.
+	this->logVideo(QStringLiteral("%1 swap #%2 pool=%3 offset=%4 path=\"%5\" preloaded=%6")
 		.arg(sideLabel(side))
 		.arg(state.videoSeq)
 		.arg(this->source.videoPoolSize())
-		.arg(offsetMs < 0 ? QStringLiteral("random") : QString::number(offsetMs))
-		.arg(path));
+		.arg(effectiveOffsetMs < 0 ? QStringLiteral("random") : QString::number(effectiveOffsetMs))
+		.arg(path)
+		.arg(fromPreload ? QStringLiteral("yes") : QStringLiteral("no")));
+	if (fromPreload && slot->swapToPreloaded())
+		return;
+	// Nothing parked, or the parked clip could not be activated: the load this path has always done.
+	// Silent about the miss -- a preload is an optimisation, and swapTo() is the behaviour the panel
+	// had before it, so a miss is not a failure of anything.
 	slot->swapTo(path, offsetMs);
 }
 
@@ -1279,6 +1369,10 @@ void MascotController::fadeInVideo(SideState& state, MascotSide side, int ab)
 	if (fade <= 0) {
 		// No fade to wait for, so the outgoing player's decoder is worth nothing: retired now.
 		state.video->retireInactive();
+		// And only now, with the outgoing player retired, is the idle output the one the *next*
+		// swap will use -- so this is the earliest moment a preload can be parked on the right
+		// player. Parked before the retire it would be thrown away by it.
+		this->preloadNext(side);
 		return;
 	}
 	// The retirement ends the crossfade: until then the outgoing player is what is still partly
@@ -1287,7 +1381,104 @@ void MascotController::fadeInVideo(SideState& state, MascotSide side, int ab)
 	QTimer::singleShot(fade, this, [this, side]() {
 		if (MascotVideoSlot* slot = this->stateFor(side).video.data())
 			slot->retireInactive();
+		// The same ordering rule as the hard cut above: the preload follows the retirement, because
+		// until it has happened the output a preload would pick is the outgoing clip's.
+		this->preloadNext(side);
 	});
+}
+
+void MascotController::preloadNext(MascotSide side)
+{
+	// Queued for the same reason armSpeculation() is: the pick reads the pool and the preload posts
+	// a load, and neither may sit inside the commit or the fade callback that asked for them. Queued
+	// to `this`, so a controller that was stopped or destroyed in between simply never runs it.
+	QMetaObject::invokeMethod(this, [this, side] { this->startPreload(side); }, Qt::QueuedConnection);
+}
+
+void MascotController::startPreload(MascotSide side)
+{
+	if (!this->running || !this->preloadEnabled || !this->mediaMayBeVideo())
+		return;
+	SideState& state = this->stateFor(side);
+	MascotSurface* surface = state.surface.data();
+	MascotVideoSlot* slot = state.video.data();
+	if (!surface || !slot)
+		return;
+	// Never while the panel is paused-hidden: a preload opens a decoder and paints a frame for a
+	// panel nobody can see, which is exactly the cost the pause rule (§7.13) exists to remove. The
+	// resume path arms a fresh preload, so nothing is lost by waiting.
+	if (this->videoPaused || !surface->isVisible())
+		return;
+	// Only a panel that is showing video has a next clip to prepare. An image panel's next media is
+	// already speculative through armSpeculation(), which is the same trick for the other media.
+	if (state.shown.type != MascotMedia::Video || state.shown.path.isEmpty())
+		return;
+	// A swap in flight owns the panel; a parked clip means one is already armed, and a preload in
+	// flight is one being made. The first of those must never be disturbed, and the other two would
+	// only repeat work.
+	if (slot->isBusy() || slot->hasPreload())
+		return;
+	// Under the mirror key the pair shows one file at one offset, so the pick is made once, by the
+	// left panel: the right panel's preload is started from the left's preloaded() report, which is
+	// where the offset it has to match exists. A right panel that drew its own file here would
+	// desync the pair -- the rule startMirrorVideo() enforces for swaps, applied one step earlier.
+	if (side == MascotSide::Right && this->mirrorEnabled())
+		return;
+	// A missing sink is the delegate being a turn behind. The swap path has its own retry budget for
+	// exactly that, so a preload does not compete for it: it simply waits for the next commit.
+	if (!surface->slotSink(0, 0))
+		return;
+	// Which branch serves this pick is the same question the swap asks, and the pool it asks about
+	// is the pool this preload will draw from: a panel whose type is not video has nothing to park.
+	if (this->pickType(state) != MascotMedia::Video)
+		return;
+	// The seed and the weighted switch are pushed here for the same reason pickVideo() pushes them:
+	// the source reads no config, and the clip chosen at preload time is chosen with whatever the
+	// settings say *now* rather than at the next apply.
+	this->applySeedSource();
+	this->source.setWeightedChoice(this->weightedRandom);
+	const QString path = this->source.nextVideoPath();
+	if (path.isEmpty())
+		return;
+	slot->setSinks(surface->slotSink(0, 0), surface->slotSink(0, 1));
+	// -1 asks the slot for the same start offset swapTo() would have chosen, so a preloaded clip
+	// and a loaded one are indistinguishable in where they begin.
+	slot->preload(path, -1);
+}
+
+void MascotController::onVideoPreloaded(MascotSide side, const QString& path, qint64 offsetMs,
+	const QSize& frameSize)
+{
+	if (!this->running || path.isEmpty())
+		return;
+	SideState& state = this->stateFor(side);
+	if (!state.surface || !state.video)
+		return;
+	// The gate's evidence that a swap was served from a preload is this line followed by a
+	// `swap #n ... preloaded=yes` for the same path and offset.
+	this->logVideo(QStringLiteral("%1 preloaded path=\"%2\" offset=%3ms %4x%5")
+		.arg(sideLabel(side))
+		.arg(path)
+		.arg(offsetMs)
+		.arg(frameSize.width())
+		.arg(frameSize.height()));
+	// The pair shows one file at one offset, and the offset exists only now that the left panel has
+	// reported it -- so the right panel's copy of the pair is parked here rather than chosen by its
+	// own preload. Both panels are then parked on the same frame, and the swap is two flips in the
+	// same turn instead of one panel waiting for the other's first frame.
+	if (side != MascotSide::Left || !this->mirrorEnabled())
+		return;
+	SideState& right = this->rightState;
+	if (!right.surface || !right.video)
+		return;
+	// The right panel is a turn behind (its own swap still opening) or already has a clip parked:
+	// either way there is nothing to add here, and the next commit asks again.
+	if (right.video->isBusy() || right.video->hasPreload())
+		return;
+	if (!right.surface->slotSink(0, 0))
+		return;
+	right.video->setSinks(right.surface->slotSink(0, 0), right.surface->slotSink(0, 1));
+	right.video->preload(path, offsetMs);
 }
 
 void MascotController::startMirrorVideo(const QString& path, qint64 offsetMs)
@@ -1302,7 +1493,8 @@ void MascotController::startMirrorVideo(const QString& path, qint64 offsetMs)
 	this->startVideoLoad(right, MascotSide::Right, path, offsetMs);
 }
 
-void MascotController::onVideoFailed(MascotSide side, const QString& path, bool timedOut)
+void MascotController::onVideoFailed(MascotSide side, const QString& path,
+	MascotVideoSlot::FailKind kind, bool timedOut)
 {
 	if (!this->running)
 		return;
@@ -1314,8 +1506,25 @@ void MascotController::onVideoFailed(MascotSide side, const QString& path, bool 
 	// died on screen -- and the drop is applied by the only thing that draws (the source). Without
 	// it the same unusable file comes back roughly every 1/pool swaps and costs a failure line or
 	// five seconds of frozen last frame each time, which is the cost this rule exists to remove.
+	// (Task 6: "five seconds" is the shipped default of `mascots_swap_timeout_ms`, i.e. whatever the
+	// user set it to; the cost this rule removes is the same either way.)
+	//
+	// Only a *decode* failure may make that statement, because it is a statement about the file:
+	// the backend refused the media and will refuse it again. The other two ways a load can end say
+	// nothing about the file and must not cost it its place in the pool for the rest of the
+	// session:
+	//   - a timeout is a deadline, and a perfectly good file on a slow machine reaches it (the
+	//     configured `mascots_swap_timeout_ms` is the user's judgement of their own machine, not a
+	//     verdict on the media). Dropping it there would turn one slow open into a file the user
+	//     never sees again until they restart.
+	//   - a wiring report (no sink yet, the slot already shut down) is a fact about the player or
+	//     the panel: nothing was ever attempted, so the file has not been tried, let alone failed.
+	// Preload makes both of those ordinary rather than exotic: it opens a file before anything asks
+	// for it, so it can meet a delegate that is a turn behind and it can reach the deadline, and
+	// neither may take a file out of the rotation.
 	// An empty path is a wiring report rather than a file, and the source ignores it.
-	this->source.noteVideoFailure(path);
+	if (!timedOut && kind == MascotVideoSlot::FailKind::Decode)
+		this->source.noteVideoFailure(path);
 	// The panel keeps whatever it is drawing. A load that failed says nothing about the clip that
 	// is on screen, and a clip that died on screen has already stopped and released itself (Task
 	// 2 releases before emitting), so the frame it painted last is still in the slot: blanking
@@ -1329,26 +1538,36 @@ void MascotController::onVideoFailed(MascotSide side, const QString& path, bool 
 	}
 	// The other panel may be waiting for this panel's offset to start its copy of the pair. It
 	// will never arrive now, and the next committed media re-pairs them.
-	if (side == MascotSide::Left && wasLoading) {
+	// Cleared whether or not this failure was the left panel's own swap: a left panel that just
+	// failed anything is not going to commit a pair the right panel could copy, and leaving the
+	// flag set would park a copy that waits for a report which is not coming.
+	if (side == MascotSide::Left) {
 		this->rightState.mirrorCopyPending = false;
-		this->logVideo(QStringLiteral("the mirrored pair is unpaired for now; the next swap re-pairs it"));
+		if (wasLoading)
+			this->logVideo(QStringLiteral("the mirrored pair is unpaired for now; the next swap re-pairs it"));
 	}
 	// One line per unusable file, so a broken clip cannot print once per swap. A timeout is
 	// reported separately because it means the file opened and never painted, which is a
 	// different fault from "the backend refused it".
-	const QString key = path + (timedOut ? QStringLiteral("|t") : QStringLiteral("|f"));
+	// Task 6: the kind is printed as well, because it is what decides whether the path was dropped
+	// for the session (see the rule above) -- a reader of the log has to be able to tell a wiring
+	// report from a decode failure without inferring it.
+	const QString kindLabel = timedOut ? QStringLiteral("timeout")
+		: (kind == MascotVideoSlot::FailKind::Decode ? QStringLiteral("decode") : QStringLiteral("wiring"));
+	const QString key = path + QStringLiteral("|") + kindLabel;
 	const qint64 now = QDateTime::currentMSecsSinceEpoch();
 	const bool repeat = state.lastFailedVideoPath == key
 		&& (now - state.lastFailedVideoLogMs) < VIDEO_LOG_INTERVAL_MS;
 	if (!repeat) {
 		state.lastFailedVideoPath = key;
 		state.lastFailedVideoLogMs = now;
-		this->logVideo(QStringLiteral("%1 %2 #%3 onScreen=%4 path=\"%5\"")
+		this->logVideo(QStringLiteral("%1 %2 #%3 onScreen=%4 path=\"%5\" kind=%6")
 			.arg(sideLabel(side))
 			.arg(timedOut ? QStringLiteral("timed out") : QStringLiteral("failed"))
 			.arg(state.videoSeq)
 			.arg(state.shown.path.isEmpty() ? QStringLiteral("no") : QStringLiteral("yes"))
-			.arg(path));
+			.arg(path)
+			.arg(kindLabel));
 	}
 	// Keep drawing what the panel has, and arm a replacement. A panel that is drawing something is
 	// advanced by its clip timer or by the beat, so nothing more is needed; a panel that is drawing
@@ -1426,14 +1645,30 @@ void MascotController::createVideoSlot(SideState& state, MascotSide side)
 	// configuration instead of from the class defaults.
 	slot->setSinglePlayer(this->videoMode != VideoMode::Crossfade);
 	slot->setRandomStart(this->randomStart, this->clipSeconds);
+	// The waits come from config, not from the slot's defaults: a slot created after an Apply has to
+	// start from the configured values, or a panel enabled later would use a deadline the user had
+	// already changed.
+	slot->setTimings(this->swapTimeoutMs, this->retryIntervalMs, this->retryAttempts);
 	connect(slot, &MascotVideoSlot::firstFrame, this,
 		[this, side](const QString& path, int ab, const QSize& frameSize, qint64 offsetMs) {
 			this->onVideoFirstFrame(side, path, ab, frameSize, offsetMs);
 		});
 	connect(slot, &MascotVideoSlot::failed, this,
-		[this, side](const QString& path) { this->onVideoFailed(side, path, false); });
+		[this, side](const QString& path, MascotVideoSlot::FailKind kind) {
+			this->onVideoFailed(side, path, kind, false);
+		});
 	connect(slot, &MascotVideoSlot::timedOut, this,
-		[this, side](const QString& path) { this->onVideoFailed(side, path, true); });
+		[this, side](const QString& path) {
+			// A deadline passed. `kind` is only read when the log words the line, and the ruled
+			// rule never drops a file for a timeout, so the shipped value is the honest one.
+			this->onVideoFailed(side, path, MascotVideoSlot::FailKind::Decode, true);
+		});
+	// A parked clip is not a commit: nothing of it is on screen, so the only thing the controller
+	// does with the report is start the mirror pair's copy of the same file at the same offset.
+	connect(slot, &MascotVideoSlot::preloaded, this,
+		[this, side](const QString& path, qint64 offsetMs, const QSize& frameSize) {
+			this->onVideoPreloaded(side, path, offsetMs, frameSize);
+		});
 	state.video = slot;
 	// A panel built while the window cannot be seen starts paused, exactly like one that was
 	// already running when the window went away.
@@ -1591,16 +1826,32 @@ void MascotController::applyVideoPaused()
 		SideState& state = this->stateFor(side);
 		if (state.video)
 			state.video->setPaused(pause);
-		if (!state.clipTimer)
+		if (!state.clipTimer) {
+			// A panel that is being paused still has to give up a parked clip: the decoder it holds
+			// is open for a panel nobody can see, which is the cost this rule removes. The resume
+			// branch below arms a fresh one, so nothing is lost but the lead time.
+			if (pause && state.video)
+				state.video->discardPreload();
 			continue;
+		}
 		if (pause) {
 			// Nothing may advance while nothing can be seen: a timer that fired here would start a
 			// load whose first frame is what the gate reads as "a swap happened".
 			state.clipTimer->stop();
+			// And the parked clip goes with the cadence: it is the next swap made ready, and a paused
+			// panel has no next swap to make it ready for. Kept, it would hold a decoder open on a
+			// panel nobody can see -- exactly what the pause rule exists to stop.
+			if (state.video)
+				state.video->discardPreload();
 		}
 		else if (state.shown.type == MascotMedia::Video && !state.shown.path.isEmpty()) {
 			// The clip on screen is resumed by the player itself; its cadence starts again from here.
 			this->restartClipTimer(state, side);
+			// And the next clip is armed here rather than left to the next commit: the preload that
+			// would have been parked was refused while the panel was hidden (a parked decoder is
+			// exactly the cost the pause rule removes), so this is where the panel catches up -- one
+			// clip of lead time before the timer that was just restarted asks for it.
+			this->preloadNext(side);
 		}
 	}
 	// Debug-gated like every line below it, and silent for an images-only setting: a pause that no

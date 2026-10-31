@@ -29,6 +29,20 @@ class MascotVideoSlot : public QObject
 {
 	Q_OBJECT
 public:
+	// Why a load ended without a clip, where that changes what the owner may conclude about the
+	// *file*. A decode failure is a fact about the media -- the backend refused it and will refuse
+	// it again -- so the owner is right to drop that path for the session (§7.8). A wiring failure
+	// is a fact about the player or the panel: there was no sink to draw into yet, or the slot had
+	// already been shut down. The file a wiring failure names has not been shown to be unplayable,
+	// so dropping it would take a good file out of the rotation for the rest of the session.
+	// A timeout is neither and keeps its own signal (timedOut() below): the deadline is a deadline,
+	// and a transiently slow good file reaches it.
+	enum class FailKind {
+		Decode,
+		Wiring
+	};
+	Q_ENUM(FailKind)
+
 	explicit MascotVideoSlot(QObject* parent = nullptr);
 	~MascotVideoSlot() override;
 
@@ -50,6 +64,19 @@ public:
 	// every clip starts at 0.
 	void setRandomStart(bool random, int clipSeconds);
 
+	// The waits that gate a user-visible wait, in one setter because they are one policy: the open
+	// + first-frame deadline, the interval a retried pick/load is re-asked at, and how many times
+	// it is re-asked before the panel gives up on it. They are config values, not constants,
+	// because "how long before we call this clip dead" is a machine-speed judgement the user is
+	// better placed to make than the build is. Already stored values are replaced, so a live
+	// change reaches a slot that already exists -- the same trap `setRandomStart` exists for.
+	// Each value is clamped at its point of use (see the setters' clamps below), and 0 attempts
+	// means "do not retry at all" rather than "retry forever".
+	void setTimings(int swapTimeoutMs, int retryIntervalMs, int retryAttempts);
+	int swapTimeoutMs() const { return this->m_swapTimeoutMs; }
+	int retryIntervalMs() const { return this->m_retryIntervalMs; }
+	int retryAttempts() const { return this->m_retryAttempts; }
+
 	// Loads `path` into the idle player, seeks it and starts it. `startOffsetMs` >= 0 seeks
 	// exactly there -- the mirror pair uses that to start the same file at the same place --
 	// while a negative value asks for the random (or zero) start configured above. Nothing is
@@ -57,6 +84,48 @@ public:
 	// landed on, the frame's pixel size and the offset that was actually asked for. A swap
 	// arriving mid-load supersedes the one before it.
 	void swapTo(const QString& path, qint64 startOffsetMs);
+
+	// Opens `path` on the output the *next* swap will use and parks it there: seeked, played until
+	// a frame of it is known, then paused on that frame. It does not become the active output, it
+	// is not faded in, and it reports preloaded() rather than firstFrame(), so nothing of it is on
+	// screen until a swapToPreloaded() makes it the clip. That is the point of the call: a clip
+	// chosen and opened before it is due has no load latency left to hide, so the swap is a
+	// play() plus the owner's fade instead of a load.
+	//
+	// `startOffsetMs` >= 0 seeks exactly there -- the mirror pair parks the same file at the same
+	// place with that -- while a negative value asks for the random (or zero) start swapTo() would
+	// have chosen. Parked means paused, so the clip costs no CPU and holds no active decode; a
+	// panel that is hidden keeps it paused.
+	//
+	// A preload is an optimisation, never a requirement, so nothing here is a promise: a preload
+	// that cannot be made (no sink yet, the output that is on screen, a load already in flight)
+	// emits nothing, and one that fails reports through failed()/timedOut() with a kind whose
+	// comment explains that it may not cost the file its place in the pool. The caller keeps
+	// swapTo() to fall back on in every case.
+	void preload(const QString& path, qint64 startOffsetMs);
+
+	// Makes the parked clip the one on screen: sets it active, plays it and reports it through
+	// firstFrame() -- inside this call, because its frame is already in the sink, so the owner's
+	// fade and the swap land in the same turn. False when nothing is parked or the player it was
+	// parked on is gone, in which case the caller falls back to swapTo().
+	bool swapToPreloaded();
+
+	// The parked clip: empty and 0 while nothing is parked.
+	QString preloadedPath() const { return this->m_preload.parked ? this->m_preload.path : QString(); }
+	qint64 preloadedOffsetMs() const { return this->m_preload.offsetMs; }
+	bool hasPreload() const { return this->m_preload.parked; }
+	// True while what is in flight is a preload rather than a swap. The owner asks this to tell
+	// "a clip is opening, do not supersede it" from "the next clip is being made ready, which a
+	// swap that is due may simply take over".
+	bool preloading() const { return this->m_pending.serial != 0 && this->m_pending.preload; }
+
+	// Drops the parked clip and empties the player it was parked on, so its decoder is freed
+	// rather than held for a clip that will not be used. Silent, like every preload outcome:
+	// nothing was on screen and nothing was reported.
+	// (Task 6: a preload that is still *opening* is dropped here too. It is the same clip and the
+	// same decoder, and one release path covers both states -- which is what lets a caller drop a
+	// preload without first asking which of the two it is in.)
+	void discardPreload();
 
 	// Cancels a pending load and stops both players, dropping their sources so no decoder stays
 	// open on a panel that is no longer showing video. The active record is cleared too: after
@@ -95,11 +164,24 @@ public:
 
 signals:
 	// One clip's first frame is on screen: where, how big, and the offset that was asked for.
+	// (Task 6: a swap served from a parked preload reports through this same signal, in the call
+	// that made it the active clip, because its frame was already in the sink.)
 	void firstFrame(QString path, int ab, QSize frameSize, qint64 offsetMs);
 	// `path` could not be opened, or the player carrying it failed. Nothing of it is retained.
-	void failed(QString path);
+	// `kind` is what the owner needs to decide whether the *file* has been shown to be unusable:
+	// see FailKind's comment -- only a decode failure may cost it its place in the pool.
+	void failed(QString path, MascotVideoSlot::FailKind kind);
 	// `path` opened but no frame of it arrived within START_TIMEOUT_MS, so it was abandoned.
+	// (Task 6: START_TIMEOUT_MS is `mascots_swap_timeout_ms` now -- the sentence above names the
+	// constant the build shipped before the deadline became configurable.)
+	// The deadline is a deadline rather than a verdict on the file: a transiently slow good clip
+	// reaches it, so the owner is told *what* happened and keeps the file.
 	void timedOut(QString path);
+	// A clip is opened, seeked and paused on its first frame on the output the next swap will use.
+	// Nothing of it is on screen: this is the announcement a parked clip makes instead of
+	// firstFrame(). `ab` is not passed because nothing became active -- which output was parked is
+	// the slot's business until swapToPreloaded() reports the clip through firstFrame().
+	void preloaded(QString path, qint64 offsetMs, QSize frameSize);
 
 private slots:
 	// The gate. A frame counts only for the load whose output is `ab` and only after that load
@@ -128,6 +210,22 @@ private:
 		// clip's first frame.
 		bool loaded = false;
 		bool playing = false;
+		// This load is a preload rather than a swap: its first frame parks the clip instead of
+		// making it the clip on screen. Everything before that point is the same work, which is
+		// why the two share one pending record, one gate and one deadline.
+		bool preload = false;
+	};
+
+	// One parked clip: opened, seeked, played until a frame of it was known, then paused on that
+	// frame on the output the next swap will use. `parked` false is the only empty state.
+	struct Preload {
+		bool parked = false;
+		int ab = -1;
+		QString path;
+		qint64 offsetMs = 0;
+		// The size of the frame it is parked on, kept because the swap reports it without waiting
+		// for another frame: nothing paints while it is paused.
+		QSize frameSize;
 	};
 
 	// Subscribes one output to its sink, or unsubscribes the one it had. Separate from setSinks()
@@ -148,7 +246,17 @@ private:
 	qint64 chooseOffset(qint64 durationMs) const;
 	void warnNoSinkOnce(int ab);
 
-	static constexpr int START_TIMEOUT_MS = 5000;
+	// The deadlines and the retry budget, from setTimings(). Defaults are the values Task 2 and
+	// Task 4 shipped as constants, so a slot nothing has configured yet behaves exactly as it did;
+	// they are values rather than constants because how long a clip may take to open is a
+	// machine-speed judgement, and the user is the one who knows their machine (§7.11).
+	// 5000 = `mascots_swap_timeout_ms`: open + first-frame deadline. Not 0-able: see setTimings().
+	int m_swapTimeoutMs = 5000;
+	// 150 = `mascots_retry_interval_ms`, and 5 = `mascots_retry_attempts`: how often, and how many
+	// times, the owner re-asks for a sink that has not been created yet. Kept here rather than in
+	// the owner so both figures move together and one config value cannot desync the pair.
+	int m_retryIntervalMs = 150;
+	int m_retryAttempts = 5;
 
 	// QPointer because these point into the QML item, not at anything this object owns: a
 	// delegate destroyed by a slot-count change leaves null behind instead of dangling.
@@ -162,6 +270,11 @@ private:
 	ThreadedMediaPlayer* m_players[2] = { nullptr, nullptr };
 
 	Load m_pending;
+	// The next clip, already opened and paused on its frame. Separate from m_pending because the
+	// two are different things: a pending load is work in progress that a swap may supersede,
+	// while a parked clip is a finished piece of work waiting to be used -- which is exactly why
+	// retiredInactive() has to leave it alone.
+	Preload m_preload;
 	// One deadline for the one load in flight; a swap that supersedes another re-arms it instead
 	// of owning a timer of its own.
 	QTimer* m_timer = nullptr;

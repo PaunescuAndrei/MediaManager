@@ -199,6 +199,9 @@ private:
 		// back (§7.13). The rule is re-asked every PREVIEW_DEFER_MS while the tooltip plays, so
 		// the line needs its own rate limit: sharing one with the type line would let a deferral
 		// suppress the "which branch picked" line the gate reads.
+		// (Task 6: that interval is the configured `mascots_busy_defer_ms` now -- the constant the
+		// sentence above names was the shipped default, not a name this class still holds. The
+		// reason for the separate rate limit is unchanged.)
 		qint64 lastPreviewDeferLogMs = 0;
 	};
 
@@ -298,12 +301,28 @@ private:
 		qint64 offsetMs);
 	// A load -- or a clip already on screen -- that failed or timed out. Never blanks the panel:
 	// whatever it is drawing keeps playing, and the panel is armed for a replacement.
-	void onVideoFailed(MascotSide side, const QString& path, bool timedOut);
+	// Task 6: `kind` is the slot's own distinction between a decode failure and a wiring report,
+	// which is what decides whether the *file* may be dropped for the session (§7.8).
+	void onVideoFailed(MascotSide side, const QString& path, MascotVideoSlot::FailKind kind,
+		bool timedOut);
 	// Fades the output the new clip landed on in, the previous one out, and schedules the
 	// outgoing player's retirement for the end of the fade (immediately when there is no fade).
 	void fadeInVideo(SideState& state, MascotSide side, int ab);
 	// Copies the left panel's committed video onto the right panel: same file, same offset.
 	void startMirrorVideo(const QString& path, qint64 offsetMs);
+
+	// ---- M2 (Task 6): the preload ----
+	// Chooses the panel's next clip *now* and parks it on the player the next swap will use, so
+	// that swap is a play() plus the fade instead of a load. Queued, because it reads the pool and
+	// posts a load, and the commit (or the fade that ends it) must not pay for either inline.
+	void preloadNext(MascotSide side);
+	// Does the work preloadNext() queues: every guard, the pick, and the preload itself.
+	void startPreload(MascotSide side);
+	// A clip is parked. The mirror pair starts its copy of it here, because this is the moment the
+	// offset the right panel has to match exists -- which is the whole reason a preloaded pair can
+	// swap in one turn instead of waiting for the left panel's first frame.
+	void onVideoPreloaded(MascotSide side, const QString& path, qint64 offsetMs,
+		const QSize& frameSize);
 
 	// Builds or drops the player half of each panel from the media setting and the decoder budget.
 	// Returns true when a panel that was showing a video lost its players: that panel is drawing
@@ -383,6 +402,23 @@ private:
 	bool videoPaused = false;
 	// `mascots_weighted_random`, pushed into the source with the seed before every video pick.
 	bool weightedRandom = true;
+	// `mascots_preload`. With it off the video path is exactly what it was before the preload
+	// existed: every swap chooses its clip and loads it at the swap, which is also the state a
+	// panel falls back to whenever a preload cannot be made. Read here, pushed nowhere -- the
+	// decision to preload is this class's, the slot only does what it is told.
+	bool preloadEnabled = true;
+	// The waits that gate a user-visible wait (§7.11), all read here and pushed into the slots with
+	// setTimings(). Values rather than constants because "how long before this clip is declared
+	// dead" is a machine-speed judgement: a slow machine legitimately needs longer than a fast one,
+	// and the user is the one who knows which they have. Clamped where they are read (applyConfig())
+	// and again at the point of use (MascotVideoSlot::setTimings()), so a bad value cannot shorten
+	// a deadline down to a frame.
+	int swapTimeoutMs = 5000;
+	int retryIntervalMs = 150;
+	int retryAttempts = 5;
+	// `mascots_busy_defer_ms`: how often a pick is re-asked while the preview tooltip plays. This
+	// one never leaves this class -- the slot has no part in §7.13's deferral.
+	int busyDeferMs = 250;
 	// The window whose Show/Hide/activation/minimize state drives the pause. Watched with an
 	// event filter installed from updateLayout(), which is where a surface learns its window.
 	QPointer<QWidget> watchedWindow;

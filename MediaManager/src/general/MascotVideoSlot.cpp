@@ -7,6 +7,7 @@
 #include <QRandomGenerator>
 #include <QTimer>
 #include <QVideoSink>
+#include <algorithm>
 
 namespace {
 	// The same output indices MascotSurface::slotSink() takes (0 = A, 1 = B), named here so the
@@ -23,7 +24,7 @@ MascotVideoSlot::MascotVideoSlot(QObject* parent)
 	// supersedes another re-arms this one.
 	this->m_timer = new QTimer(this);
 	this->m_timer->setSingleShot(true);
-	this->m_timer->setInterval(START_TIMEOUT_MS);
+	this->m_timer->setInterval(this->m_swapTimeoutMs);
 	QObject::connect(this->m_timer, &QTimer::timeout, this, &MascotVideoSlot::handleStartTimeout);
 }
 
@@ -81,6 +82,12 @@ void MascotVideoSlot::setSinglePlayer(bool single)
 	if (this->m_pending.serial != 0 && this->m_pending.ab == OUTPUT_B)
 		this->releasePending();
 
+	// A parked clip on B is unreachable for the same reason and by the same rule: in this mode
+	// every swap reloads A, so the decoder it holds buys nothing. Dropped before the player it was
+	// parked on is destroyed below, so no record survives the player it describes.
+	if (this->m_preload.parked && this->m_preload.ab != OUTPUT_A)
+		this->m_preload = Preload{};
+
 	ThreadedMediaPlayer* playerB = this->m_players[OUTPUT_B];
 	if (!playerB)
 		return;
@@ -104,12 +111,40 @@ void MascotVideoSlot::setRandomStart(bool random, int clipSeconds)
 	this->m_clipMs = clipSeconds > 0 ? qint64(clipSeconds) * 1000 : 0;
 }
 
+void MascotVideoSlot::setTimings(int swapTimeoutMs, int retryIntervalMs, int retryAttempts)
+{
+	// The clamps live here, at the point of use, so a config file cannot produce a deadline that
+	// abandons clips that are merely opening. 500 ms is the floor because a local file that has
+	// not painted a frame in half a second is already outside every measured warm load (49-300 ms
+	// in the M2 gate); 60 s is the ceiling because a deadline longer than that is no deadline at
+	// all and would hold `isBusy()` on a dead file for a minute, freezing the panel with it.
+	// There is deliberately no "0 = wait forever": this timer is the only thing that releases a
+	// load that neither paints nor errors, and without it the slot stays busy and retireInactive()
+	// skips its player forever.
+	this->m_swapTimeoutMs = std::clamp(swapTimeoutMs, 500, 60000);
+	// 20 ms is under a frame at any refresh rate, so a smaller value would re-ask for a sink that
+	// cannot have appeared yet; 2 s is longer than a delegate takes to be created by a wide margin.
+	this->m_retryIntervalMs = std::clamp(retryIntervalMs, 20, 2000);
+	// 0 attempts is a supported setting -- it means "do not retry, give up at once" -- so the floor
+	// is that, not 1. 50 is above any count a human would configure and bounds the churn.
+	this->m_retryAttempts = std::clamp(retryAttempts, 0, 50);
+	// The running timer, not only the next one: a deadline already armed under the old value has
+	// to move with the setting, otherwise a shortened deadline would not apply until the clip
+	// after the next one -- the "two consumers of one key" trap setRandomStart() documents.
+	if (this->m_timer->isActive())
+		this->m_timer->start(this->m_swapTimeoutMs);
+	else
+		this->m_timer->setInterval(this->m_swapTimeoutMs);
+}
+
 void MascotVideoSlot::swapTo(const QString& path, qint64 startOffsetMs)
 {
 	if (this->m_shutdown || path.isEmpty()) {
 		// Nothing can be loaded, and a caller waiting for a first frame that has no player behind
 		// it would wait until its own deadline: say so instead.
-		emit this->failed(path);
+		// (Task 6: say so as a *wiring* failure -- the file was never attempted, so the owner keeps
+		// it in the pool; see FailKind.)
+		emit this->failed(path, FailKind::Wiring);
 		return;
 	}
 
@@ -119,8 +154,15 @@ void MascotVideoSlot::swapTo(const QString& path, qint64 startOffsetMs)
 	if (this->m_singlePlayer)
 		ab = OUTPUT_A; // one sink, one player: a swap reloads the output that is on screen
 
+	// A parked clip on the output this load is about to take is spent: setSource() below replaces
+	// the media it held, and leaving the record behind would let a later swapToPreloaded() claim
+	// the player carries a clip it no longer has. Its state only -- the load below is the thing
+	// that changes the player, so emptying it here would post a second, pointless load.
+	if (this->m_preload.parked)
+		this->m_preload = Preload{};
+
 	if (!this->ensurePlayer(ab)) {
-		emit this->failed(path);
+		emit this->failed(path, FailKind::Wiring);
 		return;
 	}
 
@@ -158,9 +200,137 @@ void MascotVideoSlot::swapTo(const QString& path, qint64 startOffsetMs)
 	}
 }
 
+void MascotVideoSlot::preload(const QString& path, qint64 startOffsetMs)
+{
+	if (this->m_shutdown || path.isEmpty()) {
+		// A wiring report, not a verdict on the file: nothing was attempted. Reported rather than
+		// dropped because the owner is the only object that knows whether it still wants this
+		// clip; what it must not do with it is forget the path (see FailKind).
+		emit this->failed(path, FailKind::Wiring);
+		return;
+	}
+
+	// The output the next swap will use, chosen by the same rule swapTo() uses, so the clip and
+	// the swap can never disagree about which player is idle.
+	int ab = this->m_activeAb == OUTPUT_A ? OUTPUT_B : OUTPUT_A;
+	if (this->m_singlePlayer)
+		ab = OUTPUT_A;
+
+	// The output to park on has to be one nothing is visible on: reloading the player that is on
+	// screen would end the clip the user is watching, which is the one thing a preload must never
+	// cause. In the clamped one-player mode that is every case after the first clip, so no preload
+	// is available there and the swap keeps its load -- the fallback this class already has.
+	if (ab == this->m_activeAb)
+		return;
+
+	// One load at a time through the same pending record as a swap, so the preload shares the
+	// gate, the deadline and the supersede rules. A swap in flight wins: it is the clip the user
+	// is about to see, and the preload can be made again after the next commit.
+	if (this->m_pending.serial != 0)
+		return;
+
+	if (this->m_preload.parked) {
+		// Never twice for the same path: a second open of the file already parked would throw away
+		// a ready clip and pay for it a second time. A different path does replace it, because the
+		// parked clip is only useful if it is the clip the next swap will ask for.
+		if (this->m_preload.path == path)
+			return;
+		this->discardPreload();
+	}
+
+	if (!this->ensurePlayer(ab)) {
+		// The delegate that owns the sink does not exist yet. Same wiring report as above: the
+		// file has not been shown to be unplayable, so it stays in the pool.
+		emit this->failed(path, FailKind::Wiring);
+		return;
+	}
+
+	this->m_pending.serial = ++this->m_serial;
+	this->m_pending.ab = ab;
+	this->m_pending.path = path;
+	this->m_pending.requestedOffsetMs = startOffsetMs;
+	this->m_pending.preload = true;
+
+	ThreadedMediaPlayer* player = this->m_players[ab];
+	// The same trap swapTo() documents: an equal URL is a no-op inside QMediaPlayer, so a player
+	// that already held this file would never report loading and the gate would time out on a
+	// perfectly good clip. Emptying it first forces a real open.
+	if (player->currentSource() == path)
+		player->setSource(QString());
+	player->setSource(path);
+
+	if (!this->m_paused) {
+		// The same deadline a swap gets, for the same reason: a preload that neither paints nor
+		// errors would otherwise hold this record -- and the output it is parked on -- forever.
+		this->m_timer->start();
+	}
+}
+
+bool MascotVideoSlot::swapToPreloaded()
+{
+	if (this->m_shutdown || !this->m_preload.parked)
+		return false;
+
+	const Preload parked = this->m_preload;
+	ThreadedMediaPlayer* player = this->m_players[parked.ab];
+	if (!player || parked.ab < OUTPUT_A || parked.ab > OUTPUT_B) {
+		// The player the clip was parked on is gone (a single-player switch, a shutdown, a sink
+		// that was replaced): nothing can be made of it, and the caller still has swapTo().
+		this->discardPreload();
+		return false;
+	}
+
+	// State first, emission last, exactly as handleFrame() does it: a handler that swaps again
+	// from firstFrame() must not be overwritten by the bookkeeping of the swap that just
+	// completed. Nothing is "pending" any more either -- this call is the whole load.
+	this->m_preload = Preload{};
+	this->m_pending = Load{};
+	this->m_timer->stop();
+	this->m_activeAb = parked.ab;
+	this->m_activePath = parked.path;
+
+	// The clip was parked paused, so the swap is this play() plus the owner's opacity writes, and
+	// the frame is already in the sink -- which is why the report below happens now rather than
+	// one load later. While paused it stays parked-in-place: the owner's fade still runs, and
+	// setPaused(false) is what starts it, exactly as for a clip that loaded while paused.
+	if (!this->m_paused)
+		player->play();
+
+	emit this->firstFrame(parked.path, parked.ab, parked.frameSize, parked.offsetMs);
+	return true;
+}
+
+void MascotVideoSlot::discardPreload()
+{
+	// A preload that is still opening is dropped by the same call: it is the same clip and the same
+	// decoder, and leaving it in flight would keep the slot busy -- and its deadline armed -- for a
+	// panel that has just stopped being able to use it. Released silently, like everything else a
+	// preload does when it is dropped: releasePending() emits nothing.
+	if (this->m_pending.serial != 0 && this->m_pending.preload)
+		this->releasePending();
+
+	if (!this->m_preload.parked)
+		return;
+
+	const int ab = this->m_preload.ab;
+	this->m_preload = Preload{};
+
+	// A parked clip is never the active one (preload() refuses that output), so its player has
+	// nothing on screen to lose: stopping and emptying it frees the decoder the parking held.
+	if (ab == this->m_activeAb)
+		return;
+	if (ThreadedMediaPlayer* player = this->m_players[ab]) {
+		player->stop();
+		player->setSource(QString());
+	}
+}
+
 void MascotVideoSlot::stopAll()
 {
 	// No signal: this is a caller-initiated stop, not a clip's failure.
+	// Task 6: a parked preload goes with it -- a stopped slot claims nothing is loaded, and a record
+	// that disagreed would let a later swapToPreloaded() activate a player this call emptied.
+	this->m_preload = Preload{};
 	this->m_pending = Load{};
 	this->m_timer->stop();
 
@@ -222,6 +392,11 @@ void MascotVideoSlot::retireInactive()
 		// swap that is merely slow into a missing clip.
 		if (this->m_pending.serial != 0 && this->m_pending.ab == ab)
 			continue;
+		// A parked preload is the next clip too -- finished work rather than an outgoing one -- and
+		// it is inactive by construction, so this call would otherwise throw away exactly the load
+		// the preload exists to have already done. Emptied only when it is dropped on purpose.
+		if (this->m_preload.parked && this->m_preload.ab == ab)
+			continue;
 		// setSource() stops the player first, so this one command both ends the clip and frees its
 		// decoder; the wrapper keeps the position and duration it reports in step with it.
 		player->setSource(QString());
@@ -236,6 +411,7 @@ void MascotVideoSlot::shutdown()
 
 	this->m_timer->stop();
 	this->m_pending = Load{};
+	this->m_preload = Preload{};
 	this->m_activeAb = -1;
 	this->m_activePath.clear();
 
@@ -268,6 +444,28 @@ void MascotVideoSlot::handleFrame(int ab, const QVideoFrame& frame)
 	const QString path = this->m_pending.path;
 	const qint64 offsetMs = this->m_pending.offsetMs;
 	const QSize frameSize = frame.size();
+
+	// A preload's first frame is where the parking happens: the clip is opened, seeked and known to
+	// paint, so it is paused on that frame and announced as ready. `m_activeAb`/`m_activePath` are
+	// deliberately left alone -- nothing has been swapped, and a swap that never happens must leave
+	// the panel exactly as it was.
+	if (this->m_pending.preload) {
+		const int parkedAb = this->m_pending.ab;
+		this->m_pending = Load{};
+		this->m_preload.parked = true;
+		this->m_preload.ab = parkedAb;
+		this->m_preload.path = path;
+		this->m_preload.offsetMs = offsetMs;
+		this->m_preload.frameSize = frameSize;
+		// Paused rather than stopped: a parked clip must cost no CPU and hold no active decode,
+		// while keeping its source is what makes the next swap a play() on a player that already
+		// has the media open. The frame it is paused on stays in the sink, which is what turns the
+		// swap into an opacity change.
+		if (ThreadedMediaPlayer* parked = this->m_players[parkedAb])
+			parked->pause();
+		emit this->preloaded(path, offsetMs, frameSize);
+		return;
+	}
 
 	// State first, emission last: a handler that swaps again from firstFrame() must not have its
 	// new load overwritten by the bookkeeping of the load that just finished.
@@ -443,7 +641,7 @@ void MascotVideoSlot::abortPending(bool timedOut)
 	if (timedOut)
 		emit this->timedOut(path);
 	else
-		emit this->failed(path);
+		emit this->failed(path, FailKind::Decode);
 }
 
 void MascotVideoSlot::failPlayer(int ab)
@@ -455,6 +653,20 @@ void MascotVideoSlot::failPlayer(int ab)
 	if (this->m_pending.serial != 0 && this->m_pending.ab == ab
 		&& player->currentSource() == this->m_pending.path) {
 		this->abortPending(false);
+		return;
+	}
+
+	// A parked preload that dies while it waits is released before the emission, for the reason
+	// every other release is: a handler that reacts by asking for another clip must find clean
+	// state. The *file* is reported as a decode failure -- the backend refused it, and it will
+	// refuse it again, which is the one kind of failure that may cost a path its place in the pool
+	// (§7.8). Nothing was on screen, so no panel state changes.
+	if (this->m_preload.parked && this->m_preload.ab == ab) {
+		const QString parkedPath = this->m_preload.path;
+		this->m_preload = Preload{};
+		player->stop();
+		player->setSource(QString());
+		emit this->failed(parkedPath, FailKind::Decode);
 		return;
 	}
 
@@ -474,7 +686,7 @@ void MascotVideoSlot::failPlayer(int ab)
 		this->m_timer->stop();
 	player->stop();
 	player->setSource(QString());
-	emit this->failed(path);
+	emit this->failed(path, FailKind::Decode);
 }
 
 qint64 MascotVideoSlot::chooseOffset(qint64 durationMs) const

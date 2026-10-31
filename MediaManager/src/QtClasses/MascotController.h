@@ -697,7 +697,10 @@ private:
 	// (M3 Task 6B fix: only a band showing video is rate-limited this way; an image band has no
 	// clip of its own and always passes, so a default `Images` run keeps the dice as its only
 	// rate limit.)
-	bool bandMayAdvance(const MascotBand& band) const;
+	bool bandMayAdvance(MascotPanel panel, const MascotBand& band) const;
+	// M5 Task 10: the clip length that governs this panel. The pairs use the columns' key, the layer its
+	// own; the fallback is applied at read time in applyConfig(), so this is one lookup and no state.
+	int clipSecondsFor(MascotPanel panel) const;
 	// (M3 Task 6B: whether this band can still reach a wrap seam while the scroll driver runs.
 	// False means there is no pass to defer to -- the driver is stopped, the speed is 0, the
 	// content does not overflow, or the tick would take the still branch -- so onBeat() commits
@@ -1057,6 +1060,14 @@ private:
 	// `mascots_clip_seconds`: how long one clip stays on screen. 0 disables the clip timer
 	// entirely, which leaves the clip looping and the panel advancing on the existing beat.
 	int clipSeconds = 30;
+	// (M5 Task 10: the layer's own cadence. `mascots_background_clip_seconds`,
+	// `mascots_background_swap_on_beat`, `mascots_background_random_change` and
+	// `mascots_background_random_chance`, each falling back to its columns twin when absent. The M4 note
+	// at bandMayAdvance() said these stay shared "on purpose, and nothing asks for that"; the user asked.)
+	int backgroundClipSeconds = 30;
+	bool backgroundSwapOnBeat = true;
+	bool backgroundRandomChange = true;
+	double backgroundRandomChance = 0.1;
 	// (M3 Task 6B: `mascots_swap_on_beat`, cached like every other key this class consumes. False
 	// makes a swap beat flip both panels instead of advancing any band, which is the old
 	// non-swap-beat behaviour applied to every beat.)

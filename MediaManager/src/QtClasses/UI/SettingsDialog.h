@@ -134,6 +134,11 @@ public:
     // (M5 Task 8e: the list's scrollbars, which are opaque today because a scrollbar's groove paints
     // with the Window role and the row palette only gestures at Base and AlternateBase.)
     QDoubleSpinBox* mascotScrollbarAlphaSpinBox = nullptr;
+    // (M5 Task 10: the layer's own cadence -- clip length, beat swap, random change and its chance.)
+    QSpinBox* mascotBackgroundClipSpinBox = nullptr;
+    QCheckBox* mascotBackgroundSwapOnBeatCheckBox = nullptr;
+    QCheckBox* mascotBackgroundRandomChangeCheckBox = nullptr;
+    QSpinBox* mascotBackgroundChanceSpinBox = nullptr;
     QComboBox* mascotColumnsZCombo = nullptr;
     QComboBox* mascotBackgroundModeCombo = nullptr;
     QComboBox* mascotBackgroundFillCombo = nullptr;

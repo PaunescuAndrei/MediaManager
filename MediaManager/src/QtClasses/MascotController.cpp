@@ -135,6 +135,17 @@ namespace {
 		return std::clamp(ok ? value : fallback, low, high);
 	}
 
+	// M5 Task 10: a boolean with "absent means follow the other panel" semantics. Config::get_bool() has no
+	// fallback and answers False for a key that is not there, which would silently switch the layer's beat
+	// swap off for every config written before the key existed.
+	bool configBoolWithFallback(Config* config, const QString& key, bool fallback)
+	{
+		if (!config)
+			return fallback;
+		const QString value = config->get(key);
+		return value.isEmpty() ? fallback : utils::text_to_bool(value.toStdString());
+	}
+
 	// M3 Task 2: `count` equal slices of one panel along its stacking axis, which is what a
 	// panel's bands are. `stackVertically` is the horizontal-stripe axis: `Static`, `Scroll` and
 	// `Stripes` all stack top to bottom for now, and Task 5's `mascots_stripes_orientation` is
@@ -536,6 +547,21 @@ void MascotController::applyConfig()
 	// of three competing ones.)
 	this->mediaSetting = config->get(QStringLiteral("mascots_media"));
 	this->clipSeconds = clampedClipSeconds(config);
+	// (M5 Task 10: the layer's own cadence, on the user's request -- the M4 note further down said these
+	// three keys stay shared "on purpose" and nothing asked for a split; this is the ask. Each value falls
+	// back to the columns' key when it is absent, so a config written before these existed renders
+	// exactly as it did: the split only begins when something writes the layer's number.)
+	const bool columnsRandomChange = config->get_bool(QStringLiteral("mascots_random_change"));
+	const double columnsRandomChance =
+		std::clamp(config->get_double(QStringLiteral("mascots_random_chance"), 10.0) / 100.0, 0.0, 1.0);
+	this->backgroundClipSeconds = clampedConfigInt(config,
+		QStringLiteral("mascots_background_clip_seconds"), this->clipSeconds, 0, MAX_CLIP_SECONDS);
+	this->backgroundSwapOnBeat = configBoolWithFallback(config,
+		QStringLiteral("mascots_background_swap_on_beat"), this->swapOnBeat);
+	this->backgroundRandomChange = configBoolWithFallback(config,
+		QStringLiteral("mascots_background_random_change"), columnsRandomChange);
+	this->backgroundRandomChance = std::clamp(config->get_double(
+		QStringLiteral("mascots_background_random_chance"), columnsRandomChance * 100.0) / 100.0, 0.0, 1.0);
 	// (M3 Task 6B: `mascots_swap_on_beat`, read here under the same "one reader" rule as every key
 	// above so onBeat() decides from the cached value and no beat path re-reads the config.)
 	this->swapOnBeat = config->get_bool(QStringLiteral("mascots_swap_on_beat"));
@@ -4174,7 +4200,7 @@ void MascotController::createVideoSlot(PanelState& state, MascotPanel panel, int
 	// slot created later (an Images -> Videos settings apply) starts from the current
 	// configuration instead of from the class defaults.
 	slot->setSinglePlayer(!this->videoCrossfades(panel));
-	slot->setRandomStart(this->randomStart, this->clipSeconds);
+	slot->setRandomStart(this->randomStart, this->clipSecondsFor(panel));
 	// The waits come from config, not from the slot's defaults: a slot created after an Apply has to
 	// start from the configured values, or a panel enabled later would use a deadline the user had
 	// already changed.
@@ -4522,7 +4548,8 @@ void MascotController::restartClipTimer(MascotPanel panel, int bandIndex)
 	}
 	QTimer* timer = band->clipTimer();
 	// 0 disables the timer entirely: the clip loops and the panel advances only on the beat.
-	if (this->clipSeconds <= 0 || this->videoPaused) {
+	const int clip = this->clipSecondsFor(panel);
+	if (clip <= 0 || this->videoPaused) {
 		timer->stop();
 		return;
 	}
@@ -4536,7 +4563,7 @@ void MascotController::restartClipTimer(MascotPanel panel, int bandIndex)
 		timer->stop();
 		return;
 	}
-	timer->start(std::min(this->clipSeconds * 1000, MAX_CLIP_TIMER_MS));
+	timer->start(std::min(clip * 1000, MAX_CLIP_TIMER_MS));
 }
 
 void MascotController::onClipTimer(MascotPanel panel, int bandIndex)
@@ -4809,10 +4836,15 @@ void MascotController::onBeat(bool swapWanted)
 	// flip path and a background case placed after it would never run. Each band that the half-clip
 	// floor accepts is advanced through the same scheduleBeatAdvance()/commitBeatAdvance() pair a
 	// column band uses, so a panning background later defers to its own seam for free.
-	if (swapWanted && this->swapOnBeat && this->backgroundState.surface) {
+	// (M5 Task 10: the layer has its own dice. `swapWanted` is the columns' beat -- one shared roll of
+	// `mascots_random_change`/`mascots_random_chance` -- so the layer rolls its own, from
+	// `mascots_background_random_change`/`_chance`, and advances on a beat the columns flipped on. With the
+	// layer's random change off, nothing on the beat moves it and only its clip timer does.)
+	if (this->backgroundSwapOnBeat && this->backgroundState.surface
+		&& this->backgroundRandomChange && utils::randfloat(0, 1) < this->backgroundRandomChance) {
 		for (int i = 0; i < static_cast<int>(this->backgroundState.bands.size()); ++i) {
 			MascotBand* band = this->backgroundState.band(i);
-			if (!band || !this->bandMayAdvance(*band))
+			if (!band || !this->bandMayAdvance(MascotPanel::Background, *band))
 				continue;
 			this->scheduleBeatAdvance(MascotPanel::Background, i);
 		}
@@ -4844,8 +4876,8 @@ void MascotController::onBeat(bool swapWanted)
 		// With the key off, each side is gated by its own content age.)
 		MascotBand* leftBand = this->leftState.band(0);
 		MascotBand* rightBand = this->rightState.band(0);
-		const bool leftMay = leftBand && this->bandMayAdvance(*leftBand);
-		const bool rightMay = rightBand && this->bandMayAdvance(*rightBand);
+		const bool leftMay = leftBand && this->bandMayAdvance(MascotPanel::Left, *leftBand);
+		const bool rightMay = rightBand && this->bandMayAdvance(MascotPanel::Right, *rightBand);
 		const bool mirrors = this->bandMirrorsLeft(0);
 		if (mirrors) {
 			if (this->leftState.surface && this->rightState.surface && leftMay && rightMay) {
@@ -4885,7 +4917,7 @@ void MascotController::onBeat(bool swapWanted)
 			MascotBand* leftBand = this->leftState.band(i);
 			MascotBand* rightBand = this->rightState.band(i);
 			if (!this->leftState.surface || !this->rightState.surface || !leftBand || !rightBand
-				|| !this->bandMayAdvance(*leftBand) || !this->bandMayAdvance(*rightBand))
+				|| !this->bandMayAdvance(MascotPanel::Left, *leftBand) || !this->bandMayAdvance(MascotPanel::Right, *rightBand))
 				continue;
 			advanced = true;
 			this->scheduleBeatAdvance(MascotPanel::Left, i);
@@ -4898,7 +4930,7 @@ void MascotController::onBeat(bool swapWanted)
 			MascotBand* band = state.band(i);
 			if (!band)
 				continue;
-			if (!this->bandMayAdvance(*band))
+			if (!this->bandMayAdvance(panelOf(side), *band))
 				continue;
 			advanced = true;
 			this->scheduleBeatAdvance(panelOf(side), i);
@@ -4909,7 +4941,12 @@ void MascotController::onBeat(bool swapWanted)
 		this->flipBoth();
 }
 
-bool MascotController::bandMayAdvance(const MascotBand& band) const
+int MascotController::clipSecondsFor(MascotPanel panel) const
+{
+	return panel == MascotPanel::Background ? this->backgroundClipSeconds : this->clipSeconds;
+}
+
+bool MascotController::bandMayAdvance(MascotPanel panel, const MascotBand& band) const
 {
 	// (M3 Task 6B: the half-clip floor. `mascots_clip_seconds` <= 0 disables it, and a band that
 	// has never committed anything has no age to measure, so both are "may advance". The clock is
@@ -4922,15 +4959,19 @@ bool MascotController::bandMayAdvance(const MascotBand& band) const
 	// purpose -- there is one cadence clock, and the clip length is not part of the background's
 	// layout. Do not give the layer a clip length of its own: two clocks would let the pair and the
 	// layer drift apart, and nothing asks for that.)
+	// (M5 Task 10: it is asked for now, and the drift the note feared is not a thing: every band already
+	// arms its own clip timer, so a different length for the layer is a different interval on the layer's
+	// timers and nothing shared moves. The panel's number is read through clipSecondsFor().)
 	if (band.media().type != MascotMedia::Video)
 		return true;
-	if (this->clipSeconds <= 0)
+	const int clip = this->clipSecondsFor(panel);
+	if (clip <= 0)
 		return true;
 	const qint64 committedAt = band.playback().committedAtMs;
 	if (committedAt <= 0)
 		return true;
 	const qint64 now = QDateTime::currentMSecsSinceEpoch();
-	return now - committedAt >= static_cast<qint64>(this->clipSeconds) * 500;
+	return now - committedAt >= static_cast<qint64>(clip) * 500;
 }
 
 bool MascotController::bandReachesSeam(MascotPanel panel, const MascotBand& band) const
@@ -5024,11 +5065,11 @@ void MascotController::commitBeatAdvance(MascotPanel panel, int bandIndex)
 	// `mascots_swap_on_beat = False` applied in between would still advance the band once, and
 	// content committed in between would be replaced inside the half-clip floor -- a swap that the
 	// current configuration does not permit, from a beat that no longer reflects it.)
-	if (!this->swapOnBeat || !this->bandMayAdvance(*band))
+	if (!this->swapOnBeat || !this->bandMayAdvance(panel, *band))
 		return;
 	if (panel == MascotPanel::Left && this->bandMirrorsLeft(bandIndex)) {
 		MascotBand* rightBand = this->rightState.band(bandIndex);
-		if (!rightBand || !this->bandMayAdvance(*rightBand))
+		if (!rightBand || !this->bandMayAdvance(panel, *rightBand))
 			return;
 		this->nextBandImages(bandIndex, false);
 		return;

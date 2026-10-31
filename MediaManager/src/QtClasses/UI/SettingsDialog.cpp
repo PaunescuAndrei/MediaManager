@@ -1044,6 +1044,47 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "Ping-pong: reverse at the end of a layer band instead of wrapping around to its start.");
     backgroundLayout->addWidget(mascotBackgroundScrollPingpongCheckBox);
 
+    // (M5 Task 10: the layer's own cadence. Until now the layer borrowed `mascots_clip_seconds`,
+    // `mascots_swap_on_beat` and the image dice from the columns; these four rows are its own, and each
+    // one starts from the columns' value so a config that never touches them behaves as before.)
+    mascotBackgroundClipSpinBox = makeSpinBox(0, 3600, 5,
+        config->get(QStringLiteral("mascots_background_clip_seconds")).isEmpty()
+            ? config->get(QStringLiteral("mascots_clip_seconds")).toInt()
+            : config->get(QStringLiteral("mascots_background_clip_seconds")).toInt());
+    addRow(backgroundLayout, "Layer clip length (s):",
+        "How long one layer clip stays before the layer's own timer advances it -- independent of the "
+        "columns' Clip length. 0 disables it, so only a swap beat moves the layer.",
+        mascotBackgroundClipSpinBox);
+
+    mascotBackgroundSwapOnBeatCheckBox = new QCheckBox("Let a music beat swap the layer");
+    mascotBackgroundSwapOnBeatCheckBox->setChecked(
+        config->get(QStringLiteral("mascots_background_swap_on_beat")).isEmpty()
+            ? config->get_bool(QStringLiteral("mascots_swap_on_beat"))
+            : config->get_bool(QStringLiteral("mascots_background_swap_on_beat")));
+    mascotBackgroundSwapOnBeatCheckBox->setToolTip(
+        "Whether the layer may advance on a beat at all. Independent of the columns' Swap on the music "
+        "beat: the layer can swap on beats the columns flip on.");
+    backgroundLayout->addWidget(mascotBackgroundSwapOnBeatCheckBox);
+
+    mascotBackgroundRandomChangeCheckBox = new QCheckBox("Random layer change (Music Beat)");
+    mascotBackgroundRandomChangeCheckBox->setChecked(
+        config->get(QStringLiteral("mascots_background_random_change")).isEmpty()
+            ? config->get_bool(QStringLiteral("mascots_random_change"))
+            : config->get_bool(QStringLiteral("mascots_background_random_change")));
+    mascotBackgroundRandomChangeCheckBox->setToolTip(
+        "Whether the layer rolls for a change at all. Off means the beat never moves it and only the "
+        "layer clip length does.");
+    backgroundLayout->addWidget(mascotBackgroundRandomChangeCheckBox);
+
+    mascotBackgroundChanceSpinBox = makeSpinBox(0, 100, 1,
+        config->get(QStringLiteral("mascots_background_random_chance")).isEmpty()
+            ? config->get(QStringLiteral("mascots_random_chance")).toInt()
+            : config->get(QStringLiteral("mascots_background_random_chance")).toInt());
+    addRow(backgroundLayout, "Layer chance (%):",
+        "The layer's own dice: the chance per beat that it changes, rolled separately from the columns' "
+        "chance so one can be quiet while the other moves.",
+        mascotBackgroundChanceSpinBox);
+
     // (M5 Task 9: the layer group is appearance, not behaviour -- it decides how the window looks and
     // nothing about what runs -- so it is built here and added to the Appearance page, above that page's
     // trailing spacer. One tab for "make it look different", one for "make it behave differently": the
@@ -1092,6 +1133,8 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         mascotBackgroundFillCombo, mascotBackgroundStripesSpinBox,
         mascotBackgroundOrientationCombo, mascotBackgroundAlternateCheckBox,
         mascotBackgroundScrollSpeedSpinBox, mascotBackgroundScrollDirectionCombo,
+        mascotBackgroundClipSpinBox, mascotBackgroundSwapOnBeatCheckBox,
+        mascotBackgroundRandomChangeCheckBox, mascotBackgroundChanceSpinBox,
         mascotBackgroundScrollPingpongCheckBox, mascotCacheMbSpinBox, mascotCacheItemsSpinBox,
     };
     for (QWidget* widget : mascotControls) {
@@ -1150,6 +1193,10 @@ void SettingsDialog::syncMascotConfig()
         mascotBackgroundAlternateCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_background_scroll_speed", QString::number(mascotBackgroundScrollSpeedSpinBox->value()));
     config->set("mascots_background_scroll_direction", mascotBackgroundScrollDirectionCombo->currentText());
+    config->set("mascots_background_clip_seconds", QString::number(mascotBackgroundClipSpinBox->value()));
+    config->set("mascots_background_swap_on_beat", mascotBackgroundSwapOnBeatCheckBox->isChecked() ? "True" : "False");
+    config->set("mascots_background_random_change", mascotBackgroundRandomChangeCheckBox->isChecked() ? "True" : "False");
+    config->set("mascots_background_random_chance", QString::number(mascotBackgroundChanceSpinBox->value()));
     config->set("mascots_background_scroll_pingpong",
         mascotBackgroundScrollPingpongCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_image_cache_mb", QString::number(mascotCacheMbSpinBox->value()));
@@ -1234,6 +1281,10 @@ void SettingsDialog::updateMascotControlStates()
     mascotBackgroundScrollSpeedSpinBox->setEnabled(backgroundOn && scrollLayer);
     mascotBackgroundScrollDirectionCombo->setEnabled(backgroundOn && scrollLayer);
     mascotBackgroundScrollPingpongCheckBox->setEnabled(backgroundOn && scrollLayer);
+    mascotBackgroundClipSpinBox->setEnabled(backgroundOn);
+    mascotBackgroundSwapOnBeatCheckBox->setEnabled(backgroundOn);
+    mascotBackgroundRandomChangeCheckBox->setEnabled(backgroundOn);
+    mascotBackgroundChanceSpinBox->setEnabled(backgroundOn);
 }
 
 void SettingsDialog::setupAudioPage(MainWindow* mw)

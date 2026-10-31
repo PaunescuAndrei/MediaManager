@@ -2835,13 +2835,14 @@ void MainWindow::applyMascotSettings() {
         // always been.
         this->hideMascots();
         this->App->MascotsAnimation->stop_running();
-    }
-    // (M5 review fix: this is not inside the visibility test. `3bc9711` called resetPalette()
-    // whenever the switch was off, visible or not, and a background-only window has the columns
-    // hidden from the start -- so gating it here would have skipped the reset exactly in the gating
-    // matrix's rows where the layer runs without the columns.)
-    if (!columnsOn)
+        // (M5 review fix 2: the palette reset belongs to this transition, not to the off state.
+        // applyMascotSettings() runs on every live control change now, and resetPalette() rebuilds
+        // the application palette from the theme -- doing that per tick would throw away whatever
+        // palette is current (a chosen theme, a mascot-extracted highlight) while the user is only
+        // moving a spin box. The reset exists because colour extraction can change that palette,
+        // which can only have happened while the columns were visible.)
         this->resetPalette();
+    }
     // M5 Task 1: the columns being off does not mean the layer is off. When the layer is on and no
     // controller is running -- the columns were just hidden with the layer off, or the dialog just
     // switched the layer on -- start it the way the startup path does: the two hosts stay hidden,

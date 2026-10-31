@@ -86,6 +86,11 @@ void SettingsDialog::wireApplyEnable()
             connect(sl, &QSlider::valueChanged, this, [applyBtn] { applyBtn->setEnabled(true); });
         else if (auto* le = qobject_cast<QLineEdit*>(w))
             connect(le, &QLineEdit::textChanged, this, [applyBtn] { applyBtn->setEnabled(true); });
+        // (M5 fix: combos were missing from this walk, so choosing a media type, a layout mode or a
+        // fill mode left Apply greyed out. Nothing in the dialog noticed, because every other control
+        // type was covered and the Mascots page is the first one whose main controls are combos.)
+        else if (auto* co = qobject_cast<QComboBox*>(w))
+            connect(co, &QComboBox::currentIndexChanged, this, [applyBtn] { applyBtn->setEnabled(true); });
     }
 }
 

@@ -2942,6 +2942,13 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     // with the panels hidden there is nothing to re-layout but the next start() would
     // otherwise pick with stale values.
     this->mascotController->applyConfig();
+    // (M4 review fix: the row alpha and the strip's scrim are derived from `mascots_background`
+    // and `mascots_background_list_alpha`, and until now only `initStyleSheets()` re-derived them --
+    // so a live toggle left the two halves disagreeing: off kept the rows translucent and the scrim
+    // on screen, on left opaque rows under a layer running at full strength across the strip. The
+    // controller reads those keys in the Apply above, so the list's half is refreshed here, beside
+    // it, instead of waiting for the next theme change.)
+    this->applyListTransparency();
     // Amendment H3: the cache bounds are config too, so a settings change re-applies them.
     this->App->updateMascotCacheLimits();
     if (oldMascotsUseSeed != newMascotsUseSeed) {

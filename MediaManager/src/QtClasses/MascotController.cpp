@@ -729,7 +729,11 @@ void MascotController::applyConfig()
 	this->backgroundLayout.scrollPingpong =
 		config->get_bool(QStringLiteral("mascots_background_scroll_pingpong"));
 	this->backgroundOpacity = std::clamp(
-		config->get_double(QStringLiteral("mascots_background_opacity"), 0.5), 0.0, 1.0);
+		config->get_double(QStringLiteral("mascots_background_opacity"), 1.0), 0.0, 1.0);
+	// (M4 review fix: the fallback above is the shipped default. It was 0.5 -- the value this key
+	// had when Task 2 read it -- but Task 3's correction made the rows the scrim and the default
+	// 1.0, so a config written before the key existed would otherwise come up at half strength
+	// while a fresh one comes up at full.)
 
 	this->source.setAllFilesRandom(config->get_bool("mascots_allfiles_random"));
 	// The weighted/uniform switch is one of the source's two config-derived inputs, and the
@@ -765,6 +769,10 @@ void MascotController::applyConfig()
 		// which is the background's answer to losing players (it never takes an image in their
 		// place).
 		this->syncBands(this->backgroundState, MascotPanel::Background);
+		// (M4 review fix: the funded prefix is what decides whether the layer has anything to draw,
+		// so this is where the surface becomes visible or goes quiet again -- an empty layer is
+		// hidden rather than left as a black sheet behind the rows.)
+		this->updateBackgroundVisibility();
 		// `mascots_background_opacity` is presentation, not a gate: zero is applied like any other
 		// value, because the band logic -- picks, cadence, the player budget -- must not depend on
 		// how visible the layer currently is.
@@ -2333,6 +2341,23 @@ void MascotController::createSurfaces()
 	this->setSurfaces(left, right);
 }
 
+void MascotController::updateBackgroundVisibility()
+{
+	MascotSurface* surface = this->backgroundState.surface.data();
+	if (!surface)
+		return;
+	// A layer with no funded band has nothing to draw, and "nothing" from this widget is opaque
+	// black rather than the window behind it: without `WA_AlwaysStackOnTop` the quick widget blits
+	// its offscreen buffer as an opaque rectangle (MascotSurface's constructor records the
+	// measurement). Edge-to-edge video hides that entirely, which is why the layer can take the
+	// trade at all -- but an empty layer would put a black sheet behind the rows at (1 - alpha),
+	// and the list would read as darker than the app's own background for no reason the user asked
+	// for. So existence stays syncBackgroundSurface()'s question and this is the visibility one.
+	const bool drawable = this->backgroundBandCount() > 0;
+	if (surface->isVisible() != drawable)
+		surface->setVisible(drawable);
+}
+
 void MascotController::syncBackgroundSurface()
 {
 	// The layer's whole invariant, in one place: the surface exists if and only if this controller
@@ -2375,6 +2400,11 @@ void MascotController::createBackgroundSurface()
 	surface->setGeometry(host->rect());
 	surface->lower();
 	surface->show();
+	// (M4 review fix: the layer must not eat clicks. Its quick child already passes the mouse
+	// through, but that attribute does not stop the wrapper itself from being the widget under the
+	// cursor in the parts of the central widget no sibling covers -- which, for a window-sized
+	// child, is most of the empty area. A background is scenery: nothing it covers loses its events.)
+	surface->setAttribute(Qt::WA_TransparentForMouseEvents, true);
 	// M4 Task 2: the host's resize is what makes the layer's final rectangle, since the surface is
 	// in no layout (see the resize branch of eventFilter()). Installed here and removed with the
 	// surface, so a controller that never runs the layer watches nothing.
@@ -2393,6 +2423,10 @@ void MascotController::createBackgroundSurface()
 	// later in the same turn, which is idempotent). Without it a surface created after
 	// createSurfaces() would draw its first frames at a rect nobody had written.
 	this->updateLayout();
+	// (M4 review fix: `show()` above is the creation-time visibility the comment there describes;
+	// whether the layer should be showing *now* is the funded-prefix question, and a surface built
+	// by an Apply that left the layer no player must come up hidden rather than as a black sheet.)
+	this->updateBackgroundVisibility();
 }
 
 void MascotController::destroyBackgroundSurface()
@@ -4136,6 +4170,14 @@ void MascotController::applyBackgroundBudget()
 	// background's, which is what lets a `Stripes` layer draw its configured count of bands. A
 	// `Static` background keeps Task 2's subtraction exactly, because its acceptance is
 	// byte-identity at every budget; the pair's own allocation and lines are untouched either way.)
+	// (M4 review fix: that last sentence became "correct the subtraction in the panning modes only",
+	// which asked the wrong question -- the subtraction is a statement about *the pair*, not about the
+	// layer, so a pair that builds no players was still charged 2-4 decoders whenever the background
+	// was `Static`. A funded layer was then left blank: `mascots` off with
+	// `mascots_background_mode=Static` at `mascots_max_decoders=4` asked for 4, subtracted 4 from a
+	// pair that had none, and reported "no player left". The question is asked in every background
+	// mode now, and a pair that *can* show video is charged exactly what it was charged before, so
+	// Task 2's byte-identity case does not move.)
 	int pairPlayers = this->leftBandPlayers + this->rightBandPlayers;
 	if (this->columnsLayout.mode == MascotMode::Static) {
 		// A `Static` pair has no per-band allocation to read: each panel's one band owns two
@@ -4145,11 +4187,8 @@ void MascotController::applyBackgroundBudget()
 			: (this->videoMode == VideoMode::SinglePlayer ? 1 : 0);
 		pairPlayers = perPanel * VIDEO_PANEL_COUNT;
 	}
-	if (this->backgroundLayout.mode != MascotMode::Static
-		&& !this->mediaMayBeVideo(MascotPanel::Left)
-		&& !this->mediaMayBeVideo(MascotPanel::Right)) {
+	if (!this->mediaMayBeVideo(MascotPanel::Left) && !this->mediaMayBeVideo(MascotPanel::Right))
 		pairPlayers = 0;
-	}
 	if (!this->backgroundEnabled) {
 		// A layer that is off owns nothing and says nothing. The latches are reset with it, so a
 		// later enable states its allocation instead of comparing against a previous episode.

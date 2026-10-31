@@ -476,6 +476,14 @@ private:
 	// first (they draw into QVideoSinks the surface's QML delegates own), then clearSide() drops
 	// the slots and the pins, then releaseSurface() deletes it.
 	void destroyBackgroundSurface();
+	// (M4 review fix: existence is not the same question as visibility. A surface with no funded band
+	// draws nothing, and nothing -- for this widget -- is an opaque black rectangle: the layer takes
+	// the quick widget's opaque blit (see MascotSurface's constructor), which edge-to-edge video
+	// hides and an empty layer does not. So the layer is shown only while bandCount() is above zero,
+	// and a layer that loses its last player goes back to being invisible instead of black. Called
+	// wherever the funded prefix can change: the end of createBackgroundSurface() and the Apply that
+	// re-spends the budget.)
+	void updateBackgroundVisibility();
 
 	// ---- M3 Task 4: the scroll driver's own half ----
 	// Starts or stops the driver to match the current state. The one place the "should it be

@@ -583,6 +583,9 @@ void MascotController::applyConfig()
 		}
 	}
 	this->randomStart = config->get_bool(QStringLiteral("mascots_random_start"));
+	// (M5 item 1: cached here so scrollDirectionReverses() -- asked every scroll tick -- stays a field read.)
+	this->pairScrollOpposite = config->get(QStringLiteral("mascots_pair_scroll"))
+		.compare(QStringLiteral("Opposite"), Qt::CaseInsensitive) == 0;
 	// (M5: `mascots_low_latency` -- Qt's low-latency intent reduces buffering at the cost of a higher chance
 	// of dropped frames or glitches, so it is the user's call. Read here with the other player keys and
 	// pushed to a slot when the slot is created; a running player keeps the intent it was built with.)
@@ -922,7 +925,7 @@ void MascotController::applyConfig()
 			continue;
 		// The surface-wide default. The per-slot value written by applyDisplay() below is
 		// what is drawn, so the default can never disagree with the picture.
-		state->surface->setMirror(mirror);
+		state->surface->setMirror(false);
 		// Applying config drops a user flip, which is what the retired renderer did when the
 		// settings were applied: the side rule becomes authoritative and the repaint below draws
 		// what the settings say, never a leftover toggle.
@@ -2764,7 +2767,10 @@ void MascotController::configureSurface(PanelState& state, MascotPanel panel)
 	// layer flipped until its next commit. The pair's answer is unchanged.
 	MascotSide pairSide = MascotSide::Left;
 	const bool hasPairSide = this->pairSideOf(state, &pairSide);
-	surface->setMirror(hasPairSide ? this->mirrorEnabled() : false);
+	// (M5 item 1: the surface-wide mirror is gone. It flipped the whole surface -- in a panning mode that is
+	// the marquee itself, which is why Scroll "flipped the video but it stayed in place": the contents were
+	// mirrored while the pan kept running one way. Mirroring is per slot now, at the band, above.)
+	surface->setMirror(false);
 	// M3 Task 2: one mirror per band, from the media that band already carries. setMirror() above
 	// is only the bulk default a slot created by setSlotCount() starts from; these calls are what
 	// re-apply the per-band flip parity a surviving band had before the surface was rebuilt (a
@@ -3012,12 +3018,20 @@ void MascotController::applyMirror(PanelState& state, MascotPanel panel, const Q
 	if (!state.surface || !band)
 		return;
 	bool mirrored;
-	if (state.mirrorOverrideEnabled)
+	// (M5 item 1: parity has two sources, composed. The hardcoded folder rule -- a file authored for one side
+	// landing in the other slot is flipped -- stays as it always was. Mirror Mascots adds the pair rule: the
+	// right column is the left one mirrored, which is the rule a video can honour. XOR, not assignment: a
+	// folder-flipped image under mirror would otherwise flip twice and cancel, which is the "they always face
+	// the same way" this replaces.)
+	if (state.mirrorOverrideEnabled) {
 		mirrored = state.mirrorOverrideValue;
-	else if (!path.isEmpty())
-		mirrored = this->mirrorParityFor(panel, path);
-	else
-		mirrored = false;
+	}
+	else {
+		const bool folderFlip = !path.isEmpty()
+			&& this->flipForSide(path, panel == MascotPanel::Left ? MascotSide::Left : MascotSide::Right);
+		const bool pairMirror = this->mirrorEnabled() && panel == MascotPanel::Right;
+		mirrored = folderFlip != pairMirror;
+	}
 	// The retired renderer toggled whatever the side rule had produced, and a new image reset that
 	// toggle. One authoritative value per slot, written here and nowhere else.
 	// (M3 Task 2: the toggle is per panel, so every band of a `Stripes` panel draws the same

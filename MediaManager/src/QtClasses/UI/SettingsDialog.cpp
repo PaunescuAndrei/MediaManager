@@ -866,6 +866,15 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "smooth playback at a slower first frame. Applies to the next player a panel builds.");
     playbackLayout->addWidget(mascotLowLatencyCheckBox);
 
+    // (M5 item 1: one control, one clear label. Mirror mode already puts the same media in both columns and
+    // flips one against the other; this decides whether they also travel against each other.)
+    mascotPairScrollCombo = makeComboBox({ QStringLiteral("Same"), QStringLiteral("Opposite") },
+        config->get(QStringLiteral("mascots_pair_scroll")));
+    addRow(playbackLayout, "Mirror pair scroll:",
+        "In mirror mode, whether the two columns scroll the same way or against each other. Same is what "
+        "they have always done; Opposite makes the mirrored pair travel outwards or inwards together.",
+        mascotPairScrollCombo);
+
     // (M5 Task 9: the label follows the rule the fix gave it. It said "not focused", which is exactly what
     // it must not do any more.)
     mascotPauseUnfocusedCheckBox = new QCheckBox("Pause when the window cannot be seen");
@@ -1144,7 +1153,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         mascotMediaCombo, mascotModeCombo, mascotFillCombo, mascotWeightedCheckBox,
         mascotClipSecondsSpinBox, mascotCrossfadeSpinBox, mascotSwapOnBeatCheckBox,
         mascotRandomStartCheckBox, mascotPreloadCheckBox, mascotPauseUnfocusedCheckBox,
-        mascotLowLatencyCheckBox,
+        mascotLowLatencyCheckBox, mascotPairScrollCombo,
         mascotMaxDecodersSpinBox, mascotScrollSpeedSpinBox, mascotScrollDirectionCombo,
         mascotScrollPingpongCheckBox, mascotStripesLeftSpinBox, mascotStripesRightSpinBox,
         mascotStripesOrientationCombo, mascotStripesAlternateCheckBox, mascotBackgroundCheckBox,
@@ -1191,6 +1200,7 @@ void SettingsDialog::syncMascotConfig()
     config->set("mascots_preload", mascotPreloadCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_pause_unfocused", mascotPauseUnfocusedCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_low_latency", mascotLowLatencyCheckBox->isChecked() ? "True" : "False");
+    config->set("mascots_pair_scroll", mascotPairScrollCombo->currentText());
     config->set("mascots_max_decoders", QString::number(mascotMaxDecodersSpinBox->value()));
     config->set("mascots_scroll_speed", QString::number(mascotScrollSpeedSpinBox->value()));
     config->set("mascots_scroll_direction", mascotScrollDirectionCombo->currentText());
@@ -1267,6 +1277,7 @@ void SettingsDialog::updateMascotControlStates()
     mascotMaxDecodersSpinBox->setEnabled(true);
     mascotPauseUnfocusedCheckBox->setEnabled(true);
     mascotLowLatencyCheckBox->setEnabled(true);
+    mascotPairScrollCombo->setEnabled(true);
 
 
     // Rows 3-5: Scroll and Stripes share this group, so the rows go dark individually instead of

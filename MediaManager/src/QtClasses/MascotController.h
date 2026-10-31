@@ -1063,6 +1063,8 @@ private:
 	// (M5: `mascots_low_latency`. Pushed into every slot at creation -- the intent is fixed for a player's
 	// lifetime, so a change reaches the next player rather than the running one.)
 	bool lowLatency = true;
+	// (M5 item 1: `mascots_pair_scroll` == Opposite, cached for the per-tick scroll direction answer.)
+	bool pairScrollOpposite = false;
 	// (M5 Task 10: the layer's own cadence. `mascots_background_clip_seconds`,
 	// `mascots_background_swap_on_beat`, `mascots_background_random_change` and
 	// `mascots_background_random_chance`, each falling back to its columns twin when absent. The M4 note

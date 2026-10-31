@@ -99,6 +99,9 @@ void Config::init_defaults() {
 		// M5: Qt's low-latency playback intent. True is what the mascots have always used; False asks for the
 		// backend's normal buffering instead -- smoother playback, a slower first frame.
 		{"mascots_low_latency", "True"},
+		// M5 item 1: whether the two columns scroll against each other in mirror mode. Same is the behaviour
+		// they have always had; Opposite makes a mirrored pair travel outwards or inwards together.
+		{"mascots_pair_scroll", "Same"},
 		{"mascots_swap_on_beat", "True"},
 		{"mascots_random_start", "True"},
 		{"mascots_crossfade_ms", "600"},

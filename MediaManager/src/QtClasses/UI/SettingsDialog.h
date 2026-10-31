@@ -137,6 +137,8 @@ public:
     // (M5 Task 10: the layer's own cadence -- clip length, beat swap, random change and its chance.)
     // (M5: Qt's low-latency playback intent, which trades buffering for a higher chance of dropped frames.)
     QCheckBox* mascotLowLatencyCheckBox = nullptr;
+    // (M5 item 1: `mascots_pair_scroll` -- whether a mirrored pair scrolls the same way or against itself.)
+    QComboBox* mascotPairScrollCombo = nullptr;
     QSpinBox* mascotBackgroundClipSpinBox = nullptr;
     QCheckBox* mascotBackgroundSwapOnBeatCheckBox = nullptr;
     QCheckBox* mascotBackgroundRandomChangeCheckBox = nullptr;

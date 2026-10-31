@@ -658,6 +658,13 @@ void MainWindow::applyListTransparency() {
         : appPalette;
     this->ui.videosWidget->setPalette(rowPalette);
     this->ui.videosWidget->viewport()->setPalette(viewportPalette);
+    // (M5 fix: an alpha-0 palette is not enough. A polish after this call resets the viewport's
+    // palette to the view's, so the viewport paints a second row scrim underneath the rows and the
+    // media is held back twice -- 0.85 over 0.85 is 0.9775 opaque, which is what a flat #FF8000 layer
+    // measured as (55,52,49) where the single-scrim blend is (68,49,30). The viewport stops filling
+    // at all instead, so the row fill is the only scrim whatever the polish does to the palette; the
+    // off state restores the autofill it shipped with, so its rendering is unchanged.)
+    this->ui.videosWidget->viewport()->setAutoFillBackground(!backgroundEnabled);
     // (M4 follow-up: the strip above the list had one opaque row. The current-video label sits in a
     // QScrollArea, and that row is filled twice over: `qt_scrollarea_viewport` *and* the
     // `scrollAreaWidgetContents` widget both autofill, with the `Window` role -- so the row stayed at

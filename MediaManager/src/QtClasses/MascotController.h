@@ -675,6 +675,11 @@ private:
 	// The orientation the last layout was derived with (M3 Task 5). An orientation change alters
 	// the stacking axis without changing the band count, so applyMode() has to compare this too or
 	// a `Horizontal` -> `Vertical` switch would leave the old rectangles in place.
+	// (M3 Task 5 fix: the rectangles are written by applyConfig()'s later unconditional
+	// updateLayout() -- the orientation is cached before applyMode() runs -- so this comparison is
+	// what makes applyMode() run at all on an axis-only change: without it the old offset would
+	// stay on the slot and the zero-travel latch would keep a statement about the old layout. The
+	// sentence above is kept as the record of what the task first asserted.)
 	StripesOrientation appliedStripesOrientation = StripesOrientation::Horizontal;
 	bool modeApplied = false;
 	// ---- M3 Task 5: the per-band decoder allocation, written by applyBandBudget() ----
@@ -689,9 +694,16 @@ private:
 	// pattern) rather than once per Apply or once per band. The mode is part of the key because it
 	// is part of the sentence: a `Scroll` panel's one band and a `Stripes` panel's one band are the
 	// same count but not the same statement.
+	// (M3 Task 5 fix: the per-panel split is part of the tuple too, because two allocations can
+	// want and keep the same total on different panels -- a live 2/2 -> 3/1 change with an
+	// unchanged total used to leave the log advertising the old split. The whole tuple is also
+	// reset by the `Static` branch: a `Static` interlude has no panning allocation to describe, so
+	// the next panning mode must say its piece again.)
 	int loggedBandBudgetDecoders = -1;
 	int loggedBandBudgetWanted = -1;
 	int loggedBandBudgetAllowed = -1;
+	int loggedBandBudgetLeft = -1;
+	int loggedBandBudgetRight = -1;
 	MascotMode loggedBandBudgetMode = MascotMode::Static;
 
 	// ---- M3 Task 4: the scroll configuration and the driver, all written by applyConfig() ----

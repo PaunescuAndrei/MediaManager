@@ -929,7 +929,14 @@ void MascotController::applyMode()
 	// without changing the count, so its own relayout has to be added to this condition.)
 	// (M3 Task 5: added, as `orientationChanged`. The condition is exactly "the rectangles may have
 	// moved": a count change or an axis change, never the mode alone.)
-	if (countChanged || orientationChanged)
+	// (M3 Task 5 fix: the axis change is *not* added here after all. applyConfig() calls
+	// updateLayout() unconditionally after applyDisplay(), and the orientation is cached before
+	// applyMode() runs, so that call already produces the new rectangles; adding this one wrote
+	// every band's rect twice on an orientation change -- the duplicate c4d9fd5 removed. The count
+	// path stays: syncBands() has just changed the slot count, and the layout must be settled
+	// before applyDisplay() below repaints into it. `orientationChanged` still makes applyMode()
+	// run, for the offset and zero-travel-latch clearing above, which no later call performs.)
+	if (countChanged)
 		this->updateLayout();
 	// Bands the change added have no content. Queued, because this runs inside a settings handler
 	// and a pick walks the mascot directory and posts a decode; a controller that was stopped in
@@ -1314,8 +1321,11 @@ void MascotController::onScrollTick()
 	// widest shares that phase, so its own step is proportionally smaller and this test is
 	// conservative for it; the error is toward standing still on a travel measured in pixels,
 	// which is invisible at the default 40 px/s.
-	const double tickStep = static_cast<double>(this->scrollSpeed)
-		* static_cast<double>(SCROLL_TICK_MS) / 1000.0;
+	// (M3 Task 5 fix: the test below no longer uses this nominal step. It compares the phase
+	// advance the tick actually applied -- `scrollSpeed * elapsedMs / referenceTravel`, i.e. the
+	// measured dt over the panel's reference travel -- against one whole travel, so a narrow band
+	// on a fast tick is no longer frozen and a stalled frame that really did jump a pass is
+	// caught. The paragraph above is kept as the record of the first version.)
 	const bool vertical = this->scrollPanIsVertical();
 	const bool reverse = this->scrollDirectionReverses();
 	const bool pingpong = this->scrollPingpong;
@@ -1334,14 +1344,24 @@ void MascotController::onScrollTick()
 			referenceTravel = std::max(referenceTravel, this->scrollTravel(*owned));
 		const double phaseBefore = state.scrollPhase;
 		double phaseRaw = phaseBefore;
+		double phaseDelta = 0.0;
 		if (referenceTravel > 0.0 && this->scrollSpeed > 0) {
 			// px/s -> travel lengths/s -> this tick's slice of a travel. A speed of 0 is not "pan
 			// infinitely slowly", it is "do not pan": the phase is left alone so that turning the
 			// speed back up resumes where the band was instead of having moved invisibly.
 			const double delta = static_cast<double>(this->scrollSpeed) * dtSeconds / referenceTravel;
+			phaseDelta = delta;
 			phaseRaw = phaseBefore + delta;
 			state.scrollPhase = advancedScrollPhase(phaseBefore, delta);
 		}
+		// M3 Task 5: the aliasing test. One tick advances the panel's shared phase by `phaseDelta`
+		// travel lengths; at a whole travel or more every band's fraction wraps more than once in
+		// the frame, so the drawn positions are effectively random instead of moving, and the bands
+		// below take the still branch. Both terms are the quantities the phase is actually advanced
+		// by -- this tick's measured dt and the panel's reference travel -- so a stalled frame that
+		// really did jump a whole pass is caught, and a narrow band on a fast tick that moves a
+		// fraction of its own travel is not mistaken for an aliasing one.
+		const bool phaseAliases = referenceTravel > 0.0 && phaseDelta >= 1.0;
 		for (int i = 0; i < static_cast<int>(state.bands.size()); ++i) {
 			MascotBand* band = state.band(i);
 			if (!band)
@@ -1353,8 +1373,21 @@ void MascotController::onScrollTick()
 			// that names the travel instead of the content), as content that fits its band.
 			// A queued wrap-point commit has no seam on such a band either, exactly as for a band
 			// with travel 0; the caller that queued it (Task 6) has to handle "no pass is running".
-			const bool subTickTravel = travel > 0.0 && travel < tickStep;
-			if (travel <= 0.0 || subTickTravel) {
+			// (M3 Task 5 fix: the comparison is no longer the band's travel against a nominal tick.
+			// A tick that advances the panel's shared phase by a whole travel or more makes every
+			// band's fraction wrap more than once, so the test is `phaseAliases` above -- measured
+			// from the dt this tick actually saw and the panel's reference travel -- and the band's
+			// own travel only has to be positive. The paragraph above is kept as the record of the
+			// first version.)
+			// M3 Task 5: a band that can pan still takes the still branch while the panel's phase
+			// aliases (phaseAliases above): one frame would move it by more than a whole travel, so
+			// it is centred and left there -- the same answer, and the same once-per-layout line
+			// (with a wording that names the tick instead of the content), as content that fits its
+			// band. A queued wrap-point commit has no seam on such a band either, exactly as for a
+			// band with travel 0; the caller that queued it (Task 6) has to handle "no pass is
+			// running".
+			const bool travelAliases = travel > 0.0 && phaseAliases;
+			if (travel <= 0.0 || travelAliases) {
 				// Nothing to pan: the band is centred and still (Ruling M3-6), and per tick it
 				// writes nothing at all. The one write it can owe is the transition off a previous
 				// offset -- a band whose content became narrower than its band would otherwise be
@@ -1372,13 +1405,13 @@ void MascotController::onScrollTick()
 				// would silence the line for the narrow picture that is the actual case.
 				if (!band->media().path.isEmpty() && !state.scrollZeroTravelLogged.value(i, false)) {
 					state.scrollZeroTravelLogged[i] = true;
-					if (subTickTravel) {
-						this->logScroll(QStringLiteral("%1 band %2 stands still: its travel is %3px, under one %4ms tick's %5px step")
+					if (travelAliases) {
+						this->logScroll(QStringLiteral("%1 band %2 stands still: one %3ms tick advances the pass %4 times (its travel is %5px)")
 							.arg(sideLabel(side))
 							.arg(i)
-							.arg(travel, 0, 'f', 1)
-							.arg(SCROLL_TICK_MS)
-							.arg(tickStep, 0, 'f', 1));
+							.arg(elapsedMs)
+							.arg(phaseDelta, 0, 'f', 2)
+							.arg(travel, 0, 'f', 1));
 					}
 					else {
 						const QSizeF content = surface->slotContentSize(band->slotIndex());
@@ -3058,6 +3091,13 @@ void MascotController::applyBandBudget()
 	if (this->mascotMode == MascotMode::Static) {
 		this->leftBandPlayers = 0;
 		this->rightBandPlayers = 0;
+		// The latch describes a panning allocation. A `Static` interlude has none, so the next
+		// panning mode writes its line again instead of comparing against a layout two modes old.
+		this->loggedBandBudgetDecoders = -1;
+		this->loggedBandBudgetWanted = -1;
+		this->loggedBandBudgetAllowed = -1;
+		this->loggedBandBudgetLeft = -1;
+		this->loggedBandBudgetRight = -1;
 		return;
 	}
 	// Panning modes: one player per band, so the bands are the players that are wanted.
@@ -3073,13 +3113,16 @@ void MascotController::applyBandBudget()
 		// spare -- it is the band the mirror pair follows, and it is also what a floor split of the
 		// budget between two equal panels gives it. The bands past each panel's allocation show
 		// images, so a short budget never leaves a band blanker than "no media at all".
+		// (M3 Task 5 fix: the order is left then right on every round. Alternating the *starting*
+		// panel handed the odd spare to the right -- with 2+2 bands and three decoders the split
+		// was left 1 / right 2 -- which contradicted the sentence above. The sentence is the
+		// intent; the loop now keeps it.)
 		allowedLeft = 0;
 		allowedRight = 0;
 		int remaining = std::max(0, this->maxDecoders);
-		for (int round = 0; remaining > 0; ++round) {
+		while (remaining > 0) {
 			bool took = false;
-			const MascotSide first = (round % 2 == 0) ? MascotSide::Left : MascotSide::Right;
-			for (MascotSide side : { first, other(first) }) {
+			for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
 				if (remaining <= 0)
 					break;
 				int& allowed = side == MascotSide::Left ? allowedLeft : allowedRight;
@@ -3094,6 +3137,20 @@ void MascotController::applyBandBudget()
 				break;
 		}
 	}
+	// The pair shares one video budget, not two independent ones: `nextImages()` mirrors the left
+	// panel's video onto the right and `onSwapBeat()` treats the pair as one video-capable unit, so
+	// a panel whose first band has no player can be neither copied into nor advanced and would sit
+	// on whatever it had. If the clamp leaves either panel's first band without a player, the pair
+	// degrades: neither panel keeps a player and both show images, which is exactly the
+	// `VideoMode::Off` behaviour M2 produced for a one-decoder budget and what the beat then drives.
+	// A four-way per-panel answer would let a one-video/one-image pair exist, which the mirror rules
+	// were never written for.
+	bool pairDegraded = false;
+	if (allowedLeft == 0 || allowedRight == 0) {
+		pairDegraded = allowedLeft > 0 || allowedRight > 0;
+		allowedLeft = 0;
+		allowedRight = 0;
+	}
 	this->leftBandPlayers = allowedLeft;
 	this->rightBandPlayers = allowedRight;
 	// An images-only setting has nothing to clamp and nothing to say: its run's log has to stay
@@ -3104,15 +3161,30 @@ void MascotController::applyBandBudget()
 	// One line per change of the budget, the bands that ask or the bands that keep a player -- the
 	// M2 clamp-line pattern. A count change with the same budget is a different clamp, so it says
 	// its piece rather than leaving the last line describing a layout that no longer exists.
+	// (M3 Task 5 fix: the per-panel split and the mode join the tuple, because an allocation can
+	// change which panels keep the players while leaving the total alone, and a `Scroll`/`Stripes`
+	// change is a different sentence with the same counts. The tuple is reset by the `Static`
+	// branch above, so a panning mode re-entered after a `Static` interlude says its piece again.)
 	if (this->loggedBandBudgetDecoders == this->maxDecoders
 		&& this->loggedBandBudgetWanted == wanted
 		&& this->loggedBandBudgetAllowed == allowed
+		&& this->loggedBandBudgetLeft == allowedLeft
+		&& this->loggedBandBudgetRight == allowedRight
 		&& this->loggedBandBudgetMode == this->mascotMode)
 		return;
 	this->loggedBandBudgetDecoders = this->maxDecoders;
 	this->loggedBandBudgetWanted = wanted;
 	this->loggedBandBudgetAllowed = allowed;
+	this->loggedBandBudgetLeft = allowedLeft;
+	this->loggedBandBudgetRight = allowedRight;
 	this->loggedBandBudgetMode = this->mascotMode;
+	if (pairDegraded) {
+		this->logVideo(QStringLiteral("mascots_max_decoders=%1 cannot give both panels a player (%2 %3 bands ask for one each); neither panel keeps one, so both show images on the beat")
+			.arg(this->maxDecoders)
+			.arg(wanted)
+			.arg(modeLabel(this->mascotMode)));
+		return;
+	}
 	if (allowed < wanted) {
 		this->logVideo(QStringLiteral("mascots_max_decoders=%1 is below what %2 %3 bands ask for (one player each); %4 bands keep a player (left %5, right %6) and the rest show images")
 			.arg(this->maxDecoders)

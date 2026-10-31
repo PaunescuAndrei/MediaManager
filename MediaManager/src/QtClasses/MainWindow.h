@@ -265,6 +265,12 @@ public:
     // written by the caller), runs the columns/background state machine and then everything that
     // derives from it, so the dialog's live apply and applySettings' accept path share one body.
     void applyMascotSettings();
+    // (M5 review fix: the rows that predate the M5 page -- master switch, Animated, the dice, frequency,
+    // width, colour theme, centre -- are written by the page's one writer now, but their *runtime* side
+    // effects (the animation thread's cadence, the host width, the palette) do not live in config. This is
+    // that half: it pushes those effects from the keys and then runs applyMascotSettings(). Called on every
+    // live change and on Cancel, so a row means the same thing whichever button the user presses.)
+    void applyLiveMascotRows();
     void applyMascotWidth(int windowWidth, double percent);
     void setDebugMode(bool debug);
     void settingsDialogButton();

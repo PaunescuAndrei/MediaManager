@@ -1009,10 +1009,27 @@ void MascotController::applyConfig()
 	// transition check is guarded by `mirrorAppliedKnown` so the first Apply of a run -- the one `start()`
 	// makes before the panels have filled -- records the value instead of triggering a second fill.)
 	const bool mirrorNow = this->mirrorEnabled();
-	if (this->mirrorAppliedKnown && mirrorNow && !this->mirrorAppliedLast && this->running) {
-		for (int i = 0; i < this->bandCount(MascotPanel::Left); ++i) {
-			if (this->leftState.band(i) && this->rightState.band(i))
-				this->nextBandImages(i, false);
+	if (this->mirrorAppliedKnown && mirrorNow != this->mirrorAppliedLast && this->running) {
+		if (mirrorNow) {
+			for (int i = 0; i < this->bandCount(MascotPanel::Left); ++i) {
+				if (this->leftState.band(i) && this->rightState.band(i))
+					this->nextBandImages(i, false);
+			}
+		}
+		else {
+			// (M5 review fix: the other direction has to happen as immediately as this one. Turning Mirror
+			// off used to leave the right column on the left column's file until its own next advance --
+			// which a static configuration never makes -- so the pair looked paired with the key off. The
+			// armed copy is dropped first (it would otherwise fire on the left band's next first frame and
+			// re-pair them), then the right band picks for itself, from its own pool.)
+			for (int i = 0; i < this->bandCount(MascotPanel::Right); ++i) {
+				MascotBand* rightBand = this->rightState.band(i);
+				if (!rightBand)
+					continue;
+				rightBand->playback().mirrorCopyPending = false;
+				if (this->leftState.band(i))
+					this->pickFor(this->rightState, MascotPanel::Right, i, false);
+			}
 		}
 	}
 	this->mirrorAppliedLast = mirrorNow;
@@ -2655,8 +2672,11 @@ void MascotController::refreshColumnsVeil()
 {
 	if (!this->App || !this->App->config)
 		return;
+	// (M5 review: the fallback follows the shipped default (0). It used to be 0.85 in three places with
+	// three different spellings, which meant the "columns below" fade and the veil could disagree by a
+	// step, and an old config with no line for the key came up dimmed against the new default's look.)
 	const double veilOpacity = std::clamp(
-		this->App->config->get_double(QStringLiteral("mascots_background_opacity"), 0.85), 0.0, 1.0);
+		this->App->config->get_double(QStringLiteral("mascots_background_opacity"), 0.0), 0.0, 1.0);
 	const bool above = this->App->config->get(QStringLiteral("mascots_columns_z"))
 		.compare(QStringLiteral("Below"), Qt::CaseInsensitive) != 0;
 	// With the layer off there is no veil to be under, so the pair keeps its ordinary drawing whatever
@@ -3873,7 +3893,11 @@ void MascotController::onVideoFirstFrame(MascotPanel panel, int bandIndex, const
 		MascotBand* rightBand = this->rightState.band(bandIndex);
 		if (rightBand && rightBand->playback().mirrorCopyPending) {
 			rightBand->playback().mirrorCopyPending = false;
-			if (this->rightState.surface && rightBand->video())
+			// (M5 review fix: the copy is the *mirror* key's work, so it has to ask the key. A copy armed
+			// while the pair was mirrored could still be pending when the user turned Mirror off, and this
+			// line then dragged the right column back onto the left column's file one commit later -- the
+			// column followed the left one again after the switch that should have set it free.)
+			if (this->mirrorEnabled() && this->rightState.surface && rightBand->video())
 				this->startMirrorVideo(bandIndex, path, offsetMs);
 		}
 	}

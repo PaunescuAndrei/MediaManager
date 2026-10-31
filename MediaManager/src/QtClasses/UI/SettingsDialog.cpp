@@ -1035,7 +1035,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     backgroundLayout->addWidget(mascotBackgroundCheckBox);
 
     mascotBackgroundOpacitySpinBox = makeDoubleSpinBox(0.00, 1.00, 0.05,
-        config->get_double(QStringLiteral("mascots_background_opacity"), 0.85));
+        config->get_double(QStringLiteral("mascots_background_opacity"), 0.0));
     addRow(backgroundLayout, "Veil opacity:",
         "How much of the window's own background colour is painted over the layer. The layer itself "
         "always runs at full strength; this is one translucent rectangle in front of it, so 1.00 is "
@@ -1245,6 +1245,11 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         mascotBackgroundClipSpinBox, mascotBackgroundSwapOnBeatCheckBox,
         mascotBackgroundRandomChangeCheckBox, mascotBackgroundChanceSpinBox,
         mascotBackgroundScrollPingpongCheckBox, mascotCacheMbSpinBox, mascotCacheItemsSpinBox,
+        // (M5 review fix: the legacy rows, in the same live path. Their runtime side effects are
+        // MainWindow::applyLiveMascotRows()'s; the config writes are at the top of syncMascotConfig().)
+        this->ui.mascotsOnOff, this->ui.mascotsAnimated, this->ui.mascotsRandomChange,
+        this->ui.mascotsChanceSpinBox, this->ui.mascotsFreqSpinBox, this->ui.mascotsWidthSpinBox,
+        this->ui.mascotsExtractColor, this->ui.mascotsCenterContent,
     };
     for (QWidget* widget : mascotControls) {
         if (auto* combo = qobject_cast<QComboBox*>(widget))
@@ -1294,6 +1299,20 @@ void SettingsDialog::syncMascotConfig()
     // depend on it live while the switch itself was not -- and it also meant the controller could not see
     // the 0->1 transition it needs in order to re-pair the columns.)
     config->set("mascots_mirror", this->ui.mascotsMirror->isChecked() ? "True" : "False");
+    // (M5 review fix: the legacy rows on this page -- master switch, Animated, the dice, frequency, width,
+    // colour theme, centre -- are written here too, because they are on the same page as the controls that
+    // were already live and the user asked for one rule: a control that decides something on screen takes
+    // effect when it is clicked. Their runtime half is MainWindow::applyLiveMascotRows(), called at the end
+    // of this function; the two that are *not* here -- All files random and Use seed -- change which pool is
+    // built, not a live property, so they stay with applySettings() on Apply.)
+    config->set("mascots", this->ui.mascotsOnOff->isChecked() ? "True" : "False");
+    config->set("mascots_animated", this->ui.mascotsAnimated->isChecked() ? "True" : "False");
+    config->set("mascots_random_change", this->ui.mascotsRandomChange->isChecked() ? "True" : "False");
+    config->set("mascots_random_chance", QString::number(this->ui.mascotsChanceSpinBox->value()));
+    config->set("mascots_frequency", QString::number(this->ui.mascotsFreqSpinBox->value()));
+    config->set("mascots_width_percent", QString::number(this->ui.mascotsWidthSpinBox->value()));
+    config->set("mascots_color_theme", this->ui.mascotsExtractColor->isChecked() ? "True" : "False");
+    config->set("mascots_center_content", this->ui.mascotsCenterContent->isChecked() ? "True" : "False");
     config->set("mascots_max_decoders", QString::number(mascotMaxDecodersSpinBox->value()));
     config->set("mascots_scroll_speed", QString::number(mascotScrollSpeedSpinBox->value()));
     config->set("mascots_scroll_direction", mascotScrollDirectionCombo->currentText());
@@ -1326,7 +1345,10 @@ void SettingsDialog::syncMascotConfig()
     config->set("mascots_image_cache_max_items", QString::number(mascotCacheItemsSpinBox->value()));
 
     updateMascotControlStates();
-    mw->applyMascotSettings();
+    // (M5 review fix: the live entry point that also pushes the legacy rows' runtime half -- engine
+    // cadence/dice, host width, palette. It ends in applyMascotSettings(), so the page's own controls are
+    // applied exactly as before.)
+    mw->applyLiveMascotRows();
 }
 
 void SettingsDialog::restoreMascotConfig()
@@ -1335,7 +1357,10 @@ void SettingsDialog::restoreMascotConfig()
     Config* config = mw->App->config;
     for (auto it = mascotConfigSnapshot.constBegin(); it != mascotConfigSnapshot.constEnd(); ++it)
         config->set(it.key(), it.value());
-    mw->applyMascotSettings();
+    // (M5 review fix: Cancel restores the legacy rows' keys too, so their runtime half has to follow the
+    // restore -- an engine started by a live Animated tick would otherwise keep beating after Cancel put
+    // the key back to False.)
+    mw->applyLiveMascotRows();
     updateMascotControlStates();
 }
 

@@ -144,7 +144,13 @@ void Config::init_defaults() {
 		// is drawn at 100% and nothing fades it any more. 0.85 is the default because it is the bleed
 		// the row scrim was tuned to: 15% of the frame still reads as a picture behind the text, and
 		// white body text keeps 9.8:1 over a white frame at that ratio.)
-		{"mascots_background_opacity", "0.85"},
+		// (M5 review: the default is 0 now, on the user's call. "The video in the background pretty much
+		// always at 100% opacity, then a rectangle over it in the app background colour that we can adjust
+		// its opacity" is the shape of the feature, and the veil's default should be the state that shows
+		// the layer as the user set it up: with the rows at their own 0.85 the centre pane is readable and
+		// the margins show the video. 0.85 here composed with the row fill (0.85 x 0.85) and left ~2% of
+		// the frame under the list, which is not what "visible at 100%" means.)
+		{"mascots_background_opacity", "0"},
 		// M4 Task 3b: how opaque the list's rows (and the strip above them) are over the layer.
 		// 1.0 would hide the layer behind the list entirely, 0.0 would put body text straight on the
 		// video. 0.85 is what the app shipped with as a constant: white text keeps 9.8:1 on the Base

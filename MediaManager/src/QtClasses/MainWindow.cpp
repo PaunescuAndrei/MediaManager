@@ -644,7 +644,7 @@ void MainWindow::applyBackgroundVeil() {
     int veilAlpha = BACKGROUND_ROW_ALPHA;
     if (this->App->config) {
         const double configured = this->App->config->get_double(
-            "mascots_background_opacity", BACKGROUND_ROW_ALPHA / 255.0);
+            "mascots_background_opacity", 0.0);
         veilAlpha = qBound(0, qRound(configured * 255.0), 255);
     }
     // (M5 Task 8: the rows paint their fill again -- Base and AlternateBase at one alpha, which is what
@@ -667,7 +667,13 @@ void MainWindow::applyBackgroundVeil() {
             "mascots_background_alternate_alpha", rowAlpha / 255.0);
         alternateAlpha = qBound(0, qRound(configured * 255.0), 255);
     }
-    const QPalette rowPalette = backgroundEnabled
+    // (M5 review fix: at 1.00 the veil covers the layer completely, so every surface that exists only to
+    // make text readable *over* the layer has nothing left to do -- and painting them anyway changed the
+    // window's look: the strip's scrim laid the list's Base colour over an opaque window-coloured veil, so
+    // the top of the centre pane came out a different grey from the window with the layer switched off.
+    // `layerVisible` is what those surfaces ask: the layer is only worth scrimming while some of it shows.
+    const bool layerVisible = backgroundEnabled && veilAlpha < 255;
+    const QPalette rowPalette = layerVisible
         ? get_background_row_palette(appPalette, rowAlpha, alternateAlpha)
         : appPalette;
     // The view and its viewport: the viewport paints the rows' backdrop and the rows paint their
@@ -680,7 +686,7 @@ void MainWindow::applyBackgroundVeil() {
     // a row -- measured, the layer was invisible. The viewport's Base is therefore cleared to alpha
     // 0: it stops painting a scrim between the media and the row fill, and the row fill becomes the
     // only one. Both row colours still carry the one row alpha the requirement asks for.)
-    const QPalette viewportPalette = backgroundEnabled
+    const QPalette viewportPalette = layerVisible
         ? get_background_row_palette(appPalette, 0, 0)
         : appPalette;
     this->ui.videosWidget->setPalette(rowPalette);
@@ -688,7 +694,7 @@ void MainWindow::applyBackgroundVeil() {
     // (M5 Task 8b: the rows paint their own fill while the layer is on, because Qt's arrangement cannot
     // express a translucent list that also alternates -- see VideosTreeView::setTranslucentRows(). With
     // the layer off this hands the view back to Qt, which is what keeps that rendering identical.)
-    this->ui.videosWidget->setTranslucentRows(backgroundEnabled);
+    this->ui.videosWidget->setTranslucentRows(layerVisible);
     // (M5 Task 8e: the scrollbars' own opacity. Two mechanisms were tried and one of them works: the
     // palette does not, because a scrollbar's groove is drawn from a style that resolves its colours
     // through the style sheet machinery the view already has -- measured, the groove stayed at the list
@@ -696,7 +702,7 @@ void MainWindow::applyBackgroundVeil() {
     // value is below 1.00 the bar is drawn from these two rules; at 1.00 the style sheet is cleared and
     // the bar is the stock one again, which is what it has always been.)
     int scrollbarAlpha = 255;
-    if (backgroundEnabled && this->App->config) {
+    if (layerVisible && this->App->config) {
         const double configured = this->App->config->get_double(
             "mascots_background_scrollbar_alpha", 1.0);
         scrollbarAlpha = qBound(0, qRound(configured * 255.0), 255);
@@ -722,7 +728,7 @@ void MainWindow::applyBackgroundVeil() {
     // measured as (55,52,49) where the single-scrim blend is (68,49,30). The viewport stops filling
     // at all instead, so the row fill is the only scrim whatever the polish does to the palette; the
     // off state restores the autofill it shipped with, so its rendering is unchanged.)
-    this->ui.videosWidget->viewport()->setAutoFillBackground(!backgroundEnabled);
+    this->ui.videosWidget->viewport()->setAutoFillBackground(!layerVisible);
     // (M4 follow-up: the strip above the list had one opaque row. The current-video label sits in a
     // QScrollArea, and that row is filled twice over: `qt_scrollarea_viewport` *and* the
     // `scrollAreaWidgetContents` widget both autofill, with the `Window` role -- so the row stayed at
@@ -740,7 +746,7 @@ void MainWindow::applyBackgroundVeil() {
     for (QWidget* fill : currentVideoFills) {
         if (!fill)
             continue;
-        if (backgroundEnabled) {
+        if (layerVisible) {
             fill->setBackgroundRole(QPalette::NoRole);
             fill->setAutoFillBackground(false);
         }
@@ -791,7 +797,7 @@ void MainWindow::applyBackgroundVeil() {
     // at the row alpha -- so the strip above the list reads exactly like an even row, and the layer is
     // held back by the same amount above the list as inside it. Sized to the space the list does not
     // occupy: a scrim that covered the list too would stack a second fill under the rows.)
-    if (backgroundEnabled) {
+    if (layerVisible) {
         if (!this->backgroundScrim) {
             this->backgroundScrim = new QWidget(this->ui.CenterContainer);
             // A plain QWidget fills with its Window role by default; the strip's colour is Base.
@@ -2973,6 +2979,39 @@ void MainWindow::handleMascotClickEvents(MascotSide mascot, Qt::MouseButton butt
         else if (button == Qt::RightButton)
             this->flipMascots();
     }
+}
+
+void MainWindow::applyLiveMascotRows() {
+    Config* config = this->App->config;
+    if (!config)
+        return;
+    // (M5 review fix: the legacy rows' runtime half. The config keys below are written by
+    // SettingsDialog::syncMascotConfig() on every change now; this pushes the ones that are not read live
+    // by their consumer.
+    //  - the animation thread holds its cadence and its dice as members, so a key change alone reaches it
+    //    only on the next start; pushed here, which also makes Animated start and stop the engine.
+    //  - the mascot hosts' width is a layout property, not a key read.
+    //  - the palette is only rebuilt when the extraction switch actually flips: resetPalette() rebuilds the
+    //    application palette, and doing that per spin-box tick would throw away a chosen theme.)
+    if (this->App->MascotsAnimation) {
+        this->App->MascotsAnimation->frequency = config->get("mascots_frequency").toInt();
+        this->App->MascotsAnimation->set_random_chance(
+            config->get("mascots_random_chance").toDouble() / 100.0);
+        this->App->MascotsAnimation->random_change = config->get_bool("mascots_random_change");
+        if (config->get_bool("mascots_animated"))
+            this->App->MascotsAnimation->start_running();
+        else
+            this->App->MascotsAnimation->stop_running();
+    }
+    this->applyMascotWidth(this->width(), config->get_double("mascots_width_percent", 15.0));
+    const bool extractColours = config->get_bool("mascots_color_theme");
+    if (extractColours != this->App->MascotsExtractColor) {
+        this->App->MascotsExtractColor = extractColours;
+        if (this->App->mascotPrefetcher)
+            this->App->mascotPrefetcher->setExtractColors(extractColours);
+        this->resetPalette();
+    }
+    this->applyMascotSettings();
 }
 
 void MainWindow::applyMascotSettings() {

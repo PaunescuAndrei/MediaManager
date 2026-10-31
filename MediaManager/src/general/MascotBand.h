@@ -132,6 +132,11 @@ public:
 		quint64 videoSeq = 0;
 		// When the outstanding swap was asked for (milliseconds since the epoch), for that delta.
 		qint64 requestedAtMs = 0;
+		// (M3 Task 6B: when the content currently shown *landed* (milliseconds since the epoch),
+		// which is what the half-clip floor measures. requestedAtMs above cannot serve: it is when
+		// a load was asked for, not when its content arrived, and a slow load would make the band
+		// look older than it is. showMedia() is the one commit path and writes it.)
+		qint64 committedAtMs = 0;
 		// Failures since the last committed media, so a broken clip is not retried forever and a
 		// panel that cannot play anything stops asking rather than walking the whole library.
 		// (M3 Task 6A: the budget is this band's. A stripe that cannot play anything has no beat

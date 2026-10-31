@@ -508,8 +508,24 @@ private:
 
 	void connectBeats();
 	void disconnectBeats();
-	void onSwapBeat();
-	void onFlipBeat();
+	// (M3 Task 6B: one handler for the one pulse. A swap beat advances the bands that have been
+	// up for at least half a clip and flips when none may; every other beat flips both panels.)
+	void onBeat(bool swapWanted);
+	// (M3 Task 6B: whether this band's content has been up for the half-clip floor -- or longer
+	// than any floor when `mascots_clip_seconds` is 0, which is what makes the beat the whole
+	// cadence. Read by onBeat() through the band's committedAtMs.)
+	bool bandMayAdvance(const MascotBand& band) const;
+	// (M3 Task 6B: whether this band can still reach a wrap seam while the scroll driver runs.
+	// False means there is no pass to defer to -- the driver is stopped, the speed is 0, the
+	// content does not overflow, or the tick would take the still branch -- so onBeat() commits
+	// the change now instead of queueing it where it would wait forever.)
+	bool bandReachesSeam(const MascotBand& band) const;
+	// (M3 Task 6B: the two halves of a beat's advance. scheduleBeatAdvance() queues the change on
+	// the band when a seam exists and commits it now otherwise; commitBeatAdvance() is the one
+	// action -- it captures only a side and an index, resolves the band fresh, and never reaches
+	// applyConfig() or configureSurface().)
+	void scheduleBeatAdvance(MascotSide side, int bandIndex);
+	void commitBeatAdvance(MascotSide side, int bandIndex);
 	bool beatsAllowed() const;
 
 	void onMediaReady(const MascotMedia& media);
@@ -676,8 +692,9 @@ private:
 	// once, and the fallback is `Horizontal` -- the axis every Stripes panel stacked along before
 	// the key existed -- so a typo cannot turn the bands on their side.
 	bool warnedUnsupportedStripesOrientation = false;
-	QMetaObject::Connection swapConnection;
-	QMetaObject::Connection flipConnection;
+	// (M3 Task 6B: one connection for the pulse. The two legacy signals stay on the thread for any
+	// other listener, but this controller no longer connects them, so one beat is handled once.)
+	QMetaObject::Connection beatConnection;
 
 	// ---- M3 Task 2: the layout configuration, written by applyConfig() ----
 	// `mascots_mode`, cached: bandCount()/bandRects()/applyMode() answer from this one value, so
@@ -781,6 +798,10 @@ private:
 	// `mascots_clip_seconds`: how long one clip stays on screen. 0 disables the clip timer
 	// entirely, which leaves the clip looping and the panel advancing on the existing beat.
 	int clipSeconds = 30;
+	// (M3 Task 6B: `mascots_swap_on_beat`, cached like every other key this class consumes. False
+	// makes a swap beat flip both panels instead of advancing any band, which is the old
+	// non-swap-beat behaviour applied to every beat.)
+	bool swapOnBeat = true;
 	// `mascots_random_start`: a clip may start anywhere in the file that leaves a clip's worth of
 	// it after the offset.
 	bool randomStart = true;

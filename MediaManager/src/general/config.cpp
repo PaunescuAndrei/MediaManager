@@ -96,6 +96,7 @@ void Config::init_defaults() {
 		{"mascots_image_cache_mb", "128"},
 		{"mascots_image_cache_max_items", "12"},
 		{"mascots_clip_seconds", "30"},
+		{"mascots_swap_on_beat", "True"},
 		{"mascots_random_start", "True"},
 		{"mascots_crossfade_ms", "600"},
 		{"mascots_max_decoders", "6"},

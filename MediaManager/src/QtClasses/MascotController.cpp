@@ -407,6 +407,9 @@ void MascotController::applyConfig()
 	// of three competing ones.)
 	this->mediaSetting = config->get(QStringLiteral("mascots_media"));
 	this->clipSeconds = clampedClipSeconds(config);
+	// (M3 Task 6B: `mascots_swap_on_beat`, read here under the same "one reader" rule as every key
+	// above so onBeat() decides from the cached value and no beat path re-reads the config.)
+	this->swapOnBeat = config->get_bool(QStringLiteral("mascots_swap_on_beat"));
 	this->randomStart = config->get_bool(QStringLiteral("mascots_random_start"));
 	this->crossfadeMs = clampedCrossfadeMs(config);
 	this->maxDecoders = std::max(0, config->get(QStringLiteral("mascots_max_decoders")).toInt());
@@ -1703,7 +1706,17 @@ void MascotController::flipSide(MascotSide side)
 	if (!state.surface || !band || band->media().path.isEmpty())
 		return;
 	state.flipToggled = !state.flipToggled;
-	this->applyMirror(state, side, band->media().path, 0);
+	// (M3 Task 6B: the parity is the panel's, so every band of the panel is written with it --
+	// a `Stripes` panel's other bands used to keep the old parity until their next commit, and a
+	// video band that refused a beat's swap has to flip exactly like an image band. The write is
+	// the same mirrored property an image band gets: no file is re-opened, re-seeked or reloaded,
+	// and a band showing nothing is skipped as it is above.)
+	for (int i = 0; i < static_cast<int>(state.bands.size()); ++i) {
+		MascotBand* flipped = state.band(i);
+		if (!flipped || flipped->media().path.isEmpty())
+			continue;
+		this->applyMirror(state, side, flipped->media().path, i);
+	}
 }
 
 void MascotController::flipBoth()
@@ -2326,6 +2339,11 @@ void MascotController::showMedia(SideState& state, MascotSide side, const Mascot
 	const QString previousCandidate = band->playback().candidate.path;
 	if (fromReady)
 		band->playback().candidate = MascotMedia(); // consumed by this commit
+	// (M3 Task 6B: the content's arrival time, which the half-clip floor measures. Written by this
+	// one commit path -- an image delivery, a ready candidate, a video's first frame -- so a band
+	// that has just changed is young whatever media type it changed to, and requestedAtMs (when
+	// the load was asked for) is never mistaken for it.)
+	band->playback().committedAtMs = QDateTime::currentMSecsSinceEpoch();
 	// Recorded here, before the pins are re-evaluated, and written by presentMedia() below: that
 	// is the order the commit has always run in (amendment H2 needs the new path to be the shown
 	// one when pinReferenced() runs, and the slot write needs the mirror settled first).
@@ -3202,6 +3220,9 @@ bool MascotController::ensureVideoSlots()
 				// i.e. frozen on a frame nothing owns until the app is restarted. The output is left
 				// visible, so the QML VideoOutput keeps its last frame on screen until the first image
 				// lands -- that commit hides it through applyDisplay() like any other image.
+				// (M3 Task 6B: "onSwapBeat()" is onBeat() now, and the cadence no longer tests the
+				// type; the claim is still dropped, so a band cannot be advanced as a video that no
+				// longer has a player behind it. The paragraph is kept as the record of the reason.)
 				// (M3 Task 1: `shown` is the band's `media()`, and forgetMedia() is what drops the
 				// claim without touching the slot -- the output keeps its frame for the reason above.)
 				if (band->media().type == MascotMedia::Video) {
@@ -3436,6 +3457,8 @@ void MascotController::applyBandBudget()
 	// `VideoMode::Off` behaviour M2 produced for a one-decoder budget and what the beat then drives.
 	// A four-way per-panel answer would let a one-video/one-image pair exist, which the mirror rules
 	// were never written for.
+	// (M3 Task 6B: "onSwapBeat()" is onBeat() now; the pair rule it describes still holds for every
+	// band index, and the one-band mode still advances the pair through nextBandImages().)
 	bool pairDegraded = false;
 	if (allowedLeft == 0 || allowedRight == 0) {
 		pairDegraded = allowedLeft > 0 || allowedRight > 0;
@@ -3704,33 +3727,29 @@ void MascotController::logScroll(const QString& message) const
 
 void MascotController::connectBeats()
 {
-	if (this->swapConnection)
+	if (this->beatConnection)
 		return;
 	if (!this->App || !this->App->MascotsAnimation)
 		return;
 	// Amendment W: the controller takes the beat connections itself. MainApp's old handlers
 	// were gated on the retired widgets' isVisible(), and those widgets were hidden after the
 	// cutover, so a branch inside them could never run.
-	this->swapConnection = connect(this->App->MascotsAnimation, &mascotsAnimationsThread::updateMascotsSignal,
-		this, &MascotController::onSwapBeat);
-	this->flipConnection = connect(this->App->MascotsAnimation, &mascotsAnimationsThread::updateMascotsAnimationSignal,
-		this, &MascotController::onFlipBeat);
+	// (M3 Task 6B: one connection, to the pulse, so one beat is handled once. The two legacy
+	// signals stay on the thread for any other listener but are deliberately not connected here:
+	// connecting them as well as the pulse would handle every beat twice.)
+	this->beatConnection = connect(this->App->MascotsAnimation, &mascotsAnimationsThread::beatPulse,
+		this, &MascotController::onBeat);
 }
 
 void MascotController::disconnectBeats()
 {
-	if (this->swapConnection)
-		disconnect(this->swapConnection);
-	if (this->flipConnection)
-		disconnect(this->flipConnection);
-	this->swapConnection = QMetaObject::Connection();
-	this->flipConnection = QMetaObject::Connection();
+	if (this->beatConnection)
+		disconnect(this->beatConnection);
+	this->beatConnection = QMetaObject::Connection();
 }
 
-void MascotController::onSwapBeat()
+void MascotController::onBeat(bool swapWanted)
 {
-	if (!this->running || !this->beatsAllowed())
-		return;
 	// M2: a video panel's cadence is its clip timer, not the beat (§7.9's "the clip timer governs
 	// video slots"). A beat arrives every `mascots_frequency` milliseconds, which is far shorter
 	// than any clip length, so letting it advance a video panel would churn clips several times a
@@ -3738,38 +3757,178 @@ void MascotController::onSwapBeat()
 	// panel is *showing*, not what the setting asks for: a panel that fell back to images is
 	// cadenced like an image panel, so a library of unusable files cannot freeze it, and
 	// `mascots_media=Images` keeps M1's cadence exactly because nothing there is ever a video.
-	const MascotBand* leftBand = this->leftState.band(0);
-	const MascotBand* rightBand = this->rightState.band(0);
-	const bool leftVideo = leftBand && leftBand->media().type == MascotMedia::Video;
-	const bool rightVideo = rightBand && rightBand->media().type == MascotMedia::Video;
-	if (!leftVideo && !rightVideo) {
-		// M1, untouched: the pair advances together and the mirror key decides whether the right
-		// panel copies the left one.
-		this->nextImages(false);
-		return;
-	}
+	// (M3 Task 6B: the paragraph above is kept as the record of the two-signal cadence. There is
+	// one cadence now, and the clip length gates it instead of excluding video: a band advances
+	// only once its content has been up for half a clip, and a beat that finds it too young flips
+	// instead. The clip timer is untouched -- it still runs and still advances a video band at the
+	// full clip length.)
+	//
 	// `mascots_clip_seconds` = 0 is the one setting under which the beat *is* the video cadence
 	// (the clip loops and only the beat moves it on), so the beat keeps working for a video panel
 	// exactly as it did before this branch existed.
-	const bool beatDrivesVideo = this->clipSeconds <= 0;
-	if (this->mirrorEnabled()) {
-		// The pair is one media, so it is advanced by one thing: its clip timer while that timer is
-		// running, and the beat only when there is no timer at all.
-		if (beatDrivesVideo)
-			this->nextImages(false);
-		return;
-	}
-	if (!leftVideo || beatDrivesVideo)
-		this->nextImage(MascotSide::Left, true);
-	if (!rightVideo || beatDrivesVideo)
-		this->nextImage(MascotSide::Right, false);
-}
-
-void MascotController::onFlipBeat()
-{
+	// (M3 Task 6B: with no clip length there is no floor either, so every swap beat advances --
+	// the same "the beat is the cadence" the sentence above describes.)
+	//
+	// The pair is one media, so it is advanced by one thing: its clip timer while that timer is
+	// running, and the beat only when there is no timer at all.
+	// (M3 Task 6B: the beat also advances a video band once half a clip has passed; the sentence
+	// above is kept as the record of the two-signal cadence the floor replaces.)
 	if (!this->running || !this->beatsAllowed())
 		return;
-	this->flipBoth();
+	// A non-swap beat, or `mascots_swap_on_beat = False`, is the retired flip signal's whole
+	// action: both panels flip, and no band advances on this beat.
+	if (!swapWanted || !this->swapOnBeat) {
+		this->flipBoth();
+		return;
+	}
+	if (this->mascotMode == MascotMode::Static) {
+		// M1, untouched: the pair advances together and the mirror key decides whether the right
+		// panel copies the left one.
+		// (M3 Task 6B: one band index at a time now, and a one-band mode advances the pair through
+		// nextBandImages() -- the body nextImages() had. A `Stripes` panel walks every index
+		// instead, and a panning mode queues each advance on its own band.)
+		// One band per panel. Both aged is the paired path; one aged advances only that side, so
+		// the floor stays a property of the band that would change.
+		MascotBand* leftBand = this->leftState.band(0);
+		MascotBand* rightBand = this->rightState.band(0);
+		const bool leftMay = leftBand && this->bandMayAdvance(*leftBand);
+		const bool rightMay = rightBand && this->bandMayAdvance(*rightBand);
+		const bool mirrors = this->bandMirrorsLeft(0);
+		if (leftMay && (mirrors || rightMay)) {
+			this->nextBandImages(0, false);
+			return;
+		}
+		if (!mirrors && (leftMay || rightMay)) {
+			if (leftMay)
+				this->pickFor(this->leftState, MascotSide::Left, 0, true);
+			else
+				this->pickFor(this->rightState, MascotSide::Right, 0, false);
+			return;
+		}
+		this->flipBoth();
+		return;
+	}
+	// Panning modes: every band of both panels is asked, and each eligible band's advance is
+	// queued on that band (or committed now when it has no seam). A right-panel band under the
+	// mirror key is skipped because the left band's advance carries the pair.
+	bool advanced = false;
+	const int bandTotal = std::max(
+		static_cast<int>(this->leftState.bands.size()),
+		static_cast<int>(this->rightState.bands.size()));
+	for (int i = 0; i < bandTotal; ++i) {
+		for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
+			SideState& state = this->stateFor(side);
+			if (!state.surface)
+				continue;
+			MascotBand* band = state.band(i);
+			if (!band || (side == MascotSide::Right && this->bandMirrorsLeft(i)))
+				continue;
+			if (!this->bandMayAdvance(*band))
+				continue;
+			advanced = true;
+			this->scheduleBeatAdvance(side, i);
+		}
+	}
+	// Nothing could advance, so the beat is a flip rather than nothing at all.
+	if (!advanced)
+		this->flipBoth();
+}
+
+bool MascotController::bandMayAdvance(const MascotBand& band) const
+{
+	// (M3 Task 6B: the half-clip floor. `mascots_clip_seconds` <= 0 disables it, and a band that
+	// has never committed anything has no age to measure, so both are "may advance". The clock is
+	// read here, at beat time, because a queued advance is re-evaluated by its seam anyway.)
+	if (this->clipSeconds <= 0)
+		return true;
+	const qint64 committedAt = band.playback().committedAtMs;
+	if (committedAt <= 0)
+		return true;
+	const qint64 now = QDateTime::currentMSecsSinceEpoch();
+	return now - committedAt >= static_cast<qint64>(this->clipSeconds) * 500;
+}
+
+bool MascotController::bandReachesSeam(const MascotBand& band) const
+{
+	// (M3 Task 6B: whether a pass is actually running for this band. A queued wrap commit has no
+	// seam when the driver is stopped or would take a still branch, so onBeat() must commit now
+	// rather than wait for a trigger that never comes. Every term below is one of the reasons
+	// onScrollTick()'s band loop would not reach a seam.)
+	if (!this->running || this->mascotMode == MascotMode::Static)
+		return false;
+	if (!this->scrollTimer || !this->scrollTimer->isActive())
+		return false;
+	// Hidden, minimized or paused by the window rule: no tick will paint, and updateScrollDriver()
+	// stops the timer on these. Asked here as well so a missed event cannot strand a queued change.
+	if (!this->scrollCanTick())
+		return false;
+	if (this->scrollSpeed <= 0)
+		return false;
+	const double travel = this->scrollTravel(band);
+	if (travel <= 0.0)
+		return false;
+	// The tick measures its phase advance against the panel's widest band. A band whose own share
+	// of that advance is a whole travel or more is the sub-tick still branch, and it has no seam.
+	const SideState* owner = nullptr;
+	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
+		const SideState& state = this->stateFor(side);
+		if (state.band(band.slotIndex()) == &band) {
+			owner = &state;
+			break;
+		}
+	}
+	if (!owner)
+		return false;
+	double referenceTravel = 0.0;
+	for (const auto& owned : owner->bands)
+		referenceTravel = std::max(referenceTravel, this->scrollTravel(*owned));
+	if (referenceTravel <= 0.0)
+		return false;
+	const double tickDelta = static_cast<double>(this->scrollSpeed)
+		* (static_cast<double>(SCROLL_TICK_MS) / 1000.0) / referenceTravel;
+	return tickDelta < 1.0;
+}
+
+void MascotController::scheduleBeatAdvance(MascotSide side, int bandIndex)
+{
+	SideState& state = this->stateFor(side);
+	MascotBand* band = state.band(bandIndex);
+	if (!band)
+		return;
+	if (this->bandReachesSeam(*band)) {
+		// (M3 Task 6B: the change is deferred to this band's next wrap point. The closure names
+		// only the side and the index and resolves the band fresh when the seam runs, so a band
+		// destroyed between the beat and the seam cannot be written through a stale pointer.)
+		band->queueWrapCommit([this, side, bandIndex]() {
+			this->commitBeatAdvance(side, bandIndex);
+		});
+		return;
+	}
+	// (M3 Task 6B: no pass is running, so there is no seam to defer to and the change is applied
+	// now. Waiting would let a stopped driver hold the swap forever.)
+	this->commitBeatAdvance(side, bandIndex);
+}
+
+void MascotController::commitBeatAdvance(MascotSide side, int bandIndex)
+{
+	if (!this->running)
+		return;
+	SideState& state = this->stateFor(side);
+	if (!state.surface)
+		return;
+	MascotBand* band = state.band(bandIndex);
+	if (!band)
+		return;
+	// (M3 Task 6B: a mirrored right band is advanced by the left band's commit, which carries the
+	// pair, so committing it here as well would replace the same media twice. Everything below is
+	// content work only: no applyConfig() and no configureSurface() is reachable from a beat.)
+	if (side == MascotSide::Right && this->bandMirrorsLeft(bandIndex))
+		return;
+	if (side == MascotSide::Left && this->bandMirrorsLeft(bandIndex)) {
+		this->nextBandImages(bandIndex, false);
+		return;
+	}
+	this->pickFor(state, side, bandIndex, bandIndex == 0);
 }
 
 bool MascotController::beatsAllowed() const

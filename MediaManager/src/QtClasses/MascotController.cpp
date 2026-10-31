@@ -10,6 +10,7 @@
 #include "utils.h"
 #include <QDateTime>
 #include <QEvent>
+#include <QFileInfo>
 #include <QPalette>
 #include <QStringList>
 #include <QTimer>
@@ -586,6 +587,10 @@ void MascotController::applyConfig()
 	// (M5 item 1: cached here so scrollDirectionReverses() -- asked every scroll tick -- stays a field read.)
 	this->pairScrollOpposite = config->get(QStringLiteral("mascots_pair_scroll"))
 		.compare(QStringLiteral("Opposite"), Qt::CaseInsensitive) == 0;
+	// (M5 item 2: `mascots_pair_flip` -- whether the mirrored column is flipped against the other one or
+	// repeats it. A config written before the key existed has no line for it, and the look those configs were
+	// showing is the flipped one, so "absent" answers True rather than Config::get_bool()'s False.)
+	this->flipMirroredColumn = configBoolWithFallback(config, QStringLiteral("mascots_pair_flip"), true);
 	// (M5: `mascots_low_latency` -- Qt's low-latency intent reduces buffering at the cost of a higher chance
 	// of dropped frames or glitches, so it is the user's call. Read here with the other player keys and
 	// pushed to a slot when the slot is created; a running player keeps the intent it was built with.)
@@ -2956,6 +2961,17 @@ void MascotController::presentMedia(PanelState& state, MascotPanel panel, const 
 	// M3 Task 1: the record and the write are one call on the band, and it comes after the
 	// mirror and the fill mode because the slot derives its content shift from both.
 	band->setMedia(media);
+	// (M5 item 1: the *pairing* observable. The report was that the two columns end up on different
+	// files, which no pick counter can see -- a pick says who asked, not what was committed. One line
+	// per commit, naming the file and the offset the band actually adopted, is what lets the harness
+	// compare the two columns episode by episode. Every commit path runs through here: an image
+	// delivery, a ready candidate, a video's first frame and the mirror copy.)
+	this->logVideo(QStringLiteral("MASCOT-COMMIT %1 band=%2 kind=%3 file=%4 offset=%5")
+		.arg(panelLabel(panel))
+		.arg(bandIndex)
+		.arg(media.type == MascotMedia::Video ? QStringLiteral("video") : QStringLiteral("image"))
+		.arg(QFileInfo(media.path).fileName())
+		.arg(media.startOffsetMs));
 	if (media.type == MascotMedia::Video) {
 		// A video's content shift is 0: there is no alpha silhouette to centre (the media's own
 		// frame is the content), and the slot is already the frame's height-normalised rectangle.
@@ -3029,14 +3045,24 @@ void MascotController::applyMirror(PanelState& state, MascotPanel panel, const Q
 	// right column is the left one mirrored, which is the rule a video can honour. XOR, not assignment: a
 	// folder-flipped image under mirror would otherwise flip twice and cancel, which is the "they always face
 	// the same way" this replaces.)
+	// (M5 item 2 amendment: that XOR was wrong, and the measurement says where. The folder rule flips a
+	// `left/` file in the right slot, and the mirror look also wants the right slot flipped -- XOR cancels
+	// them, so a side-tagged image came out *identical* while a video from a series folder came out
+	// *mirrored*: the same switch, opposite looks, decided by which folder the file lives in. The rule now:
+	// the folder rule decides which way the *pair* faces (through the left slot, which is the reference) and
+	// `mascots_pair_flip` is the only thing that decides the pair's parity, so the look is the same for every
+	// media type -- on is mirrored, off is identical. A column without a pair partner keeps the folder rule
+	// exactly as it was.)
 	if (state.mirrorOverrideEnabled) {
 		mirrored = state.mirrorOverrideValue;
 	}
+	else if (this->mirrorEnabled() && panel == MascotPanel::Right) {
+		const bool leftParity = !path.isEmpty() && this->flipForSide(path, MascotSide::Left);
+		mirrored = leftParity != this->flipMirroredColumn;
+	}
 	else {
-		const bool folderFlip = !path.isEmpty()
+		mirrored = !path.isEmpty()
 			&& this->flipForSide(path, panel == MascotPanel::Left ? MascotSide::Left : MascotSide::Right);
-		const bool pairMirror = this->mirrorEnabled() && panel == MascotPanel::Right;
-		mirrored = folderFlip != pairMirror;
 	}
 	// The retired renderer toggled whatever the side rule had produced, and a new image reset that
 	// toggle. One authoritative value per slot, written here and nowhere else.

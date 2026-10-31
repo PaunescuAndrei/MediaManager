@@ -875,6 +875,23 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "they have always done; Opposite makes the mirrored pair travel outwards or inwards together.",
         mascotPairScrollCombo);
 
+    // (M5 item 2: the parity switch, and the only one. Mirror mode already puts the same image or clip in
+    // both columns; this says whether the right column is that media mirrored or a plain repeat of it. The
+    // folder rule keeps deciding which way the pair faces, so this reads the same for images and videos.)
+    mascotPairFlipCheckBox = new QCheckBox("Flip the mirrored column");
+    // Absent means on: the columns that predate the key were showing the flipped look, and the key is only
+    // written when the page is applied. Same answer the controller gives for a config with no line for it.
+    const QString pairFlipValue = config->get(QStringLiteral("mascots_pair_flip"));
+    mascotPairFlipCheckBox->setChecked(pairFlipValue.isEmpty()
+        ? true
+        : utils::text_to_bool(pairFlipValue.toStdString()));
+    mascotPairFlipCheckBox->setToolTip(
+        "On, the right column is the left one mirrored, so the pair reads as two sides of the same picture. "
+        "Off, both columns show the identical image or clip. Either way both columns show the same media, and "
+        "the left and right folders still decide which way that media faces. Only used while Mirror mascots "
+        "is on.");
+    playbackLayout->addWidget(mascotPairFlipCheckBox);
+
     // (M5 Task 9: the label follows the rule the fix gave it. It said "not focused", which is exactly what
     // it must not do any more.)
     mascotPauseUnfocusedCheckBox = new QCheckBox("Pause when the window cannot be seen");
@@ -1153,7 +1170,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         mascotMediaCombo, mascotModeCombo, mascotFillCombo, mascotWeightedCheckBox,
         mascotClipSecondsSpinBox, mascotCrossfadeSpinBox, mascotSwapOnBeatCheckBox,
         mascotRandomStartCheckBox, mascotPreloadCheckBox, mascotPauseUnfocusedCheckBox,
-        mascotLowLatencyCheckBox, mascotPairScrollCombo,
+        mascotLowLatencyCheckBox, mascotPairScrollCombo, mascotPairFlipCheckBox,
         mascotMaxDecodersSpinBox, mascotScrollSpeedSpinBox, mascotScrollDirectionCombo,
         mascotScrollPingpongCheckBox, mascotStripesLeftSpinBox, mascotStripesRightSpinBox,
         mascotStripesOrientationCombo, mascotStripesAlternateCheckBox, mascotBackgroundCheckBox,
@@ -1201,6 +1218,7 @@ void SettingsDialog::syncMascotConfig()
     config->set("mascots_pause_unfocused", mascotPauseUnfocusedCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_low_latency", mascotLowLatencyCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_pair_scroll", mascotPairScrollCombo->currentText());
+    config->set("mascots_pair_flip", mascotPairFlipCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_max_decoders", QString::number(mascotMaxDecodersSpinBox->value()));
     config->set("mascots_scroll_speed", QString::number(mascotScrollSpeedSpinBox->value()));
     config->set("mascots_scroll_direction", mascotScrollDirectionCombo->currentText());
@@ -1278,6 +1296,9 @@ void SettingsDialog::updateMascotControlStates()
     mascotPauseUnfocusedCheckBox->setEnabled(true);
     mascotLowLatencyCheckBox->setEnabled(true);
     mascotPairScrollCombo->setEnabled(true);
+    // (M5 item 2: the parity switch keeps its meaning for images and videos alike -- it is about the pair,
+    // not about a player -- so it never goes dark.)
+    mascotPairFlipCheckBox->setEnabled(true);
 
 
     // Rows 3-5: Scroll and Stripes share this group, so the rows go dark individually instead of

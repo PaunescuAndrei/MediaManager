@@ -1065,6 +1065,10 @@ private:
 	bool lowLatency = true;
 	// (M5 item 1: `mascots_pair_scroll` == Opposite, cached for the per-tick scroll direction answer.)
 	bool pairScrollOpposite = false;
+	// (M5 item 2: `mascots_pair_flip`. In mirror mode the two columns show one media; this says whether the
+	// right column is drawn as its mirror (the look that was asked for) or repeats it. Read at Apply, and it
+	// is the only thing that decides the pair's parity -- the folder rule decides which way the pair faces.)
+	bool flipMirroredColumn = true;
 	// (M5 Task 10: the layer's own cadence. `mascots_background_clip_seconds`,
 	// `mascots_background_swap_on_beat`, `mascots_background_random_change` and
 	// `mascots_background_random_chance`, each falling back to its columns twin when absent. The M4 note

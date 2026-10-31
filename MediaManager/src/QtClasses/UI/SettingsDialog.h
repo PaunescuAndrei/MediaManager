@@ -139,6 +139,8 @@ public:
     QCheckBox* mascotLowLatencyCheckBox = nullptr;
     // (M5 item 1: `mascots_pair_scroll` -- whether a mirrored pair scrolls the same way or against itself.)
     QComboBox* mascotPairScrollCombo = nullptr;
+    // (M5 item 2: `mascots_pair_flip` -- whether the mirrored column is drawn flipped or identical.)
+    QCheckBox* mascotPairFlipCheckBox = nullptr;
     QSpinBox* mascotBackgroundClipSpinBox = nullptr;
     QCheckBox* mascotBackgroundSwapOnBeatCheckBox = nullptr;
     QCheckBox* mascotBackgroundRandomChangeCheckBox = nullptr;

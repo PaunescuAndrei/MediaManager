@@ -102,6 +102,10 @@ void Config::init_defaults() {
 		// M5 item 1: whether the two columns scroll against each other in mirror mode. Same is the behaviour
 		// they have always had; Opposite makes a mirrored pair travel outwards or inwards together.
 		{"mascots_pair_scroll", "Same"},
+		// M5 item 2: whether the mirrored column is drawn flipped against the other one (the look mirror mode
+		// was asked for) or repeats it. True is what the columns were already showing, so an older config that
+		// never gained the line keeps its look.
+		{"mascots_pair_flip", "True"},
 		{"mascots_swap_on_beat", "True"},
 		{"mascots_random_start", "True"},
 		{"mascots_crossfade_ms", "600"},

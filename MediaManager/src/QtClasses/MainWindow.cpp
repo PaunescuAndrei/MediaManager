@@ -2984,7 +2984,14 @@ void MainWindow::applyMascotSettings() {
             // showMascots() starts the controller, which seeds both panels: updateMascots()
             // here would be a second swap.
             this->showMascots();
-            this->App->MascotsAnimation->start_running();
+            // (M5 fix, user report: "starting with mascots off then turning them on appears to make them
+            // animate too even tho the animate mascots is and stays off". `mascots_animated` is the switch
+            // for the whole animation/beat engine, and this enable path was the one place that started it
+            // without asking -- initMascotAnimation() consults the key at startup and the checkbox's own
+            // handler consults it when it is ticked. Same question here: the engine only starts when the
+            // user asked for it, and ticking Animate Mascots later starts it through that handler.)
+            if (config->get_bool("mascots_animated"))
+                this->App->MascotsAnimation->start_running();
         }
     }
     else if (this->ui.mascotLeftHost->isVisible()) {

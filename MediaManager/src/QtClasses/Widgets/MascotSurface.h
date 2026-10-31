@@ -4,6 +4,7 @@
 #include <QPointer>
 #include <QRectF>
 #include <QSize>
+#include <QSizeF>
 #include <QString>
 #include <QVector>
 #include <QWidget>
@@ -33,7 +34,13 @@ public:
 	// width is the only axis that can crop (a wide image) or leave margins (a narrow one).
 	// Crop, Fit and Stretch keep Qt Quick's meanings for the milestones that need them, and the
 	// painted width that HeightFit produces is computed here, never in QML.
-	enum class FillMode { Crop, Fit, Stretch, HeightFit };
+	// (M3 Task 3: WidthFit is HeightFit on the other axis -- the media is scaled to the slot's
+	// *width* with its aspect ratio kept, so the height overflows and is clipped, which is the
+	// axis a vertically stacked stripe pans along. The two normalised modes are the only ones
+	// whose painted size differs from the slot's rectangle; Crop, Fit and Stretch keep that
+	// rectangle and let Qt Quick fit or crop the media inside it. ContentSizeFor() below is the
+	// one place all five sizes are derived.)
+	enum class FillMode { Crop, Fit, Stretch, HeightFit, WidthFit };
 
 	// `cache` is used to construct the image provider and is not stored; it must outlive the
 	// shared QML engine, which owns the provider.
@@ -45,9 +52,22 @@ public:
 	int slotCount() const;
 
 	void setSlotRect(int i, const QRectF& r);
+	// The size the media is drawn at in slot `i`, both axes, for the fill mode that slot
+	// carries. This is the single place a pan's travel is derived from -- `max(0, contentWidth -
+	// slotWidth)` for a horizontal pan and the same on the height for a vertical one -- so a
+	// caller must ask this rather than repeat the fill arithmetic. An invalid slot answers an
+	// empty size rather than the surface's.
+	QSizeF slotContentSize(int i) const;
 	// Horizontal shift in pixels that brings the media's visual content centre onto the slot's
 	// centre. Overrides the shift setSlotMedia() derives until the slot's media changes again.
 	void setSlotContentOffset(int i, const QPointF& offset);
+	// The scroll driver's translation, in pixels, added on top of whatever centring the slot
+	// already applies (the offset above, or the value setSlotMedia() derives). One value per
+	// axis because a vertical stripe pans along the other axis than a horizontal one, and it is
+	// deliberately separate from the centring so the surface keeps owning the centre and the
+	// driver only moves it. Mirroring it in Slot is what brings a delegate QML recreated after
+	// a slot count change back to the offset the driver last wrote.
+	void setSlotScrollOffset(int i, double dx, double dy);
 	void setSlotOpacity(int i, double opacity);
 	void setSlotFillMode(int i, FillMode mode);
 	void setSlotMirrored(int i, bool mirrored);
@@ -139,6 +159,12 @@ private:
 		// the slot's media is replaced.
 		bool hasExplicitContentOffset = false;
 		double explicitContentOffsetX = 0.0;
+		// M3 Task 3: the scroll driver's translation, one per axis, applied on top of the
+		// centring above. Kept separate from it so the centre stays the surface's answer and the
+		// pan stays the driver's; mirrored here for the same reason as every other value, so a
+		// delegate QML recreated comes back at the offset the driver last wrote.
+		double scrollOffsetX = 0.0;
+		double scrollOffsetY = 0.0;
 	};
 
 	bool isValidSlot(int i) const;
@@ -154,7 +180,17 @@ private:
 	// Width the media is painted at: the slot's width for Stretch, the height-normalised width
 	// for HeightFit, and the fit/crop scale of the slot for Fit/Crop. The single place the
 	// painted width is derived, so the shift and the QML geometry cannot disagree.
+	// (M3 Task 3: contentSizeFor() below is that place now -- WidthFit needs the two axes derived
+	// together, and a second copy of the arithmetic is exactly what this comment exists to
+	// prevent. This function is the width half of it, kept because the content shift only ever
+	// needed the width and every answer above is unchanged.)
 	double paintedWidthFor(const Slot& slot) const;
+	// The size the media is painted at, both axes, for the slot's fill mode: the slot's own size
+	// for Stretch, the height-normalised pair for HeightFit, the width-normalised pair for
+	// WidthFit, and the fit/crop scale of the slot for Fit/Crop. The single place the painted
+	// geometry is derived, so the content shift, the QML item sizes and a caller's pan travel
+	// (slotContentSize()) cannot disagree.
+	QSizeF contentSizeFor(const Slot& slot) const;
 	int slotAt(const QPointF& position) const;
 
 	QQuickWidget* quick = nullptr;

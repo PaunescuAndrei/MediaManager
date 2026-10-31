@@ -25,6 +25,13 @@ Item {
 	// computed -- this file draws what it is told.
 	property bool heightFill: false
 	property real paintedWidth: 0.0
+	// The same pair for the other axis (M3 Task 3, MascotSurface::FillMode::WidthFit): the media
+	// is scaled to this slot's width with its aspect ratio kept, `paintedHeight` is the height
+	// that produces, and the slot's clip is what crops the overflow. Written by MascotSurface
+	// like everything else here; `heightFill` keeps its exact M1 meaning, so the two flags are
+	// never both set and a slot that carries neither keeps its rectangle.
+	property bool widthFill: false
+	property real paintedHeight: 0.0
 	// Set by MascotSurface::setSlotMirrored and ::setMirror. This is the single authoritative
 	// mirror value: the C++ side derives the content shift from the same property it writes
 	// here, so the flip and the shift cannot disagree.
@@ -33,6 +40,13 @@ Item {
 	// MascotSurface computes it from the source-pixel centre, the slot rectangle, the fill mode
 	// and the mirror, so no arithmetic on the centre is repeated here.
 	property real contentOffsetX: 0.0
+	// The scroll driver's translation, in pixels, one per axis (M3 Task 3). It is added to the
+	// centring above rather than replacing it: contentOffsetX still puts the content centre on
+	// the slot's centre, these move that centred picture by how far the pan has travelled. The
+	// surface owns the centre, the driver owns these, and a band that does not pan leaves both
+	// at 0 -- which is what a `Static` panel always writes.
+	property real scrollOffsetX: 0.0
+	property real scrollOffsetY: 0.0
 	property bool mediaIsImage: false
 
 	// Video path state, all of it written by MascotSurface. The image above and the two video
@@ -76,12 +90,19 @@ Item {
 		// modes on exactly the rectangle they filled before (same size, same origin), which is
 		// the rectangle the content shift is derived from. In height-normalised mode the slot's
 		// own clip is the whole crop: vertically the image is always the slot's height.
+		// (M3 Task 3: width-normalised mode is the mirror image -- there the painted *height* is
+		// not the slot's height -- so the height below is the general form of the same rule. For
+		// HeightFit both expressions evaluate exactly as they did before: the width from
+		// paintedWidth, the height from parent.height, and the clip still crops horizontally.)
 		width: slot.heightFill ? slot.paintedWidth : parent.width
-		height: parent.height
+		height: slot.widthFill ? slot.paintedHeight : parent.height
 		anchors.centerIn: parent
 		// The Image is already the painted size in height-normalised mode, so Stretch has
 		// nothing to do; the other modes keep their Qt Quick meaning.
-		fillMode: slot.heightFill ? Image.Stretch : slot.fillMode
+		// (M3 Task 3: width-normalised mode is the same thing on the other axis -- the item is
+		// already the painted size there too, so it takes Stretch as well. Crop, Fit and Stretch
+		// still keep the slot's rectangle and their Qt Quick meaning.)
+		fillMode: slot.heightFill || slot.widthFill ? Image.Stretch : slot.fillMode
 		mirror: slot.mirrored
 		visible: slot.mediaIsImage
 		// Pinned, not left to Image's default: the pixels are already decoded and sitting in
@@ -91,7 +112,13 @@ Item {
 		// swap: the provider answers from the cache inside the same property write.
 		asynchronous: false
 		// The position is pinned by anchors, so the content shift has to be a transform.
-		transform: Translate { x: slot.contentOffsetX }
+		// (M3 Task 3: the same transform carries the scroll offset now, on both axes. With the
+		// offsets at 0 -- every band that does not pan -- `contentOffsetX + 0` is the value this
+		// line always wrote, and the y term is a no-op.)
+		transform: Translate {
+			x: slot.contentOffsetX + slot.scrollOffsetX
+			y: slot.scrollOffsetY
+		}
 	}
 
 	// Video outputs for the video path. Named per index (amendment O) but not driven yet: this
@@ -110,20 +137,28 @@ Item {
 	// mode values agree because MascotSurface (qmlFillModeValue) writes Qt Quick's Image.FillMode
 	// numbers, and VideoOutput.FillMode spells the three modes that mapping produces -- Stretch,
 	// PreserveAspectFit, PreserveAspectCrop -- with the same values.
+	// (M3 Task 3: "member for member" now includes the width-normalised pair and the scroll
+	// translation, so a video band pans exactly as the image it replaced would. A video's content
+	// offset is always 0 -- there is no alpha silhouette to centre -- so its translate carries
+	// only the scroll offset.)
 	VideoOutput {
 		id: videoA
 
 		objectName: "videoA" + index
 		width: slot.heightFill ? slot.paintedWidth : parent.width
-		height: parent.height
+		height: slot.widthFill ? slot.paintedHeight : parent.height
 		anchors.centerIn: parent
-		fillMode: slot.heightFill ? VideoOutput.Stretch : slot.fillMode
+		fillMode: slot.heightFill || slot.widthFill ? VideoOutput.Stretch : slot.fillMode
 		// mirrored is a real property since Qt 6.9 (REVISION(6, 9)), so the output flips the
 		// frame itself: this is the video path's `mirror:` and needs no Scale transform, which
 		// would also have to be undone for the clip and the content shift.
 		mirrored: slot.mirrored
 		visible: slot.videoVisible
 		opacity: slot.videoOpacityA
+		transform: Translate {
+			x: slot.scrollOffsetX
+			y: slot.scrollOffsetY
+		}
 	}
 
 	VideoOutput {
@@ -131,11 +166,15 @@ Item {
 
 		objectName: "videoB" + index
 		width: slot.heightFill ? slot.paintedWidth : parent.width
-		height: parent.height
+		height: slot.widthFill ? slot.paintedHeight : parent.height
 		anchors.centerIn: parent
-		fillMode: slot.heightFill ? VideoOutput.Stretch : slot.fillMode
+		fillMode: slot.heightFill || slot.widthFill ? VideoOutput.Stretch : slot.fillMode
 		mirrored: slot.mirrored
 		visible: slot.videoVisible
 		opacity: slot.videoOpacityB
+		transform: Translate {
+			x: slot.scrollOffsetX
+			y: slot.scrollOffsetY
+		}
 	}
 }

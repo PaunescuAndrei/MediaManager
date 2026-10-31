@@ -283,6 +283,18 @@ private:
 	// through an unpinned moment.
 	bool pinReferenced(const QString& path) const;
 	void syncPin(const QString& path);
+	// M3 Task 3: `mascots_fill` as this class reads it, case-insensitively. `ok` is false for
+	// anything that is not one of the five names, and the returned mode is then `HeightFit` --
+	// what M1 shipped, and what every existing panel already draws (Ruling M3-2) -- so a caller
+	// that ignores `ok` still gets a mode that draws something rather than an uninitialised one.
+	static MascotSurface::FillMode fillModeFromString(const QString& value, bool* ok);
+	// The fill mode the bands of this layout mode are written with. `Static` is the one mode
+	// whose band is the whole panel and therefore has no panning axis to normalise, so it honours
+	// the configured value; `Scroll` and `Stripes` need the panning axis normalised, which is
+	// `HeightFit` for the horizontal axis both of them stack along in this task. M3 Task 5 moves
+	// the `Stripes` answer onto `mascots_stripes_orientation` (a vertical stripe stacks along the
+	// other axis, so its normalised mode is `WidthFit`).
+	MascotSurface::FillMode effectiveFillMode() const;
 	// Writes the mirror, the media and the centred-content override the config asks for into
 	// one slot. Shared by a fresh media and by a config change, so a mode change repaints
 	// what is already on screen.
@@ -439,6 +451,9 @@ private:
 	// The same latch for `mascots_mode` (M3 Task 2), for the same reason: an unreadable value is a
 	// statement about the configuration, and the fallback is `Static` rather than a guess.
 	bool warnedUnsupportedMode = false;
+	// The same latch for `mascots_fill` (M3 Task 3): an unreadable value is reported once, and the
+	// fallback is `HeightFit` -- the mode M1 shipped, not the spec table's original `Crop`.
+	bool warnedUnsupportedFill = false;
 	QMetaObject::Connection swapConnection;
 	QMetaObject::Connection flipConnection;
 
@@ -447,6 +462,12 @@ private:
 	// a settings change cannot land on one panel and not the other, and no layout path re-reads
 	// the config.
 	MascotMode mascotMode = MascotMode::Static;
+	// ---- M3 Task 3: the fill configuration, written by applyConfig() ----
+	// `mascots_fill`, cached for the same reason `mascots_mode` is: presentMedia() asks
+	// effectiveFillMode() for it, so no repaint path re-reads the config. `HeightFit` is the
+	// default and the value every existing panel draws (Ruling M3-2), not the spec table's
+	// original `Crop`.
+	MascotSurface::FillMode fillModeSetting = MascotSurface::FillMode::HeightFit;
 	// `mascots_stripes_left` / `_right`, clamped to [1, 8] where they are read. Only `Stripes`
 	// reads them; `Static` and `Scroll` are one band regardless of what they say.
 	// (M3 Task 5 owns `mascots_stripes_orientation` and `_alternate`; this task assumes the

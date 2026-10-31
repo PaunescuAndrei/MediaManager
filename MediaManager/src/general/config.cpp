@@ -91,6 +91,7 @@ void Config::init_defaults() {
 		{"mascots_use_seed","True"},
 		{"mascots_width_percent", "15"},
 		{"mascots_mode", "Static"},
+		{"mascots_fill", "HeightFit"},
 		{"mascots_media", "Images"},
 		{"mascots_image_cache_mb", "128"},
 		{"mascots_image_cache_max_items", "12"},

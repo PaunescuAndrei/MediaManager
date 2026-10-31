@@ -91,6 +91,10 @@ namespace {
 			// Image is already exactly the right size and has nothing left to fit or crop.
 			// Stretch is therefore the honest value rather than a substitute.
 			return 0; // Image.Stretch
+		case MascotSurface::FillMode::WidthFit:
+			// The same argument on the other axis (M3 Task 3): the slot's QML sizes the item from
+			// the painted height, so again there is nothing left for Qt Quick to fit or crop.
+			return 0; // Image.Stretch
 		}
 		return 1;
 	}
@@ -180,6 +184,18 @@ void MascotSurface::setSlotRect(int i, const QRectF& r)
 	this->applySlot(i);
 }
 
+QSizeF MascotSurface::slotContentSize(int i) const
+{
+	// An out-of-range index has no geometry to report; a zero size keeps a caller's travel
+	// arithmetic (max(0, content - slot)) from inventing one -- and it is spelled out rather than
+	// left to QSizeF's default, which is (-1, -1). Every valid slot answers from the same
+	// function applySlot() writes the QML geometry from, so what a caller measures is what is
+	// drawn.
+	if (!this->isValidSlot(i))
+		return QSizeF(0.0, 0.0);
+	return this->contentSizeFor(this->slotStates.at(i));
+}
+
 void MascotSurface::setSlotContentOffset(int i, const QPointF& offset)
 {
 	if (!this->isValidSlot(i) || !isSaneExtent(offset.x()))
@@ -187,6 +203,28 @@ void MascotSurface::setSlotContentOffset(int i, const QPointF& offset)
 	this->slotStates[i].hasExplicitContentOffset = true;
 	this->slotStates[i].explicitContentOffsetX = offset.x();
 	this->applySlot(i);
+}
+
+void MascotSurface::setSlotScrollOffset(int i, double dx, double dy)
+{
+	// Both axes go through the same ordered comparisons a rectangle and an opacity use, so a NaN
+	// offset is rejected by construction and never reaches QML (see isSaneRect). An unchanged
+	// tick is not filtered here: the band's own record of the offset it last wrote
+	// (MascotBand::scrollOffset()) is where that happens, and this setter stays a plain write.
+	if (!this->isValidSlot(i) || !isSaneExtent(dx) || !isSaneExtent(dy))
+		return;
+	Slot& slot = this->slotStates[i];
+	slot.scrollOffsetX = dx;
+	slot.scrollOffsetY = dy;
+	// Two property writes, not an applySlot(): a tick moves the content and changes nothing else,
+	// and §7.10's per-tick budget is a few writes, not a whole slot re-apply (which would also
+	// re-resolve the delegate and rewrite every other property on the GUI thread). A delegate
+	// that does not exist yet has nothing to move; the mirrored value is applied by applySlot()
+	// when QML creates it.
+	if (QQuickItem* item = slot.item.data()) {
+		item->setProperty("scrollOffsetX", dx);
+		item->setProperty("scrollOffsetY", dy);
+	}
 }
 
 void MascotSurface::setSlotOpacity(int i, double opacity)
@@ -474,12 +512,22 @@ void MascotSurface::applySlot(int i)
 	// The height-normalised mode needs two values QML has no way to derive on its own without
 	// repeating this arithmetic: the flag that selects it, and the width the media is painted
 	// at. Both come from the one place that owns the geometry.
+	// (M3 Task 3: WidthFit needs the same pair on the other axis, a flag and the painted height,
+	// and HeightFit's two values are the ones written here before. One contentSizeFor() call
+	// answers both axes, so no value is derived twice.)
+	const QSizeF contentSize = this->contentSizeFor(slot);
 	item->setProperty("heightFill", slot.fillMode == FillMode::HeightFit);
-	item->setProperty("paintedWidth", this->paintedWidthFor(slot));
+	item->setProperty("widthFill", slot.fillMode == FillMode::WidthFit);
+	item->setProperty("paintedWidth", contentSize.width());
+	item->setProperty("paintedHeight", contentSize.height());
 	item->setProperty("mediaIsImage", slot.mediaIsImage);
 	item->setProperty("contentOffsetX", slot.hasExplicitContentOffset
 		? slot.explicitContentOffsetX
 		: this->contentShiftFor(slot, mirrored));
+	// The scroll driver's translation, kept apart from the centring above: QML adds the two, so
+	// the centre stays this class's answer and a tick only ever moves the second term.
+	item->setProperty("scrollOffsetX", slot.scrollOffsetX);
+	item->setProperty("scrollOffsetY", slot.scrollOffsetY);
 
 	// The video path's state, written from the slot for the same reason as everything above: a
 	// delegate QML recreated after a slot count change comes back with the outputs the caller
@@ -512,28 +560,48 @@ void MascotSurface::applyAllSlots()
 
 double MascotSurface::paintedWidthFor(const Slot& slot) const
 {
+	// M3 Task 3: the width half of contentSizeFor(), which is where the geometry is derived now.
+	// The answer is the same expression it always was -- HeightFit's width in particular is
+	// still nativeWidth * (slotHeight / nativeHeight) -- so the shift derived from it does not
+	// move by a pixel.
+	return this->contentSizeFor(slot).width();
+}
+
+QSizeF MascotSurface::contentSizeFor(const Slot& slot) const
+{
 	const double nativeWidth = static_cast<double>(slot.nativeSize.width());
 	const double nativeHeight = static_cast<double>(slot.nativeSize.height());
 	const double slotWidth = slot.rect.width();
 	const double slotHeight = slot.rect.height();
 	// No media, or nothing to scale by: fall back to the slot's width, which is what an empty
 	// slot draws anyway.
+	// (M3 Task 3: an empty slot's painted size is its whole rectangle, so the fallback answers
+	// the height too; its width is still the slot's, which is the value this comment names.)
 	if (nativeWidth <= 0.0 || nativeHeight <= 0.0 || slotWidth <= 0.0 || slotHeight <= 0.0)
-		return slotWidth;
+		return QSizeF(slotWidth, slotHeight);
 
 	switch (slot.fillMode) {
 	case FillMode::Stretch:
-		return slotWidth; // no aspect ratio to preserve
+		return QSizeF(slotWidth, slotHeight); // no aspect ratio to preserve
 	case FillMode::HeightFit:
 		// The old renderer's scaling: the height is the slot's, the width follows the aspect
 		// ratio, so a narrow image keeps side margins and a wide one overflows horizontally.
-		return nativeWidth * (slotHeight / nativeHeight);
-	case FillMode::Fit:
-		return nativeWidth * std::min(slotWidth / nativeWidth, slotHeight / nativeHeight);
-	case FillMode::Crop:
-		return nativeWidth * std::max(slotWidth / nativeWidth, slotHeight / nativeHeight);
+		return QSizeF(nativeWidth * (slotHeight / nativeHeight), slotHeight);
+	case FillMode::WidthFit:
+		// HeightFit on the other axis: the width is the slot's and the height follows the
+		// aspect ratio, so it is the vertical extent that overflows (and is clipped) -- the axis
+		// a vertically stacked stripe travels along.
+		return QSizeF(slotWidth, nativeHeight * (slotWidth / nativeWidth));
+	case FillMode::Fit: {
+		const double scale = std::min(slotWidth / nativeWidth, slotHeight / nativeHeight);
+		return QSizeF(nativeWidth * scale, nativeHeight * scale);
 	}
-	return slotWidth;
+	case FillMode::Crop: {
+		const double scale = std::max(slotWidth / nativeWidth, slotHeight / nativeHeight);
+		return QSizeF(nativeWidth * scale, nativeHeight * scale);
+	}
+	}
+	return QSizeF(slotWidth, slotHeight);
 }
 
 double MascotSurface::contentShiftFor(const Slot& slot, bool mirrored) const

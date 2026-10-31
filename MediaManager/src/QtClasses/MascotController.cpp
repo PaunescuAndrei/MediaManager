@@ -318,6 +318,16 @@ void MascotController::applyConfig()
 	this->mascotMode = modeOk ? parsedMode : MascotMode::Static;
 	this->stripesLeftBands = clampedConfigInt(config, QStringLiteral("mascots_stripes_left"), 2, 1, 8);
 	this->stripesRightBands = clampedConfigInt(config, QStringLiteral("mascots_stripes_right"), 2, 1, 8);
+	// M3 Task 3: the fill mode. Read here under the same "one reader" rule as every key above:
+	// effectiveFillMode() answers from this cached value, so a settings change cannot land one
+	// repaint late and no repaint path re-reads the config. The documented default is
+	// `HeightFit` -- what M1 shipped (the retired renderer's scaled(w, height, KeepAspectRatio))
+	// and what every existing panel already draws -- so a value this class cannot honour must not
+	// reshape a picture just because the key is absent or mistyped (Ruling M3-2).
+	bool fillOk = false;
+	const QString fillValue = config->get(QStringLiteral("mascots_fill"));
+	const MascotSurface::FillMode parsedFill = MascotController::fillModeFromString(fillValue, &fillOk);
+	this->fillModeSetting = fillOk ? parsedFill : MascotSurface::FillMode::HeightFit;
 
 	// A value that is none of the three is reported once per process rather than ignored: it is a
 	// statement about the configuration, not an event, so repeating it on every Apply would only
@@ -354,6 +364,23 @@ void MascotController::applyConfig()
 		// is invisible in the run where they need to see it.
 		qWarning() << "mascots_mode:" << modeValue
 			<< "is not one of Static, Scroll or Stripes; using Static.";
+	}
+
+	// M3 Task 3: the same one-warning latch as the two blocks above, for the same reason -- an
+	// unsupported value is a statement about the configuration, not an event, so repeating it on
+	// every Apply would only bury the rest of the log. The fallback is `HeightFit` rather than the
+	// spec table's original `Crop`, so a typo leaves every panel exactly as it was instead of
+	// reshaping all of them. An empty value is not reported: that is the key simply not being
+	// written, which `Config` answers with the default.
+	if (!this->warnedUnsupportedFill && !fillValue.isEmpty() && !fillOk) {
+		this->warnedUnsupportedFill = true;
+		this->logVideo(QStringLiteral("mascots_fill=\"%1\" is not one of Crop, Fit, Stretch, HeightFit or WidthFit; using HeightFit")
+			.arg(fillValue));
+		// The ungated warning beside the debug line, exactly as the two blocks above have it: a
+		// typo here reshapes every panel, and a debug-gated line is invisible in the run where the
+		// user needs to see why their picture changed.
+		qWarning() << "mascots_fill:" << fillValue
+			<< "is not one of Crop, Fit, Stretch, HeightFit or WidthFit; using HeightFit.";
 	}
 
 	this->source.setAllFilesRandom(config->get_bool("mascots_allfiles_random"));
@@ -475,6 +502,46 @@ MascotMode MascotController::modeFromString(const QString& value, bool* ok)
 	// The panel's historical shape, and what applyConfig() falls back to: a caller that ignores
 	// `ok` still gets a mode that draws something rather than an uninitialised one.
 	return MascotMode::Static;
+}
+
+MascotSurface::FillMode MascotController::fillModeFromString(const QString& value, bool* ok)
+{
+	if (ok)
+		*ok = true;
+	if (value.compare(QStringLiteral("Crop"), Qt::CaseInsensitive) == 0)
+		return MascotSurface::FillMode::Crop;
+	if (value.compare(QStringLiteral("Fit"), Qt::CaseInsensitive) == 0)
+		return MascotSurface::FillMode::Fit;
+	if (value.compare(QStringLiteral("Stretch"), Qt::CaseInsensitive) == 0)
+		return MascotSurface::FillMode::Stretch;
+	if (value.compare(QStringLiteral("HeightFit"), Qt::CaseInsensitive) == 0)
+		return MascotSurface::FillMode::HeightFit;
+	if (value.compare(QStringLiteral("WidthFit"), Qt::CaseInsensitive) == 0)
+		return MascotSurface::FillMode::WidthFit;
+	if (ok)
+		*ok = false;
+	// The mode M1 shipped, and what applyConfig() falls back to: a caller that ignores `ok` still
+	// gets the height-normalised rendering every existing panel has, which is also the only
+	// fallback that cannot change a picture just because a key was misspelled (Ruling M3-2).
+	return MascotSurface::FillMode::HeightFit;
+}
+
+MascotSurface::FillMode MascotController::effectiveFillMode() const
+{
+	// `Static` is the one mode whose band is the whole panel and therefore has no panning axis to
+	// normalise, so it honours the configured value exactly -- which is what makes `Crop`, `Fit`,
+	// `Stretch` and `WidthFit` selectable at all.
+	//
+	// `Scroll` and `Stripes` pan along the axis their bands are stacked along, and a pan needs
+	// that axis normalised: the band's content must be exactly as tall (or wide) as the band in
+	// the other axis, or the pan would also have to solve a second overflow. This task's stacking
+	// axis is horizontal (`slicedBandRects(..., true)`), so the normalised mode is `HeightFit`,
+	// whose width is the only axis that overflows. M3 Task 5 makes the `Stripes` answer follow
+	// `mascots_stripes_orientation`, where a vertical stripe stacks along the other axis and
+	// therefore needs `WidthFit`; no `Stripes` panel this task can produce does.
+	if (this->mascotMode == MascotMode::Static)
+		return this->fillModeSetting;
+	return MascotSurface::FillMode::HeightFit;
 }
 
 int MascotController::bandCount(MascotSide side) const
@@ -1116,8 +1183,12 @@ void MascotController::presentMedia(SideState& state, MascotSide side, const Mas
 	// M1's when a later milestone adds `mascots_fill` -- but the decision belongs next to the
 	// media it describes, and the `slotFillModeKnown` test keeps the image path from writing a
 	// property it already carries.
-	const MascotSurface::FillMode fillMode = MascotSurface::FillMode::HeightFit;
-	band->applyFill(fillMode);
+	// (M3 Task 3: "a later milestone adds `mascots_fill`" is this one. The value is no longer
+	// hardcoded: effectiveFillMode() answers with the configured mode in `Static` and with the
+	// mode's normalised panning axis in `Scroll`/`Stripes`, and the configured default is
+	// HeightFit -- so a default config still writes exactly the value this comment describes.
+	// The media type still plays no part in the choice, which is why the write stays here.)
+	band->applyFill(this->effectiveFillMode());
 	// M3 Task 1: the record and the write are one call on the band, and it comes after the
 	// mirror and the fill mode because the slot derives its content shift from both.
 	band->setMedia(media);

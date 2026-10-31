@@ -25,6 +25,78 @@
 #include <shellapi.h>
 
 // ---------------------------------------------------------------------------
+// Mascot keys, as one list
+// ---------------------------------------------------------------------------
+
+// (M5 review fix I4: the Cancel snapshot needs a universe that is the *writer's*, not "whatever the ini
+// happens to contain". Four layer keys have no `init_defaults` entry on purpose -- absent means "follow the
+// columns" -- so a dialog opened before anything wrote them snapshotted nothing for them, and a live change
+// that wrote them survived Cancel. An absent key answers empty here, and restoring empty is precisely what
+// "follow the columns" means, so the snapshot and the writer now cover the same keys.
+// The second half is the legacy rows, whose writes live in MainWindow::applySettings(); they were in the old
+// ini walk and have to stay in the snapshot or Cancel would stop reverting them.)
+const QStringList& mascotConfigKeys()
+{
+    static const QStringList keys = {
+        // Written by SettingsDialog::syncMascotConfig().
+        QStringLiteral("mascots_media"),
+        QStringLiteral("mascots_mode"),
+        QStringLiteral("mascots_fill"),
+        QStringLiteral("mascots_weighted_random"),
+        QStringLiteral("mascots_clip_seconds"),
+        QStringLiteral("mascots_crossfade_ms"),
+        QStringLiteral("mascots_swap_on_beat"),
+        QStringLiteral("mascots_random_start"),
+        QStringLiteral("mascots_preload"),
+        QStringLiteral("mascots_pause_unfocused"),
+        QStringLiteral("mascots_low_latency"),
+        QStringLiteral("mascots_pair_scroll"),
+        QStringLiteral("mascots_pair_flip"),
+        QStringLiteral("mascots_mirror"),
+        QStringLiteral("mascots_max_decoders"),
+        QStringLiteral("mascots_scroll_speed"),
+        QStringLiteral("mascots_scroll_direction"),
+        QStringLiteral("mascots_scroll_pingpong"),
+        QStringLiteral("mascots_stripes_left"),
+        QStringLiteral("mascots_stripes_right"),
+        QStringLiteral("mascots_stripes_orientation"),
+        QStringLiteral("mascots_stripes_alternate"),
+        QStringLiteral("mascots_background"),
+        QStringLiteral("mascots_background_opacity"),
+        QStringLiteral("mascots_columns_z"),
+        QStringLiteral("mascots_background_list_alpha"),
+        QStringLiteral("mascots_background_alternate_alpha"),
+        QStringLiteral("mascots_background_scrollbar_alpha"),
+        QStringLiteral("mascots_background_mode"),
+        QStringLiteral("mascots_background_fill"),
+        QStringLiteral("mascots_background_stripes"),
+        QStringLiteral("mascots_background_stripes_orientation"),
+        QStringLiteral("mascots_background_stripes_alternate"),
+        QStringLiteral("mascots_background_scroll_speed"),
+        QStringLiteral("mascots_background_scroll_direction"),
+        QStringLiteral("mascots_background_clip_seconds"),
+        QStringLiteral("mascots_background_swap_on_beat"),
+        QStringLiteral("mascots_background_random_change"),
+        QStringLiteral("mascots_background_random_chance"),
+        QStringLiteral("mascots_background_scroll_pingpong"),
+        QStringLiteral("mascots_image_cache_mb"),
+        QStringLiteral("mascots_image_cache_max_items"),
+        // Written by MainWindow::applySettings() from the legacy rows on this page.
+        QStringLiteral("mascots"),
+        QStringLiteral("mascots_allfiles_random"),
+        QStringLiteral("mascots_animated"),
+        QStringLiteral("mascots_color_theme"),
+        QStringLiteral("mascots_center_content"),
+        QStringLiteral("mascots_use_seed"),
+        QStringLiteral("mascots_frequency"),
+        QStringLiteral("mascots_width_percent"),
+        QStringLiteral("mascots_random_change"),
+        QStringLiteral("mascots_random_chance"),
+    };
+    return keys;
+}
+
+// ---------------------------------------------------------------------------
 // Shared style constants
 // ---------------------------------------------------------------------------
 
@@ -695,26 +767,13 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
 {
     Config* config = mw->App->config;
 
-    // M5 Task 3: snapshot every mascot key, the legacy ones included, before a single control can
-    // write one. Config has no key enumeration, so the shipped defaults and the file's own section
-    // are walked for names that start with `mascots`; get() resolves a key the file has not written
-    // yet to its default, which is also the value the controls below are about to show.
-    // (M5 review fix: the section names are compared case-insensitively. On disk they are written
-    // as `[settings]` and `[default]` -- `Config::get()` never notices because mINI's lookups are
-    // case-insensitive, but this walk is a QString comparison, so the exact-match version collected
-    // nothing at all and Cancel restored nothing: an empty snapshot looks exactly like a snapshot
-    // whose values happen to match.)
-    for (const auto& section : config->ini) {
-        const QString sectionName = QString::fromStdString(section.first);
-        if (sectionName.compare(QStringLiteral("DEFAULT"), Qt::CaseInsensitive) != 0
-            && sectionName.compare(QStringLiteral("Settings"), Qt::CaseInsensitive) != 0)
-            continue;
-        for (const auto& entry : section.second) {
-            const QString key = QString::fromStdString(entry.first);
-            if (key.startsWith(QStringLiteral("mascots")) && !mascotConfigSnapshot.contains(key))
-                mascotConfigSnapshot.insert(key, config->get(key));
-        }
-    }
+    // (M5 review fix I4: the walk that used to be here collected "whatever mascot keys the ini happens to
+    // contain". The four layer keys have no default entry on purpose, so a dialog opened before anything
+    // wrote them snapshotted nothing for them and a live write survived Cancel. The snapshot now covers
+    // exactly the keys the writers own -- see mascotConfigKeys() -- and an absent key is captured empty,
+    // which is the same "follow the columns" the readers see.)
+    for (const QString& key : mascotConfigKeys())
+        mascotConfigSnapshot.insert(key, config->get(key));
 
     // Build the page programmatically and insert it after Appearance. Both the sidebar and the
     // stack are given the same index, the way setupStreaksPage() keeps the two in sync.
@@ -838,8 +897,8 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     mascotSwapOnBeatCheckBox = new QCheckBox("Swap on the music beat");
     mascotSwapOnBeatCheckBox->setChecked(config->get_bool(QStringLiteral("mascots_swap_on_beat")));
     mascotSwapOnBeatCheckBox->setToolTip(
-        "Let a beat advance a video before its clip ends, rate-limited to half the clip time. Read "
-        "only while the columns show videos.");
+        "Let a beat advance a video before its clip ends, as often as the beat and the random chance "
+        "allow. Read only while the columns show videos.");
     playbackLayout->addWidget(mascotSwapOnBeatCheckBox);
 
     mascotRandomStartCheckBox = new QCheckBox("Start videos at a random position");
@@ -1134,6 +1193,11 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     // trailing spacer. One tab for "make it look different", one for "make it behave differently": the
     // group is built here because its controls are wired into this page's one writer and one matrix, and
     // reparenting the built box is the smaller change than moving twelve control definitions.)
+    // (M5 review amendment: "nothing about what runs" stopped being true when the layer got its own cadence.
+    // Clip length, beat swap, random change and chance are behaviour, and they live in this group because
+    // the layer does -- keeping the layer's controls together matters more to a user looking for them than
+    // the appearance/behaviour split does. The sentence above is kept because it is why the group is here at
+    // all; the four cadence rows are the deliberate exception.)
     this->ui.appearancePageLayout->insertWidget(
         this->ui.appearancePageLayout->count() - 1, backgroundGroup);
 
@@ -1195,6 +1259,12 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     // The master switch is not one of the page's own keys, but row 1 of the matrix is about it: the
     // groups have to follow the checkbox at once, not on the next Apply.
     connect(this->ui.mascotsOnOff, &QCheckBox::toggled, this, [this] { updateMascotControlStates(); });
+    // (M5 review fix C1: Mirror is one of the legacy rows -- its config write lives in
+    // MainWindow::applySettings -- but it is the switch the two pair controls depend on, and the two of
+    // them are live. It joins the live path here so the page has one rule: a control that decides something
+    // on screen takes effect when it is clicked. That is also what lets the controller see the 0->1
+    // transition and re-pair the columns.)
+    connect(this->ui.mascotsMirror, &QCheckBox::toggled, this, [this] { this->syncMascotConfig(); });
 
     updateMascotControlStates();
 }
@@ -1219,6 +1289,11 @@ void SettingsDialog::syncMascotConfig()
     config->set("mascots_low_latency", mascotLowLatencyCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_pair_scroll", mascotPairScrollCombo->currentText());
     config->set("mascots_pair_flip", mascotPairFlipCheckBox->isChecked() ? "True" : "False");
+    // (M5 review fix C1: Mirror is written here now, and the checkbox is part of the live wiring below.
+    // It was one of the legacy rows that only took effect on Apply, which made the two pair controls that
+    // depend on it live while the switch itself was not -- and it also meant the controller could not see
+    // the 0->1 transition it needs in order to re-pair the columns.)
+    config->set("mascots_mirror", this->ui.mascotsMirror->isChecked() ? "True" : "False");
     config->set("mascots_max_decoders", QString::number(mascotMaxDecodersSpinBox->value()));
     config->set("mascots_scroll_speed", QString::number(mascotScrollSpeedSpinBox->value()));
     config->set("mascots_scroll_direction", mascotScrollDirectionCombo->currentText());

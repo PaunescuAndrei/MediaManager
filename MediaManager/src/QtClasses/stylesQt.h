@@ -36,9 +36,11 @@ QBrush get_highlighted_text_brush(QPalette current_palette);
 // background, so its own opacity is the control for reading text over the layer. `alternateAlpha` is
 // the caller's, and passing the same value for both keeps the old look.)
 QPalette get_background_row_palette(const QPalette& appPalette, int alpha, int alternateAlpha);
-// (M5 Task 8: the rows are given alpha 0 through the function above now -- they paint no fill at
-// all -- and this is the palette that replaced their scrim: one veil, `QPalette::Window` at the
-// configured alpha, behind every pane of the window. The colour is the window's own and not the
-// list's Base, because the veil has to be indistinguishable from the window with the layer switched
-// off -- at alpha 255 it is exactly that, which is the test that says the colour is right.)
+// (M5 Task 8: this paragraph was written when the rows had been handed alpha 0 on the theory that the veil
+// replaced their scrim. That theory was undone in the same milestone -- the rows paint their fill again, at
+// BACKGROUND_ROW_ALPHA or the configured `mascots_background_list_alpha` -- so the veil is a second surface
+// in front of the layer, not a replacement for the row fill. What stays true, and is why the function is
+// shaped this way: the veil is `QPalette::Window` at the configured alpha, behind every pane of the window,
+// in the window's own colour rather than the list's Base, so at alpha 255 it is indistinguishable from the
+// window with the layer switched off -- the test that says the colour is right.)
 QPalette get_background_veil_palette(const QPalette& appPalette, int alpha);

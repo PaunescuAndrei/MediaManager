@@ -1069,6 +1069,11 @@ private:
 	// right column is drawn as its mirror (the look that was asked for) or repeats it. Read at Apply, and it
 	// is the only thing that decides the pair's parity -- the folder rule decides which way the pair faces.)
 	bool flipMirroredColumn = true;
+	// (M5 review fix C1: the mirror key as the last Apply saw it, so enabling it can re-pair the columns
+	// once. `known` is what keeps the first Apply of a run -- before the panels have filled -- from
+	// treating "on" as a transition; without it, `start()` would fill the pair twice.)
+	bool mirrorAppliedLast = false;
+	bool mirrorAppliedKnown = false;
 	// (M5 Task 10: the layer's own cadence. `mascots_background_clip_seconds`,
 	// `mascots_background_swap_on_beat`, `mascots_background_random_change` and
 	// `mascots_background_random_chance`, each falling back to its columns twin when absent. The M4 note

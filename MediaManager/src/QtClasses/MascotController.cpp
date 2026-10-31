@@ -556,6 +556,14 @@ void MascotController::applyConfig()
 	const double columnsRandomChance =
 		std::clamp(config->get_double(QStringLiteral("mascots_random_chance"), 10.0) / 100.0, 0.0, 1.0);
 	this->columnsRandomChance = columnsRandomChance;
+	// (M5 review fix I2: read *before* the layer's fallbacks below. `backgroundSwapOnBeat` follows the
+	// columns' key when its own is absent, and it used to read `this->swapOnBeat` a few lines before this
+	// assignment -- so the first Apply after launch fell back to whatever the previous configuration had
+	// left there, and a config with the columns' beat swap off could beat-swap the layer until the next
+	// Apply.)
+	// (M3 Task 6B: `mascots_swap_on_beat`, read here under the same "one reader" rule as every key
+	// above so onBeat() decides from the cached value and no beat path re-reads the config.)
+	this->swapOnBeat = config->get_bool(QStringLiteral("mascots_swap_on_beat"));
 	this->backgroundClipSeconds = clampedConfigInt(config,
 		QStringLiteral("mascots_background_clip_seconds"), this->clipSeconds, 0, MAX_CLIP_SECONDS);
 	this->backgroundSwapOnBeat = configBoolWithFallback(config,
@@ -564,9 +572,6 @@ void MascotController::applyConfig()
 		QStringLiteral("mascots_background_random_change"), columnsRandomChange);
 	this->backgroundRandomChance = std::clamp(config->get_double(
 		QStringLiteral("mascots_background_random_chance"), columnsRandomChance * 100.0) / 100.0, 0.0, 1.0);
-	// (M3 Task 6B: `mascots_swap_on_beat`, read here under the same "one reader" rule as every key
-	// above so onBeat() decides from the cached value and no beat path re-reads the config.)
-	this->swapOnBeat = config->get_bool(QStringLiteral("mascots_swap_on_beat"));
 	// (M3 whole-branch fix: a change queued at a beat waits for that band's scroll seam, and a
 	// seam can be a whole clip away -- long enough for this Apply to have turned
 	// `mascots_swap_on_beat` off, changed the clip length, or left the panel in `Static` where
@@ -954,6 +959,12 @@ void MascotController::applyConfig()
 			// rebuilt. Pushed here rather than only in createVideoSlot() for exactly the reason
 			// setRandomStart() is.
 			band->video()->setTimings(this->swapTimeoutMs, this->retryIntervalMs, this->retryAttempts);
+			// (M5 review fix I3: `mascots_low_latency` was pushed only by createVideoSlot(), so a player
+			// that already existed never heard a change -- the commit that added the setting said it
+			// applied to live players, and it did not. The intent is fixed for a player's lifetime and
+			// setLowLatency() returns at once when the value has not moved, so this is one comparison per
+			// band per Apply rather than a player rebuild.)
+			band->video()->setLowLatency(this->lowLatency);
 			// The preload switch is a live setting too, and turning it *off* has to be more than a guard
 			// on the next preload: a clip parked before the Apply would still be there, hold its paused
 			// decoder, and be served by the next swap as `preloaded=yes` -- i.e. the switch would only
@@ -975,6 +986,9 @@ void MascotController::applyConfig()
 				continue;
 			band->video()->setRandomStart(this->randomStart, this->clipSeconds);
 			band->video()->setTimings(this->swapTimeoutMs, this->retryIntervalMs, this->retryAttempts);
+			// (M5 review fix I3: the layer's players take the live low-latency change too -- see the pair's
+			// loop above for why the push belongs here and not only in createVideoSlot().)
+			band->video()->setLowLatency(this->lowLatency);
 			if (!this->preloadEnabled)
 				band->video()->discardPreload();
 		}
@@ -987,6 +1001,22 @@ void MascotController::applyConfig()
 	// a settings Apply repaints the clip already on screen with the new one, exactly as the pair's
 	// two calls just did for theirs.
 	this->applyDisplay(this->backgroundState, MascotPanel::Background);
+	// (M5 review fix C1: turning Mirror on has to make the two columns show one media *now*. The parity
+	// repaint above cannot change what the right band is holding -- the only path that copies the left
+	// band's file and start offset to the right one is an advance (`nextBandImages()`), and a static
+	// configuration (clip 0, no beat swap) never advances at all. The pair therefore kept two files for as
+	// long as the app ran, which is exactly the out-of-sync look mirror mode exists to remove. The
+	// transition check is guarded by `mirrorAppliedKnown` so the first Apply of a run -- the one `start()`
+	// makes before the panels have filled -- records the value instead of triggering a second fill.)
+	const bool mirrorNow = this->mirrorEnabled();
+	if (this->mirrorAppliedKnown && mirrorNow && !this->mirrorAppliedLast && this->running) {
+		for (int i = 0; i < this->bandCount(MascotPanel::Left); ++i) {
+			if (this->leftState.band(i) && this->rightState.band(i))
+				this->nextBandImages(i, false);
+		}
+	}
+	this->mirrorAppliedLast = mirrorNow;
+	this->mirrorAppliedKnown = true;
 	this->updateLayout();
 	// The player half follows the new media setting and the new budget: an `Images` setting, or a
 	// budget below what a panel needs, gives the panel back its memory instead of leaving idle
@@ -1800,10 +1830,12 @@ bool MascotController::scrollCanTick() const
 		return false;
 	// Hidden and minimized are "cannot be seen" whatever the config says, so they are tested here
 	// and not left to `mascots_pause_unfocused` (videoShouldPause() answers false as soon as that
-	// key is off, which is right for a player and wrong for a timer nobody can see). The covered
-	// case is deliberately not asked: IsMyWindowVisible() costs more per call than a whole tick
-	// does, and the event-driven reconciliation stops the driver when the window itself changes
-	// state.
+	// key is off, which is right for a player and wrong for a timer nobody can see).
+	// (M5 review fix: the paragraph that used to end here said the *covered* case was deliberately not
+	// asked, because IsMyWindowVisible() cost more per call than a whole tick. That is no longer true and
+	// no longer the rule: the covered case is asked, through the cached `windowSeen` a 1 Hz timer refreshes,
+	// so a covered window stops the scroll driver just as it stops a player. The comment is kept because
+	// the cost argument is why the answer is cached rather than asked per tick.)
 	return !this->videoShouldPause();
 }
 
@@ -4687,7 +4719,10 @@ void MascotController::refreshWindowSeen()
 		return;
 	this->windowSeen = seen;
 	this->windowSeenKnown = true;
-	qDebug() << "MASCOT-VISIBLE" << "seen" << seen;
+	// (M5 review fix I6: this was the one new probe that bypassed the gate every other line uses --
+	// `qDebug()` writes to OutputDebugString in a normal run, so `MASCOT-VISIBLE` appeared for users who
+	// never passed -debug. Same line, same place in the log, behind the same gate as its neighbours.)
+	this->logVideo(QStringLiteral("MASCOT-VISIBLE seen %1").arg(seen));
 	this->applyVideoPaused();
 	this->updateScrollDriver();
 }
@@ -4778,8 +4813,10 @@ void MascotController::applyVideoPaused()
 	// (M4 Task 2: unless the background is drawing -- it is video-only, so its players observe the
 	// pause whatever `mascots_media` says about the columns.)
 	if (this->mediaSettingWantsVideo() || this->backgroundBandCount() > 0) {
+		// (M5: the rule no longer involves focus at all -- "seen" is visible, not minimized, and not
+		// covered by another top-level window. The text said "visible and active" from the focus era.)
 		this->logVideo(pause ? QStringLiteral("paused (the window cannot be seen)")
-			: QStringLiteral("resumed (the window is visible and active)"));
+			: QStringLiteral("resumed (the window is visible)"));
 	}
 }
 void MascotController::watchWindow(QWidget* window)
@@ -5100,7 +5137,12 @@ void MascotController::commitBeatAdvance(MascotPanel panel, int bandIndex)
 	// `mascots_swap_on_beat = False` applied in between would still advance the band once, and
 	// content committed in between would be replaced inside the half-clip floor -- a swap that the
 	// current configuration does not permit, from a beat that no longer reflects it.)
-	if (!this->swapOnBeat)
+	// (M5 review fix I2: the per-panel key, not the columns' one. This commit is reached for the layer as
+	// well as for the pair, and `mascots_background_swap_on_beat` is documented -- and shown -- as
+	// independent of the columns' switch. Asking the columns' key here dropped every layer advance the
+	// beat had just scheduled, so the layer could never swap on a beat while the columns' box was off.)
+	const bool swapOnBeat = panel == MascotPanel::Background ? this->backgroundSwapOnBeat : this->swapOnBeat;
+	if (!swapOnBeat)
 		return;
 	if (panel == MascotPanel::Left && this->bandMirrorsLeft(bandIndex)) {
 		MascotBand* rightBand = this->rightState.band(bandIndex);

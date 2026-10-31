@@ -605,6 +605,12 @@ void MainWindow::changePalette(QPalette palette) {
     this->initRatingIcons();
     this->initStyleSheets();
     this->highlightCurrentItem(QPersistentModelIndex(), false);
+    // M5 fix: the row scrim is re-applied last. `initStyleSheets()` sets it, but the highlight pass
+    // above runs a model change afterwards, and the repaint it schedules can resolve the row brush
+    // against the palette that was set before ours -- the rows then paint at the wrong alpha while
+    // the palette reads correct. Re-applying after the last thing that can touch the list costs one
+    // pass and removes the ordering question entirely.
+    this->applyListTransparency();
 }
 
 void MainWindow::initStyleSheets() {

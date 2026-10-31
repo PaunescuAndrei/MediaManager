@@ -21,6 +21,10 @@ Item {
 	property color backdropColor: "transparent"
 	property bool backdropVisible: false
 
+	// Written by MascotSurface::setSurfaceOpacity(): the layer's own opacity, applied to the content
+	// rather than to the root item so the backdrop below it stays solid (see the note there).
+	property real contentOpacity: 1.0
+
 	// M4 Task 6: first child, so the Repeater's slots below are drawn above it.
 	Rectangle {
 		id: backdrop
@@ -30,8 +34,19 @@ Item {
 		visible: surface.backdropVisible
 	}
 
-	Repeater {
-		model: surface.slotCount
-		delegate: MascotSlot {}
+	// M5 fix: the layer's opacity fades the content only. It used to be written on the root item, so
+	// the backdrop faded with the video and a low `mascots_background_opacity` left the layer's empty
+	// pixels black instead of the app's colour. `MascotSurface::setSurfaceOpacity()` writes this
+	// property now.
+	Item {
+		id: content
+
+		anchors.fill: parent
+		opacity: surface.contentOpacity
+
+		Repeater {
+			model: surface.slotCount
+			delegate: MascotSlot {}
+		}
 	}
 }

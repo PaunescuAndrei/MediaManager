@@ -396,7 +396,11 @@ void MascotSurface::setSurfaceOpacity(double opacity)
 	// a slot count change inherits the root item's value on its own.
 	if (!(opacity >= 0.0) || !this->root)
 		return;
-	this->root->setProperty("opacity", opacity > 1.0 ? 1.0 : opacity);
+	// (M5 fix: the content, not the root item. Fading the root faded the backdrop rectangle with
+	// it, so `mascots_background_opacity = 0` made the layer paint nothing at all and the window
+	// showed black wherever the quick widget would have been -- the whole point of the backdrop is
+	// that those pixels read as the app's own colour. The slots fade; the backdrop does not.)
+	this->root->setProperty("contentOpacity", opacity > 1.0 ? 1.0 : opacity);
 }
 
 void MascotSurface::setBackdrop(const QColor& colour, bool enabled)

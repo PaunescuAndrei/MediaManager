@@ -230,10 +230,17 @@ void MascotVideoSlot::preload(const QString& path, qint64 startOffsetMs)
 		return;
 
 	if (this->m_preload.parked) {
-		// Never twice for the same path: a second open of the file already parked would throw away
+		// Never twice for the same clip: a second open of the file already parked would throw away
 		// a ready clip and pay for it a second time. A different path does replace it, because the
 		// parked clip is only useful if it is the clip the next swap will ask for.
-		if (this->m_preload.path == path)
+		// The *offset* is part of "the same clip", not just the path: a parked clip is a specific
+		// moment of a file, so a request for the same file at a different moment must replace it --
+		// keeping it would let a caller that asked for `startOffsetMs` be served the moment it did
+		// not ask for, and for the mirror pair that is the one thing startMirrorVideo() prevents.
+		// A negative `startOffsetMs` means "whatever swapTo() would have chosen": that is not a value
+		// this call can compare, and the parked clip may be exactly that choice, so it stands.
+		const bool sameMoment = startOffsetMs < 0 || this->m_preload.offsetMs == startOffsetMs;
+		if (this->m_preload.path == path && sameMoment)
 			return;
 		this->discardPreload();
 	}
@@ -272,8 +279,15 @@ bool MascotVideoSlot::swapToPreloaded()
 		return false;
 
 	const Preload parked = this->m_preload;
+	// The bounds are checked before the index, not beside it: `parked.ab` is -1 in the empty state
+	// and any other value would index outside `m_players` -- dormant UB is still UB, and this is the
+	// one place the record's output is used as an index before anything has vouched for it.
+	if (parked.ab < OUTPUT_A || parked.ab > OUTPUT_B) {
+		this->discardPreload();
+		return false;
+	}
 	ThreadedMediaPlayer* player = this->m_players[parked.ab];
-	if (!player || parked.ab < OUTPUT_A || parked.ab > OUTPUT_B) {
+	if (!player) {
 		// The player the clip was parked on is gone (a single-player switch, a shutdown, a sink
 		// that was replaced): nothing can be made of it, and the caller still has swapTo().
 		this->discardPreload();
@@ -317,7 +331,10 @@ void MascotVideoSlot::discardPreload()
 
 	// A parked clip is never the active one (preload() refuses that output), so its player has
 	// nothing on screen to lose: stopping and emptying it frees the decoder the parking held.
-	if (ab == this->m_activeAb)
+	// The bounds check is the same one swapToPreloaded() makes before it indexes: this method runs
+	// on records that other code has already decided to drop, so it cannot be the place that trusts
+	// `ab`.
+	if (ab < OUTPUT_A || ab > OUTPUT_B || ab == this->m_activeAb)
 		return;
 	if (ThreadedMediaPlayer* player = this->m_players[ab]) {
 		player->stop();

@@ -47,9 +47,9 @@ namespace {
 	// it described are gone because the values are the user's to set (§7.11).)
 
 	// §7.13's preview rule is a deferral, not a skip: a tooltip plays for as long as the user keeps
-	// hovering, so the pick is re-asked at this interval until it stops. One `isPlaying()`
-	// on a QPointer is the whole cost of a tick, and the panel keeps the clip it is already showing
-	// -- the rule gates a *start*, never playback.
+	// hovering, so the pick is re-asked at this interval until it stops. One `isPlaying()` on a
+	// QPointer is the whole cost of a tick, and the panel keeps the clip it is already showing --
+	// the rule gates a *start*, never playback.
 	// (Task 6: "this interval" is `mascots_busy_defer_ms` now, and the constant this comment used to
 	// name is gone with it. The rate limit below is unchanged and still exists for the reason it
 	// gives -- a per-deferral log line would fight the swap lines the gate reads.)
@@ -79,6 +79,22 @@ namespace {
 			return 30;
 		const int value = config->get(QStringLiteral("mascots_clip_seconds")).toInt();
 		return std::clamp(value, 0, MAX_CLIP_SECONDS);
+	}
+
+	// One configured number with a documented default, for the waits that gate a user-visible wait
+	// (Task 6). A value that does not parse is *not* clamped: toInt() answers 0 for "abc", and
+	// clamped to the floor that is the most aggressive setting there is -- a typo in config.ini
+	// would silently shorten the swap deadline to 500 ms and start abandoning clips that are merely
+	// opening. So a malformed value falls back to the default the spec documents, and the clamp only
+	// ever applies to a number the user actually wrote. (`fallback` is inside [low, high] by
+	// construction, so the clamp is a no-op for it.)
+	int clampedConfigInt(Config* config, const QString& key, int fallback, int low, int high)
+	{
+		if (!config)
+			return fallback;
+		bool ok = false;
+		const int value = config->get(key).toInt(&ok);
+		return std::clamp(ok ? value : fallback, low, high);
 	}
 }
 
@@ -230,10 +246,12 @@ void MascotController::applyConfig()
 	//    count a human would configure and bounds the churn a missing delegate can cause.
 	//  - the preview deferral [50, 5000]: a shorter interval re-asks a player that cannot have
 	//    started, a longer one leaves the panel waiting on a tooltip that may already be over.
-	this->swapTimeoutMs = std::clamp(config->get(QStringLiteral("mascots_swap_timeout_ms")).toInt(), 500, 60000);
-	this->retryIntervalMs = std::clamp(config->get(QStringLiteral("mascots_retry_interval_ms")).toInt(), 20, 2000);
-	this->retryAttempts = std::clamp(config->get(QStringLiteral("mascots_retry_attempts")).toInt(), 0, 50);
-	this->busyDeferMs = std::clamp(config->get(QStringLiteral("mascots_busy_defer_ms")).toInt(), 50, 5000);
+	// A value that does not parse falls back to the documented default rather than to the floor --
+	// clampedConfigInt() explains why that matters for a deadline.
+	this->swapTimeoutMs = clampedConfigInt(config, QStringLiteral("mascots_swap_timeout_ms"), 5000, 500, 60000);
+	this->retryIntervalMs = clampedConfigInt(config, QStringLiteral("mascots_retry_interval_ms"), 150, 20, 2000);
+	this->retryAttempts = clampedConfigInt(config, QStringLiteral("mascots_retry_attempts"), 5, 0, 50);
+	this->busyDeferMs = clampedConfigInt(config, QStringLiteral("mascots_busy_defer_ms"), 250, 50, 5000);
 
 	// A value that is none of the three is reported once per process rather than ignored: it is a
 	// statement about the configuration, not an event, so repeating it on every Apply would only
@@ -294,6 +312,14 @@ void MascotController::applyConfig()
 		// setRandomStart() is.
 		if (state->video)
 			state->video->setTimings(this->swapTimeoutMs, this->retryIntervalMs, this->retryAttempts);
+		// The preload switch is a live setting too, and turning it *off* has to be more than a guard
+		// on the next preload: a clip parked before the Apply would still be there, hold its paused
+		// decoder, and be served by the next swap as `preloaded=yes` -- i.e. the switch would only
+		// take effect one clip later, and the panel would show behaviour the user had just turned
+		// off. Discarded here so "off" means off from the next swap, exactly as it does from
+		// startup. An armed preload goes with it: discardPreload() drops both states.
+		if (state->video && !this->preloadEnabled)
+			state->video->discardPreload();
 	}
 	// A mode change repaints what is already on screen; the surface default alone would only
 	// affect a slot created later.
@@ -1122,7 +1148,12 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 			SideState& panel = this->stateFor(side);
 			// A load that started in the meantime (a click, the other panel's pair) is newer than
 			// this deferral: it owns the panel's next frame.
-			if (!panel.video || panel.video->isBusy() || panel.requestedIsVideo)
+			// (Task 6: `isBusy()` is also true while a *preload* opens, and a preload is not a newer
+			// swap -- it was armed right after the commit this deferral belongs to. Testing it alone
+			// would let the deferral drop itself in that window, and the panel would then wait for a
+			// beat it may never get. Same pairing as pickVideo()'s busy gate, for the same reason.)
+			if (!panel.video || panel.requestedIsVideo
+				|| (panel.video->isBusy() && !panel.video->preloading()))
 				return;
 			this->pickFor(panel, side, true);
 		});
@@ -1274,10 +1305,14 @@ void MascotController::startVideoLoad(SideState& state, MascotSide side, const Q
 	}
 	// Was this clip already chosen, opened and parked? If so the swap is the slot's play() plus the
 	// fade below -- no load, and the offset that was actually seeked to is the slot's, not a value
-	// this call would have had to invent. A preload that is not for exactly this file is a miss (a
-	// superseding pick, a mirror copy whose parked clip was dropped) and falls through to swapTo(),
-	// which is the path that existed before preload did.
-	const bool fromPreload = slot->preloadedPath() == path && slot->hasPreload();
+	// this call would have had to invent. A preload that is not for exactly this file *and this
+	// offset* is a miss (a superseding pick, a mirror copy whose parked clip was dropped, or the
+	// pair's two panels parked on different moments of one file) and falls through to swapTo(),
+	// which is the path that existed before preload did. The offset is part of the match for the
+	// same reason it is part of preload()'s: a parked clip is a moment, so serving a swap that
+	// asked for a different moment would put the pair on two different frames of one file.
+	const bool fromPreload = slot->preloadedPath() == path && slot->hasPreload()
+		&& (offsetMs < 0 || slot->preloadedOffsetMs() == offsetMs);
 	const qint64 effectiveOffsetMs = fromPreload ? slot->preloadedOffsetMs() : offsetMs;
 	state.requestedPath = path;
 	state.requestedIsVideo = true;

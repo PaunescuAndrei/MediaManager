@@ -94,14 +94,20 @@ public:
 	//
 	// `startOffsetMs` >= 0 seeks exactly there -- the mirror pair parks the same file at the same
 	// place with that -- while a negative value asks for the random (or zero) start swapTo() would
-	// have chosen. Parked means paused, so the clip costs no CPU and holds no active decode; a
-	// panel that is hidden keeps it paused.
+	// have chosen. Parked means paused, so the clip costs no CPU and holds no active decode.
+	// (Task 6 fix: "a panel that is hidden keeps it paused" was the first draft of that sentence and
+	// is not what the code does. The parked clip *is* paused while the panel is hidden, but the
+	// owner does not leave it there: MascotController::applyVideoPaused() calls discardPreload() on
+	// every pause and arms a fresh preload on resume, so a hidden panel holds no parked decoder at
+	// all. Deciding that is the owner's job -- hiding a panel is a policy, not a fact this class
+	// can see -- and this class obeys by releasing the record.)
 	//
 	// A preload is an optimisation, never a requirement, so nothing here is a promise: a preload
 	// that cannot be made (no sink yet, the output that is on screen, a load already in flight)
-	// emits nothing, and one that fails reports through failed()/timedOut() with a kind whose
-	// comment explains that it may not cost the file its place in the pool. The caller keeps
-	// swapTo() to fall back on in every case.
+	// emits nothing, and one that fails reports through failed() with a kind whose comment explains
+	// that it may not cost the file its place in the pool, or through timedOut(), which has no kind
+	// because a deadline is never a verdict on the file. The caller keeps swapTo() to fall back on
+	// in every case.
 	void preload(const QString& path, qint64 startOffsetMs);
 
 	// Makes the parked clip the one on screen: sets it active, plays it and reports it through

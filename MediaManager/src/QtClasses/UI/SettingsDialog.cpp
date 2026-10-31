@@ -949,9 +949,18 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     addRow(backgroundLayout, "Veil opacity:",
         "How much of the window's own background colour is painted over the layer. The layer itself "
         "always runs at full strength; this is one translucent rectangle in front of it, so 1.00 is "
-        "the plain window and 0.00 is the media at full strength. It covers the strip, the list and "
-        "the margins alike -- they cannot be dimmed by different amounts.",
+        "the plain window and 0.00 is the media at full strength. It covers the strip, the margins "
+        "and the list alike. The list's rows have their own opacity below, and it sits on top of this "
+        "one -- set this to 0.00 if you want the list's row colours to be what decides the list.",
         mascotBackgroundOpacitySpinBox);
+
+    mascotListAlphaSpinBox = makeDoubleSpinBox(0.00, 1.00, 0.05,
+        config->get_double(QStringLiteral("mascots_background_list_alpha"), 0.85));
+    addRow(backgroundLayout, "List row opacity:",
+        "Opacity of the list's rows over the veil -- the row fill that makes Base and AlternateBase "
+        "alternate. 1.00 is an opaque list, 0.00 lets whatever the veil leaves reach the text at full "
+        "strength. Different from the veil above: this one is only the list.",
+        mascotListAlphaSpinBox);
 
     mascotColumnsZCombo = makeComboBox({ QStringLiteral("Above"), QStringLiteral("Below") },
         config->get(QStringLiteral("mascots_columns_z")));
@@ -1057,7 +1066,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         mascotMaxDecodersSpinBox, mascotScrollSpeedSpinBox, mascotScrollDirectionCombo,
         mascotScrollPingpongCheckBox, mascotStripesLeftSpinBox, mascotStripesRightSpinBox,
         mascotStripesOrientationCombo, mascotStripesAlternateCheckBox, mascotBackgroundCheckBox,
-        mascotBackgroundOpacitySpinBox, mascotColumnsZCombo, mascotBackgroundModeCombo,
+        mascotBackgroundOpacitySpinBox, mascotListAlphaSpinBox, mascotColumnsZCombo, mascotBackgroundModeCombo,
         mascotBackgroundFillCombo, mascotBackgroundStripesSpinBox,
         mascotBackgroundOrientationCombo, mascotBackgroundAlternateCheckBox,
         mascotBackgroundScrollSpeedSpinBox, mascotBackgroundScrollDirectionCombo,
@@ -1108,6 +1117,7 @@ void SettingsDialog::syncMascotConfig()
     config->set("mascots_background", mascotBackgroundCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_background_opacity", QString::number(mascotBackgroundOpacitySpinBox->value(), 'f', 2));
     config->set("mascots_columns_z", mascotColumnsZCombo->currentText());
+    config->set("mascots_background_list_alpha", QString::number(mascotListAlphaSpinBox->value(), 'f', 2));
     config->set("mascots_background_mode", mascotBackgroundModeCombo->currentText());
     config->set("mascots_background_fill", mascotBackgroundFillCombo->currentText());
     config->set("mascots_background_stripes", QString::number(mascotBackgroundStripesSpinBox->value()));
@@ -1182,6 +1192,7 @@ void SettingsDialog::updateMascotControlStates()
     // Row 6: with the layer off nothing in its box has an effect -- except the switch itself.
     const bool backgroundOn = mascotBackgroundCheckBox->isChecked();
     mascotBackgroundOpacitySpinBox->setEnabled(backgroundOn);
+    mascotListAlphaSpinBox->setEnabled(backgroundOn);
     mascotColumnsZCombo->setEnabled(backgroundOn);
     mascotBackgroundModeCombo->setEnabled(backgroundOn);
     mascotBackgroundFillCombo->setEnabled(backgroundOn);

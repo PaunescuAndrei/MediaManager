@@ -125,8 +125,9 @@ public:
     QCheckBox* mascotStripesAlternateCheckBox = nullptr;
     QCheckBox* mascotBackgroundCheckBox = nullptr;
     QDoubleSpinBox* mascotBackgroundOpacitySpinBox = nullptr;
-    // (M5 Task 8: `mascotListAlphaSpinBox` is gone with `mascots_background_list_alpha` -- one veil
-    // means one alpha, and `mascotBackgroundOpacitySpinBox` above is it.)
+    // (M5 Task 8: the list's own opacity, back after a commit that removed it. The veil above is the
+    // window; this is the list's row fill, which is what makes the rows alternate.)
+    QDoubleSpinBox* mascotListAlphaSpinBox = nullptr;
     QComboBox* mascotColumnsZCombo = nullptr;
     QComboBox* mascotBackgroundModeCombo = nullptr;
     QComboBox* mascotBackgroundFillCombo = nullptr;

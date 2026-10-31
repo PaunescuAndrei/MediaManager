@@ -12,6 +12,30 @@ VideosTreeView::VideosTreeView(QWidget* parent) : QTreeView(parent) {
     setAllColumnsShowFocus(true);
 }
 
+void VideosTreeView::drawRow(QPainter* painter, const QStyleOptionViewItem& options,
+    const QModelIndex& index) const {
+    // Which of the two row colours this row is. The option Qt hands to drawRow() carries no Alternate
+    // flag -- the base implementation computes it per item, further down -- so it is derived here the
+    // way the view alternates: on the row, from 1. Measured: with the flag read from `options` instead,
+    // every row came out Base and the list lost its alternation entirely.
+    const bool alternate = this->alternatingRowColors() && (index.row() % 2) == 1;
+    const QColor rowColour =
+        options.palette.color(alternate ? QPalette::AlternateBase : QPalette::Base);
+    if (rowColour.alpha() >= 255) {
+        // An opaque list is Qt's own business: the viewport and the style already paint these rows, and
+        // the same fill again would be a no-op at best. This is also the branch every other view takes,
+        // and the branch taken whenever the background layer is off.
+        QTreeView::drawRow(painter, options, index);
+        return;
+    }
+    QStyleOptionViewItem opt(options);
+    painter->fillRect(options.rect, rowColour);
+    // The style fills alternate rows from the same role, and per column rather than per row. An alpha-0
+    // copy makes that second fill a no-op, so the rectangle above is the row's only fill.
+    opt.palette.setColor(QPalette::AlternateBase, QColor(Qt::transparent));
+    QTreeView::drawRow(painter, opt, index);
+}
+
 void VideosTreeView::mousePressEvent(QMouseEvent* event) {
     if ((event->button() == Qt::LeftButton || event->button() == Qt::RightButton || event->button() == Qt::MiddleButton) && (event->modifiers() & Qt::AltModifier)) {
         this->altPreviewPressed = true;

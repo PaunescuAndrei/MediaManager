@@ -638,20 +638,27 @@ void MainWindow::applyBackgroundVeil() {
     // M4 Task 3b: the row alpha is a setting now, because it is the one number that decides how
     // present the layer is. BACKGROUND_ROW_ALPHA is the fallback, and the same value the app shipped
     // with before the key existed, so an existing config keeps the look it had.
-    // (M5 Task 8: the setting is `mascots_background_opacity` and the number is the *veil's* alpha --
-    // how much of the window's colour is laid over the layer. `mascots_background_list_alpha` is gone
-    // with the row scrim it tinted; the layer itself is no longer faded at all.)
+    // (M5 Task 8: this is the *veil's* alpha, `mascots_background_opacity` -- how much of the window's
+    // colour is laid over the layer, across the strip and the margins as well as the list. It is not
+    // the list's own number; that is `mascots_background_list_alpha` below, and it is still the rows'.)
     int veilAlpha = BACKGROUND_ROW_ALPHA;
     if (this->App->config) {
         const double configured = this->App->config->get_double(
             "mascots_background_opacity", BACKGROUND_ROW_ALPHA / 255.0);
         veilAlpha = qBound(0, qRound(configured * 255.0), 255);
     }
-    // (M5 Task 8: the rows are given alpha 0 -- they paint no fill of their own. The veil behind them
-    // already carries the colour and the alpha for the whole window, so a row fill on top of it would
-    // be exactly the second scrim this arrangement exists to delete.)
+    // (M5 Task 8: the rows paint their fill again -- Base and AlternateBase at one alpha, which is what
+    // makes the list alternate, and the only control over the list's own opacity. One commit handed them
+    // alpha 0 on the theory that the veil had replaced them; it had not, and the alternation went with
+    // it. The two surfaces are independent: the veil is the whole window, this is the list.)
+    int rowAlpha = BACKGROUND_ROW_ALPHA;
+    if (this->App->config) {
+        const double configured = this->App->config->get_double(
+            "mascots_background_list_alpha", BACKGROUND_ROW_ALPHA / 255.0);
+        rowAlpha = qBound(0, qRound(configured * 255.0), 255);
+    }
     const QPalette rowPalette = backgroundEnabled
-        ? get_background_row_palette(appPalette, 0)
+        ? get_background_row_palette(appPalette, rowAlpha)
         : appPalette;
     // The view and its viewport: the viewport paints the rows' backdrop and the rows paint their
     // own fill on top, so both have to carry the alpha. Nothing else -- no stylesheet, no

@@ -8,10 +8,10 @@
 // whatever the layer puts behind them. Two different alphas would pull one band towards the
 // video more than the other and flatten the alternation into a single shade.
 constexpr int BACKGROUND_ROW_ALPHA = 216;
-// (M5 Task 8: the rows do not paint a fill at all any more -- they are handed alpha 0 and the veil
-// behind them is what is seen -- so this is the *veil's* fallback alpha now, used when
-// `mascots_background_opacity` is missing. 216/255 is 0.847, the same 15% of the frame the row scrim
-// was tuned to let through, so a config without the key lands on the look this app has always had.)
+// (M5 Task 8: the rows kept their fill. For one commit they were handed alpha 0 on the theory that the
+// veil had replaced them, which removed the list's alternation and the list's own opacity; the rows are
+// back on BACKGROUND_ROW_ALPHA as the fallback, exactly as before, and the veil is a second surface in
+// front of the layer rather than a replacement for the row fill.)
 
 QPalette get_palette(std::string palette);
 QString get_stylesheet(QString stylesheet);

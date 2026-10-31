@@ -292,6 +292,9 @@
     <ClCompile Include="src\general\MpcPlayer.cpp">
       <Filter>Source Files\general</Filter>
     </ClCompile>
+    <ClCompile Include="src\general\MascotBand.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
     <ClCompile Include="src\general\MascotVideoSlot.cpp">
       <Filter>Source Files\general</Filter>
     </ClCompile>
@@ -376,6 +379,9 @@
       <Filter>Header Files\general</Filter>
     </ClInclude>
     <QtMoc Include="src\general\MascotPrefetcher.h">
+      <Filter>Header Files\general</Filter>
+    </QtMoc>
+    <QtMoc Include="src\general\MascotBand.h">
       <Filter>Header Files\general</Filter>
     </QtMoc>
     <QtMoc Include="src\general\MascotVideoSlot.h">

@@ -7,11 +7,17 @@
 #include "MascotSurface.h"
 // M2, same reason as the three above: SideState holds one of these per panel by QPointer.
 #include "MascotVideoSlot.h"
+// M3 Task 1: the per-band state lives on MascotBand, one object per band of a panel, which
+// SideState owns by unique_ptr. Included rather than forward declared for the reason the two
+// above are included: the vector's destructor needs the complete type.
+#include "MascotBand.h"
 #include <QJsonObject>
 #include <QObject>
 #include <QPointer>
 #include <QString>
 #include <Qt>
+#include <memory>
+#include <vector>
 
 class MainApp;
 class MascotImageCache;
@@ -31,6 +37,12 @@ enum class MascotSide { Left, Right };
 //   - the cache pin held for the media a panel displays (amendment H2);
 //   - the palette the last applied media carries, which is where the theme colour comes from
 //     (amendment H5 -- the cache is not consulted for it and nothing is re-extracted).
+//
+// M3 Task 1: the request path and the shown media are the per-band state now, held by one
+// MascotBand per band of a panel; the controller keeps the decisions that set them (which path
+// to ask for, which media to commit, when to mirror) and the band keeps the record and makes
+// every write into its slot. The mirror, the pin and the palette stay where they were: they are
+// per path and per panel, not per band.
 //
 // Thread affinity: every member, signal and slot here runs on the GUI thread. The only
 // cross-thread input is MascotPrefetcher::mediaReady/mediaFailed, which the prefetcher emits
@@ -116,11 +128,14 @@ private:
 		// deletes the old panels next), and a null pointer is answerable while a dangling one
 		// is not.
 		QPointer<MascotSurface> surface;
-		// The path this panel is waiting for. A media is applied to a panel only while it is
-		// what that panel asked for, so a late delivery can never overwrite a newer pick.
-		QString requestedPath;
-		// What the panel displays, including the palette and content centre it came with.
-		MascotMedia shown;
+		// M3 Task 1: the bands of this panel, one per slot. `shown`, `requestedPath`,
+		// `requestedIsVideo`, `video`, `wantedOffsetMs`, `slotFillMode`, `slotFillModeKnown` and
+		// `videoOutputVisible` are the band's now; `band(0)` is the one band a single-band panel
+		// has, which is the shape Task 2 generalises. A band outlives the surface it draws into
+		// (see MascotBand::setSurface), so a panel rebuilt keeps its band object and only loses
+		// the slot state that described the old surface.
+		std::vector<std::unique_ptr<MascotBand>> bands;
+		MascotBand* band(int i) const;
 		// The speculative pick: the path requested ahead of the next swap, and the decoded
 		// media it produced once it arrives. Exactly one deep -- a queue is deliberately not
 		// kept -- and both empty when nothing is armed.
@@ -137,19 +152,6 @@ private:
 		bool highlightOnApply = false;
 
 		// ---- M2: the video half of one panel ----
-		// The panel's players: two outputs that take turns across a crossfade, a gate that only
-		// reports a clip once a frame of it is on screen, and a deadline. QPointer for the same
-		// reason the surface uses one: it is destroyed in releaseSurface() *because* it draws into
-		// sinks the surface owns, and a null pointer is answerable while a dangling one is not.
-		QPointer<MascotVideoSlot> video;
-		// The offset this panel asked its player for: -1 is the configured random start, and a
-		// mirror copy supplies the left panel's exact offset instead. Recorded so the log says
-		// which of the two a swap asked for, and so the mirror copy cannot invent its own.
-		qint64 wantedOffsetMs = -1;
-		// True while requestedPath names a video a player is loading rather than an image the
-		// prefetcher is decoding. Both waits share the one field because both mean "this panel is
-		// waiting for exactly that path", but only the delivery that matches may be applied.
-		bool requestedIsVideo = false;
 		// Set on the right panel while the left panel's pick -- the one the pair mirrors -- is
 		// still loading: the copy starts from the left panel's firstFrame(), which is where its
 		// offset finally exists.
@@ -163,16 +165,6 @@ private:
 		// video, never started for an image panel (M1's beat-driven cadence is untouched). Owned
 		// by the controller, so it survives the enable/disable cycles the surfaces do not.
 		QTimer* clipTimer = nullptr;
-		// The fill mode this panel's slot currently carries, and whether one has been written at
-		// all. M2 moved that write out of configureSurface() into applyDisplay(), where the mode
-		// follows the media type; keeping the last value here is what makes an image commit write
-		// no fill mode at all, so the image path costs exactly what it cost in M1.
-		MascotSurface::FillMode slotFillMode = MascotSurface::FillMode::HeightFit;
-		bool slotFillModeKnown = false;
-		// Whether the slot's video outputs are currently shown. `clearSlot()` does not hide them
-		// (Task 1's interface fact), so the flag both makes the hiding the controller's job and
-		// lets the image path leave the outputs alone entirely while it has never shown one.
-		bool videoOutputVisible = false;
 		// Failures since the last committed media, so a broken clip is not retried forever and a
 		// panel that cannot play anything stops asking rather than walking the whole library.
 		int videoFailures = 0;
@@ -236,8 +228,18 @@ private:
 	// Writes the mirror, the media and the centred-content override the config asks for into
 	// one slot. Shared by a fresh media and by a config change, so a mode change repaints
 	// what is already on screen.
+	// M3 Task 1: "into one slot" is the band's slot now and the writes are the band's; this is
+	// the decision half, presentMedia() is the write half.
 	void applyDisplay(SideState& state, MascotSide side);
-	void applyMirror(SideState& state, MascotSide side);
+	// The write half of applyDisplay(): applies the mirror for `media`, then the fill mode, then
+	// the media itself -- the order the slot has always been written in. showMedia() takes this
+	// path too, after it has recorded the media on the band and before the slot is written, so
+	// the media write never lands under the old mirror.
+	void presentMedia(SideState& state, MascotSide side, const MascotMedia& media);
+	// `path` is the media the side rule is asked about: showMedia() presents a media between
+	// recording it and writing it, so the rule is given the path explicitly instead of reading
+	// the band.
+	void applyMirror(SideState& state, MascotSide side, const QString& path);
 	void requestPath(SideState& state, const QString& path);
 	// Commits a media to one panel: pins it, writes the slot, drops whatever that panel was still
 	// waiting for, arms the next speculative pick and pushes the theme colour when the swap asked

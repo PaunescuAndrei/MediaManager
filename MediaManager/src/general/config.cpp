@@ -129,13 +129,25 @@ void Config::init_defaults() {
 		// reads as a picture behind the text (verified on a bright frame), and white body text keeps
 		// 9.8:1 on the Base row and 7.5:1 on the AlternateBase row, so nothing has to be traded away.
 		// The key stays the dimmer for a user who wants a quieter backdrop.
-		{"mascots_background_opacity", "1.0"},
+		// (M5 Task 8: the meaning inverted with the veil. This is the alpha of the veil laid *over*
+		// the layer now, so 1.0 hides the layer and 0.0 shows it at full strength -- the layer itself
+		// is drawn at 100% and nothing fades it any more. 0.85 is the default because it is the bleed
+		// the row scrim was tuned to: 15% of the frame still reads as a picture behind the text, and
+		// white body text keeps 9.8:1 over a white frame at that ratio.)
+		{"mascots_background_opacity", "0.85"},
 		// M4 Task 3b: how opaque the list's rows (and the strip above them) are over the layer.
 		// 1.0 would hide the layer behind the list entirely, 0.0 would put body text straight on the
 		// video. 0.85 is what the app shipped with as a constant: white text keeps 9.8:1 on the Base
 		// row and 7.5:1 on the alternate row even over a white frame, and the layer still reads as a
 		// picture rather than a wash.
-		{"mascots_background_list_alpha", "0.85"},
+		// (M5 Task 8: the key itself is gone -- the rows paint no fill of their own any more, they are
+		// handed alpha 0 and the one veil carries the colour and the alpha for the whole window, list
+		// and strip together. A config that still has it is migrated on load: Config::open_config()
+		// moves its value into `mascots_background_opacity`, which is where the same 85% bleed lives.)
+		// M5 Task 8: where the two mascot columns sit relative to that veil. Above draws them after it,
+		// at full brightness, which is where they have always been; Below puts the veil between them
+		// and the rest of the UI, so they are dimmed with the layer behind them.
+		{"mascots_columns_z", "Above"},
 		{"sound_effects_on","False"},
 		{"sound_effects_volume","3"},
 		{"sound_effects_special_on","False"},
@@ -253,6 +265,21 @@ void Config::open_config(QString filepath) {
 	this->file->open(filepath.toStdString());
 	this->ini.clear();
 	this->file->read(this->ini);
+	// M5 Task 8: the veil migration. `mascots_background_list_alpha` was the list rows' scrim; the
+	// rows paint no fill now and one veil of the window's colour covers the strip, the list and the
+	// margins, so `mascots_background_opacity` is that veil's alpha. The old key's value is the one
+	// that carries over -- it is what the list area let through, which is the same 15% the veil has
+	// to let through to keep the look -- so an existing config does not come up with the layer either
+	// buried (opacity's old 1.0 meaning inverted) or at full strength. The key is removed as it is
+	// read, so this happens once per file.
+	if (this->ini.has("Settings")) {
+		auto& settings = this->ini["Settings"];
+		if (settings.has("mascots_background_list_alpha")) {
+			settings.set("mascots_background_opacity",
+				settings.get("mascots_background_list_alpha"));
+			settings.remove("mascots_background_list_alpha");
+		}
+	}
 }
 
 void Config::save_config() {

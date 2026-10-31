@@ -170,6 +170,12 @@ public:
 	// edit. The pair's and the columns' surfaces are never touched: the backdrop exists only on the
 	// layer, and a surface that never receives a setBackdrop() keeps the QML defaults.
 	void refreshBackgroundBackdrop();
+	// M5 Task 8: applies `mascots_columns_z` and the veil's alpha to the pair. The layer gets the veil
+	// from MainWindow, but the columns cannot be put behind a widget -- their QQuickWidget always
+	// composites on top -- so "below the veil" is drawn on the panel instead: the window's colour as the
+	// pair's backdrop, with the content faded to what the veil would have left of it. Above (the default)
+	// is no backdrop and full opacity, which is how the pair has always been drawn.
+	void refreshColumnsVeil();
 
 	// ---- M3 Task 2: the layout mode ----
 	// The mode value as this class reads it, case-insensitively. `ok` is false for anything that
@@ -961,8 +967,10 @@ private:
 	// the invariant that decides whether it exists, and `mascots_background_opacity` is applied
 	// through MascotSurface::setSurfaceOpacity() on every apply while the surface exists. Zero is
 	// deliberately not special-cased: it is presentation, and no band decision reads it.)
+	// (M5 Task 8: `mascots_background_opacity` left this class. It is the alpha of the veil MainWindow
+	// paints over the layer now, and the layer is drawn at full strength -- applying it here as well
+	// was the double dim this refactor deleted.)
 	bool backgroundEnabled = false;
-	double backgroundOpacity = 0.5;
 	// M4 Task 2: `mascots` (the two column panels). Cached here because start() has to know which
 	// layer it is enabling: the pair is seeded only when the columns are on, and a start() that
 	// brings the columns back under a running background seeds them then. Read here under the

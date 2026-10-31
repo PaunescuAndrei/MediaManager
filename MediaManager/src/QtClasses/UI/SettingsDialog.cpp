@@ -945,18 +945,20 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     backgroundLayout->addWidget(mascotBackgroundCheckBox);
 
     mascotBackgroundOpacitySpinBox = makeDoubleSpinBox(0.00, 1.00, 0.05,
-        config->get_double(QStringLiteral("mascots_background_opacity"), 1.0));
-    addRow(backgroundLayout, "Layer opacity:",
-        "How opaque the layer (and its backdrop) is as a whole: 0.00 makes it invisible, 1.00 runs "
-        "it at full strength. This is the layer's own opacity, not the list rows'.",
+        config->get_double(QStringLiteral("mascots_background_opacity"), 0.85));
+    addRow(backgroundLayout, "Veil opacity:",
+        "How much of the window's own background colour is painted over the layer. The layer itself "
+        "always runs at full strength; this is one translucent rectangle in front of it, so 1.00 is "
+        "the plain window and 0.00 is the media at full strength. It covers the strip, the list and "
+        "the margins alike -- they cannot be dimmed by different amounts.",
         mascotBackgroundOpacitySpinBox);
 
-    mascotListAlphaSpinBox = makeDoubleSpinBox(0.00, 1.00, 0.05,
-        config->get_double(QStringLiteral("mascots_background_list_alpha"), 0.85));
-    addRow(backgroundLayout, "List row opacity:",
-        "Opacity of the list rows over the layer -- the scrim. 1.00 is an opaque list, 0.00 shows "
-        "the layer through the rows at full strength. Different from the layer's own opacity.",
-        mascotListAlphaSpinBox);
+    mascotColumnsZCombo = makeComboBox({ QStringLiteral("Above"), QStringLiteral("Below") },
+        config->get(QStringLiteral("mascots_columns_z")));
+    addRow(backgroundLayout, "Columns:",
+        "Whether the two mascot columns are drawn above that veil -- full brightness, the default -- "
+        "or below it, so the veil dims them together with the media behind them.",
+        mascotColumnsZCombo);
 
     mascotBackgroundModeCombo = makeComboBox({ QStringLiteral("Static"), QStringLiteral("Scroll"),
                                               QStringLiteral("Stripes") },
@@ -1055,7 +1057,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         mascotMaxDecodersSpinBox, mascotScrollSpeedSpinBox, mascotScrollDirectionCombo,
         mascotScrollPingpongCheckBox, mascotStripesLeftSpinBox, mascotStripesRightSpinBox,
         mascotStripesOrientationCombo, mascotStripesAlternateCheckBox, mascotBackgroundCheckBox,
-        mascotBackgroundOpacitySpinBox, mascotListAlphaSpinBox, mascotBackgroundModeCombo,
+        mascotBackgroundOpacitySpinBox, mascotColumnsZCombo, mascotBackgroundModeCombo,
         mascotBackgroundFillCombo, mascotBackgroundStripesSpinBox,
         mascotBackgroundOrientationCombo, mascotBackgroundAlternateCheckBox,
         mascotBackgroundScrollSpeedSpinBox, mascotBackgroundScrollDirectionCombo,
@@ -1105,7 +1107,7 @@ void SettingsDialog::syncMascotConfig()
     config->set("mascots_stripes_alternate", mascotStripesAlternateCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_background", mascotBackgroundCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_background_opacity", QString::number(mascotBackgroundOpacitySpinBox->value(), 'f', 2));
-    config->set("mascots_background_list_alpha", QString::number(mascotListAlphaSpinBox->value(), 'f', 2));
+    config->set("mascots_columns_z", mascotColumnsZCombo->currentText());
     config->set("mascots_background_mode", mascotBackgroundModeCombo->currentText());
     config->set("mascots_background_fill", mascotBackgroundFillCombo->currentText());
     config->set("mascots_background_stripes", QString::number(mascotBackgroundStripesSpinBox->value()));
@@ -1180,7 +1182,7 @@ void SettingsDialog::updateMascotControlStates()
     // Row 6: with the layer off nothing in its box has an effect -- except the switch itself.
     const bool backgroundOn = mascotBackgroundCheckBox->isChecked();
     mascotBackgroundOpacitySpinBox->setEnabled(backgroundOn);
-    mascotListAlphaSpinBox->setEnabled(backgroundOn);
+    mascotColumnsZCombo->setEnabled(backgroundOn);
     mascotBackgroundModeCombo->setEnabled(backgroundOn);
     mascotBackgroundFillCombo->setEnabled(backgroundOn);
 

@@ -98,7 +98,12 @@ public:
     MascotController* mascotController = nullptr;
     // M4 Task 3b: the scrim behind the strip above the list. Owned by CenterContainer, so it is
     // destroyed with the window; null until the background layer is first switched on.
-    QWidget* backgroundScrim = nullptr;
+    // (M5 Task 8: the scrim became the veil. One rectangle of `QPalette::Window` at the configured
+    // alpha, owned by centralwidget -- the same parent the layer has, so the two cover the same
+    // rectangle -- behind every pane of the layout and above the layer. The scrim it grew out of
+    // could only fill the space the list did not occupy, which is why the list needed a scrim of its
+    // own and why the two could disagree; one veil covers both, so there is nothing left to disagree.)
+    QWidget* backgroundVeil = nullptr;
     QHash<QString, qint64> previewPositionCache;
     QList<QString> previewHistoryOrder;
     mutable QMutex saltSeedMutex;
@@ -338,14 +343,25 @@ private:
     // M4 Task 3: gives the list's viewport and row fills the background layer's alpha, or puts
     // them back to the inherited app palette when the layer is off. Called from
     // initStyleSheets(), which is also what changePalette() runs after replacing the app palette.
-    void applyListTransparency();
+    // (M5 Task 8: it applies the veil now -- the row fills it used to tint are transparent and the
+    // one alpha lives on the veil -- and it is the only place that alpha is derived, so the strip,
+    // the list and the margins cannot be given different ones.)
+    void applyBackgroundVeil();
     // M4 Task 3b: the strip above the list -- the buttons, the title and the search row -- gets the
     // same scrim as an even row, because in this app that area's colour *is* the list's Base colour.
     // Without it the layer shows through the top strip at full strength while the rows hold it at
     // the row alpha, so the top reads as more transparent than the list. The scrim is a plain child
     // of CenterContainer, lowered under the strip's widgets, and only as tall as the space the list
     // does not occupy.
-    void updateBackgroundScrim();
+    // (M5 Task 8: it is the whole container's rectangle now, because the veil is not the strip's
+    // scrim any more -- it is the window's. The geometry follows centralwidget, and the layout that
+    // sets that is a pass of its own, hence the event filter below.)
+    void updateBackgroundVeil();
+    // M5 Task 8: re-raises the three panes above the veil, so the veil is behind every widget in the
+    // window and in front of the layer -- and above nothing else. The columns' own z-order is not a
+    // stacking question: their QQuickWidget always composites on top, so `mascots_columns_z` is the
+    // controller's, applied through the pair's backdrop and opacity.
+    void stackBackgroundVeil();
     bool eventFilter(QObject* watched, QEvent* event) override;
 signals:
     void fileDropped(QStringList files, QWidget* widget = nullptr);

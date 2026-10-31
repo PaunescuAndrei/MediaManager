@@ -125,7 +125,9 @@ public:
     QCheckBox* mascotStripesAlternateCheckBox = nullptr;
     QCheckBox* mascotBackgroundCheckBox = nullptr;
     QDoubleSpinBox* mascotBackgroundOpacitySpinBox = nullptr;
-    QDoubleSpinBox* mascotListAlphaSpinBox = nullptr;
+    // (M5 Task 8: `mascotListAlphaSpinBox` is gone with `mascots_background_list_alpha` -- one veil
+    // means one alpha, and `mascotBackgroundOpacitySpinBox` above is it.)
+    QComboBox* mascotColumnsZCombo = nullptr;
     QComboBox* mascotBackgroundModeCombo = nullptr;
     QComboBox* mascotBackgroundFillCombo = nullptr;
     QSpinBox* mascotBackgroundStripesSpinBox = nullptr;

@@ -610,7 +610,9 @@ void MainWindow::changePalette(QPalette palette) {
     // against the palette that was set before ours -- the rows then paint at the wrong alpha while
     // the palette reads correct. Re-applying after the last thing that can touch the list costs one
     // pass and removes the ordering question entirely.
-    this->applyListTransparency();
+    // (M5 Task 8: the call re-derives the veil and the rows' palette from the new app palette; the
+    // ordering reason is unchanged, and it now matters more, since the veil is coloured from it.)
+    this->applyBackgroundVeil();
 }
 
 void MainWindow::initStyleSheets() {
@@ -620,10 +622,12 @@ void MainWindow::initStyleSheets() {
     // M4 Task 3: changePalette() replaces the whole application palette before calling this, so
     // the list's alpha palette is re-derived here; with `mascots_background` off this restores
     // the inherited palette instead of leaving a stale translucent one behind after a toggle.
-    this->applyListTransparency();
+    // (M5 Task 8: "the list's alpha palette" is the veil's colour and the rows' transparency now --
+    // same reason, same single call.)
+    this->applyBackgroundVeil();
 }
 
-void MainWindow::applyListTransparency() {
+void MainWindow::applyBackgroundVeil() {
     if (!this->App)
         return;
     const QPalette appPalette = this->App->palette();
@@ -634,14 +638,20 @@ void MainWindow::applyListTransparency() {
     // M4 Task 3b: the row alpha is a setting now, because it is the one number that decides how
     // present the layer is. BACKGROUND_ROW_ALPHA is the fallback, and the same value the app shipped
     // with before the key existed, so an existing config keeps the look it had.
-    int rowAlpha = BACKGROUND_ROW_ALPHA;
+    // (M5 Task 8: the setting is `mascots_background_opacity` and the number is the *veil's* alpha --
+    // how much of the window's colour is laid over the layer. `mascots_background_list_alpha` is gone
+    // with the row scrim it tinted; the layer itself is no longer faded at all.)
+    int veilAlpha = BACKGROUND_ROW_ALPHA;
     if (this->App->config) {
         const double configured = this->App->config->get_double(
-            "mascots_background_list_alpha", BACKGROUND_ROW_ALPHA / 255.0);
-        rowAlpha = qBound(0, qRound(configured * 255.0), 255);
+            "mascots_background_opacity", BACKGROUND_ROW_ALPHA / 255.0);
+        veilAlpha = qBound(0, qRound(configured * 255.0), 255);
     }
+    // (M5 Task 8: the rows are given alpha 0 -- they paint no fill of their own. The veil behind them
+    // already carries the colour and the alpha for the whole window, so a row fill on top of it would
+    // be exactly the second scrim this arrangement exists to delete.)
     const QPalette rowPalette = backgroundEnabled
-        ? get_background_row_palette(appPalette, rowAlpha)
+        ? get_background_row_palette(appPalette, 0)
         : appPalette;
     // The view and its viewport: the viewport paints the rows' backdrop and the rows paint their
     // own fill on top, so both have to carry the alpha. Nothing else -- no stylesheet, no
@@ -694,47 +704,80 @@ void MainWindow::applyListTransparency() {
     // M4 Task 3b: the strip above the list is the same Base colour in this app's design, so it takes
     // the same scrim -- otherwise the layer is held back under the rows and runs at full strength
     // across the buttons and the title, and the two areas read as different transparencies.
+    // (M5 Task 8: there is one veil instead of a strip scrim beside a row alpha. It is a child of
+    // centralwidget -- the layer's own parent, so the two cover the same rectangle -- filled with the
+    // window's colour at the configured alpha, and it sits above the layer and below every pane of
+    // the layout. The rows and the strip stop painting fills of their own, so this is the only
+    // translucent surface in the window and the two halves cannot hold the layer back by different
+    // amounts.)
     if (backgroundEnabled) {
-        if (!this->backgroundScrim) {
-            this->backgroundScrim = new QWidget(this->ui.CenterContainer);
-            // A plain QWidget fills with its Window role by default; the strip's colour is Base.
-            this->backgroundScrim->setBackgroundRole(QPalette::Base);
-            this->backgroundScrim->setAutoFillBackground(true);
-            // It is scenery: clicks and hovers belong to the widgets above it.
-            this->backgroundScrim->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+        if (!this->backgroundVeil) {
+            this->backgroundVeil = new QWidget(this->ui.centralwidget);
+            // A plain QWidget fills with its Window role by default, and that is exactly the colour
+            // this has to be: the window with the layer switched off.
+            this->backgroundVeil->setBackgroundRole(QPalette::Window);
+            this->backgroundVeil->setAutoFillBackground(true);
+            // It is scenery: clicks, hovers and drags belong to the widgets above it.
+            this->backgroundVeil->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+            // The veil fills a container whose geometry the layout settles in a pass of its own, so
+            // the container is watched rather than the window: a resize reaches MainWindow::event()
+            // before the central widget has its new size.
+            this->ui.centralwidget->installEventFilter(this);
         }
-        const QPalette scrimPalette = get_background_row_palette(appPalette, rowAlpha);
-        this->backgroundScrim->setPalette(scrimPalette);
-        // Below every sibling: the strip's own widgets paint on top of the scrim.
-        this->backgroundScrim->lower();
-        this->backgroundScrim->show();
-        this->updateBackgroundScrim();
-        // The list's geometry is what the scrim's height depends on, and it moves when the layout
-        // changes -- a search bar or a date column appearing does not resize the window.
-        this->ui.videosWidget->installEventFilter(this);
+        this->backgroundVeil->setPalette(get_background_veil_palette(appPalette, veilAlpha));
+        this->backgroundVeil->show();
+        this->updateBackgroundVeil();
+        // Stacking last, so that whatever order the form built the panes in, the veil is under all of
+        // them and above the layer by the time this returns.
+        // (M5 Task 8: no setting owns a place in this order -- see stackBackgroundVeil().)
+        this->stackBackgroundVeil();
     }
-    else if (this->backgroundScrim) {
-        this->ui.videosWidget->removeEventFilter(this);
-        this->backgroundScrim->hide();
+    else if (this->backgroundVeil) {
+        this->backgroundVeil->hide();
     }
 }
 
-void MainWindow::updateBackgroundScrim() {
-    if (!this->backgroundScrim || !this->backgroundScrim->isVisible())
+void MainWindow::updateBackgroundVeil() {
+    if (!this->backgroundVeil)
         return;
-    // Everything CenterContainer owns above the list. Both widgets are children of that container,
-    // so y() is already in the coordinate space the scrim is placed in.
-    const QWidget* container = this->ui.CenterContainer;
-    const int height = qBound(0, this->ui.videosWidget->y(), container->height());
-    this->backgroundScrim->setGeometry(0, 0, container->width(), height);
+    // (M5 Task 8: no visibility test here. The veil is created during construction, while the window is
+    // still hidden, and a child of a hidden parent is not "visible" -- so the first sizing pass returned
+    // without doing anything and nothing ever sized the veil again in a run that never re-applied
+    // settings: measured as a veil with geometry 100x30 (an unparented QWidget's default) and therefore
+    // not painted at all. Setting the geometry on a hidden widget is free: it is already the right size
+    // by the time the window is shown.)
+    const QRect rect = this->ui.centralwidget->rect();
+    if (this->backgroundVeil->geometry() != rect)
+        this->backgroundVeil->setGeometry(rect);
+}
+
+void MainWindow::stackBackgroundVeil() {
+    if (!this->backgroundVeil)
+        return;
+    // The three panes are re-raised on every call, so the veil's place is decided here and nowhere
+    // else. The background layer lowers itself to the bottom when it is created and never moves
+    // again, so anything the veil does above that bottom is above the layer.
+    // (M5 Task 8: and that is the whole rule now. The columns cannot be put under the veil by stacking
+    // them -- their QQuickWidget is created with Qt::WA_AlwaysStackOnTop, which the widget stack does
+    // not override, and the measurement says so: two runs that differed only in the key were
+    // pixel-identical. The z key is the controller's, and it dims the columns through their own
+    // backdrop and opacity; see MascotController::applyConfig().)
+    this->ui.mascotLeftHost->raise();
+    this->ui.mascotRightHost->raise();
+    // Last, so the centre pane is above both columns whatever order the form built them in. The three
+    // do not overlap, so their order among themselves is taste, not layout.
+    this->ui.CenterContainer->raise();
 }
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
     // M4 Task 3b: the list moving inside its container is the only thing that changes how tall the
     // strip above it is. A resize covered by MainWindow::event() would miss a search bar opening.
-    if (this->backgroundScrim && watched == this->ui.videosWidget
+    // (M5 Task 8: the veil is sized from the whole container now, so the container's own geometry is
+    // what it follows -- and the layout pass that sets that geometry runs after the window's resize
+    // event, which is why this is an event filter rather than a line in MainWindow::event().)
+    if (this->backgroundVeil && watched == this->ui.centralwidget
         && (event->type() == QEvent::Move || event->type() == QEvent::Resize)) {
-        this->updateBackgroundScrim();
+        this->updateBackgroundVeil();
     }
     return QMainWindow::eventFilter(watched, event);
 }
@@ -2872,7 +2915,10 @@ void MainWindow::applyMascotSettings() {
     this->mascotController->applyConfig();
     // M5 Task 1: the row alpha and the strip's scrim are derived from `mascots_background` and
     // `mascots_background_list_alpha`, so the list's half follows every live change of either.
-    this->applyListTransparency();
+    // (M5 Task 8: it is one veil derived from `mascots_background` and
+    // `mascots_background_opacity`, and it also carries the columns' z-order -- so a live change of
+    // any of the three is applied here, in the same pass as the controller's.)
+    this->applyBackgroundVeil();
     // The cache bounds are config too, so they are re-applied by the same entry point.
     this->App->updateMascotCacheLimits();
 }
@@ -5921,6 +5967,13 @@ bool MainWindow::event(QEvent* e)
             this->playSpecialSoundEffect();
         }
     }
+    if (e->type() == QEvent::Show) {
+        // (M5 Task 8: the veil is created and sized while the window is still hidden -- the container
+        // has no real geometry until the first layout pass. Sizing it once more when the window is up
+        // costs a rect write and removes the whole question of whether some later apply happens to
+        // rescue it.)
+        this->updateBackgroundVeil();
+    }
     if (e->type() == QEvent::Resize) {
         //scale mascots
         QResizeEvent* resizeEvent = static_cast<QResizeEvent*>(e);
@@ -5929,7 +5982,9 @@ bool MainWindow::event(QEvent* e)
         this->applyMascotWidth(windowWidth, this->App->config->get_double("mascots_width_percent", 15.0));
         // M4 Task 3b: the strip above the list changed height with the window; the layer's scrim
         // covers exactly that strip.
-        this->updateBackgroundScrim();
+        // (M5 Task 8: the veil is the size of the whole container, so this is the early answer and
+        // the container's own Resize event -- see eventFilter() -- is the final one.)
+        this->updateBackgroundVeil();
     }
     return QMainWindow::event(e);
 }

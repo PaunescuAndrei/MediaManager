@@ -353,6 +353,9 @@ void MascotController::setSurfaces(MascotSurface* left, MascotSurface* right)
 	this->rightState.surface = right;
 	this->configureSurface(this->leftState, MascotPanel::Left);
 	this->configureSurface(this->rightState, MascotPanel::Right);
+	// M5 Task 8: a pair built by an apply that ran before it existed would otherwise keep the QML
+	// defaults -- no backdrop and full opacity -- however `mascots_columns_z` is set.
+	this->refreshColumnsVeil();
 	this->updateLayout();
 }
 
@@ -801,12 +804,14 @@ void MascotController::applyConfig()
 		qWarning() << "mascots_background_scroll_direction:" << backgroundScrollDirectionValue
 			<< "is not one of LeftToRight, RightToLeft, TopToBottom or BottomToTop; using LeftToRight.";
 	}
-	this->backgroundOpacity = std::clamp(
-		config->get_double(QStringLiteral("mascots_background_opacity"), 1.0), 0.0, 1.0);
 	// (M4 review fix: the fallback above is the shipped default. It was 0.5 -- the value this key
 	// had when Task 2 read it -- but Task 3's correction made the rows the scrim and the default
 	// 1.0, so a config written before the key existed would otherwise come up at half strength
 	// while a fresh one comes up at full.)
+	// (M5 Task 8: the key is not this controller's any more. `mascots_background_opacity` is the
+	// alpha of the veil MainWindow paints over the layer, and the layer itself runs at full strength
+	// -- fading it here as well would dim it twice. Nothing in this class reads or writes that key.)
+
 
 	this->source.setAllFilesRandom(config->get_bool("mascots_allfiles_random"));
 	// The weighted/uniform switch is one of the source's two config-derived inputs, and the
@@ -849,11 +854,16 @@ void MascotController::applyConfig()
 		// `mascots_background_opacity` is presentation, not a gate: zero is applied like any other
 		// value, because the band logic -- picks, cadence, the player budget -- must not depend on
 		// how visible the layer currently is.
-		this->backgroundState.surface->setSurfaceOpacity(this->backgroundOpacity);
+		// (M5 Task 8: it is the veil's alpha now and MainWindow applies it, so zero is still not a
+		// gate -- it is simply not this class's value to apply.)
 		// M4 Task 6: the palette may have been replaced since the layer was built (a theme Apply
 		// reaches this same method), so the backdrop follows it here as well as at creation.
 		this->refreshBackgroundBackdrop();
 	}
+
+	// M5 Task 8: the veil's two keys, from the pair's side. Called here and at creation, because the
+	// pair can be built after this apply and would otherwise keep the QML defaults.
+	this->refreshColumnsVeil();
 
 	const bool mirror = this->mirrorEnabled();
 	// M3 Task 2: the player half below stays on `band(0)` for now. The extra bands a `Stripes`
@@ -2536,6 +2546,38 @@ void MascotController::refreshBackgroundBackdrop()
 	if (!surface || !this->App)
 		return;
 	surface->setBackdrop(this->App->palette().color(QPalette::Window), true);
+	// M5 Task 8: `MM_MASCOT_FLAT=#RRGGBB` replaces the layer with one flat colour -- the backdrop
+	// painted, the slots faded out -- so the veil's blend can be measured against a known value instead
+	// of against a clip that is picked at random per run. Kept in the build rather than re-added for one
+	// run: it is the only way the harness can assert the veil's arithmetic (see `m5-veil`), and the
+	// milestone paid for that lesson once already, when the equivalent M4 hook was deleted and the
+	// measurement had to be rebuilt from nothing. It is inert unless the variable is set.
+	const QColor flat = QColor::fromString(qEnvironmentVariable("MM_MASCOT_FLAT"));
+	if (flat.isValid()) {
+		surface->setBackdrop(flat, true);
+		surface->setSurfaceOpacity(0.0);
+	}
+}
+
+void MascotController::refreshColumnsVeil()
+{
+	if (!this->App || !this->App->config)
+		return;
+	const double veilOpacity = std::clamp(
+		this->App->config->get_double(QStringLiteral("mascots_background_opacity"), 0.85), 0.0, 1.0);
+	const bool above = this->App->config->get(QStringLiteral("mascots_columns_z"))
+		.compare(QStringLiteral("Below"), Qt::CaseInsensitive) != 0;
+	// With the layer off there is no veil to be under, so the pair keeps its ordinary drawing whatever
+	// the key says -- otherwise a config with columns Below and no layer would come up with a backdrop
+	// nobody asked for.
+	const bool veiled = this->backgroundEnabled && !above;
+	const QColor colour = this->App->palette().color(QPalette::Window);
+	for (PanelState* state : { &this->leftState, &this->rightState }) {
+		if (!state->surface)
+			continue;
+		state->surface->setBackdrop(colour, veiled);
+		state->surface->setSurfaceOpacity(veiled ? (1.0 - veilOpacity) : 1.0);
+	}
 }
 
 void MascotController::updateBackgroundVisibility()
@@ -2614,7 +2656,8 @@ void MascotController::createBackgroundSurface()
 	// The opacity the last Apply asked for, so a layer built by that Apply comes back at the
 	// configured presentation instead of at the QML default. Zero is applied like any other value:
 	// it is presentation, and no band decision reads it.
-	surface->setSurfaceOpacity(this->backgroundOpacity);
+	// (M5 Task 8: the layer is built at full strength and stays there -- the veil over it carries the
+	// configured alpha, and a fade here would be a second one.)
 	// M4 Task 6: the app's own window colour behind the layer, enabled from the moment the surface
 	// exists -- including the zero-player case, where the whole layer is one backdrop-coloured
 	// sheet that updateBackgroundVisibility() then hides for the reason that predates this task.

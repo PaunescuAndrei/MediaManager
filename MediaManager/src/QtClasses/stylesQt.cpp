@@ -46,6 +46,17 @@ QPalette get_background_row_palette(const QPalette& appPalette, int alpha) {
     return rowPalette;
 }
 
+QPalette get_background_veil_palette(const QPalette& appPalette, int alpha) {
+    QPalette veilPalette = appPalette;
+    // Window only. Every other role stays opaque and inherited, so the widgets above the veil -- the
+    // buttons, the labels, the selected row, the scrollbars -- keep painting exactly as they did, and
+    // the veil is the only translucent surface in the window.
+    QColor colour = veilPalette.color(QPalette::Window);
+    colour.setAlpha(alpha);
+    veilPalette.setColor(QPalette::Window, colour);
+    return veilPalette;
+}
+
 QString get_stylesheet(QString stylesheet) {
     QString ss = QString();
     if (stylesheet == "spinbox") {

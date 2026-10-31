@@ -123,7 +123,13 @@ void Config::init_defaults() {
 		{"mascots_background_scroll_speed", "20"},
 		{"mascots_background_scroll_direction", "LeftToRight"},
 		{"mascots_background_scroll_pingpong", "False"},
-		{"mascots_background_opacity", "0.5"},
+		// M4: full strength, not half. The layer's only visible surface is through the list's rows,
+		// and a row fill is already an 85% scrim, so half opacity left the video at ~7% of a row --
+		// measurable, and invisible in a screenshot. At 1.0 the same rows carry it at ~15%: the media
+		// reads as a picture behind the text (verified on a bright frame), and white body text keeps
+		// 9.8:1 on the Base row and 7.5:1 on the AlternateBase row, so nothing has to be traded away.
+		// The key stays the dimmer for a user who wants a quieter backdrop.
+		{"mascots_background_opacity", "1.0"},
 		{"sound_effects_on","False"},
 		{"sound_effects_volume","3"},
 		{"sound_effects_special_on","False"},

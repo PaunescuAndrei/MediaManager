@@ -625,15 +625,24 @@ void MainWindow::applyListTransparency() {
     // (or returned to) the palette every widget inherits, which is byte-identical to today.
     const bool backgroundEnabled = this->App->config
         && this->App->config->get_bool("mascots_background");
-    const QPalette listPalette = backgroundEnabled
-        ? get_background_row_palette(appPalette)
+    const QPalette rowPalette = backgroundEnabled
+        ? get_background_row_palette(appPalette, BACKGROUND_ROW_ALPHA)
         : appPalette;
     // The view and its viewport: the viewport paints the rows' backdrop and the rows paint their
     // own fill on top, so both have to carry the alpha. Nothing else -- no stylesheet, no
     // alternatingRowColors, no delegates -- is touched, and Base/AlternateBase are the only roles
     // that differ.
-    this->ui.videosWidget->setPalette(listPalette);
-    this->ui.videosWidget->viewport()->setPalette(listPalette);
+    // (M4 Task 3 fix: "both have to carry the alpha" is true of the same *surface* and false of two
+    // surfaces stacked on each other. The rows are painted by the view's palette and the backdrop by
+    // the viewport's, so giving both 216/255 scrims the media twice and leaves about 2% of it under
+    // a row -- measured, the layer was invisible. The viewport's Base is therefore cleared to alpha
+    // 0: it stops painting a scrim between the media and the row fill, and the row fill becomes the
+    // only one. Both row colours still carry the one BACKGROUND_ROW_ALPHA the requirement asks for.)
+    const QPalette viewportPalette = backgroundEnabled
+        ? get_background_row_palette(appPalette, 0)
+        : appPalette;
+    this->ui.videosWidget->setPalette(rowPalette);
+    this->ui.videosWidget->viewport()->setPalette(viewportPalette);
 }
 
 void MainWindow::initRatingIcons() {

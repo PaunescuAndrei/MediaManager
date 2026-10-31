@@ -203,6 +203,13 @@ public:
 	bool hasWrapCommit() const;
 	// Takes the queued change out, leaving nothing queued, so one seam can never run it twice.
 	WrapCommit takeWrapCommit();
+	// Drops a queued change without running it. (M3 whole-branch fix: a change queued before a
+	// settings Apply would otherwise survive it and fire at the next seam -- after a `Static`
+	// interlude, or after `mascots_swap_on_beat` was turned off, or on content that a newer commit
+	// has since replaced inside the half-clip floor. The config apply drops what the old config
+	// queued; the pure "take and discard" is separated from takeWrapCommit() so the discard is
+	// readable at the call site rather than looking like an ignored return value.)
+	void discardWrapCommit();
 
 private:
 	int m_slotIndex = 0;

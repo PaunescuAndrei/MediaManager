@@ -265,3 +265,8 @@ MascotBand::WrapCommit MascotBand::takeWrapCommit()
 	this->m_wrapCommit = WrapCommit();
 	return commit;
 }
+
+void MascotBand::discardWrapCommit()
+{
+	this->m_wrapCommit = WrapCommit();
+}

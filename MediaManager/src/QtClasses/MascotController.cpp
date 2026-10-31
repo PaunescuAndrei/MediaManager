@@ -410,6 +410,18 @@ void MascotController::applyConfig()
 	// (M3 Task 6B: `mascots_swap_on_beat`, read here under the same "one reader" rule as every key
 	// above so onBeat() decides from the cached value and no beat path re-reads the config.)
 	this->swapOnBeat = config->get_bool(QStringLiteral("mascots_swap_on_beat"));
+	// (M3 whole-branch fix: a change queued at a beat waits for that band's scroll seam, and a
+	// seam can be a whole clip away -- long enough for this Apply to have turned
+	// `mascots_swap_on_beat` off, changed the clip length, or left the panel in `Static` where
+	// there is no seam at all. Such a commit would then fire against a cadence that no longer
+	// asked for it, so whatever the old configuration queued is dropped here. The new
+	// configuration queues its own on the next beat.)
+	for (SideState* state : { &this->leftState, &this->rightState }) {
+		for (auto& owned : state->bands) {
+			if (owned)
+				owned->discardWrapCommit();
+		}
+	}
 	this->randomStart = config->get_bool(QStringLiteral("mascots_random_start"));
 	this->crossfadeMs = clampedCrossfadeMs(config);
 	this->maxDecoders = std::max(0, config->get(QStringLiteral("mascots_max_decoders")).toInt());
@@ -1109,6 +1121,15 @@ void MascotController::fillEmptyBands()
 						continue;
 					}
 				}
+				// (M3 whole-branch fix: the left band's in-flight request may be an *image* -- it
+				// always is when both bands of a pair have just lost their players (a live budget
+				// 4->2 on 2+2, or 8->4 on 4+4), because the pair's image pick is what follows the
+				// degradation. That image's delivery is exactly what copies onto this band, so
+				// picking here would post a second decode for one picture and show the pair
+				// disagreeing until it landed. Wait for the copy instead; only a video this band
+				// cannot show falls through to its own still.)
+				if (leftBand && !leftBand->requestPath().isEmpty() && !leftBand->requestIsVideo())
+					continue;
 				// Nothing this band can take from the left *yet*. A band that may own a player -- or
 				// a panel under an images-only setting, where the left band's pick is always an
 				// image -- waits for the left's next commit, which copies. A player-less band in a
@@ -3225,19 +3246,27 @@ bool MascotController::ensureVideoSlots()
 				// longer has a player behind it. The paragraph is kept as the record of the reason.)
 				// (M3 Task 1: `shown` is the band's `media()`, and forgetMedia() is what drops the
 				// claim without touching the slot -- the output keeps its frame for the reason above.)
-				if (band->media().type == MascotMedia::Video) {
+				const bool hadVideo = band->media().type == MascotMedia::Video;
+				if (hadVideo) {
 					const QString previousShown = band->media().path;
 					band->forgetMedia();
 					// The owner field changed, so the pin invariant is re-established the way every
 					// other path does it (a video path was never in the image cache, so this is a
 					// no-op that keeps the rule uniform).
 					this->syncPin(previousShown);
+				}
+				this->destroyVideoSlot(state, i);
+				// (M3 whole-branch fix: a band that already had *no* media when it lost its player
+				// is just as contentless -- its first clip may still have been opening, or its fill
+				// may have failed -- and it needs the same refill. With `mascots_animated = False`,
+				// which is the shipped default, nothing else would ever ask that band again, so it
+				// would stay blank for the session. The flag is set for either case.)
+				if (hadVideo || band->media().path.isEmpty()) {
 					if (i == 0)
 						downgraded = true;
 					else
 						refillExtraBands = true;
 				}
-				this->destroyVideoSlot(state, i);
 			}
 			if (MascotVideoSlot* slot = band->video())
 				slot->setSinglePlayer(!this->videoCrossfades());
@@ -3955,7 +3984,17 @@ void MascotController::commitBeatAdvance(MascotSide side, int bandIndex)
 	// content work only: no applyConfig() and no configureSurface() is reachable from a beat.)
 	if (side == MascotSide::Right && this->bandMirrorsLeft(bandIndex))
 		return;
+	// (M3 whole-branch fix: this commit may be running at a seam a whole clip after the beat that
+	// queued it, so the conditions that allowed it are asked again. Without the re-ask, a
+	// `mascots_swap_on_beat = False` applied in between would still advance the band once, and
+	// content committed in between would be replaced inside the half-clip floor -- a swap that the
+	// current configuration does not permit, from a beat that no longer reflects it.)
+	if (!this->swapOnBeat || !this->bandMayAdvance(*band))
+		return;
 	if (side == MascotSide::Left && this->bandMirrorsLeft(bandIndex)) {
+		MascotBand* rightBand = this->rightState.band(bandIndex);
+		if (!rightBand || !this->bandMayAdvance(*rightBand))
+			return;
 		this->nextBandImages(bandIndex, false);
 		return;
 	}

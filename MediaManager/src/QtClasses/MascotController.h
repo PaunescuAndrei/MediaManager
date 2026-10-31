@@ -697,7 +697,7 @@ private:
 	// (M3 Task 6B fix: only a band showing video is rate-limited this way; an image band has no
 	// clip of its own and always passes, so a default `Images` run keeps the dice as its only
 	// rate limit.)
-	bool bandMayAdvance(MascotPanel panel, const MascotBand& band) const;
+
 	// M5 Task 10: the clip length that governs this panel. The pairs use the columns' key, the layer its
 	// own; the fallback is applied at read time in applyConfig(), so this is one lookup and no state.
 	int clipSecondsFor(MascotPanel panel) const;

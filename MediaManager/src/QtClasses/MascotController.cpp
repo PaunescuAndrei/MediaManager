@@ -4851,7 +4851,7 @@ void MascotController::onBeat(bool swapWanted)
 		&& this->backgroundRandomChange && utils::randfloat(0, 1) < this->backgroundRandomChance) {
 		for (int i = 0; i < static_cast<int>(this->backgroundState.bands.size()); ++i) {
 			MascotBand* band = this->backgroundState.band(i);
-			if (!band || !this->bandMayAdvance(MascotPanel::Background, *band))
+			if (!band)
 				continue;
 			this->scheduleBeatAdvance(MascotPanel::Background, i);
 		}
@@ -4883,8 +4883,8 @@ void MascotController::onBeat(bool swapWanted)
 		// With the key off, each side is gated by its own content age.)
 		MascotBand* leftBand = this->leftState.band(0);
 		MascotBand* rightBand = this->rightState.band(0);
-		const bool leftMay = leftBand && this->bandMayAdvance(MascotPanel::Left, *leftBand);
-		const bool rightMay = rightBand && this->bandMayAdvance(MascotPanel::Right, *rightBand);
+		const bool leftMay = leftBand != nullptr;
+		const bool rightMay = rightBand != nullptr;
 		const bool mirrors = this->bandMirrorsLeft(0);
 		if (mirrors) {
 			if (this->leftState.surface && this->rightState.surface && leftMay && rightMay) {
@@ -4924,7 +4924,7 @@ void MascotController::onBeat(bool swapWanted)
 			MascotBand* leftBand = this->leftState.band(i);
 			MascotBand* rightBand = this->rightState.band(i);
 			if (!this->leftState.surface || !this->rightState.surface || !leftBand || !rightBand
-				|| !this->bandMayAdvance(MascotPanel::Left, *leftBand) || !this->bandMayAdvance(MascotPanel::Right, *rightBand))
+				)
 				continue;
 			advanced = true;
 			this->scheduleBeatAdvance(MascotPanel::Left, i);
@@ -4936,8 +4936,6 @@ void MascotController::onBeat(bool swapWanted)
 				continue;
 			MascotBand* band = state.band(i);
 			if (!band)
-				continue;
-			if (!this->bandMayAdvance(panelOf(side), *band))
 				continue;
 			advanced = true;
 			this->scheduleBeatAdvance(panelOf(side), i);
@@ -4951,43 +4949,6 @@ void MascotController::onBeat(bool swapWanted)
 int MascotController::clipSecondsFor(MascotPanel panel) const
 {
 	return panel == MascotPanel::Background ? this->backgroundClipSeconds : this->clipSeconds;
-}
-
-bool MascotController::bandMayAdvance(MascotPanel panel, const MascotBand& band) const
-{
-	// (M3 Task 6B: the half-clip floor. `mascots_clip_seconds` <= 0 disables it, and a band that
-	// has never committed anything has no age to measure, so both are "may advance". The clock is
-	// read here, at beat time, because a queued advance is re-evaluated by its seam anyway.)
-	// (M3 Task 6B fix: the floor is a *clip* floor, so it applies only to a band that is showing a
-	// video. An image band has no clip of its own; its rate limit is the existing dice
-	// (`mascots_random_change`/`mascots_random_chance`), which keeps a default `Images`
-	// configuration byte-identical to def041d.)
-	// (M4 Task 2: `mascots_clip_seconds` stays shared between the columns and the background on
-	// purpose -- there is one cadence clock, and the clip length is not part of the background's
-	// layout. Do not give the layer a clip length of its own: two clocks would let the pair and the
-	// layer drift apart, and nothing asks for that.)
-	// (M5 Task 10: it is asked for now, and the drift the note feared is not a thing: every band already
-	// arms its own clip timer, so a different length for the layer is a different interval on the layer's
-	// timers and nothing shared moves. The panel's number is read through clipSecondsFor().)
-	if (band.media().type != MascotMedia::Video)
-		return true;
-	// (M5 fix: 100% means every beat. The half-clip floor below is what makes a *swap* beat pass over a band
-	// younger than half its clip, so the default dice (about one beat in ten, a beat a second) cannot churn a
-	// 30 s clip. A user who sets the chance to 100% is asking for the beat to *be* the cadence, and the floor
-	// was silently answering no to every one of those beats -- which reads as "chance 100% changes nothing,
-	// it still only moves on the timer". At 100% the floor stands aside.)
-	const double chance = panel == MascotPanel::Background
-		? this->backgroundRandomChance : this->columnsRandomChance;
-	if (chance >= 1.0)
-		return true;
-	const int clip = this->clipSecondsFor(panel);
-	if (clip <= 0)
-		return true;
-	const qint64 committedAt = band.playback().committedAtMs;
-	if (committedAt <= 0)
-		return true;
-	const qint64 now = QDateTime::currentMSecsSinceEpoch();
-	return now - committedAt >= static_cast<qint64>(clip) * 500;
 }
 
 bool MascotController::bandReachesSeam(MascotPanel panel, const MascotBand& band) const
@@ -5085,11 +5046,11 @@ void MascotController::commitBeatAdvance(MascotPanel panel, int bandIndex)
 	// `mascots_swap_on_beat = False` applied in between would still advance the band once, and
 	// content committed in between would be replaced inside the half-clip floor -- a swap that the
 	// current configuration does not permit, from a beat that no longer reflects it.)
-	if (!this->swapOnBeat || !this->bandMayAdvance(panel, *band))
+	if (!this->swapOnBeat)
 		return;
 	if (panel == MascotPanel::Left && this->bandMirrorsLeft(bandIndex)) {
 		MascotBand* rightBand = this->rightState.band(bandIndex);
-		if (!rightBand || !this->bandMayAdvance(panel, *rightBand))
+		if (!rightBand)
 			return;
 		this->nextBandImages(bandIndex, false);
 		return;

@@ -508,12 +508,16 @@ private:
 
 	void connectBeats();
 	void disconnectBeats();
-	// (M3 Task 6B: one handler for the one pulse. A swap beat advances the bands that have been
-	// up for at least half a clip and flips when none may; every other beat flips both panels.)
+	// (M3 Task 6B: one handler for the one pulse. A swap beat advances the video bands that have
+	// been up for at least half a clip -- image bands always may advance -- and flips when none
+	// may; every other beat flips both panels.)
 	void onBeat(bool swapWanted);
 	// (M3 Task 6B: whether this band's content has been up for the half-clip floor -- or longer
 	// than any floor when `mascots_clip_seconds` is 0, which is what makes the beat the whole
 	// cadence. Read by onBeat() through the band's committedAtMs.)
+	// (M3 Task 6B fix: only a band showing video is rate-limited this way; an image band has no
+	// clip of its own and always passes, so a default `Images` run keeps the dice as its only
+	// rate limit.)
 	bool bandMayAdvance(const MascotBand& band) const;
 	// (M3 Task 6B: whether this band can still reach a wrap seam while the scroll driver runs.
 	// False means there is no pass to defer to -- the driver is stopped, the speed is 0, the

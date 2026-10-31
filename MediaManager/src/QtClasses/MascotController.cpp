@@ -3758,10 +3758,11 @@ void MascotController::onBeat(bool swapWanted)
 	// cadenced like an image panel, so a library of unusable files cannot freeze it, and
 	// `mascots_media=Images` keeps M1's cadence exactly because nothing there is ever a video.
 	// (M3 Task 6B: the paragraph above is kept as the record of the two-signal cadence. There is
-	// one cadence now, and the clip length gates it instead of excluding video: a band advances
-	// only once its content has been up for half a clip, and a beat that finds it too young flips
-	// instead. The clip timer is untouched -- it still runs and still advances a video band at the
-	// full clip length.)
+	// one cadence now, and the clip length gates it instead of excluding video: a *video* band
+	// advances only once its content has been up for half a clip, and a beat that finds it too
+	// young flips instead. An image band has no clip, so it is never floored -- its rate limit is
+	// the dice, which keeps a default `Images` run's cadence exactly as it was. The clip timer is
+	// untouched -- it still runs and still advances a video band at the full clip length.)
 	//
 	// `mascots_clip_seconds` = 0 is the one setting under which the beat *is* the video cadence
 	// (the clip loops and only the beat moves it on), so the beat keeps working for a video panel
@@ -3787,41 +3788,65 @@ void MascotController::onBeat(bool swapWanted)
 		// (M3 Task 6B: one band index at a time now, and a one-band mode advances the pair through
 		// nextBandImages() -- the body nextImages() had. A `Stripes` panel walks every index
 		// instead, and a panning mode queues each advance on its own band.)
-		// One band per panel. Both aged is the paired path; one aged advances only that side, so
-		// the floor stays a property of the band that would change.
+		// (M3 Task 6B fix: under the mirror key the pair is one unit, so it advances only when the
+		// *oldest* of its two commits meets the floor -- the right band's copy lands a little after
+		// the left's, and advancing one side alone would leave the pair showing different files.
+		// With the key off, each side is gated by its own content age.)
 		MascotBand* leftBand = this->leftState.band(0);
 		MascotBand* rightBand = this->rightState.band(0);
 		const bool leftMay = leftBand && this->bandMayAdvance(*leftBand);
 		const bool rightMay = rightBand && this->bandMayAdvance(*rightBand);
 		const bool mirrors = this->bandMirrorsLeft(0);
-		if (leftMay && (mirrors || rightMay)) {
+		if (mirrors) {
+			if (this->leftState.surface && this->rightState.surface && leftMay && rightMay) {
+				this->nextBandImages(0, false);
+				return;
+			}
+			this->flipBoth();
+			return;
+		}
+		if (leftMay && rightMay) {
 			this->nextBandImages(0, false);
 			return;
 		}
-		if (!mirrors && (leftMay || rightMay)) {
-			if (leftMay)
-				this->pickFor(this->leftState, MascotSide::Left, 0, true);
-			else
-				this->pickFor(this->rightState, MascotSide::Right, 0, false);
+		if (leftMay) {
+			this->pickFor(this->leftState, MascotSide::Left, 0, true);
+			return;
+		}
+		if (rightMay) {
+			this->pickFor(this->rightState, MascotSide::Right, 0, false);
 			return;
 		}
 		this->flipBoth();
 		return;
 	}
 	// Panning modes: every band of both panels is asked, and each eligible band's advance is
-	// queued on that band (or committed now when it has no seam). A right-panel band under the
-	// mirror key is skipped because the left band's advance carries the pair.
+	// queued on that band (or committed now when it has no seam). Under the mirror key a pair
+	// index is one unit and advances only when both sides meet the floor; a right band past the
+	// left panel's count has no counterpart, so it advances on its own.
 	bool advanced = false;
 	const int bandTotal = std::max(
 		static_cast<int>(this->leftState.bands.size()),
 		static_cast<int>(this->rightState.bands.size()));
 	for (int i = 0; i < bandTotal; ++i) {
+		if (this->bandMirrorsLeft(i)) {
+			// (M3 Task 6B fix: the pair waits for the older of its two commits, and a beat that
+			// finds it younger flips rather than advancing one panel alone.)
+			MascotBand* leftBand = this->leftState.band(i);
+			MascotBand* rightBand = this->rightState.band(i);
+			if (!this->leftState.surface || !this->rightState.surface || !leftBand || !rightBand
+				|| !this->bandMayAdvance(*leftBand) || !this->bandMayAdvance(*rightBand))
+				continue;
+			advanced = true;
+			this->scheduleBeatAdvance(MascotSide::Left, i);
+			continue;
+		}
 		for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
 			SideState& state = this->stateFor(side);
 			if (!state.surface)
 				continue;
 			MascotBand* band = state.band(i);
-			if (!band || (side == MascotSide::Right && this->bandMirrorsLeft(i)))
+			if (!band)
 				continue;
 			if (!this->bandMayAdvance(*band))
 				continue;
@@ -3839,6 +3864,12 @@ bool MascotController::bandMayAdvance(const MascotBand& band) const
 	// (M3 Task 6B: the half-clip floor. `mascots_clip_seconds` <= 0 disables it, and a band that
 	// has never committed anything has no age to measure, so both are "may advance". The clock is
 	// read here, at beat time, because a queued advance is re-evaluated by its seam anyway.)
+	// (M3 Task 6B fix: the floor is a *clip* floor, so it applies only to a band that is showing a
+	// video. An image band has no clip of its own; its rate limit is the existing dice
+	// (`mascots_random_change`/`mascots_random_chance`), which keeps a default `Images`
+	// configuration byte-identical to def041d.)
+	if (band.media().type != MascotMedia::Video)
+		return true;
 	if (this->clipSeconds <= 0)
 		return true;
 	const qint64 committedAt = band.playback().committedAtMs;

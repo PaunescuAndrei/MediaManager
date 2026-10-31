@@ -322,6 +322,13 @@ MascotController::MascotController(MainApp* App, MascotImageCache* cache, Mascot
 		connect(source, &MascotPrefetcher::mediaReady, this, &MascotController::onMediaReady);
 		connect(source, &MascotPrefetcher::mediaFailed, this, &MascotController::onMediaFailed);
 	}
+
+	// (M5 fix: the visibility tick. Nothing tells us when another window is put over ours, so the one
+	// second interval is what closes that case; every window event re-answers it as well. It runs only
+	// while the controller does -- a stopped controller has no panels to pause.)
+	this->windowSeenTimer.setInterval(1000);
+	this->windowSeenTimer.setTimerType(Qt::CoarseTimer);
+	connect(&this->windowSeenTimer, &QTimer::timeout, this, &MascotController::refreshWindowSeen);
 }
 
 MascotController::~MascotController()
@@ -383,7 +390,10 @@ void MascotController::start()
 	// M2: the pause state is derived from the window the surfaces have just landed in, so a panel
 	// enabled while the window is minimized or in the background starts paused instead of loading
 	// a clip nobody can see.
-	this->applyVideoPaused();
+	// (M5 fix: answered by the visibility tick, which re-derives the pause state itself.)
+	this->windowSeenKnown = false;
+	this->refreshWindowSeen();
+	this->windowSeenTimer.start();
 	// Both panels were empty when the old code ran updateMascots() right before
 	// showMascots(); one seeding swap does both jobs now.
 	// (M4 Task 2: only when the columns are on. A controller started for the background alone
@@ -433,8 +443,10 @@ void MascotController::stop()
 	// start() re-derives the pause from the window it finds.
 	this->stopClipTimers();
 	this->watchWindow(nullptr);
+	this->windowSeenTimer.stop();
+	this->windowSeen = true;
+	this->windowSeenKnown = false;
 	this->videoPaused = false;
-	this->sawWindowActivation = false;
 	// M2: the players come down before the surfaces are released, because the sinks they draw
 	// into belong to the surfaces' QML delegates (Task 2's interface fact). shutdown() detaches
 	// them synchronously, so a delegate destroyed next cannot leave a player pointing at it.
@@ -2399,20 +2411,19 @@ bool MascotController::eventFilter(QObject* watched, QEvent* event)
 	if (this->watchedWindow && watched == this->watchedWindow.data()) {
 		switch (event->type()) {
 		case QEvent::WindowActivate:
-			// From here on, "not active" means the user switched away rather than "the window
-			// has not been activated yet", which is what the startup state looks like.
-			this->sawWindowActivation = true;
-			this->applyVideoPaused();
 			// M3 Task 4: the pan obeys the same three events the players do. It is a separate
 			// reconciliation from applyVideoPaused() only because the driver has a fourth reason
 			// to be idle (no mode with a pan in it) that the players know nothing about.
+			// (M5 fix: focus is no longer part of the pause rule, but an activation is a good moment to
+			// re-answer "can this window be seen": it is the event that follows being brought forward.)
+			this->refreshWindowSeen();
 			this->updateScrollDriver();
 			break;
 		case QEvent::Show:
 		case QEvent::Hide:
 		case QEvent::WindowDeactivate:
 		case QEvent::WindowStateChange:
-			this->applyVideoPaused();
+			this->refreshWindowSeen();
 			this->updateScrollDriver();
 			break;
 		default:
@@ -4568,14 +4579,29 @@ bool MascotController::videoShouldPause() const
 	if (!window)
 		return false;
 	// Hidden and minimized are both "cannot be seen", and Qt calls a minimized window visible, so
-	// the two are tested separately. Activation is the third way a panel goes unseen, and it is
-	// only consulted after the window has been active once: before that, "not active" is the
-	// startup state of a window on its way up rather than the user having switched away.
+	// the two are tested separately.
 	if (!window->isVisible() || window->isMinimized())
 		return true;
-	if (this->sawWindowActivation && !window->isActiveWindow())
-		return true;
-	return false;
+	// (M5 fix: the third test used to be "the window is not active", i.e. the user switched away from
+	// the app while it was still on screen -- which paused the mascots for alt-tabbing, and is not what
+	// the key means. The rule is the one the retired image renderer used: MainApp gated updateMascots()
+	// and flipMascots() on `utils::IsMyWindowVisible(mainWindow)`, which is visible on screen including
+	// *not covered* by another window, and says nothing about focus. The GDI walk behind it is cached by
+	// refreshWindowSeen(), so this stays a field read.)
+	return !this->windowSeen;
+}
+
+void MascotController::refreshWindowSeen()
+{
+	QWidget* window = this->watchedWindow.data();
+	const bool seen = window && utils::IsMyWindowVisible(window);
+	if (this->windowSeenKnown && seen == this->windowSeen)
+		return;
+	this->windowSeen = seen;
+	this->windowSeenKnown = true;
+	qDebug() << "MASCOT-VISIBLE" << "seen" << seen;
+	this->applyVideoPaused();
+	this->updateScrollDriver();
 }
 
 bool MascotController::previewTooltipBusy() const
@@ -4683,8 +4709,11 @@ void MascotController::watchWindow(QWidget* window)
 	// before the first pause decision, so the deactivate rule applies from now on. Without this a
 	// controller restarted while its window has focus would ignore the user switching away until
 	// the next activation.
-	if (window->isActiveWindow())
-		this->sawWindowActivation = true;
+	// (M5 fix: the flag is no longer read -- the pause rule asks whether the window can be seen, not
+	// whether it is active -- so the write is gone with it. The watch is also the moment to answer the
+	// new question for the window that was just handed over.)
+	this->windowSeenKnown = false;
+	this->refreshWindowSeen();
 }
 
 void MascotController::logVideo(const QString& message) const

@@ -870,6 +870,15 @@ private:
 	// `mascots_pause_unfocused`. Idempotent, so the event filter can call it on every event.
 	void applyVideoPaused();
 	bool videoShouldPause() const;
+	// (M5 fix: the visibility tick. `utils::IsMyWindowVisible()` is a GDI walk over every top-level
+	// window -- affordable at a beat and at a settings Apply, not per frame -- and the covered case
+	// produces no event of ours to hang it on, so it is asked on a one-second timer plus every window
+	// event, and the answer is cached here for videoShouldPause(). This is the rule the retired image
+	// renderer applied: visible on screen, not focused.)
+	void refreshWindowSeen();
+	bool windowSeen = true;
+	bool windowSeenKnown = false;
+	QTimer windowSeenTimer;
 	// True while the preview tooltip the window owns is actually playing (§7.13: "no new clip
 	// starts while a preview tooltip is playing"). Read through MainWindow's own QPointer, so a
 	// closed or never-opened tooltip is a null pointer here rather than a stale flag; the preview
@@ -1100,6 +1109,8 @@ private:
 	QPointer<QWidget> watchedWindow;
 	// Set by the first activation: before it, "not active" is the startup state of a window on
 	// its way to being active, not the user having switched away.
+	// (M5 fix: unused. The pause rule asks whether the window can be *seen* rather than whether it is
+	// active, so nothing reads this any more; kept for one commit as the record of the rule it served.)
 	bool sawWindowActivation = false;
 	// The video pool's invalidation fingerprint (§7.8): the database, the filter settings and
 	// the model's row count. All three are cheap to compare and all three are a reason for the

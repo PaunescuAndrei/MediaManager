@@ -532,7 +532,13 @@ void MascotController::applyMode()
 	// the surfaces were built has nothing to re-write here -- configureSurface() already gave
 	// them this layout and its caller wrote the rectangles -- so `Static` stays on exactly the
 	// surface writes it made before modes existed.
-	if (modeChanged || countChanged)
+	// (M3 fix: gated on the count, not on the mode. The rectangles are derived from the band count
+	// and the stacking axis, never from the mode itself, so a mode change that leaves both alone
+	// -- `Static` to `Scroll`, which are both one full-panel band -- would only re-write the rects
+	// applyConfig() has already written, and a settings Apply would then reach each band's
+	// setSlotRect twice. M3 Task 5 adds `mascots_stripes_orientation`: that key changes the axis
+	// without changing the count, so its own relayout has to be added to this condition.)
+	if (countChanged)
 		this->updateLayout();
 	// Bands the change added have no content. Queued, because this runs inside a settings handler
 	// and a pick walks the mascot directory and posts a decode; a controller that was stopped in
@@ -2454,9 +2460,9 @@ void MascotController::onMediaReady(const MascotMedia& media)
 			MascotBand* band = state.bands[static_cast<std::size_t>(i)].get();
 			if (!band)
 				continue;
-			// M2: a video wait is not an image wait. The paths cannot collide (one is a mascot
-			// image, the other a library video), but a delivery must never be applied to a panel
-			// that is waiting for a player's frame, so the flag is checked rather than assumed.
+			// M2: a video wait is not an image wait. The paths cannot collide (one is a mascot image,
+			// the other a library video), but a delivery must never be applied to a panel that is
+			// waiting for a player's frame, so the flag is checked rather than assumed.
 			if (band->requestIsVideo())
 				continue;
 			if (band->requestPath() != media.path)

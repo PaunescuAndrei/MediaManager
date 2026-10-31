@@ -96,6 +96,9 @@ public:
     // Decides what each mascot panel shows and owns the QML surfaces that render it. The two
     // retired image widgets are gone from the .ui: these hosts are the only mascot panels.
     MascotController* mascotController = nullptr;
+    // M4 Task 3b: the scrim behind the strip above the list. Owned by CenterContainer, so it is
+    // destroyed with the window; null until the background layer is first switched on.
+    QWidget* backgroundScrim = nullptr;
     QHash<QString, qint64> previewPositionCache;
     QList<QString> previewHistoryOrder;
     mutable QMutex saltSeedMutex;
@@ -332,6 +335,14 @@ private:
     // them back to the inherited app palette when the layer is off. Called from
     // initStyleSheets(), which is also what changePalette() runs after replacing the app palette.
     void applyListTransparency();
+    // M4 Task 3b: the strip above the list -- the buttons, the title and the search row -- gets the
+    // same scrim as an even row, because in this app that area's colour *is* the list's Base colour.
+    // Without it the layer shows through the top strip at full strength while the rows hold it at
+    // the row alpha, so the top reads as more transparent than the list. The scrim is a plain child
+    // of CenterContainer, lowered under the strip's widgets, and only as tall as the space the list
+    // does not occupy.
+    void updateBackgroundScrim();
+    bool eventFilter(QObject* watched, QEvent* event) override;
 signals:
     void fileDropped(QStringList files, QWidget* widget = nullptr);
 public slots:

@@ -130,6 +130,12 @@ void Config::init_defaults() {
 		// 9.8:1 on the Base row and 7.5:1 on the AlternateBase row, so nothing has to be traded away.
 		// The key stays the dimmer for a user who wants a quieter backdrop.
 		{"mascots_background_opacity", "1.0"},
+		// M4 Task 3b: how opaque the list's rows (and the strip above them) are over the layer.
+		// 1.0 would hide the layer behind the list entirely, 0.0 would put body text straight on the
+		// video. 0.85 is what the app shipped with as a constant: white text keeps 9.8:1 on the Base
+		// row and 7.5:1 on the alternate row even over a white frame, and the layer still reads as a
+		// picture rather than a wash.
+		{"mascots_background_list_alpha", "0.85"},
 		{"sound_effects_on","False"},
 		{"sound_effects_volume","3"},
 		{"sound_effects_special_on","False"},

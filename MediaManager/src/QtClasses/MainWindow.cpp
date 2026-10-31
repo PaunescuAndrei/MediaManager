@@ -625,8 +625,17 @@ void MainWindow::applyListTransparency() {
     // (or returned to) the palette every widget inherits, which is byte-identical to today.
     const bool backgroundEnabled = this->App->config
         && this->App->config->get_bool("mascots_background");
+    // M4 Task 3b: the row alpha is a setting now, because it is the one number that decides how
+    // present the layer is. BACKGROUND_ROW_ALPHA is the fallback, and the same value the app shipped
+    // with before the key existed, so an existing config keeps the look it had.
+    int rowAlpha = BACKGROUND_ROW_ALPHA;
+    if (this->App->config) {
+        const double configured = this->App->config->get_double(
+            "mascots_background_list_alpha", BACKGROUND_ROW_ALPHA / 255.0);
+        rowAlpha = qBound(0, qRound(configured * 255.0), 255);
+    }
     const QPalette rowPalette = backgroundEnabled
-        ? get_background_row_palette(appPalette, BACKGROUND_ROW_ALPHA)
+        ? get_background_row_palette(appPalette, rowAlpha)
         : appPalette;
     // The view and its viewport: the viewport paints the rows' backdrop and the rows paint their
     // own fill on top, so both have to carry the alpha. Nothing else -- no stylesheet, no
@@ -637,12 +646,58 @@ void MainWindow::applyListTransparency() {
     // the viewport's, so giving both 216/255 scrims the media twice and leaves about 2% of it under
     // a row -- measured, the layer was invisible. The viewport's Base is therefore cleared to alpha
     // 0: it stops painting a scrim between the media and the row fill, and the row fill becomes the
-    // only one. Both row colours still carry the one BACKGROUND_ROW_ALPHA the requirement asks for.)
+    // only one. Both row colours still carry the one row alpha the requirement asks for.)
     const QPalette viewportPalette = backgroundEnabled
         ? get_background_row_palette(appPalette, 0)
         : appPalette;
     this->ui.videosWidget->setPalette(rowPalette);
     this->ui.videosWidget->viewport()->setPalette(viewportPalette);
+    // M4 Task 3b: the strip above the list is the same Base colour in this app's design, so it takes
+    // the same scrim -- otherwise the layer is held back under the rows and runs at full strength
+    // across the buttons and the title, and the two areas read as different transparencies.
+    if (backgroundEnabled) {
+        if (!this->backgroundScrim) {
+            this->backgroundScrim = new QWidget(this->ui.CenterContainer);
+            // A plain QWidget fills with its Window role by default; the strip's colour is Base.
+            this->backgroundScrim->setBackgroundRole(QPalette::Base);
+            this->backgroundScrim->setAutoFillBackground(true);
+            // It is scenery: clicks and hovers belong to the widgets above it.
+            this->backgroundScrim->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+        }
+        const QPalette scrimPalette = get_background_row_palette(appPalette, rowAlpha);
+        this->backgroundScrim->setPalette(scrimPalette);
+        // Below every sibling: the strip's own widgets paint on top of the scrim.
+        this->backgroundScrim->lower();
+        this->backgroundScrim->show();
+        this->updateBackgroundScrim();
+        // The list's geometry is what the scrim's height depends on, and it moves when the layout
+        // changes -- a search bar or a date column appearing does not resize the window.
+        this->ui.videosWidget->installEventFilter(this);
+    }
+    else if (this->backgroundScrim) {
+        this->ui.videosWidget->removeEventFilter(this);
+        this->backgroundScrim->hide();
+    }
+}
+
+void MainWindow::updateBackgroundScrim() {
+    if (!this->backgroundScrim || !this->backgroundScrim->isVisible())
+        return;
+    // Everything CenterContainer owns above the list. Both widgets are children of that container,
+    // so y() is already in the coordinate space the scrim is placed in.
+    const QWidget* container = this->ui.CenterContainer;
+    const int height = qBound(0, this->ui.videosWidget->y(), container->height());
+    this->backgroundScrim->setGeometry(0, 0, container->width(), height);
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
+    // M4 Task 3b: the list moving inside its container is the only thing that changes how tall the
+    // strip above it is. A resize covered by MainWindow::event() would miss a search bar opening.
+    if (this->backgroundScrim && watched == this->ui.videosWidget
+        && (event->type() == QEvent::Move || event->type() == QEvent::Resize)) {
+        this->updateBackgroundScrim();
+    }
+    return QMainWindow::eventFilter(watched, event);
 }
 
 void MainWindow::initRatingIcons() {
@@ -5767,6 +5822,9 @@ bool MainWindow::event(QEvent* e)
         int windowWidth = resizeEvent->size().width();
         int windowHeight = resizeEvent->size().height();
         this->applyMascotWidth(windowWidth, this->App->config->get_double("mascots_width_percent", 15.0));
+        // M4 Task 3b: the strip above the list changed height with the window; the layer's scrim
+        // covers exactly that strip.
+        this->updateBackgroundScrim();
     }
     return QMainWindow::event(e);
 }

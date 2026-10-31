@@ -14,8 +14,10 @@
 #include <QJsonObject>
 #include <QObject>
 #include <QPointer>
+#include <QRectF>
 #include <QString>
 #include <Qt>
+#include <QVector>
 #include <memory>
 #include <vector>
 
@@ -28,8 +30,25 @@ class QTimer;
 // surfaces themselves are the controller's business from here on.
 enum class MascotSide { Left, Right };
 
+// How a mascot panel arranges its bands, i.e. what one panel *is* for this milestone.
+//   - `Static` is one band covering the whole panel: exactly the picture the panel drew before
+//     modes existed, and the default this class falls back to for any value it cannot read.
+//   - `Scroll` is one band too, but its content is allowed to be wider than the panel and is
+//     panned across it. Task 4 owns the pan; the band is the whole panel either way.
+//   - `Stripes` is N bands per panel (`mascots_stripes_left` / `_right`), each one a slot of its
+//     own, stacked along the mode's axis. Task 5 adds the orientation, the phase stagger and the
+//     per-band decoder budget; Task 2 only lays the bands out and fills them.
+// The value is read in MascotController::applyConfig() and cached there, for the reason
+// `mascots_media` is: a settings change must not land one pick or one layout late.
+enum class MascotMode { Static, Scroll, Stripes };
+
 // Decides what each mascot panel shows and the wiring that turns the old entry points into
 // calls on it. One controller drives two surfaces, each of which renders a single slot.
+// (M3 Task 2: "renders a single slot" is the M1/M2 shape. A panel now renders one slot per band
+// of its mode -- one band in `Static` and `Scroll`, N in `Stripes` -- and each band is a
+// MascotBand; the sentence above stays as the record of what the controller drove before a mode
+// existed. The panel's *policy* -- picks, the mirror pair, the clip timer, the pins -- is still
+// per panel and lives on band 0, which every mode has.)
 //
 // It owns four pieces of state that the retired renderer kept inside the widget:
 //   - what a panel is waiting for (`requestedPath`) and what it shows (`shown`);
@@ -85,7 +104,32 @@ public:
 	void applyConfig();
 	// Slot geometry is the controller's job (amendment V): each slot is the rectangle of the
 	// surface that hosts it. Called on enable, once per host resize and on a mode change.
+	// (M3 Task 2: "each slot" is each *band's* slot now -- N rectangles for a `Stripes` panel,
+	// one full-panel rectangle for `Static` and `Scroll`, which is the rectangle this wrote
+	// before modes existed.)
 	void updateLayout();
+
+	// ---- M3 Task 2: the layout mode ----
+	// The mode value as this class reads it, case-insensitively. `ok` is false for anything that
+	// is not one of the three names, and the returned mode is then `Static` -- the panel's
+	// historical shape and the documented default -- so a caller can fall back in one step.
+	static MascotMode modeFromString(const QString& value, bool* ok);
+
+	// How many bands `side` has in the current mode: one for `Static` and `Scroll`, the
+	// configured `mascots_stripes_left`/`_right` for `Stripes`. The number both panels' layouts
+	// are derived from, so Task 5's decoder budget can ask it without knowing the mode.
+	int bandCount(MascotSide side) const;
+	// `bandCount()` equal slices of that panel's rectangle along the mode's stacking axis,
+	// rounded so they sum to the panel exactly. Empty while `side` has no surface.
+	QVector<QRectF> bandRects(MascotSide side) const;
+	// Applies the current mode to both panels: resizes each existing surface's slot count,
+	// creates or destroys band objects from the tail, applies the rectangles and leaves every
+	// surviving band's slot state in place (setSlotCount() re-applies it, so what a surviving
+	// band was drawing stays drawn), then fills the bands that have no content. Idempotent, and it
+	// never replaces a surface -- the surface is the thing drawing, so it is resized in place.
+	// Called from applyConfig(); does nothing while no panel exists yet (the enable path applies
+	// the same layout when its surfaces are built).
+	void applyMode();
 
 	// Replaces what `side` shows: served from the panel's speculative candidate when it has one
 	// (a committed MascotMedia, no decode), otherwise picked, requested and written when
@@ -136,6 +180,10 @@ private:
 		// the slot state that described the old surface.
 		std::vector<std::unique_ptr<MascotBand>> bands;
 		MascotBand* band(int i) const;
+		// M3 Task 2: the band count this panel's surface was last given. applyMode() compares the
+		// mode's count with this so an Apply that changed neither the mode nor a count does
+		// nothing at all; -1 until a surface has been configured for this panel.
+		int configuredBandCount = -1;
 		// The speculative pick: the path requested ahead of the next swap, and the decoded
 		// media it produced once it arrives. Exactly one deep -- a queue is deliberately not
 		// kept -- and both empty when nothing is armed.
@@ -213,6 +261,16 @@ private:
 	void createSurfaces();
 	void configureSurface(SideState& state, MascotSide side);
 	void releaseSurface(SideState& state);
+	// M3 Task 2: brings one panel's band vector to the mode's band count. Bands are destroyed from
+	// the tail (their players come down while the QML sinks they draw into still exist) and
+	// created for the new indices; a band whose index survives keeps its media, its request and
+	// its players. Writes the surface's slot count as well, so the two can never disagree.
+	void syncBands(SideState& state, MascotSide side);
+	// M3 Task 2: gives every band of both panels that has no content some, one pick per band,
+	// after a layout change. Band 0 takes the panel's existing pick path; the extra bands of a
+	// `Stripes` panel are image-only for this task (the per-band player budget is Task 5), so
+	// they are filled through the same image request/delivery path and keep that picture.
+	void fillEmptyBands();
 	// Clears the slot, releases the pins and forgets the state of one side. Every path that
 	// replaces or drops a displayed media goes through here, which is what keeps a pin from
 	// outliving what it protects (amendment H2).
@@ -235,18 +293,28 @@ private:
 	// the media itself -- the order the slot has always been written in. showMedia() takes this
 	// path too, after it has recorded the media on the band and before the slot is written, so
 	// the media write never lands under the old mirror.
-	void presentMedia(SideState& state, MascotSide side, const MascotMedia& media);
+	// M3 Task 2: `bandIndex` names the band -- and therefore the slot -- being written. Band 0 is
+	// the panel's policy band and every pre-mode call site names it.
+	void presentMedia(SideState& state, MascotSide side, const MascotMedia& media, int bandIndex);
 	// `path` is the media the side rule is asked about: showMedia() presents a media between
 	// recording it and writing it, so the rule is given the path explicitly instead of reading
 	// the band.
-	void applyMirror(SideState& state, MascotSide side, const QString& path);
-	void requestPath(SideState& state, const QString& path);
+	// M3 Task 2: `bandIndex` is the band whose slot receives the value. The parity itself is the
+	// panel's, so every band of a `Stripes` panel is written with the same answer.
+	void applyMirror(SideState& state, MascotSide side, const QString& path, int bandIndex);
+	// `bandIndex` is the band whose request record is written (M3 Task 2: a `Stripes` panel's
+	// extra bands are filled through this same request). The panel-level half of the call --
+	// dropping a pending mirror copy -- belongs to the policy band only.
+	void requestPath(SideState& state, const QString& path, int bandIndex);
 	// Commits a media to one panel: pins it, writes the slot, drops whatever that panel was still
 	// waiting for, arms the next speculative pick and pushes the theme colour when the swap asked
 	// for it. `fromReady` means the media came out of this panel's own candidate, which is then
 	// consumed.
+	// M3 Task 2: `bandIndex` names the band the media is committed to. The panel-level policy
+	// below -- the candidate, the speculation, the flip parity, the mirror pair, the theme colour
+	// -- is band 0's and runs for band 0 only, so a fill of an extra band cannot disturb it.
 	void showMedia(SideState& state, MascotSide side, const MascotMedia& media, bool fromReady,
-		bool armCandidate);
+		bool armCandidate, int bandIndex);
 	// Stores a decoded speculative media, pinned, until the next swap takes it.
 	void holdCandidate(SideState& state, const MascotMedia& media);
 	// Requests the path for the panel's *next* swap. Exactly one deep per panel; does nothing
@@ -368,8 +436,27 @@ private:
 	// Set by the first applyConfig() that finds an unsupported `mascots_media`: the warning is a
 	// statement about the configuration, so it is made once rather than on every Apply.
 	bool warnedUnsupportedMedia = false;
+	// The same latch for `mascots_mode` (M3 Task 2), for the same reason: an unreadable value is a
+	// statement about the configuration, and the fallback is `Static` rather than a guess.
+	bool warnedUnsupportedMode = false;
 	QMetaObject::Connection swapConnection;
 	QMetaObject::Connection flipConnection;
+
+	// ---- M3 Task 2: the layout configuration, written by applyConfig() ----
+	// `mascots_mode`, cached: bandCount()/bandRects()/applyMode() answer from this one value, so
+	// a settings change cannot land on one panel and not the other, and no layout path re-reads
+	// the config.
+	MascotMode mascotMode = MascotMode::Static;
+	// `mascots_stripes_left` / `_right`, clamped to [1, 8] where they are read. Only `Stripes`
+	// reads them; `Static` and `Scroll` are one band regardless of what they say.
+	// (M3 Task 5 owns `mascots_stripes_orientation` and `_alternate`; this task assumes the
+	// default stacking axis and no phase stagger, which is what the counts alone describe.)
+	int stripesLeftBands = 2;
+	int stripesRightBands = 2;
+	// The mode applyMode() last applied, and whether it has applied one at all. applyMode() is
+	// idempotent: an Apply that changed neither the mode nor a panel's band count does nothing.
+	MascotMode appliedMode = MascotMode::Static;
+	bool modeApplied = false;
 
 	// ---- M2: the video configuration, all of it written by applyConfig() ----
 	// The `mascots_media` value, cached: pickType() decides from this instead of re-reading the

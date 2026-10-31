@@ -499,7 +499,12 @@ private:
 	// (M3 Task 6A: one band's next media, named by its index.)
 	MascotMedia pickFor(SideState& state, MascotSide side, int bandIndex, bool updateHighlight);
 	// The state a fresh pick starts from, also used when a pick is copied to the other panel.
-	void preparePick(SideState& state, bool updateHighlight);
+	// (M3 Task 6A fix: `bandIndex` gates the four panel-wide values it resets -- the mirror
+	// override, the flip parity and the pending theme-colour request -- exactly as showMedia()
+	// gates the same values on band 0, so a stripe's pick cannot clear a debug drop's override or
+	// another request's highlight before band 0's media lands. Only the policy band's pick starts
+	// a new panel media; a stripe's starts that stripe's.)
+	void preparePick(SideState& state, int bandIndex, bool updateHighlight);
 
 	void connectBeats();
 	void disconnectBeats();
@@ -618,11 +623,11 @@ private:
 	// drawing something from being replaced when only a blank band owed the retry, while a failed
 	// video attempt on a band left showing a still may replace that still (a stripe has no beat to
 	// move it on).
+	// (M3 Task 6A fix: this is also the single content entry point for a band that has just been
+	// given a player -- the budget-increase and Images -> Videos re-fill -- and it is mirror-aware:
+	// a mirrored right band never picks on its own, and a mirrored left band advances the pair
+	// through nextBandImages(). It replaces the separate media-changed re-fill method.)
 	void queueBandRefill(MascotSide side, int bandIndex, bool onlyIfEmpty);
-	// M3 Task 6A: gives every band of a `Stripes` panel a pick under the *new* `mascots_media`, so
-	// a setting switched while the stripes are up is adopted by bands that already had content
-	// instead of leaving them showing the old kind for the session. Queued from applyConfig().
-	void refillBandsForMediaChange();
 
 	// Pauses or resumes both panels' players from the window's state and
 	// `mascots_pause_unfocused`. Idempotent, so the event filter can call it on every event.

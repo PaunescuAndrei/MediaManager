@@ -120,7 +120,7 @@ void Config::init_defaults() {
 		{"mascots_background_stripes", "3"},
 		{"mascots_background_stripes_orientation", "Horizontal"},
 		{"mascots_background_stripes_alternate", "True"},
-		{"mascots_background_scroll_speed", "20"},
+		{"mascots_background_scroll_speed", "50"},
 		{"mascots_background_scroll_direction", "LeftToRight"},
 		{"mascots_background_scroll_pingpong", "False"},
 		// M4: full strength, not half. The layer's only visible surface is through the list's rows,

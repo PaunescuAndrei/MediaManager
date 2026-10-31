@@ -13,6 +13,23 @@ Item {
 	// Set from C++ (MascotSurface::setSlotCount).
 	property int slotCount: 0
 
+	// M4 Task 6: the app's own colour behind the layer. A QQuickWidget blits its offscreen buffer
+	// opaquely, so wherever no video covers a pixel the window would otherwise read as black; the
+	// rectangle below paints the palette colour there instead. Both defaults are the historical
+	// look -- a transparent, hidden rectangle -- so a surface nobody sets these on (the pair and
+	// the columns) renders exactly as it did. Written by MascotSurface::setBackdrop().
+	property color backdropColor: "transparent"
+	property bool backdropVisible: false
+
+	// M4 Task 6: first child, so the Repeater's slots below are drawn above it.
+	Rectangle {
+		id: backdrop
+
+		anchors.fill: parent
+		color: surface.backdropColor
+		visible: surface.backdropVisible
+	}
+
 	Repeater {
 		model: surface.slotCount
 		delegate: MascotSlot {}

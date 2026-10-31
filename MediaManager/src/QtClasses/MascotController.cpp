@@ -10,6 +10,7 @@
 #include "utils.h"
 #include <QDateTime>
 #include <QEvent>
+#include <QPalette>
 #include <QStringList>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -172,6 +173,30 @@ namespace {
 			}
 		}
 		return rects;
+	}
+
+	// ---- M4 Task 6: the background marquee's geometry ----
+	// One cell of the seamless marquee: `count` cells of `cellLen = axisLen / (count - 1)` laid
+	// along the axis, so the cells are one cell longer than the visible window. `total` is the
+	// distance after which the pattern repeats; placing cell `index` at
+	// `fmod(index * cellLen + offset, total) - cellLen` normalised into
+	// [-cellLen, total - cellLen) is what makes the window `[0, axisLen)` covered exactly once at
+	// every offset: the `-cellLen` shifts the leading gap the bare modulo would leave behind the
+	// edge, where the cell that has just wrapped is waiting. The cell off the far edge is the wrap
+	// buffer, so N cells need no extra decoder. `count` must be at least 2; a one-band background
+	// is a static full-window cell and never reaches this function.
+	QRectF marqueeBandRect(const QRectF& panel, int count, int index, double offset, bool vertical)
+	{
+		const double axisLen = vertical ? panel.height() : panel.width();
+		const double cellLen = axisLen / static_cast<double>(count - 1);
+		const double total = static_cast<double>(count) * cellLen;
+		double wrapped = std::fmod(static_cast<double>(index) * cellLen + offset, total);
+		if (wrapped < 0.0)
+			wrapped += total;
+		const double pos = wrapped - cellLen;
+		if (vertical)
+			return QRectF(panel.left(), panel.top() + pos, panel.width(), cellLen);
+		return QRectF(panel.left() + pos, panel.top(), cellLen, panel.height());
 	}
 
 	// ---- M3 Task 4: the scroll driver's arithmetic ----
@@ -723,7 +748,7 @@ void MascotController::applyConfig()
 	this->backgroundLayout.alternate =
 		config->get_bool(QStringLiteral("mascots_background_stripes_alternate"));
 	this->backgroundLayout.scrollSpeed = clampedConfigInt(
-		config, QStringLiteral("mascots_background_scroll_speed"), 20, 0, MAX_SCROLL_SPEED);
+		config, QStringLiteral("mascots_background_scroll_speed"), 50, 0, MAX_SCROLL_SPEED);
 	this->backgroundLayout.scrollDirection = MascotController::scrollDirectionFromString(
 		config->get(QStringLiteral("mascots_background_scroll_direction")), nullptr);
 	this->backgroundLayout.scrollPingpong =
@@ -777,6 +802,9 @@ void MascotController::applyConfig()
 		// value, because the band logic -- picks, cadence, the player budget -- must not depend on
 		// how visible the layer currently is.
 		this->backgroundState.surface->setSurfaceOpacity(this->backgroundOpacity);
+		// M4 Task 6: the palette may have been replaced since the layer was built (a theme Apply
+		// reaches this same method), so the backdrop follows it here as well as at creation.
+		this->refreshBackgroundBackdrop();
 	}
 
 	const bool mirror = this->mirrorEnabled();
@@ -1035,6 +1063,12 @@ MascotSurface::FillMode MascotController::effectiveFillMode(MascotPanel panel) c
 	// `Scroll` keeps `HeightFit`: §7.6 defines it as content sized wider than the panel, and Ruling
 	// M3-4 keeps it on the horizontal axis, so it has no vertical variant to follow.)
 	const PanelLayout& layout = this->layoutFor(panel);
+	// (M4 Task 6: a background `Scroll` cell no longer pans its content -- the marquee moves the
+	// cell itself -- so it has no axis to normalise and honours `mascots_background_fill` exactly
+	// as `Static` does. The pair's `Scroll` still forces `HeightFit` below: its one band is still
+	// wider than the panel and its content is what travels.)
+	if (panel == MascotPanel::Background && layout.mode == MascotMode::Scroll)
+		return layout.fill;
 	if (layout.mode == MascotMode::Static)
 		return layout.fill;
 	if (layout.mode == MascotMode::Stripes
@@ -1061,11 +1095,26 @@ int MascotController::bandCount(MascotPanel panel) const
 
 int MascotController::backgroundBandCount() const
 {
+	// (M4 Task 6: `Scroll` is the seamless marquee now, so it answers the same funded prefix
+	// `Stripes` does -- the bands the budget actually bought out of
+	// `mascots_background_stripes` -- instead of the single full-window band the old pan drew
+	// inside. `Static` keeps its one band, and its two-player crossfade with it.)
 	if (this->backgroundPlayers <= 0)
 		return 0;
-	if (this->backgroundLayout.mode == MascotMode::Stripes)
+	if (this->backgroundLayout.mode == MascotMode::Stripes
+		|| this->backgroundLayout.mode == MascotMode::Scroll)
 		return std::min(this->backgroundStripes, this->backgroundPlayers);
 	return 1;
+}
+
+bool MascotController::backgroundMarqueeActive(MascotPanel panel) const
+{
+	// M4 Task 6: the marquee needs a divisor (`count - 1`), so one funded band is answered as a
+	// static full-window cell by bandRects() and never reaches the translating path. `Static` and
+	// `Stripes` keep their own shapes, so this is the only mode whose layout the driver rewrites.
+	return panel == MascotPanel::Background
+		&& this->layoutFor(panel).mode == MascotMode::Scroll
+		&& this->bandCount(panel) >= 2;
 }
 
 bool MascotController::bandMirrorsLeft(int bandIndex) const
@@ -1089,8 +1138,21 @@ QVector<QRectF> MascotController::bandRects(MascotPanel panel) const
 	// (M3 Task 5: the key is read and the axis comes from stripesStackVertically(). A `Vertical`
 	// `Stripes` panel is sliced into columns instead, and every single-band mode still asks for the
 	// top-to-bottom answer -- which `slicedBandRects()` answers with the panel itself.)
-	return slicedBandRects(QRectF(state.surface->rect()), this->bandCount(panel),
-		this->stripesStackVertically(panel));
+	// (M4 Task 6: the background's `Scroll` is the one case that is not a slice: its cells are the
+	// marquee rects, translated by the panel's own pixel offset. The pair's `Scroll` still slices
+	// its one full-panel band and pans the content inside it; `Stripes` on either kind of panel
+	// still slices exactly as before.)
+	const QRectF frame(state.surface->rect());
+	if (this->backgroundMarqueeActive(panel)) {
+		const int count = this->bandCount(panel);
+		const bool vertical = this->scrollPanIsVertical(panel);
+		QVector<QRectF> rects;
+		rects.reserve(count);
+		for (int i = 0; i < count; ++i)
+			rects.push_back(marqueeBandRect(frame, count, i, state.marqueeOffset, vertical));
+		return rects;
+	}
+	return slicedBandRects(frame, this->bandCount(panel), this->stripesStackVertically(panel));
 }
 
 bool MascotController::stripesStackVertically(MascotPanel panel) const
@@ -1686,6 +1748,13 @@ bool MascotController::scrollPanIsVertical(MascotPanel panel) const
 	// the *panning* axis, perpendicular to stripesStackVertically()'s stacking axis, and
 	// effectiveFillMode() must answer the matching normalised mode or the travel here is 0.)
 	const PanelLayout& layout = this->layoutFor(panel);
+	// (M4 Task 6: the background's marquee is one-dimensional and takes its axis from the panel's
+	// own orientation key, because `Scroll` no longer inherits the pair's "horizontal by
+	// definition" rule -- its cells travel along whichever axis they were configured for, and the
+	// offset is the same pixel displacement either way. The pair keeps the answer above.)
+	if (panel == MascotPanel::Background
+		&& (layout.mode == MascotMode::Scroll || layout.mode == MascotMode::Stripes))
+		return layout.orientation == StripesOrientation::Vertical;
 	return layout.mode == MascotMode::Stripes
 		&& layout.orientation == StripesOrientation::Vertical;
 }
@@ -1782,6 +1851,13 @@ void MascotController::resetScrollOffsets(MascotPanel panel)
 	// band's horizontal position means nothing on a column of a vertical `Stripes` panel -- which
 	// is why applyMode() now calls this on every mode change and not only into `Static`.)
 	state.scrollPhase = 0.0;
+	// (M4 Task 6: the marquee's pass is a pixel displacement rather than a phase, so it is reset
+	// beside the phase it replaces. Starting a new layout from the near end is the same rule the
+	// fraction follows: a mode change must not inherit a position measured on the old cell size,
+	// and the pingpong latch has no meaning across two different `total`s.)
+	state.marqueeOffset = 0.0;
+	state.marqueePingpongSign = 1.0;
+	state.marqueeLegDistance = 0.0;
 }
 
 void MascotController::onScrollTick()
@@ -1848,6 +1924,66 @@ void MascotController::onScrollTick()
 		MascotSurface* surface = state.surface.data();
 		if (!surface || state.bands.empty())
 			continue;
+		// M4 Task 6: the background's `Scroll` is the seamless marquee. Its cells are translated
+		// by a pixel offset, so this is not the phase path below: the rectangle is the property
+		// that moves, and the offset is kept in pixels so `speed` stays a px/s rate across resizes.
+		// A background `Scroll` with only one funded band is the static-cell case and takes no
+		// phase path either -- its content must not pan inside the full-window cell.
+		if (panel == MascotPanel::Background && layout.mode == MascotMode::Scroll) {
+			if (!this->backgroundMarqueeActive(panel))
+				continue;
+			const QRectF frame(surface->rect());
+			const double axisLen = vertical ? frame.height() : frame.width();
+			const int count = static_cast<int>(state.bands.size());
+			if (axisLen <= 0.0 || count < 2)
+				continue;
+			const double cellLen = axisLen / static_cast<double>(count - 1);
+			const double total = static_cast<double>(count) * cellLen;
+			const double speed = static_cast<double>(layout.scrollSpeed);
+			double sign = reverse ? -1.0 : 1.0;
+			if (pingpong)
+				sign *= state.marqueePingpongSign;
+			const double offsetBefore = state.marqueeOffset;
+			const double offsetAfter = offsetBefore + sign * speed * dtSeconds;
+			state.marqueeOffset = offsetAfter;
+			// `|offset|` advancing by one `total` is one complete cycle: the sign flips there, and
+			// the modulo placement makes the flip seamless. The leftover distance is kept so a
+			// frame that straddles the fold does not lose the part of the leg after it.
+			if (pingpong && speed > 0.0) {
+				state.marqueeLegDistance += std::abs(speed * dtSeconds);
+				if (state.marqueeLegDistance >= total) {
+					const double legs = std::floor(state.marqueeLegDistance / total);
+					state.marqueeLegDistance = std::fmod(state.marqueeLegDistance, total);
+					if (std::fmod(legs, 2.0) != 0.0)
+						state.marqueePingpongSign = -state.marqueePingpongSign;
+				}
+			}
+			for (int i = 0; i < count; ++i) {
+				MascotBand* band = state.band(i);
+				if (!band)
+					continue;
+				// The one-write path for a moving cell: the rectangle *is* the pan, so a changed
+				// rect is written and an unchanged one is not -- the same per-tick rule the offset
+				// path below keeps. No setSlotScrollOffset() is involved on this path at all.
+				const QRectF rect = marqueeBandRect(frame, count, i, offsetAfter, vertical);
+				if (rect != band->rect())
+					band->setRect(rect);
+				if (band->hasWrapCommit()) {
+					// A cell's seam is its unwrapped position crossing a multiple of `total`: that
+					// is the frame it leaves the window, which is when the next clip may take its
+					// place. Both travel senses are the same comparison.
+					const double rawBefore = static_cast<double>(i) * cellLen + offsetBefore;
+					const double rawAfter = static_cast<double>(i) * cellLen + offsetAfter;
+					const bool seam = std::floor(rawBefore / total) != std::floor(rawAfter / total);
+					if (seam) {
+						MascotBand::WrapCommit commit = band->takeWrapCommit();
+						if (commit)
+							wrapCommits.push_back(std::move(commit));
+					}
+				}
+			}
+			continue;
+		}
 		// One phase per panel (the plan's step 1): the bands of a panel are one pass, and Task 5
 		// staggers them with per-band offsets instead of a second clock. The pass is measured
 		// against the panel's widest band, because the speed is a px/s rate and that is the longest
@@ -2341,6 +2477,19 @@ void MascotController::createSurfaces()
 	this->setSurfaces(left, right);
 }
 
+void MascotController::refreshBackgroundBackdrop()
+{
+	// M4 Task 6: the layer's holes -- the letterbox bars of a `Fit` cell and the empty surface of a
+	// layer with no band -- would otherwise be the quick widget's opaque black. Painting the
+	// application's own window colour behind every slot makes those pixels indistinguishable from
+	// the window, which is the point: the layer becomes scenery, not a black sheet. Only the
+	// background surface is ever handed this; the pair and the columns keep the QML defaults.
+	MascotSurface* surface = this->backgroundState.surface.data();
+	if (!surface || !this->App)
+		return;
+	surface->setBackdrop(this->App->palette().color(QPalette::Window), true);
+}
+
 void MascotController::updateBackgroundVisibility()
 {
 	MascotSurface* surface = this->backgroundState.surface.data();
@@ -2418,6 +2567,10 @@ void MascotController::createBackgroundSurface()
 	// configured presentation instead of at the QML default. Zero is applied like any other value:
 	// it is presentation, and no band decision reads it.
 	surface->setSurfaceOpacity(this->backgroundOpacity);
+	// M4 Task 6: the app's own window colour behind the layer, enabled from the moment the surface
+	// exists -- including the zero-player case, where the whole layer is one backdrop-coloured
+	// sheet that updateBackgroundVisibility() then hides for the reason that predates this task.
+	this->refreshBackgroundBackdrop();
 	// The slot rectangles are written from the surface's geometry, so the layout is settled here:
 	// the enable path reaches this before any window resize (applyConfig() also calls updateLayout()
 	// later in the same turn, which is idempotent). Without it a surface created after
@@ -4212,7 +4365,10 @@ void MascotController::applyBackgroundBudget()
 		// `Scroll` and `Stripes` give every band one player, so the spend is one per band the mode
 		// has: one band for `Scroll`, `mascots_background_stripes` for `Stripes`. The clamp by
 		// `remaining` is what makes the band count a funded prefix rather than a wish.
-		const int wantedBands = mode == MascotMode::Stripes ? this->backgroundStripes : 1;
+		// (M4 Task 6: `Scroll` is the marquee now and spends `mascots_background_stripes` as well --
+		// both panning modes use the same "how many clips are in play" key, and the funded prefix
+		// is still the clamp.)
+		const int wantedBands = this->backgroundStripes;
 		players = std::min(remaining, wantedBands);
 	}
 	this->backgroundPlayers = players;
@@ -4674,6 +4830,22 @@ bool MascotController::bandReachesSeam(MascotPanel panel, const MascotBand& band
 		return false;
 	if (layout.scrollSpeed <= 0)
 		return false;
+	// (M4 Task 6: the marquee always reaches a wrap -- every cell crosses a multiple of `total`
+	// within one cycle -- so a queued advance may defer to it whenever the driver is running and
+	// the axis has a length. The travel test below is the content-pan question and does not apply:
+	// a marquee cell's own content does not move inside it any more. A background `Scroll` with
+	// only one funded band is the static-cell case, so it has no seam at all and the caller commits
+	// now rather than queueing a change no tick would ever run.)
+	if (panel == MascotPanel::Background && layout.mode == MascotMode::Scroll) {
+		if (!this->backgroundMarqueeActive(panel))
+			return false;
+		const PanelState& marqueeOwner = this->stateFor(panel);
+		if (!marqueeOwner.surface)
+			return false;
+		const QRectF frame(marqueeOwner.surface->rect());
+		const double axisLen = this->scrollPanIsVertical(panel) ? frame.height() : frame.width();
+		return axisLen > 0.0;
+	}
 	const double travel = this->scrollTravel(panel, band);
 	if (travel <= 0.0)
 		return false;

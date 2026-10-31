@@ -1,5 +1,6 @@
 #pragma once
 #include "MascotMedia.h"
+#include <QColor>
 #include <QPointF>
 #include <QPointer>
 #include <QRectF>
@@ -115,6 +116,13 @@ public:
 	// draw with. Clamped the way setSlotOpacity() clamps, and there is deliberately no slot
 	// equivalent for it: a per-slot opacity is setSlotOpacity() and stays a different thing.
 	void setSurfaceOpacity(double opacity);
+	// M4 Task 6: the colour a layer with a hole in it shows instead of the quick widget's opaque
+	// black. Both values are written on the QML root item, the same path setSurfaceOpacity()
+	// takes: `backdropColor` fills a Rectangle that is the root's first child and `backdropVisible`
+	// shows or hides it. The slots are declared after that rectangle, so they stay above it. A
+	// surface that never calls this keeps the QML defaults (transparent, hidden) and draws exactly
+	// as it did, which is what makes the pair's and the columns' surfaces backdrop-free.
+	void setBackdrop(const QColor& colour, bool enabled);
 
 signals:
 	// Emitted for a release over a slot; `slot` is always a valid index, so a release outside

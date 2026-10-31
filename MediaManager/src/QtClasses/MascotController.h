@@ -164,6 +164,12 @@ public:
 	// one full-panel rectangle for `Static` and `Scroll`, which is the rectangle this wrote
 	// before modes existed.)
 	void updateLayout();
+	// M4 Task 6: re-writes the background layer's backdrop from the application palette. Called
+	// where the colour can have changed -- from applyConfig(), which is every settings Apply, and
+	// once when the surface is built -- because MainWindow::changePalette() is not this class's to
+	// edit. The pair's and the columns' surfaces are never touched: the backdrop exists only on the
+	// layer, and a surface that never receives a setBackdrop() keeps the QML defaults.
+	void refreshBackgroundBackdrop();
 
 	// ---- M3 Task 2: the layout mode ----
 	// The mode value as this class reads it, case-insensitively. `ok` is false for anything that
@@ -364,6 +370,20 @@ private:
 		// of a panel are one pass, and Task 5 staggers them with per-band offsets instead of a
 		// second clock.
 		double scrollPhase = 0.0;
+		// ---- M4 Task 6: the background marquee's own pass ----
+		// `Scroll` on the background is a seamless marquee of N cells, not a content pan inside one
+		// band, so its offset is a pixel displacement rather than a fraction of a travel: the cells
+		// translate by `speed * dt` along the surface's axis and wrap at `N * cellLen`. It is kept
+		// per panel like every other pass, and the pair's `scrollPhase` above is untouched by it.
+		double marqueeOffset = 0.0;
+		// Pingpong's direction latch: +1/-1, flipped once per complete cycle (the distance below
+		// reaching one `total`). Seeded at +1 so the configured direction decides the first leg;
+		// the modulo placement makes the flip invisible at the seam.
+		double marqueePingpongSign = 1.0;
+		// How far the current pingpong leg has travelled, so "one complete cycle" is a distance
+		// rather than a phase. Only written while `mascots_background_scroll_pingpong` is on; a
+		// non-pingpong marquee wraps forever and never reads it.
+		double marqueeLegDistance = 0.0;
 		// One entry per band: the zero-travel line has been written since the last mode change. The
 		// line is a statement about the content, so it is written once per band per mode change
 		// rather than once per tick (the M2 rate-limit pattern); it is sized with `bands` by
@@ -800,6 +820,12 @@ private:
 	// `min(mascots_background_stripes, backgroundPlayers)` for `Stripes`. bandCount() and
 	// videoBandsFor() both answer with it, so the two can never disagree about a band existing.
 	int backgroundBandCount() const;
+	// M4 Task 6: whether `panel` draws the background marquee -- the background in `Scroll` with at
+	// least two funded bands. One funded band is deliberately not a marquee: dividing by `N - 1`
+	// would be a division by zero, and a single cell covering the window is the same picture with no
+	// translation and no wrap, so bandRects() answers it the full surface and the tick leaves it
+	// alone.
+	bool backgroundMarqueeActive(MascotPanel panel) const;
 	// Whether `bandIndex` of `side` may own a player under the current mode and budget: the guard
 	// ensureVideoSlots() creates from and the answer Task 6's pick path will ask before it lets a
 	// band become a video. `Static` is band 0 only.

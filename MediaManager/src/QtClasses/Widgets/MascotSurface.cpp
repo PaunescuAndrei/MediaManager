@@ -399,6 +399,19 @@ void MascotSurface::setSurfaceOpacity(double opacity)
 	this->root->setProperty("opacity", opacity > 1.0 ? 1.0 : opacity);
 }
 
+void MascotSurface::setBackdrop(const QColor& colour, bool enabled)
+{
+	// The two root properties MascotSurface.qml turns into a filling Rectangle behind the slots.
+	// Written like setSurfaceOpacity() writes `opacity`, and for the same reason: the value travels
+	// inside the scene graph rather than through a widget-level effect. No mirrored Slot value is
+	// kept -- a backdrop is the surface's, not a slot's, and a delegate created later is drawn
+	// above the rectangle because the Repeater is declared after it.
+	if (!this->root)
+		return;
+	this->root->setProperty("backdropColor", colour);
+	this->root->setProperty("backdropVisible", enabled);
+}
+
 void MascotSurface::mousePressEvent(QMouseEvent* event)
 {
 	// A press over a slot is consumed here for two reasons: Qt routes the matching release to

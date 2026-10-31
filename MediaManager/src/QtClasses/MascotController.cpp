@@ -20,6 +20,10 @@ namespace {
 	// The tag every video line carries, in the message as well as in the Logger's type: the line
 	// is read from OutputDebugString by the gate's harness, which only sees the message.
 	const QString VIDEO_LOG_TAG = QStringLiteral("MASCOT-VIDEO: ");
+	// M3 Task 4: the same tag arrangement for the scroll driver's lines. A separate prefix and a
+	// separate Logger type so a run can be read for the pan alone, and so a config that never pans
+	// logs nothing under it at all.
+	const QString SCROLL_LOG_TAG = QStringLiteral("MASCOT-SCROLL: ");
 
 	// Two panels, two players each for the crossfade: the budget `mascots_max_decoders` has to
 	// fit before the full design is possible. The second tier -- one player per panel -- is what
@@ -134,6 +138,106 @@ namespace {
 		}
 		return rects;
 	}
+
+	// ---- M3 Task 4: the scroll driver's arithmetic ----
+	// Everything below is pure geometry with no QML and no config in it, so the pan can be reasoned
+	// about (and its wrap points counted) without a surface, a timer or a screenshot. The driver's
+	// job is the four lines that turn these into one property write per band.
+
+	// ~60 fps is what §7.6 asks for ("~16 ms"). A precise timer is the one Qt will not coalesce
+	// into the coarse 15 ms/1 s buckets, which at 40 px/s would show as a stutter rather than a
+	// pan -- and this timer runs on the GUI thread, so a coarse one would also make its wakeups
+	// less predictable.
+	constexpr int SCROLL_TICK_MS = 16;
+
+	// `mascots_scroll_speed` is a px/s rate, clamped where it is read. The floor is 0 (the band
+	// stands still) rather than the absolute value: a negative speed must not silently invert the
+	// direction the user asked for, because `mascots_scroll_direction` is the only thing that
+	// decides the sense. The ceiling is far above any speed a panel this size can show as motion
+	// instead of a strobe, and it bounds the one multiplication a tick does.
+	constexpr int MAX_SCROLL_SPEED = 2000;
+
+	// The phase accumulates in travel lengths, and two of them make one pingpong cycle: the first
+	// unit interval is the forward pass, the second the return leg. Keeping both kinds of seam in
+	// one accumulator is what makes "a resize preserves the phase" one stored number per panel
+	// instead of a phase per axis, per direction or per band.
+	constexpr double SCROLL_PHASE_SPAN = 2.0;
+
+	// One tick's advance of a phase, `delta` in travel lengths, wrapped with fmod. fmod and not a
+	// clamp: a tick that missed (a drag, a slow frame, a suspended machine) must land somewhere
+	// inside the pass rather than have the whole missed distance played back as a pan, which is
+	// what "a stall cannot make a band jump by more than one travel" means for the drawn position.
+	double advancedScrollPhase(double phase, double delta)
+	{
+		double next = std::fmod(phase + delta, SCROLL_PHASE_SPAN);
+		if (next < 0.0)
+			next += SCROLL_PHASE_SPAN;
+		return next;
+	}
+
+	// The fraction of its own travel one band has covered: 0 is the content's near end (its left
+	// edge flush with the band's left edge, or its top with the band's top) and 1 its far end.
+	// `offset` is the band's share of the pass (Task 5's `index / count` stagger), in the same
+	// travel-length units, so a staggered band is simply a band whose pass starts later. Wrap keeps
+	// fmod's sawtooth -- the seam is the jump back to 0 -- and pingpong folds the second interval
+	// back on itself, so the same phase gives a reflection instead of a jump.
+	double scrollFractionFor(double phase, double offset, bool pingpong)
+	{
+		const double span = pingpong ? SCROLL_PHASE_SPAN : 1.0;
+		double unit = std::fmod(phase + offset, span);
+		if (unit < 0.0)
+			unit += span;
+		if (!pingpong)
+			return unit;
+		return unit <= 1.0 ? unit : SCROLL_PHASE_SPAN - unit;
+	}
+
+	// The translate a fraction asks for, in pixels, on the band's pan axis. The surface centres the
+	// content, so the pan runs from +travel/2 -- the content's near end flush with the band's near
+	// edge -- to -travel/2, one whole travel: the spec's "0 -> -(contentWidth - panelWidth)" with
+	// the centring the surface already applies added to both ends. `reverse` swaps the two ends and
+	// leaves the span (and therefore the speed) alone.
+	double scrollOffsetFor(double fraction, double travel, bool reverse)
+	{
+		const double travelled = reverse ? 1.0 - fraction : fraction;
+		return (0.5 - travelled) * travel;
+	}
+
+	// `mascots_scroll_direction`'s resolved sense as the log spells it, so the line Ruling M3-4
+	// asks for reads without knowing the enum.
+	QString scrollSenseLabel(bool reverse)
+	{
+		return reverse ? QStringLiteral("right to left") : QStringLiteral("left to right");
+	}
+
+	QString scrollAxisLabel(bool vertical)
+	{
+		return vertical ? QStringLiteral("vertical") : QStringLiteral("horizontal");
+	}
+
+	QString modeLabel(MascotMode mode)
+	{
+		switch (mode) {
+		case MascotMode::Scroll:
+			return QStringLiteral("Scroll");
+		case MascotMode::Stripes:
+			return QStringLiteral("Stripes");
+		case MascotMode::Static:
+			break;
+		}
+		return QStringLiteral("Static");
+	}
+
+	// The cheap half of "a user can see this window": visible and not minimized, both of which are
+	// Qt flags. The other half -- not covered by another top-level window -- is
+	// utils::IsMyWindowVisible()'s IsMyWindowCovered(), which walks every top-level window and
+	// builds and combines GDI regions. That is affordable at the beat cadence and at a settings
+	// Apply, and not affordable 60 times a second, so a tick asks this and leaves the covered case
+	// to the event-driven reconciliation (see scrollCanTick()).
+	bool windowOnScreen(const QWidget* window)
+	{
+		return window && window->isVisible() && !window->isMinimized();
+	}
 }
 
 MascotController::MascotController(MainApp* App, MascotImageCache* cache, MascotPrefetcher* prefetcher,
@@ -212,11 +316,19 @@ void MascotController::start()
 	// before -- while in Stripes the loop's per-band guards skip the band that is already loading.
 	if (this->bandCount(MascotSide::Left) > 1 || this->bandCount(MascotSide::Right) > 1)
 		this->fillEmptyBands();
+	// M3 Task 4: the pan starts here. It is asked rather than assumed because the answer also
+	// depends on the window the surfaces just landed in: a controller enabled while its window is
+	// minimized starts with the driver stopped, exactly as it starts with the players paused.
+	this->updateScrollDriver();
 }
 
 void MascotController::stop()
 {
 	this->running = false;
+	// M3 Task 4: first, before anything below touches a surface or a band: a tick that arrived
+	// after the surfaces were released would write into a slot state that is being destroyed.
+	// Stopping the timer costs one comparison on a controller that never scrolled.
+	this->stopScrollDriver();
 	this->disconnectBeats();
 	// The cadence, the pause state and the window watch belong to a running controller: a clip
 	// timer that survived a disable would advance a panel that is no longer there, and the next
@@ -383,6 +495,52 @@ void MascotController::applyConfig()
 			<< "is not one of Crop, Fit, Stretch, HeightFit or WidthFit; using HeightFit.";
 	}
 
+	// M3 Task 4: the scroll driver's three keys, read here under the same "one reader" rule as
+	// every key above: the tick answers from these cached values, so a settings change cannot land
+	// one frame late and no tick reads the config. `mascots_scroll_speed` is clamped in px/s with 0
+	// as its floor -- a negative speed means "stand still", not "reverse", because the direction
+	// key is the only thing that decides the sense (clampedConfigInt() applies the floor to a
+	// number the user wrote and falls back to the documented default for one that does not parse).
+	this->scrollSpeed = clampedConfigInt(config, QStringLiteral("mascots_scroll_speed"), 40, 0, MAX_SCROLL_SPEED);
+	this->scrollDirectionText = config->get(QStringLiteral("mascots_scroll_direction"));
+	bool directionOk = false;
+	const ScrollDirection parsedDirection =
+		MascotController::scrollDirectionFromString(this->scrollDirectionText, &directionOk);
+	this->scrollDirection = directionOk ? parsedDirection : ScrollDirection::LeftToRight;
+	this->scrollPingpong = config->get_bool(QStringLiteral("mascots_scroll_pingpong"));
+
+	// The same one-warning latch as the three blocks above, for the same reason. The fallback is
+	// `LeftToRight`: a value this class cannot read must not stop a band from panning, and the
+	// default is also what the mode's axis would give a vertical direction here (Ruling M3-4). An
+	// empty value is not reported: that is the key simply not being written.
+	if (!this->warnedUnsupportedScrollDirection && !this->scrollDirectionText.isEmpty() && !directionOk) {
+		this->warnedUnsupportedScrollDirection = true;
+		this->logScroll(QStringLiteral("mascots_scroll_direction=\"%1\" is not one of LeftToRight, RightToLeft, TopToBottom or BottomToTop; using LeftToRight")
+			.arg(this->scrollDirectionText));
+		// The ungated warning beside the debug line, exactly as the blocks above have it: a typo
+		// here changes the sense every panning band travels in, and a debug-gated line is invisible
+		// in the run where the user needs to see why.
+		qWarning() << "mascots_scroll_direction:" << this->scrollDirectionText
+			<< "is not one of LeftToRight, RightToLeft, TopToBottom or BottomToTop; using LeftToRight.";
+	}
+
+	// Ruling M3-4: a direction whose axis disagrees with the mode's pan axis keeps its *sense* and
+	// takes the mode's axis -- the user asked for a band that scrolls, so the action is
+	// unambiguous -- and says so once per configured value rather than once per tick. It is said
+	// only while a mode with a pan in it is configured: a `Static` panel has no axis to disagree
+	// with, and complaining about a key nothing reads would be noise.
+	if (this->mascotMode != MascotMode::Static
+		&& this->scrollDirectionIsVertical() != this->scrollPanIsVertical()
+		&& this->loggedScrollDirection != this->scrollDirectionText) {
+		this->loggedScrollDirection = this->scrollDirectionText;
+		this->logScroll(QStringLiteral("mascots_scroll_direction=\"%1\" names a %2 direction but %3 pans %4; taking the mode's axis and travelling %5")
+			.arg(this->scrollDirectionText,
+				scrollAxisLabel(this->scrollDirectionIsVertical()),
+				modeLabel(this->mascotMode),
+				scrollAxisLabel(this->scrollPanIsVertical()),
+				scrollSenseLabel(this->scrollDirectionReverses())));
+	}
+
 	this->source.setAllFilesRandom(config->get_bool("mascots_allfiles_random"));
 	// The weighted/uniform switch is one of the source's two config-derived inputs, and the
 	// source reads no config: it is pushed here and again before every video pick, so a change
@@ -453,6 +611,11 @@ void MascotController::applyConfig()
 	// A config apply can change `mascots_pause_unfocused` or the clip length under a running
 	// panel, so the new rules are applied to what is playing now.
 	this->applyVideoPaused();
+	// M3 Task 4: the scroll driver follows the same rules and one more -- it exists only while a
+	// mode with a pan in it is configured and the panels can be seen. Reconciled after applyMode()
+	// above, so a change of mode starts or stops it in the same turn the layout changed, and after
+	// applyDisplay() so a panel leaving `Scroll` has already had its offset reset by applyMode().
+	this->updateScrollDriver();
 	// The clip timer is re-derived as well, because the mirror key and the clip length are both
 	// inputs to it: the right panel's timer is stopped while the pair is mirrored, so turning the
 	// key off mid-run would otherwise leave that panel on its clip until its next commit. The cost
@@ -526,6 +689,28 @@ MascotSurface::FillMode MascotController::fillModeFromString(const QString& valu
 	return MascotSurface::FillMode::HeightFit;
 }
 
+ScrollDirection MascotController::scrollDirectionFromString(const QString& value, bool* ok)
+{
+	// M3 Task 4: same shape as the two parsers above, for the same reason -- one place turns the
+	// configured text into the value the driver reads, so no tick ever parses a string. The
+	// fallback is `LeftToRight`, the documented default *and* the sense a horizontal pan takes
+	// from a vertical direction (Ruling M3-4), so an unreadable value still pans rather than
+	// stopping the band.
+	if (ok)
+		*ok = true;
+	if (value.compare(QStringLiteral("LeftToRight"), Qt::CaseInsensitive) == 0)
+		return ScrollDirection::LeftToRight;
+	if (value.compare(QStringLiteral("RightToLeft"), Qt::CaseInsensitive) == 0)
+		return ScrollDirection::RightToLeft;
+	if (value.compare(QStringLiteral("TopToBottom"), Qt::CaseInsensitive) == 0)
+		return ScrollDirection::TopToBottom;
+	if (value.compare(QStringLiteral("BottomToTop"), Qt::CaseInsensitive) == 0)
+		return ScrollDirection::BottomToTop;
+	if (ok)
+		*ok = false;
+	return ScrollDirection::LeftToRight;
+}
+
 MascotSurface::FillMode MascotController::effectiveFillMode() const
 {
 	// `Static` is the one mode whose band is the whole panel and therefore has no panning axis to
@@ -593,6 +778,23 @@ void MascotController::applyMode()
 	}
 	this->appliedMode = this->mascotMode;
 	this->modeApplied = true;
+	// M3 Task 4: a mode change starts a fresh pass -- the phase is a fraction of a travel whose
+	// meaning has just changed -- and re-arms the per-band zero-travel line, which is a statement
+	// about the layout and not about the session. A count change alone leaves both alone: the
+	// surviving bands keep their position, so a `Stripes` count change reads as a relayout rather
+	// than as a jump.
+	if (modeChanged) {
+		for (SideState* state : { &this->leftState, &this->rightState }) {
+			state->scrollPhase = 0.0;
+			state->scrollZeroTravelLogged.fill(false);
+		}
+		// And a mode with no pan in it has no offset: `Static` must draw the picture the panel drew
+		// before modes existed, so the last pan position is taken off the slots here rather than
+		// left for the surface to replay (applySlot() restores every mirrored value, the scroll
+		// offset among them).
+		if (this->mascotMode == MascotMode::Static)
+			this->resetScrollOffsets();
+	}
 	// The rectangles follow a count or a mode change, and the surface is resized in place rather
 	// than replaced: a band that survives the change keeps its media and its players (Review
 	// Focus 1), and the thing drawing the panel never goes away underneath it. A first run after
@@ -648,6 +850,11 @@ void MascotController::syncBands(SideState& state, MascotSide side)
 		state.bands.push_back(std::move(created));
 	}
 	state.configuredBandCount = wanted;
+	// M3 Task 4: the per-band zero-travel latch travels with the bands. A surviving band keeps
+	// whether its line was already written -- nothing about its content changed -- and an index
+	// that has just appeared starts un-written, so a band added by a count change says its piece
+	// once.
+	state.scrollZeroTravelLogged.resize(wanted);
 	// The destroyed bands are no longer owner fields, so the pin invariant is re-established for
 	// each path they held: the fields are gone first and every path whose ownership that changed
 	// is re-evaluated afterwards, exactly as every other path in this class does it.
@@ -733,6 +940,302 @@ void MascotController::updateLayout()
 	if (!window && this->rightState.surface)
 		window = this->rightState.surface->window();
 	this->watchWindow(window);
+}
+
+double MascotController::scrollTravel(const MascotBand& band) const
+{
+	// The one geometry source (Task 3's seam): slotContentSize() answers the size the media is
+	// actually painted at -- an invalid slot gives (0,0) and a slot with no media gives its own
+	// size, so neither invents a pan -- and the band's rectangle is the window onto it. Travel is
+	// the overflow the pan can spend on the mode's axis; zero means the content fits its band, so
+	// the band stands still (Ruling M3-6) and the tick writes nothing for it.
+	MascotSurface* surface = band.surface();
+	if (!surface)
+		return 0.0;
+	const bool vertical = this->scrollPanIsVertical();
+	const QSizeF content = surface->slotContentSize(band.slotIndex());
+	const QRectF rect = band.rect();
+	const double contentExtent = vertical ? content.height() : content.width();
+	const double bandExtent = vertical ? rect.height() : rect.width();
+	const double travel = contentExtent - bandExtent;
+	return travel > 0.0 ? travel : 0.0;
+}
+
+void MascotController::startScrollDriver()
+{
+	if (!this->scrollTimer) {
+		// Built on the first start rather than in the constructor: a `Static` config -- the default,
+		// and the regression line every task of this milestone is measured against -- creates no
+		// timer at all, and a scroll-capable mode asks for one here, once.
+		this->scrollTimer = new QTimer(this);
+		// Precise, because the coarse timer would round a 16 ms interval into a bucket that makes a
+		// 40 px/s pan visibly uneven; the interval is the plan's ~16 ms (60 fps, §7.10's budget).
+		this->scrollTimer->setTimerType(Qt::PreciseTimer);
+		this->scrollTimer->setInterval(SCROLL_TICK_MS);
+		connect(this->scrollTimer, &QTimer::timeout, this, &MascotController::onScrollTick);
+	}
+	if (this->scrollTimer->isActive())
+		return;
+	// The clock arms with the driver, never before it: a delta measured across a pause would be
+	// spent as a jump on the first tick after the resume, which is exactly the stall behaviour the
+	// wrap is there to bound, spent on time the panel was not even on screen.
+	this->scrollClock.start();
+	this->scrollTimer->start();
+}
+
+void MascotController::stopScrollDriver()
+{
+	if (!this->scrollTimer || !this->scrollTimer->isActive())
+		return;
+	this->scrollTimer->stop();
+	// Invalid, not merely stopped: every start re-arms the clock, and a stale elapsed time is the
+	// one thing a stop exists to get rid of.
+	this->scrollClock.invalidate();
+}
+
+void MascotController::updateScrollDriver()
+{
+	if (this->scrollShouldRun())
+		this->startScrollDriver();
+	else
+		this->stopScrollDriver();
+}
+
+bool MascotController::scrollShouldRun() const
+{
+	if (!this->running)
+		return false;
+	// `Static` is one band covering the whole panel: there is nowhere for it to pan, and it is the
+	// mode every task's regression gate draws. `Scroll` and `Stripes` both pan -- Task 5 owns a
+	// stripe's stagger and its alternate direction, not its motion -- so one comparison covers
+	// both.
+	if (this->mascotMode == MascotMode::Static)
+		return false;
+	if (!this->panelsVisible())
+		return false;
+	// The pause rule the players already obey (§7.13), reused rather than reinvented: hidden and
+	// minimized are caught by panelsVisible() whether `mascots_pause_unfocused` is on or off, and
+	// the key itself decides whether a merely unfocused window stops the pan as it stops decoding.
+	return !this->videoShouldPause();
+}
+
+bool MascotController::scrollCanTick() const
+{
+	if (!this->running || this->mascotMode == MascotMode::Static)
+		return false;
+	MascotSurface* surface = this->leftState.surface ? this->leftState.surface.data()
+		: this->rightState.surface.data();
+	if (!surface || !surface->isVisible())
+		return false;
+	// Hidden and minimized are "cannot be seen" whatever the config says, so they are tested here
+	// and not left to `mascots_pause_unfocused` (videoShouldPause() answers false as soon as that
+	// key is off, which is right for a player and wrong for a timer nobody can see). The covered
+	// case is deliberately not asked: IsMyWindowVisible() costs more per call than a whole tick
+	// does, and the event-driven reconciliation stops the driver when the window itself changes
+	// state.
+	if (!windowOnScreen(surface->window()))
+		return false;
+	return !this->videoShouldPause();
+}
+
+bool MascotController::panelsVisible() const
+{
+	MascotSurface* surface = this->leftState.surface ? this->leftState.surface.data()
+		: this->rightState.surface.data();
+	if (!surface || !surface->isVisible())
+		return false;
+	QWidget* window = surface->window();
+	// IsMyWindowVisible() is the honest "a user can see it": a minimized window is still visible in
+	// Qt's sense and a covered one is not visible in the OS's.
+	return window && utils::IsMyWindowVisible(window);
+}
+
+bool MascotController::scrollPanIsVertical() const
+{
+	// Ruling M3-4 in code: `Scroll` pans horizontally. §7.6 defines it as content sized wider than
+	// the panel, and effectiveFillMode() forces the matching HeightFit for it, so the overflow this
+	// driver has to spend is the width -- a vertical pan here would travel through a band that only
+	// ever exposes one strip of the picture. `Stripes` stacks horizontally too until Task 5 reads
+	// `mascots_stripes_orientation`; that key is the one place this answer changes, and no other
+	// line in the driver needs to know which axis it got.
+	return false;
+}
+
+bool MascotController::scrollDirectionReverses() const
+{
+	// The direction names the order a pass visits the content in, and the two "reverse" values are
+	// its opposite (see ScrollDirection). A band whose pan axis disagrees with the direction's
+	// therefore keeps its *sense* by keeping that order: TopToBottom on a horizontal band is the
+	// forward pass, BottomToTop the backward one (Ruling M3-4, logged once by applyConfig()).
+	return this->scrollDirection == ScrollDirection::RightToLeft
+		|| this->scrollDirection == ScrollDirection::BottomToTop;
+}
+
+bool MascotController::scrollDirectionIsVertical() const
+{
+	return this->scrollDirection == ScrollDirection::TopToBottom
+		|| this->scrollDirection == ScrollDirection::BottomToTop;
+}
+
+double MascotController::scrollPhaseOffset(const MascotBand& band) const
+{
+	// Task 5's seam (Ruling C1): the stagger is `index / count` of the pass, added to the panel's
+	// phase in the same travel-length units, so a staggered band is a band whose pass starts
+	// later. Nothing in this task staggers anything -- a single-band mode has one phase and no
+	// second band to disagree with it -- and the driver reads this per band per tick either way.
+	Q_UNUSED(band);
+	return 0.0;
+}
+
+bool MascotController::scrollReversed(const MascotBand& band) const
+{
+	// Task 5's other seam (Ruling C1): `mascots_stripes_alternate` reverses odd bands. It is a
+	// per-band sign applied on top of the configured direction rather than folded into it, so the
+	// two can be changed independently, and it is false here because nothing in this task
+	// reverses a band.
+	Q_UNUSED(band);
+	return false;
+}
+
+void MascotController::resetScrollOffsets()
+{
+	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
+		SideState& state = this->stateFor(side);
+		MascotSurface* surface = state.surface.data();
+		if (!surface)
+			continue;
+		for (auto& owned : state.bands) {
+			MascotBand* band = owned.get();
+			if (!band || band->scrollOffset() == 0.0)
+				continue;
+			// The one-write path, not an applySlot(): the slot's other values are untouched, and
+			// the surface's mirror keeps the 0 so a delegate QML recreates comes back centred.
+			surface->setSlotScrollOffset(band->slotIndex(), 0.0, 0.0);
+			band->setScrollOffset(0.0);
+		}
+	}
+	// The phase goes with the offsets it produced. A mode that stops panning has no pass to be
+	// halfway through, so a later return to a panning mode starts from the near end rather than
+	// from where the previous one happened to stop.
+	for (SideState* state : { &this->leftState, &this->rightState })
+		state->scrollPhase = 0.0;
+}
+
+void MascotController::onScrollTick()
+{
+	if (!this->scrollCanTick()) {
+		// The belt to updateScrollDriver()'s braces: a host can stop being visible without an event
+		// this class sees (a parent hidden underneath the host is one), and the rule is that a
+		// panel nobody can see costs nothing. Stop, rather than keep timing out into discarded
+		// work.
+		this->stopScrollDriver();
+		return;
+	}
+	if (!this->scrollClock.isValid()) {
+		// A driver started by a path that did not arm the clock: this tick only starts it, so the
+		// first delta is measured from now rather than from a stale start.
+		this->scrollClock.start();
+		return;
+	}
+	// restart() answers the milliseconds since the previous start and begins a new measurement in
+	// the same call, so the delta is the one frame's, never the whole run's.
+	const qint64 elapsedMs = this->scrollClock.restart();
+	// A clock that went backwards -- a suspended machine, an adjusted system clock -- must not run
+	// the pan in reverse: dt 0 is the honest answer, and the next tick measures again.
+	if (elapsedMs <= 0)
+		return;
+	const double dtSeconds = static_cast<double>(elapsedMs) / 1000.0;
+	const bool vertical = this->scrollPanIsVertical();
+	const bool reverse = this->scrollDirectionReverses();
+	const bool pingpong = this->scrollPingpong;
+	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
+		SideState& state = this->stateFor(side);
+		MascotSurface* surface = state.surface.data();
+		if (!surface || state.bands.empty())
+			continue;
+		// One phase per panel (the plan's step 1): the bands of a panel are one pass, and Task 5
+		// staggers them with per-band offsets instead of a second clock. The pass is measured
+		// against the panel's widest band, because the speed is a px/s rate and that is the longest
+		// travel the panel has; a panel whose bands all fit their content has no pass at all, so
+		// its phase does not advance and every band below takes the still branch.
+		double referenceTravel = 0.0;
+		for (const auto& owned : state.bands)
+			referenceTravel = std::max(referenceTravel, this->scrollTravel(*owned));
+		const double phaseBefore = state.scrollPhase;
+		double phaseRaw = phaseBefore;
+		if (referenceTravel > 0.0 && this->scrollSpeed > 0) {
+			// px/s -> travel lengths/s -> this tick's slice of a travel. A speed of 0 is not "pan
+			// infinitely slowly", it is "do not pan": the phase is left alone so that turning the
+			// speed back up resumes where the band was instead of having moved invisibly.
+			const double delta = static_cast<double>(this->scrollSpeed) * dtSeconds / referenceTravel;
+			phaseRaw = phaseBefore + delta;
+			state.scrollPhase = advancedScrollPhase(phaseBefore, delta);
+		}
+		for (int i = 0; i < static_cast<int>(state.bands.size()); ++i) {
+			MascotBand* band = state.band(i);
+			if (!band)
+				continue;
+			const double travel = this->scrollTravel(*band);
+			if (travel <= 0.0) {
+				// Nothing to pan: the band is centred and still (Ruling M3-6), and per tick it
+				// writes nothing at all. The one write it can owe is the transition off a previous
+				// offset -- a band whose content became narrower than its band would otherwise be
+				// re-centred by the surface's mirrored offset and stand still *off-centre* -- and
+				// that write happens once because the record below then reads 0.
+				if (band->scrollOffset() != 0.0) {
+					surface->setSlotScrollOffset(band->slotIndex(), 0.0, 0.0);
+					band->setScrollOffset(0.0);
+				}
+				// Said once per band per mode change: it is a statement about the content and the
+				// layout, not about a frame, so repeating it at tick rate would bury the lines the
+				// gate reads (the M2 rate-limit pattern). Only a band that has content can make the
+				// statement -- a band still waiting for its first pick also has travel 0 (an empty
+				// slot's painted size is its own rectangle), and letting that consume the latch
+				// would silence the line for the narrow picture that is the actual case.
+				if (!band->media().path.isEmpty() && !state.scrollZeroTravelLogged.value(i, false)) {
+					state.scrollZeroTravelLogged[i] = true;
+					const QSizeF content = surface->slotContentSize(band->slotIndex());
+					this->logScroll(QStringLiteral("%1 band %2 stands still: its content is %3x%4 and its band is %5x%6")
+						.arg(sideLabel(side))
+						.arg(i)
+						.arg(content.width(), 0, 'f', 0)
+						.arg(content.height(), 0, 'f', 0)
+						.arg(band->rect().width(), 0, 'f', 0)
+						.arg(band->rect().height(), 0, 'f', 0));
+				}
+				continue;
+			}
+			const double offsetPhase = this->scrollPhaseOffset(*band);
+			const double fraction = scrollFractionFor(state.scrollPhase, offsetPhase, pingpong);
+			// The configured direction and the band's own sign (Task 5's alternate) are one answer:
+			// two reversals cancel, exactly as two mirror flips would.
+			const double offset = scrollOffsetFor(fraction, travel, reverse != this->scrollReversed(*band));
+			// One property write per band per tick, and none at all when the offset has not moved:
+			// the band's record is the comparison, and setSlotScrollOffset() writes only the axis
+			// that differs from the mirrored one. The other axis is handed 0 so that a band that
+			// changes axis cannot leave a stale pan behind, and the surface filters the unchanged
+			// one out.
+			if (offset != band->scrollOffset()) {
+				surface->setSlotScrollOffset(band->slotIndex(),
+					vertical ? 0.0 : offset, vertical ? offset : 0.0);
+				band->setScrollOffset(offset);
+			}
+			if (band->hasWrapCommit()) {
+				// A seam is where this band's own pass crosses a whole travel: the wrap point in
+				// wrap mode, and a turn in pingpong (the fraction reverses there, but the phase
+				// still crosses the same boundary). Both are hard repositionings or reversals of
+				// the drawn picture, which is why a queued content change rides one -- the
+				// picture changes at the one frame where it is already moving anyway (Ruling
+				// M3-5: a wrap is a reposition, never a fade).
+				const bool seam = std::floor(phaseRaw + offsetPhase) != std::floor(phaseBefore + offsetPhase);
+				if (seam) {
+					MascotBand::WrapCommit commit = band->takeWrapCommit();
+					if (commit)
+						commit();
+				}
+			}
+		}
+	}
 }
 
 void MascotController::nextImage(MascotSide side, bool updateHighlight)
@@ -922,12 +1425,17 @@ bool MascotController::eventFilter(QObject* watched, QEvent* event)
 			// has not been activated yet", which is what the startup state looks like.
 			this->sawWindowActivation = true;
 			this->applyVideoPaused();
+			// M3 Task 4: the pan obeys the same three events the players do. It is a separate
+			// reconciliation from applyVideoPaused() only because the driver has a fourth reason
+			// to be idle (no mode with a pan in it) that the players know nothing about.
+			this->updateScrollDriver();
 			break;
 		case QEvent::Show:
 		case QEvent::Hide:
 		case QEvent::WindowDeactivate:
 		case QEvent::WindowStateChange:
 			this->applyVideoPaused();
+			this->updateScrollDriver();
 			break;
 		default:
 			break;
@@ -2427,6 +2935,18 @@ void MascotController::logVideo(const QString& message) const
 	this->App->logger->log(VIDEO_LOG_TAG + message, QStringLiteral("MASCOT-VIDEO"));
 }
 
+void MascotController::logScroll(const QString& message) const
+{
+	// Debug-gated exactly like logVideo(), and for the same reason: the Logger writes to the log
+	// window always and to OutputDebugString only in debug mode, so gating here means an ordinary
+	// run writes nothing while the gate (which runs with -debug) reads every line. A tag of its own
+	// -- MASCOT-SCROLL -- so the scroll lines can be counted apart from the video ones, and so a
+	// `Static` run's log is byte-identical to merged master's.
+	if (!this->App || !this->App->debug_mode || !this->App->logger)
+		return;
+	this->App->logger->log(SCROLL_LOG_TAG + message, QStringLiteral("MASCOT-SCROLL"));
+}
+
 void MascotController::connectBeats()
 {
 	if (this->swapConnection)
@@ -2502,12 +3022,10 @@ bool MascotController::beatsAllowed() const
 	// MainApp's handlers used to test the old image widget's `isVisible()` together with
 	// utils::IsMyWindowVisible(); the surface is that widget's replacement, so the same two
 	// conditions apply to it.
-	MascotSurface* surface = this->leftState.surface ? this->leftState.surface.data()
-		: this->rightState.surface.data();
-	if (!surface || !surface->isVisible())
-		return false;
-	QWidget* window = surface->window();
-	return window && utils::IsMyWindowVisible(window);
+	// (M3 Task 4: the two conditions are panelsVisible() now. The scroll driver asks the same "can
+	// a user see the panels" question and must not grow a second copy of it, so the test moved
+	// into that function and this one delegates -- the answer is unchanged.)
+	return this->panelsVisible();
 }
 
 void MascotController::onMediaReady(const MascotMedia& media)

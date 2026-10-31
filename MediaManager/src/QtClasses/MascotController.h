@@ -18,6 +18,7 @@
 #include <QString>
 #include <Qt>
 #include <QVector>
+#include <QElapsedTimer>
 #include <memory>
 #include <vector>
 
@@ -41,6 +42,19 @@ enum class MascotSide { Left, Right };
 // The value is read in MascotController::applyConfig() and cached there, for the reason
 // `mascots_media` is: a settings change must not land one pick or one layout late.
 enum class MascotMode { Static, Scroll, Stripes };
+
+// The sense `mascots_scroll_direction` asks a panning band for.
+//   - `LeftToRight` is the order a pass visits the content in: it starts at the content's near end
+//     (its left edge flush with the band's left edge) and ends at its far end. On the vertical
+//     axis the same statement is `TopToBottom`, and the two "reverse" values are its opposite.
+//     That is the reading the spec's own default gives -- §7.6 says a `Scroll` band's offset
+//     animates "0 -> -(contentWidth - panelWidth)", i.e. from the content's left end to its right
+//     end -- and it is the only reading under which `LeftToRight` and `TopToBottom` can both mean
+//     "forward", which is what Ruling M3-4 needs when a direction's axis has to yield to the
+//     mode's (see scrollDirectionReverses()).
+//   - The value is read in MascotController::applyConfig() and cached, for the reason
+//     `mascots_mode` and `mascots_fill` are: no tick reads the config.
+enum class ScrollDirection { LeftToRight, RightToLeft, TopToBottom, BottomToTop };
 
 // Decides what each mascot panel shows and the wiring that turns the old entry points into
 // calls on it. One controller drives two surfaces, each of which renders a single slot.
@@ -131,6 +145,35 @@ public:
 	// the same layout when its surfaces are built).
 	void applyMode();
 
+	// ---- M3 Task 4: the scroll driver ----
+	// One driver for the whole controller: one QTimer at ~16 ms and one QElapsedTimer, shared by
+	// both panels and every band. The timer exists only while a scroll-capable mode is active and
+	// the panels can be seen, so a `Static` config -- the default and every task's regression line
+	// -- creates no timer, writes no offset and logs nothing at all.
+	//
+	// The pan itself is arithmetic over a phase, never over pixels: the phase is stored as a
+	// fraction of a pass, so a resize rescales the band's position instead of resetting it
+	// (Review Focus 8), and the fraction is wrapped with fmod, so a long stall or a slow frame can
+	// move a band by at most one travel. A tick writes at most one property per band (through
+	// MascotSurface::setSlotScrollOffset(), the one-write path) and never re-seeks, reloads or
+	// re-decodes anything.
+	void startScrollDriver();
+	void stopScrollDriver();
+	// The timer's slot. Public like the two above because the plan's Task 4 interface says so; it
+	// re-checks every reason not to run before it touches a slot, and it stops the driver rather
+	// than running to throw the work away.
+	void onScrollTick();
+	// The distance the pan can spend for one band, in pixels: `max(0, contentExtent - bandExtent)`
+	// on the mode's pan axis, from the size the media is painted at (MascotSurface::
+	// slotContentSize(), the one geometry source) and the band's own rectangle. 0 means the content
+	// fits its band, so the band stands still and centred (Ruling M3-6) and writes nothing.
+	double scrollTravel(const MascotBand& band) const;
+	// The direction value as this class reads it, case-insensitively. `ok` is false for anything
+	// that is not one of the four names, and the returned value is then `LeftToRight` -- the
+	// documented default and the sense a `Scroll` band takes anyway (Ruling M3-4) -- so a caller
+	// that ignores `ok` still gets a direction that pans.
+	static ScrollDirection scrollDirectionFromString(const QString& value, bool* ok);
+
 	// Replaces what `side` shows: served from the panel's speculative candidate when it has one
 	// (a committed MascotMedia, no decode), otherwise picked, requested and written when
 	// mediaReady delivers it (amendment H1).
@@ -184,6 +227,20 @@ private:
 		// mode's count with this so an Apply that changed neither the mode nor a count does
 		// nothing at all; -1 until a surface has been configured for this panel.
 		int configuredBandCount = -1;
+		// ---- M3 Task 4: this panel's scroll state ----
+		// The panel's pan phase, in travel lengths of the panel's widest band: 0..1 is one pass and
+		// 1..2 is the return leg a pingpong folds back, so one number serves both kinds of seam.
+		// A fraction of the travel, never a pixel offset -- that is what makes a resize rescale the
+		// pan instead of resetting it (Review Focus 8) and what makes a long stall unable to move a
+		// band by more than one travel. One per panel, not per band (the plan's step 1): the bands
+		// of a panel are one pass, and Task 5 staggers them with per-band offsets instead of a
+		// second clock.
+		double scrollPhase = 0.0;
+		// One entry per band: the zero-travel line has been written since the last mode change. The
+		// line is a statement about the content, so it is written once per band per mode change
+		// rather than once per tick (the M2 rate-limit pattern); it is sized with `bands` by
+		// syncBands(), and reset by applyMode() on a change of mode.
+		QVector<bool> scrollZeroTravelLogged;
 		// The speculative pick: the path requested ahead of the next swap, and the decoded
 		// media it produced once it arrives. Exactly one deep -- a queue is deliberately not
 		// kept -- and both empty when nothing is armed.
@@ -271,6 +328,56 @@ private:
 	// `Stripes` panel are image-only for this task (the per-band player budget is Task 5), so
 	// they are filled through the same image request/delivery path and keep that picture.
 	void fillEmptyBands();
+
+	// ---- M3 Task 4: the scroll driver's own half ----
+	// Starts or stops the driver to match the current state. The one place the "should it be
+	// running" question is asked, so every path that can change the answer (enable, disable, a
+	// mode change, a window event) reconciles the same way.
+	void updateScrollDriver();
+	// Whether the driver has anything to do at all: a running controller, a mode with a pan in it,
+	// panels a user can see, and the pause rule the players already obey (§7.13 -- no work while
+	// hidden or minimized, and `mascots_pause_unfocused` decides whether a merely unfocused window
+	// counts).
+	bool scrollShouldRun() const;
+	// The tick's own guard, and deliberately not scrollShouldRun(): it asks only the reasons that
+	// are cheap enough to ask 60 times a second (a Qt visibility flag and the pause rule) and
+	// leaves the covered-window test to the event-driven reconciliation, because
+	// utils::IsMyWindowVisible() walks every top-level window and builds GDI regions -- more work
+	// per call than a whole tick does.
+	bool scrollCanTick() const;
+	// Whether the panels are on screen, by the same test the beat cadence uses: the surface is
+	// visible and its window is visible, unminimized and not covered. `beatsAllowed()` is this
+	// answer now, and the scroll driver is its second caller.
+	bool panelsVisible() const;
+	// The axis the pan travels along, from the mode's stacking axis (Ruling M3-4). `Scroll` is
+	// horizontal by definition -- §7.6 sizes its content wider than the panel, and
+	// effectiveFillMode() forces the matching HeightFit for it -- and `Stripes` stacks the same way
+	// until Task 5 reads `mascots_stripes_orientation`. That key is the only thing this answer
+	// ever needs to follow, and nothing else in the driver knows which axis it got.
+	bool scrollPanIsVertical() const;
+	// Whether the configured direction is one of the two that runs the pass backwards. Read by the
+	// tick once per frame rather than once per band, and by the axis check in applyConfig().
+	bool scrollDirectionReverses() const;
+	// Whether the configured direction names the other axis than the mode pans along -- the
+	// disagreement Ruling M3-4 resolves in the mode's favour (the sense is kept, the axis is the
+	// mode's) with one line, written once per configured value.
+	bool scrollDirectionIsVertical() const;
+	// A band's share of a pass, in the same travel-length units as the phase (Task 5's
+	// `index / count` stagger). 0 is the single-band case and the only value this task produces.
+	double scrollPhaseOffset(const MascotBand& band) const;
+	// Whether this band pans the other way (Task 5's `mascots_stripes_alternate` reversing odd
+	// bands). False for every band this task produces, and the global direction is applied on top
+	// of it rather than folded into it, so the two can be changed independently.
+	bool scrollReversed(const MascotBand& band) const;
+	// Writes 0 to every band that still carries an offset, and records it. The one path that takes
+	// a pan off the slots when the mode stops panning (`Scroll` -> `Static`): the surface's mirror
+	// keeps the last offset and applySlot() would replay it, so a `Static` panel would otherwise
+	// draw the picture the pan left it at.
+	void resetScrollOffsets();
+	// Writes one MASCOT-SCROLL line, debug-gated exactly like logVideo(): an ordinary run pays
+	// nothing, and the gate (which runs with -debug) reads every line. A separate tag from
+	// MASCOT-VIDEO so the two families can be counted apart.
+	void logScroll(const QString& message) const;
 	// Clears the slot, releases the pins and forgets the state of one side. Every path that
 	// replaces or drops a displayed media goes through here, which is what keeps a pin from
 	// outliving what it protects (amendment H2).
@@ -478,6 +585,34 @@ private:
 	// idempotent: an Apply that changed neither the mode nor a panel's band count does nothing.
 	MascotMode appliedMode = MascotMode::Static;
 	bool modeApplied = false;
+
+	// ---- M3 Task 4: the scroll configuration and the driver, all written by applyConfig() ----
+	// `mascots_scroll_speed`, in px/s, clamped to [0, MAX_SCROLL_SPEED] where it is read. A
+	// negative value is clamped to 0 -- the band stands still -- rather than reversed: the direction
+	// key is the only thing that decides the sense, so a sign mistake in the speed cannot silently
+	// invert what the user asked the direction to do.
+	int scrollSpeed = 40;
+	// The value as the user wrote it, so a rate-limited line can echo the configuration rather than
+	// a normalised spelling of it, and so the one-line latch can tell one configured value from the
+	// next.
+	QString scrollDirectionText = QStringLiteral("LeftToRight");
+	// `mascots_scroll_direction`, parsed. `LeftToRight` is the default and the fallback, which is
+	// also the sense a horizontal pan takes from a vertical direction under Ruling M3-4 -- so a
+	// value this class cannot read still pans rather than stopping the band.
+	ScrollDirection scrollDirection = ScrollDirection::LeftToRight;
+	// `mascots_scroll_pingpong`: reflect the phase at each end instead of wrapping it.
+	bool scrollPingpong = false;
+	// The direction text the axis line was last written for, so the resolution is said once per
+	// configured value and not on every Apply.
+	QString loggedScrollDirection;
+	// The same latch `mascots_mode` and `mascots_fill` have: an unreadable direction is a statement
+	// about the configuration, so it is reported once rather than on every Apply.
+	bool warnedUnsupportedScrollDirection = false;
+	// The driver's one clock and its one timer. The timer is created on the first start rather than
+	// in the constructor, so a config that never scrolls allocates nothing; the clock is a value so
+	// that arming it costs no allocation on any path.
+	QTimer* scrollTimer = nullptr;
+	QElapsedTimer scrollClock;
 
 	// ---- M2: the video configuration, all of it written by applyConfig() ----
 	// The `mascots_media` value, cached: pickType() decides from this instead of re-reading the

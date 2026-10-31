@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "MascotBand.h"
+#include <utility>
 
 MascotBand::MascotBand(int slotIndex, QObject* parent)
 	: QObject(parent), m_slotIndex(slotIndex)
@@ -33,11 +34,25 @@ int MascotBand::slotIndex() const
 	return this->m_slotIndex;
 }
 
+MascotSurface* MascotBand::surface() const
+{
+	return this->m_surface.data();
+}
+
 void MascotBand::setRect(const QRectF& rect)
 {
+	// Recorded before the surface is asked to take it (M3 Task 4): the value is the band's own
+	// geometry, so it answers even while there is no surface to write into, and a surface that has
+	// gone cannot be the reason a later travel question has no answer.
+	this->m_rect = rect;
 	if (!this->m_surface)
 		return;
 	this->m_surface->setSlotRect(this->m_slotIndex, rect);
+}
+
+QRectF MascotBand::rect() const
+{
+	return this->m_rect;
 }
 
 MascotVideoSlot* MascotBand::video() const
@@ -151,6 +166,10 @@ void MascotBand::clear()
 	this->m_requestPath.clear();
 	this->m_requestIsVideo = false;
 	this->m_wantedOffsetMs = -1;
+	// (M3 Task 4: a queued wrap-point commit goes with the content it was going to replace. The
+	// band has just been emptied, so a change parked against the picture that is no longer there
+	// must not fire at the first seam after the panel is enabled again.)
+	this->m_wrapCommit = WrapCommit();
 }
 
 QString MascotBand::requestPath() const
@@ -191,4 +210,24 @@ double MascotBand::scrollOffset() const
 void MascotBand::setScrollOffset(double offset)
 {
 	this->m_scrollOffset = offset;
+}
+
+void MascotBand::queueWrapCommit(WrapCommit commit)
+{
+	// Replaced, not appended: a band has one seam at a time and one queued change, so a second
+	// request for the same pass supersedes the first instead of the band committing two content
+	// changes at one wrap (Task 6 queues at most one per pass anyway).
+	this->m_wrapCommit = std::move(commit);
+}
+
+bool MascotBand::hasWrapCommit() const
+{
+	return static_cast<bool>(this->m_wrapCommit);
+}
+
+MascotBand::WrapCommit MascotBand::takeWrapCommit()
+{
+	WrapCommit commit = std::move(this->m_wrapCommit);
+	this->m_wrapCommit = WrapCommit();
+	return commit;
 }

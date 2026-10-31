@@ -7,6 +7,7 @@
 #include <QPointer>
 #include <QRectF>
 #include <QString>
+#include <functional>
 
 // One band of one mascot panel: the slot it draws into, the media that slot carries, the players
 // that play a video into it, and the request bookkeeping that says what it is waiting for.
@@ -32,10 +33,20 @@ public:
 	// that has just gone.
 	void setSurface(MascotSurface* surface);
 	int slotIndex() const;
+	// The surface this band draws into; null on teardown. Read-only and non-owning, like video():
+	// a caller that needs the surface's own geometry (M3 Task 4's scroll travel asks it for the
+	// size the media is painted at) must not hold it across a call, and one that has gone is a
+	// band that cannot draw, let alone pan.
+	MascotSurface* surface() const;
 
 	// The band's rectangle inside the surface. The owner chooses the geometry; writing it here is
 	// what keeps every surface write in one place.
 	void setRect(const QRectF& rect);
+	// The rectangle setRect() last recorded. Recorded here rather than read back off the surface
+	// because the geometry is the band's own value: the scroll driver derives its travel from this
+	// rectangle and the painted content size, and it needs an answer even while the surface holds
+	// no slot state of its own (a delegate QML has not created yet).
+	QRectF rect() const;
 
 	// The band's players, created on first use. ensureVideo() creates the MascotVideoSlot and
 	// binds its two sinks when the delegate that owns them exists; false means the sink for `ab`
@@ -93,8 +104,27 @@ public:
 
 	// The offset the band last wrote for the scroll driver, so a tick writes only on change. (M3
 	// Task 4 owns the write into the surface; this is its record until then.)
+	// (M3 Task 4: the driver is that write now -- it calls the surface's one-write setter and then
+	// records the value here, which is what makes an unchanged tick cost no property write at
+	// all. The record is also what a band that stops panning compares against when it has to be
+	// re-centred.)
 	double scrollOffset() const;
 	void setScrollOffset(double offset);
+
+	// M3 Task 4: the wrap-point commit. A caller that wants this band's content changed while it
+	// is panning queues the change here instead of applying it mid-pass; the scroll driver runs it
+	// once, at that band's next seam -- the point where its pan wraps, or where a pingpong turns,
+	// which is the one moment a hard reposition already moves the picture. Only the mechanism
+	// lives here: the cadence that decides *when* a change is queued is the caller's (Task 6).
+	//
+	// A change queued while the band cannot pan (travel 0) never runs, because such a band has no
+	// seam; a change queued on a band that is destroyed with it is dropped with the band. Both are
+	// the caller's problem to avoid, and both are stated here rather than silently handled.
+	using WrapCommit = std::function<void()>;
+	void queueWrapCommit(WrapCommit commit);
+	bool hasWrapCommit() const;
+	// Takes the queued change out, leaving nothing queued, so one seam can never run it twice.
+	WrapCommit takeWrapCommit();
 
 private:
 	int m_slotIndex = 0;
@@ -135,4 +165,10 @@ private:
 	// the reason for keeping the flag is unchanged.)
 	bool m_videoOutputVisible = false;
 	double m_scrollOffset = 0.0;
+	// The rectangle the owner last gave this band (M3 Task 4). Kept because the scroll driver
+	// needs the band's own extent as a value, not as a question the surface may have no answer to.
+	QRectF m_rect;
+	// The change a seam will commit (M3 Task 4). Empty when nothing is queued, which is the state
+	// a tick reads on every band and therefore the state that must cost nothing.
+	WrapCommit m_wrapCommit;
 };

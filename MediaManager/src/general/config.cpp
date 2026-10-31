@@ -178,7 +178,9 @@ void Config::init_defaults() {
 		// M5 Task 8: where the two mascot columns sit relative to that veil. Above draws them after it,
 		// at full brightness, which is where they have always been; Below puts the veil between them
 		// and the rest of the UI, so they are dimmed with the layer behind them.
-		{"mascots_columns_z", "Above"},
+		// (M5 fix: the values name the mascots' relation to the veil, and the two old spellings still read as
+		// "not below", so a config written before the rename keeps its setting.)
+		{"mascots_columns_z", "Above the veil"},
 		{"sound_effects_on","False"},
 		{"sound_effects_volume","3"},
 		{"sound_effects_special_on","False"},

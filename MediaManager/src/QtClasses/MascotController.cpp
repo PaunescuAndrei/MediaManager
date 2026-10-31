@@ -2676,17 +2676,27 @@ void MascotController::refreshColumnsVeil()
 	// step, and an old config with no line for the key came up dimmed against the new default's look.)
 	const double veilOpacity = std::clamp(
 		this->App->config->get_double(QStringLiteral("mascots_background_opacity"), 0.0), 0.0, 1.0);
-	const bool above = this->App->config->get(QStringLiteral("mascots_columns_z"))
-		.compare(QStringLiteral("Below"), Qt::CaseInsensitive) != 0;
+	const bool belowByKey = this->App->config->get(QStringLiteral("mascots_columns_z"))
+		.compare(QStringLiteral("Below"), Qt::CaseInsensitive) == 0
+		|| this->App->config->get(QStringLiteral("mascots_columns_z"))
+		.compare(QStringLiteral("Below the veil"), Qt::CaseInsensitive) == 0;
+	const bool above = !belowByKey;
 	// With the layer off there is no veil to be under, so the pair keeps its ordinary drawing whatever
-	// the key says -- otherwise a config with columns Below and no layer would come up with a backdrop
-	// nobody asked for.
+	// the key says.
 	const bool veiled = this->backgroundEnabled && !above;
 	const QColor colour = this->App->palette().color(QPalette::Window);
 	for (PanelState* state : { &this->leftState, &this->rightState }) {
 		if (!state->surface)
 			continue;
-		state->surface->setBackdrop(colour, veiled);
+		// (M5 fix, user report: "if set to below the mascots do get behind the veil but they suddenly get an
+		// opaque background that covers the background video". The backdrop was painting the window's colour
+		// *inside* the column's rectangle, and that rectangle is what covered the layer. The columns cannot
+		// be stacked under the veil at all -- their QQuickWidget carries WA_AlwaysStackOnTop -- so "below" is
+		// a simulation, and the opaque patch was the wrong half of it: the widget is already translucent, so
+		// its empty pixels composite the veiled layer through, and fading the content is all that is needed.
+		// With the backdrop off, "below" shows the layer through the column and the mascots dimmed over it --
+		// the look the option promises -- instead of a flat rectangle.)
+		state->surface->setBackdrop(colour, false);
 		state->surface->setSurfaceOpacity(veiled ? (1.0 - veilOpacity) : 1.0);
 	}
 }

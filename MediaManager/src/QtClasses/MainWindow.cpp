@@ -648,6 +648,14 @@ void MainWindow::applyBackgroundVeil() {
             "mascots_background_opacity", 0.0);
         veilAlpha = qBound(0, qRound(configured * 255.0), 255);
     }
+    // (M5 probe, debug-gated: the veil's alpha and where it came from. Four runs' pixel readings disagreed
+    // about whether this number was the key's or the fallback's, and the config file said one thing while the
+    // screen said another -- this line is the answer, and it costs one comparison in a normal run.)
+    if (this->App->debug_mode) {
+        qDebug() << "MASCOT-VEIL" << "alpha" << veilAlpha
+                 << "raw" << (this->App->config ? this->App->config->get("mascots_background_opacity") : QStringLiteral("<no config>"))
+                 << "enabled" << backgroundEnabled;
+    }
     // (M5 Task 8: the rows paint their fill again -- Base and AlternateBase at one alpha, which is what
     // makes the list alternate, and the only control over the list's own opacity. One commit handed them
     // alpha 0 on the theory that the veil had replaced them; it had not, and the alternation went with

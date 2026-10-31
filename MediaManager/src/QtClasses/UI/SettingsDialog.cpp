@@ -1073,11 +1073,19 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "readable at any value.",
         mascotScrollbarAlphaSpinBox);
 
-    mascotColumnsZCombo = makeComboBox({ QStringLiteral("Above"), QStringLiteral("Below") },
-        config->get(QStringLiteral("mascots_columns_z")));
-    addRow(backgroundLayout, "Columns:",
-        "Whether the two mascot columns are drawn above that veil -- full brightness, the default -- "
-        "or below it, so the veil dims them together with the media behind them.",
+    // (M5 fix, user report: the row said "Columns:", which reads as if it were about layout columns rather
+    // than about the mascots' relation to the veil. The values carry the meaning now, and both the old
+    // spellings (Above/Below) and the new ones are accepted, so an existing config keeps its setting.)
+    const QString storedZ = config->get(QStringLiteral("mascots_columns_z"));
+    const bool storedBelow = storedZ.compare(QStringLiteral("Below"), Qt::CaseInsensitive) == 0
+        || storedZ.compare(QStringLiteral("Below the veil"), Qt::CaseInsensitive) == 0;
+    mascotColumnsZCombo = makeComboBox(
+        { QStringLiteral("Above the veil"), QStringLiteral("Below the veil") },
+        storedBelow ? QStringLiteral("Below the veil") : QStringLiteral("Above the veil"));
+    addRow(backgroundLayout, "Mascots layer:",
+        "Whether the two mascot columns are drawn above the veil -- full brightness, the default -- or "
+        "behind it, so the veil dims them along with the media behind them. Behind, the column's own "
+        "background stays see-through: the layer shows through and only the mascots are faded.",
         mascotColumnsZCombo);
 
     mascotBackgroundModeCombo = makeComboBox({ QStringLiteral("Static"), QStringLiteral("Scroll"),

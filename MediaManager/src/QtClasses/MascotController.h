@@ -922,6 +922,14 @@ private:
 	// once, and the fallback is `Horizontal` -- the axis every Stripes panel stacked along before
 	// the key existed -- so a typo cannot turn the bands on their side.
 	bool warnedUnsupportedStripesOrientation = false;
+	// M5 Task 4: the same one-warning latch for the four name-valued background keys, so a typo in
+	// `mascots_background_mode` / `_fill` / `_stripes_orientation` / `_scroll_direction` is reported
+	// once per process instead of being replaced by the parser's fallback silently. The columns'
+	// latches above are untouched: these four describe the layer, not the pair.
+	bool warnedUnsupportedBackgroundMode = false;
+	bool warnedUnsupportedBackgroundFill = false;
+	bool warnedUnsupportedBackgroundStripesOrientation = false;
+	bool warnedUnsupportedBackgroundScrollDirection = false;
 	// (M3 Task 6B: one connection for the pulse. The two legacy signals stay on the thread for any
 	// other listener, but this controller no longer connects them, so one beat is handled once.)
 	QMetaObject::Connection beatConnection;

@@ -2817,6 +2817,52 @@ void MainWindow::handleMascotClickEvents(MascotSide mascot, Qt::MouseButton butt
     }
 }
 
+void MainWindow::applyMascotSettings() {
+    Config* config = this->App->config;
+    const bool columnsOn = config->get_bool("mascots");
+    const bool backgroundOn = config->get_bool("mascots_background");
+    if (columnsOn) {
+        if (this->ui.mascotLeftHost->isHidden()) {
+            // showMascots() starts the controller, which seeds both panels: updateMascots()
+            // here would be a second swap.
+            this->showMascots();
+            this->App->MascotsAnimation->start_running();
+        }
+    }
+    else if (this->ui.mascotLeftHost->isVisible()) {
+        // hideMascots() keeps a background-only layer alive by itself: with `mascots_background` on
+        // it tears down the pair only, and with the key off it is the full stop() this branch has
+        // always been.
+        this->hideMascots();
+        this->App->MascotsAnimation->stop_running();
+    }
+    // (M5 review fix: this is not inside the visibility test. `3bc9711` called resetPalette()
+    // whenever the switch was off, visible or not, and a background-only window has the columns
+    // hidden from the start -- so gating it here would have skipped the reset exactly in the gating
+    // matrix's rows where the layer runs without the columns.)
+    if (!columnsOn)
+        this->resetPalette();
+    // M5 Task 1: the columns being off does not mean the layer is off. When the layer is on and no
+    // controller is running -- the columns were just hidden with the layer off, or the dialog just
+    // switched the layer on -- start it the way the startup path does: the two hosts stay hidden,
+    // and start() builds the layer itself.
+    if (!columnsOn && backgroundOn && !this->mascotController->isRunning()) {
+        this->ui.mascotLeftHost->hide();
+        this->ui.mascotRightHost->hide();
+        this->mascotController->start();
+    }
+    // Every mascot key this milestone consumes (all-files-random, mirror, centred content, seed) is
+    // read by the controller, so a changed key has to reach it unconditionally: with the panels
+    // hidden there is nothing to re-layout, but the next start() would otherwise pick with stale
+    // values.
+    this->mascotController->applyConfig();
+    // M5 Task 1: the row alpha and the strip's scrim are derived from `mascots_background` and
+    // `mascots_background_list_alpha`, so the list's half follows every live change of either.
+    this->applyListTransparency();
+    // The cache bounds are config too, so they are re-applied by the same entry point.
+    this->App->updateMascotCacheLimits();
+}
+
 void MainWindow::applySettings(SettingsDialog* dialog) {
     Config* config = this->App->config;
     if (dialog->ui.volumeSpinBox->value() != dialog->oldVolume) {
@@ -2880,22 +2926,21 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
             this->init_icons();
         }
     }
+    // M5 Task 1: the Mascots page writes its own keys through one function, so the Apply button and
+    // the page's live path cannot disagree about which key a control owns. That call applies too;
+    // the state machine runs once more below, after the legacy mascot keys have been written, so
+    // the last apply sees all of them.
+    dialog->syncMascotConfig();
     if (dialog->ui.mascotsOnOff->checkState() == Qt::CheckState::Checked) {
         config->set("mascots", "True");
-        if (this->ui.mascotLeftHost->isHidden()) {
             // showMascots() starts the controller, which seeds both panels: updateMascots()
             // here would be a second swap.
-            this->showMascots();
-            this->App->MascotsAnimation->start_running();
-        }
+            // (M5 Task 1: that call, and the visibility switch it belongs to, moved to
+            // applyMascotSettings(); this branch only writes the key now. The two lines above stay
+            // at their original indentation on purpose: an existing comment is not rewritten.)
     }
     else if (dialog->ui.mascotsOnOff->checkState() == Qt::CheckState::Unchecked) {
         config->set("mascots", "False");
-        if (this->ui.mascotLeftHost->isVisible()) {
-            this->hideMascots();
-            this->App->MascotsAnimation->stop_running();
-        }
-        this->resetPalette();
     }
     if (dialog->ui.mascotsAllFilesRandom->checkState() == Qt::CheckState::Checked) {
         config->set("mascots_allfiles_random", "True");
@@ -2957,6 +3002,8 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     // The seed switch is written before applyConfig(), not after it: the controller re-reads
     // `mascots_use_seed` inside applySeedSource(), so a write that lands after the call is only
     // seen by the next Apply -- a runtime toggle would apply one Apply late.
+    // (M5 Task 1: applyConfig() is reached through applyMascotSettings() below; this write still
+    // precedes that call, so the sentence above stays true.)
     const bool oldMascotsUseSeed = config->get_bool("mascots_use_seed");
     const bool newMascotsUseSeed = dialog->ui.mascotsUseSeed->checkState() == Qt::CheckState::Checked;
     if (newMascotsUseSeed)
@@ -2967,16 +3014,23 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     // seed) is read by the controller, so a settings change has to reach it unconditionally:
     // with the panels hidden there is nothing to re-layout but the next start() would
     // otherwise pick with stale values.
-    this->mascotController->applyConfig();
+    // (M5 Task 1: this apply and the two statements below are applyMascotSettings() now -- one
+    // entry point shared with the Mascots page's live apply, so both callers get the same body.)
     // (M4 review fix: the row alpha and the strip's scrim are derived from `mascots_background`
     // and `mascots_background_list_alpha`, and until now only `initStyleSheets()` re-derived them --
     // so a live toggle left the two halves disagreeing: off kept the rows translucent and the scrim
     // on screen, on left opaque rows under a layer running at full strength across the strip. The
     // controller reads those keys in the Apply above, so the list's half is refreshed here, beside
     // it, instead of waiting for the next theme change.)
-    this->applyListTransparency();
+    // (M5 Task 1: "here, beside it" is inside applyMascotSettings() now -- it applies the
+    // controller first and the list's half immediately after.)
     // Amendment H3: the cache bounds are config too, so a settings change re-applies them.
-    this->App->updateMascotCacheLimits();
+    // (M5 Task 1: re-applied by applyMascotSettings() below, which is the call this replaces.)
+    this->applyMascotSettings();
+    // (M5 review fix: everything the page owns has just been written and applied, so this Apply
+    // becomes the baseline the dialog's Cancel restores to. Without it, Apply followed by Cancel
+    // wrote the dialog-opening values straight back over what Apply had kept.)
+    dialog->rebaseMascotConfigSnapshot();
     if (oldMascotsUseSeed != newMascotsUseSeed) {
         if (this->ui.mascotLeftHost->isVisible()) {
             QTimer::singleShot(50, this, [this] {
@@ -3502,6 +3556,10 @@ void MainWindow::settingsDialogButton()
         this->updateVideoListRandomProbabilitiesIfVisible();
     }
     else if (value == QDialog::Rejected) {
+        // M5 Task 3: live apply wrote config, so Cancel has to write it back. The snapshot-and-
+        // replay runs first; the `old_*` restores below then push the same values into the runtime
+        // objects the page never wrote.
+        dialog.restoreMascotConfig();
         if (dialog.ui.volumeSpinBox->value() != dialog.oldVolume) {
             if (this->App->musicPlayer)
                 this->App->musicPlayer->setVolume(dialog.oldVolume);

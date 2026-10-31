@@ -1,5 +1,6 @@
 #pragma once
 #include <QDialog>
+#include <QHash>
 #include "ui_SettingsDialog.h"
 #include "WheelStrongFocusEventFilter.h"
 #include "stylesQt.h"
@@ -9,6 +10,8 @@ class QSpinBox;
 class QDoubleSpinBox;
 class QCheckBox;
 class QSlider;
+class QComboBox;
+class QGroupBox;
 
 class SettingsDialog :
     public QDialog
@@ -100,11 +103,60 @@ public:
     QCheckBox* goalReachedCounterEnabled = nullptr;
     QSpinBox* goalReachedCounterAmountSpinBox = nullptr;
 
+    // Mascots page — built programmatically. The legacy mascots group box itself is not repeated
+    // here: `ui.mascotsGroupBox` is reparented onto the page when it is built.
+    QComboBox* mascotMediaCombo = nullptr;
+    QComboBox* mascotModeCombo = nullptr;
+    QComboBox* mascotFillCombo = nullptr;
+    QCheckBox* mascotWeightedCheckBox = nullptr;
+    QSpinBox* mascotClipSecondsSpinBox = nullptr;
+    QSpinBox* mascotCrossfadeSpinBox = nullptr;
+    QCheckBox* mascotSwapOnBeatCheckBox = nullptr;
+    QCheckBox* mascotRandomStartCheckBox = nullptr;
+    QCheckBox* mascotPreloadCheckBox = nullptr;
+    QCheckBox* mascotPauseUnfocusedCheckBox = nullptr;
+    QSpinBox* mascotMaxDecodersSpinBox = nullptr;
+    QSpinBox* mascotScrollSpeedSpinBox = nullptr;
+    QComboBox* mascotScrollDirectionCombo = nullptr;
+    QCheckBox* mascotScrollPingpongCheckBox = nullptr;
+    QSpinBox* mascotStripesLeftSpinBox = nullptr;
+    QSpinBox* mascotStripesRightSpinBox = nullptr;
+    QComboBox* mascotStripesOrientationCombo = nullptr;
+    QCheckBox* mascotStripesAlternateCheckBox = nullptr;
+    QCheckBox* mascotBackgroundCheckBox = nullptr;
+    QDoubleSpinBox* mascotBackgroundOpacitySpinBox = nullptr;
+    QDoubleSpinBox* mascotListAlphaSpinBox = nullptr;
+    QComboBox* mascotBackgroundModeCombo = nullptr;
+    QComboBox* mascotBackgroundFillCombo = nullptr;
+    QSpinBox* mascotBackgroundStripesSpinBox = nullptr;
+    QComboBox* mascotBackgroundOrientationCombo = nullptr;
+    QCheckBox* mascotBackgroundAlternateCheckBox = nullptr;
+    QSpinBox* mascotBackgroundScrollSpeedSpinBox = nullptr;
+    QComboBox* mascotBackgroundScrollDirectionCombo = nullptr;
+    QCheckBox* mascotBackgroundScrollPingpongCheckBox = nullptr;
+    QSpinBox* mascotCacheMbSpinBox = nullptr;
+    QSpinBox* mascotCacheItemsSpinBox = nullptr;
+
+    // M5 Task 3: every mascot key's value when the page was built (the legacy keys included),
+    // captured here so Cancel can write the same values back. Live apply writes config, so the
+    // revert has to be a config write too -- a snapshot cannot drift the way one `old_*` field per
+    // control could.
+    QHash<QString, QString> mascotConfigSnapshot;
+    // Writes every control on the Mascots page to config and applies live; shared by the page's
+    // change signals and by MainWindow::applySettings(), so a key has one writer.
+    void syncMascotConfig();
+    // Puts the snapshot back and re-applies it; called from MainWindow's reject branch.
+    void restoreMascotConfig();
+    // (M5 review fix: re-reads the snapshot from config after an Apply, so Cancel stops being able
+    // to undo settings Apply has already kept.)
+    void rebaseMascotConfigSnapshot();
+
 private:
     // Per-category setup methods
     void setupGeneralPage(class MainWindow* mw);
     void setupPlaybackPage(class MainWindow* mw);
     void setupAppearancePage(class MainWindow* mw);
+    void setupMascotsPage(class MainWindow* mw);
     void setupAudioPage(class MainWindow* mw);
     void setupDatabasePage(class MainWindow* mw);
     void setupRandomPage(class MainWindow* mw);
@@ -115,8 +167,16 @@ private:
     // Helper methods
     void setupCheckBox(QCheckBox* cb, const QString& configKey, class MainWindow* mw);
     void bindSliderToSpinBox(QSlider* slider, QDoubleSpinBox* spinbox);
+    // The Mascots page's enable/disable matrix: which rows are live in the current media/mode.
+    void updateMascotControlStates();
     void wireApplyEnable();
     void installWheelFilters(WheelStrongFocusEventFilter* filter);
+
+    // The columns' three groups: `mascots` disables them as a unit, while the rows inside them
+    // follow the media and the layout mode individually.
+    QGroupBox* mascotContentGroup = nullptr;
+    QGroupBox* mascotPlaybackGroup = nullptr;
+    QGroupBox* mascotStripesGroup = nullptr;
 
     template<typename T>
     void setupSpinStyle(T* sb, const QString& key) { sb->setStyleSheet(get_stylesheet(key)); }

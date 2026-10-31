@@ -737,22 +737,70 @@ void MascotController::applyConfig()
 	// while the columns are on -- and one reader for both switches keeps them in step.)
 	this->columnsEnabled = config->get_bool(QStringLiteral("mascots"));
 	this->backgroundEnabled = config->get_bool(QStringLiteral("mascots_background"));
-	this->backgroundLayout.mode = MascotController::modeFromString(
-		config->get(QStringLiteral("mascots_background_mode")), nullptr);
-	this->backgroundLayout.fill = MascotController::fillModeFromString(
-		config->get(QStringLiteral("mascots_background_fill")), nullptr);
+	// M5 Task 4: the four name-valued keys below parse with an `ok` flag now, exactly as their
+	// column equivalents do, so a value none of the accepted names matches is reported instead of
+	// being replaced by the parser's fallback silently. The fallbacks themselves are unchanged.
+	bool backgroundModeOk = false;
+	const QString backgroundModeValue = config->get(QStringLiteral("mascots_background_mode"));
+	this->backgroundLayout.mode =
+		MascotController::modeFromString(backgroundModeValue, &backgroundModeOk);
+	bool backgroundFillOk = false;
+	const QString backgroundFillValue = config->get(QStringLiteral("mascots_background_fill"));
+	this->backgroundLayout.fill =
+		MascotController::fillModeFromString(backgroundFillValue, &backgroundFillOk);
 	this->backgroundStripes = clampedConfigInt(
 		config, QStringLiteral("mascots_background_stripes"), 3, 1, 8);
+	bool backgroundOrientationOk = false;
+	const QString backgroundOrientationValue =
+		config->get(QStringLiteral("mascots_background_stripes_orientation"));
 	this->backgroundLayout.orientation = MascotController::stripesOrientationFromString(
-		config->get(QStringLiteral("mascots_background_stripes_orientation")), nullptr);
+		backgroundOrientationValue, &backgroundOrientationOk);
 	this->backgroundLayout.alternate =
 		config->get_bool(QStringLiteral("mascots_background_stripes_alternate"));
 	this->backgroundLayout.scrollSpeed = clampedConfigInt(
 		config, QStringLiteral("mascots_background_scroll_speed"), 50, 0, MAX_SCROLL_SPEED);
+	bool backgroundScrollDirectionOk = false;
+	const QString backgroundScrollDirectionValue =
+		config->get(QStringLiteral("mascots_background_scroll_direction"));
 	this->backgroundLayout.scrollDirection = MascotController::scrollDirectionFromString(
-		config->get(QStringLiteral("mascots_background_scroll_direction")), nullptr);
+		backgroundScrollDirectionValue, &backgroundScrollDirectionOk);
 	this->backgroundLayout.scrollPingpong =
 		config->get_bool(QStringLiteral("mascots_background_scroll_pingpong"));
+	// M5 Task 4: the same one-per-process latches the columns have, for the same reason -- an
+	// unsupported value is a statement about the configuration, not an event. An empty value is not
+	// reported: that is the key simply not being written, which `Config` answers with the default.
+	// The ungated `qWarning()` beside each debug line is the one that survives a release run, where
+	// a silently different layer is exactly what the user needs to see the cause of.
+	if (!this->warnedUnsupportedBackgroundMode && !backgroundModeValue.isEmpty() && !backgroundModeOk) {
+		this->warnedUnsupportedBackgroundMode = true;
+		this->logBackground(QStringLiteral("mascots_background_mode=\"%1\" is not one of Static, Scroll or Stripes; using Static")
+			.arg(backgroundModeValue));
+		qWarning() << "mascots_background_mode:" << backgroundModeValue
+			<< "is not one of Static, Scroll or Stripes; using Static.";
+	}
+	if (!this->warnedUnsupportedBackgroundFill && !backgroundFillValue.isEmpty() && !backgroundFillOk) {
+		this->warnedUnsupportedBackgroundFill = true;
+		this->logBackground(QStringLiteral("mascots_background_fill=\"%1\" is not one of Crop, Fit, Stretch, HeightFit or WidthFit; using HeightFit")
+			.arg(backgroundFillValue));
+		qWarning() << "mascots_background_fill:" << backgroundFillValue
+			<< "is not one of Crop, Fit, Stretch, HeightFit or WidthFit; using HeightFit.";
+	}
+	if (!this->warnedUnsupportedBackgroundStripesOrientation
+		&& !backgroundOrientationValue.isEmpty() && !backgroundOrientationOk) {
+		this->warnedUnsupportedBackgroundStripesOrientation = true;
+		this->logBackground(QStringLiteral("mascots_background_stripes_orientation=\"%1\" is not one of Horizontal or Vertical; using Horizontal")
+			.arg(backgroundOrientationValue));
+		qWarning() << "mascots_background_stripes_orientation:" << backgroundOrientationValue
+			<< "is not one of Horizontal or Vertical; using Horizontal.";
+	}
+	if (!this->warnedUnsupportedBackgroundScrollDirection
+		&& !backgroundScrollDirectionValue.isEmpty() && !backgroundScrollDirectionOk) {
+		this->warnedUnsupportedBackgroundScrollDirection = true;
+		this->logBackground(QStringLiteral("mascots_background_scroll_direction=\"%1\" is not one of LeftToRight, RightToLeft, TopToBottom or BottomToTop; using LeftToRight")
+			.arg(backgroundScrollDirectionValue));
+		qWarning() << "mascots_background_scroll_direction:" << backgroundScrollDirectionValue
+			<< "is not one of LeftToRight, RightToLeft, TopToBottom or BottomToTop; using LeftToRight.";
+	}
 	this->backgroundOpacity = std::clamp(
 		config->get_double(QStringLiteral("mascots_background_opacity"), 1.0), 0.0, 1.0);
 	// (M4 review fix: the fallback above is the shipped default. It was 0.5 -- the value this key

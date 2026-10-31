@@ -252,6 +252,10 @@ public:
     void cleanMissingFilesDialog(QWidget* parent = nullptr);
     void handleMascotClickEvents(MascotSide mascot, Qt::MouseButton button, Qt::KeyboardModifiers modifiers);
     void applySettings(SettingsDialog* dialog);
+    // M5 Task 1: the mascot live-apply entry point. Reads the mascot keys from config (already
+    // written by the caller), runs the columns/background state machine and then everything that
+    // derives from it, so the dialog's live apply and applySettings' accept path share one body.
+    void applyMascotSettings();
     void applyMascotWidth(int windowWidth, double percent);
     void setDebugMode(bool debug);
     void settingsDialogButton();

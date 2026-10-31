@@ -71,15 +71,31 @@ namespace {
 		return side == MascotSide::Left ? QStringLiteral("left") : QStringLiteral("right");
 	}
 
+	// M4 Task 1: the same two words for the two pair panels, plus the third panel's own name for
+	// the lines a per-panel function will write once the background has something to say. The pair
+	// panels keep exactly the text they had, so a `Static` run's log stays unchanged.
+	QString panelLabel(MascotPanel panel)
+	{
+		switch (panel) {
+		case MascotPanel::Left:
+			return sideLabel(MascotSide::Left);
+		case MascotPanel::Right:
+			return sideLabel(MascotSide::Right);
+		case MascotPanel::Background:
+			break;
+		}
+		return QStringLiteral("background");
+	}
+
 	// M3 Task 6A: the panel a line is about, plus the band when it is not the policy band. Band 0
 	// keeps exactly the text it had, which is what keeps a `Static` run's log unchanged; a
 	// `Stripes` panel's extra bands are named so a swap line and its first-frame line still pair
 	// up, and so two bands' lines cannot be mistaken for one band swapping twice.
-	QString bandLabel(MascotSide side, int bandIndex)
+	QString bandLabel(MascotPanel panel, int bandIndex)
 	{
 		if (bandIndex == 0)
-			return sideLabel(side);
-		return QStringLiteral("%1 band %2").arg(sideLabel(side)).arg(bandIndex);
+			return panelLabel(panel);
+		return QStringLiteral("%1 band %2").arg(panelLabel(panel)).arg(bandIndex);
 	}
 
 	int clampedCrossfadeMs(Config* config)
@@ -303,8 +319,8 @@ void MascotController::setSurfaces(MascotSurface* left, MascotSurface* right)
 		this->releaseSurface(this->rightState);
 	this->leftState.surface = left;
 	this->rightState.surface = right;
-	this->configureSurface(this->leftState, MascotSide::Left);
-	this->configureSurface(this->rightState, MascotSide::Right);
+	this->configureSurface(this->leftState, MascotPanel::Left);
+	this->configureSurface(this->rightState, MascotPanel::Right);
 	this->updateLayout();
 }
 
@@ -329,7 +345,7 @@ void MascotController::start()
 	// blank. A one-band panel is asked for nothing at all -- it has already been seeded, and this
 	// is the only place `Static` and `Scroll` could have paid an extra pick they never paid
 	// before -- while in Stripes the loop's per-band guards skip the band that is already loading.
-	if (this->bandCount(MascotSide::Left) > 1 || this->bandCount(MascotSide::Right) > 1)
+	if (this->bandCount(MascotPanel::Left) > 1 || this->bandCount(MascotPanel::Right) > 1)
 		this->fillEmptyBands();
 	// M3 Task 4: the pan starts here. It is asked rather than assumed because the answer also
 	// depends on the window the surfaces just landed in: a controller enabled while its window is
@@ -359,7 +375,7 @@ void MascotController::stop()
 	// any band once Task 5 gives it a budget; leaving bands 1..n out of this loop would let them
 	// keep drawing into delegates the release below destroys -- the carried-forward Task 1 finding
 	// this loop exists to close for good. In `Static` the loop runs once per panel.)
-	for (SideState* state : { &this->leftState, &this->rightState }) {
+	for (PanelState* state : { &this->leftState, &this->rightState }) {
 		for (auto& owned : state->bands) {
 			if (owned->video())
 				owned->video()->shutdown();
@@ -416,7 +432,7 @@ void MascotController::applyConfig()
 	// there is no seam at all. Such a commit would then fire against a cadence that no longer
 	// asked for it, so whatever the old configuration queued is dropped here. The new
 	// configuration queues its own on the next beat.)
-	for (SideState* state : { &this->leftState, &this->rightState }) {
+	for (PanelState* state : { &this->leftState, &this->rightState }) {
 		for (auto& owned : state->bands) {
 			if (owned)
 				owned->discardWrapCommit();
@@ -468,7 +484,7 @@ void MascotController::applyConfig()
 	bool modeOk = false;
 	const QString modeValue = config->get(QStringLiteral("mascots_mode"));
 	const MascotMode parsedMode = MascotController::modeFromString(modeValue, &modeOk);
-	this->mascotMode = modeOk ? parsedMode : MascotMode::Static;
+	this->columnsLayout.mode = modeOk ? parsedMode : MascotMode::Static;
 	this->stripesLeftBands = clampedConfigInt(config, QStringLiteral("mascots_stripes_left"), 2, 1, 8);
 	this->stripesRightBands = clampedConfigInt(config, QStringLiteral("mascots_stripes_right"), 2, 1, 8);
 	// M3 Task 5: the stacking axis and the alternate flag, read here and cached for the reason the
@@ -479,9 +495,9 @@ void MascotController::applyConfig()
 	const QString orientationValue = config->get(QStringLiteral("mascots_stripes_orientation"));
 	const StripesOrientation parsedOrientation =
 		MascotController::stripesOrientationFromString(orientationValue, &orientationOk);
-	this->stripesOrientation =
+	this->columnsLayout.orientation =
 		orientationOk ? parsedOrientation : StripesOrientation::Horizontal;
-	this->stripesAlternate = config->get_bool(QStringLiteral("mascots_stripes_alternate"));
+	this->columnsLayout.alternate = config->get_bool(QStringLiteral("mascots_stripes_alternate"));
 	// M3 Task 3: the fill mode. Read here under the same "one reader" rule as every key above:
 	// effectiveFillMode() answers from this cached value, so a settings change cannot land one
 	// repaint late and no repaint path re-reads the config. The documented default is
@@ -491,7 +507,7 @@ void MascotController::applyConfig()
 	bool fillOk = false;
 	const QString fillValue = config->get(QStringLiteral("mascots_fill"));
 	const MascotSurface::FillMode parsedFill = MascotController::fillModeFromString(fillValue, &fillOk);
-	this->fillModeSetting = fillOk ? parsedFill : MascotSurface::FillMode::HeightFit;
+	this->columnsLayout.fill = fillOk ? parsedFill : MascotSurface::FillMode::HeightFit;
 
 	// A value that is none of the three is reported once per process rather than ignored: it is a
 	// statement about the configuration, not an event, so repeating it on every Apply would only
@@ -569,13 +585,13 @@ void MascotController::applyConfig()
 	// as its floor -- a negative speed means "stand still", not "reverse", because the direction
 	// key is the only thing that decides the sense (clampedConfigInt() applies the floor to a
 	// number the user wrote and falls back to the documented default for one that does not parse).
-	this->scrollSpeed = clampedConfigInt(config, QStringLiteral("mascots_scroll_speed"), 40, 0, MAX_SCROLL_SPEED);
+	this->columnsLayout.scrollSpeed = clampedConfigInt(config, QStringLiteral("mascots_scroll_speed"), 40, 0, MAX_SCROLL_SPEED);
 	this->scrollDirectionText = config->get(QStringLiteral("mascots_scroll_direction"));
 	bool directionOk = false;
 	const ScrollDirection parsedDirection =
 		MascotController::scrollDirectionFromString(this->scrollDirectionText, &directionOk);
-	this->scrollDirection = directionOk ? parsedDirection : ScrollDirection::LeftToRight;
-	this->scrollPingpong = config->get_bool(QStringLiteral("mascots_scroll_pingpong"));
+	this->columnsLayout.scrollDirection = directionOk ? parsedDirection : ScrollDirection::LeftToRight;
+	this->columnsLayout.scrollPingpong = config->get_bool(QStringLiteral("mascots_scroll_pingpong"));
 
 	// The same one-warning latch as the three blocks above, for the same reason. The fallback is
 	// `LeftToRight`: a value this class cannot read must not stop a band from panning, and the
@@ -597,17 +613,42 @@ void MascotController::applyConfig()
 	// unambiguous -- and says so once per configured value rather than once per tick. It is said
 	// only while a mode with a pan in it is configured: a `Static` panel has no axis to disagree
 	// with, and complaining about a key nothing reads would be noise.
-	if (this->mascotMode != MascotMode::Static
-		&& this->scrollDirectionIsVertical() != this->scrollPanIsVertical()
+	if (this->columnsLayout.mode != MascotMode::Static
+		&& this->scrollDirectionIsVertical(MascotPanel::Left) != this->scrollPanIsVertical(MascotPanel::Left)
 		&& this->loggedScrollDirection != this->scrollDirectionText) {
 		this->loggedScrollDirection = this->scrollDirectionText;
 		this->logScroll(QStringLiteral("mascots_scroll_direction=\"%1\" names a %2 direction but %3 pans %4; taking the mode's axis and travelling %5")
 			.arg(this->scrollDirectionText,
-				scrollAxisLabel(this->scrollDirectionIsVertical()),
-				modeLabel(this->mascotMode),
-				scrollAxisLabel(this->scrollPanIsVertical()),
-				scrollSenseLabel(this->scrollDirectionReverses())));
+				scrollAxisLabel(this->scrollDirectionIsVertical(MascotPanel::Left)),
+				modeLabel(this->columnsLayout.mode),
+				scrollAxisLabel(this->scrollPanIsVertical(MascotPanel::Left)),
+				scrollSenseLabel(this->scrollDirectionReverses(MascotPanel::Left))));
 	}
+
+	// ---- M4 Task 1: the background layout ----
+	// (The background surface that consumes these values is added later in this milestone. They are
+	// parsed here so the keys have exactly one reader and the background cannot pick up its layout
+	// one Apply late; nothing below draws from them yet. The background's applied latches stay at
+	// their defaults until Task 2 gives it a surface.)
+	this->backgroundEnabled = config->get_bool(QStringLiteral("mascots_background"));
+	this->backgroundLayout.mode = MascotController::modeFromString(
+		config->get(QStringLiteral("mascots_background_mode")), nullptr);
+	this->backgroundLayout.fill = MascotController::fillModeFromString(
+		config->get(QStringLiteral("mascots_background_fill")), nullptr);
+	this->backgroundStripes = clampedConfigInt(
+		config, QStringLiteral("mascots_background_stripes"), 3, 1, 8);
+	this->backgroundLayout.orientation = MascotController::stripesOrientationFromString(
+		config->get(QStringLiteral("mascots_background_stripes_orientation")), nullptr);
+	this->backgroundLayout.alternate =
+		config->get_bool(QStringLiteral("mascots_background_stripes_alternate"));
+	this->backgroundLayout.scrollSpeed = clampedConfigInt(
+		config, QStringLiteral("mascots_background_scroll_speed"), 20, 0, MAX_SCROLL_SPEED);
+	this->backgroundLayout.scrollDirection = MascotController::scrollDirectionFromString(
+		config->get(QStringLiteral("mascots_background_scroll_direction")), nullptr);
+	this->backgroundLayout.scrollPingpong =
+		config->get_bool(QStringLiteral("mascots_background_scroll_pingpong"));
+	this->backgroundOpacity = std::clamp(
+		config->get_double(QStringLiteral("mascots_background_opacity"), 0.5), 0.0, 1.0);
 
 	this->source.setAllFilesRandom(config->get_bool("mascots_allfiles_random"));
 	// The weighted/uniform switch is one of the source's two config-derived inputs, and the
@@ -639,7 +680,7 @@ void MascotController::applyConfig()
 	// live settings are pushed to every band's players. The panel-level writes above them -- the
 	// surface mirror and the flip parity -- stay once per panel, because they are the panel's, not
 	// a band's. `Static` is one band and makes exactly the calls it made before.)
-	for (SideState* state : { &this->leftState, &this->rightState }) {
+	for (PanelState* state : { &this->leftState, &this->rightState }) {
 		if (!state->surface)
 			continue;
 		// The surface-wide default. The per-slot value written by applyDisplay() below is
@@ -680,8 +721,8 @@ void MascotController::applyConfig()
 	}
 	// A mode change repaints what is already on screen; the surface default alone would only
 	// affect a slot created later.
-	this->applyDisplay(this->leftState, MascotSide::Left);
-	this->applyDisplay(this->rightState, MascotSide::Right);
+	this->applyDisplay(this->leftState, MascotPanel::Left);
+	this->applyDisplay(this->rightState, MascotPanel::Right);
 	this->updateLayout();
 	// The player half follows the new media setting and the new budget: an `Images` setting, or a
 	// budget below what a panel needs, gives the panel back its memory instead of leaving idle
@@ -704,11 +745,11 @@ void MascotController::applyConfig()
 	// has one cadence per band now, and an Apply that reached band 0 alone would leave three
 	// stripes on the old length. `Static` is one band and restarts exactly the one timer it did.)
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
-		SideState& state = this->stateFor(side);
+		PanelState& state = this->stateFor(panelOf(side));
 		for (int i = 0; i < static_cast<int>(state.bands.size()); ++i) {
 			MascotBand* band = state.band(i);
 			if (band && band->media().type == MascotMedia::Video && !band->media().path.isEmpty())
-				this->restartClipTimer(side, i);
+				this->restartClipTimer(panelOf(side), i);
 		}
 	}
 	// A panel that lost its players is drawing nothing, and nothing else will fill it: the beat
@@ -825,7 +866,7 @@ ScrollDirection MascotController::scrollDirectionFromString(const QString& value
 	return ScrollDirection::LeftToRight;
 }
 
-MascotSurface::FillMode MascotController::effectiveFillMode() const
+MascotSurface::FillMode MascotController::effectiveFillMode(MascotPanel panel) const
 {
 	// `Static` is the one mode whose band is the whole panel and therefore has no panning axis to
 	// normalise, so it honours the configured value exactly -- which is what makes `Crop`, `Fit`,
@@ -842,22 +883,23 @@ MascotSurface::FillMode MascotController::effectiveFillMode() const
 	// are normalised to their width and the *height* is what overflows, so it answers `WidthFit`.
 	// `Scroll` keeps `HeightFit`: §7.6 defines it as content sized wider than the panel, and Ruling
 	// M3-4 keeps it on the horizontal axis, so it has no vertical variant to follow.)
-	if (this->mascotMode == MascotMode::Static)
-		return this->fillModeSetting;
-	if (this->mascotMode == MascotMode::Stripes
-		&& this->stripesOrientation == StripesOrientation::Vertical)
+	const PanelLayout& layout = this->layoutFor(panel);
+	if (layout.mode == MascotMode::Static)
+		return layout.fill;
+	if (layout.mode == MascotMode::Stripes
+		&& layout.orientation == StripesOrientation::Vertical)
 		return MascotSurface::FillMode::WidthFit;
 	return MascotSurface::FillMode::HeightFit;
 }
 
-int MascotController::bandCount(MascotSide side) const
+int MascotController::bandCount(MascotPanel panel) const
 {
 	// `Static` and `Scroll` are one band by definition -- Scroll's band *is* the panel, and only
 	// the content inside it moves (Task 4) -- so this task's whole layout asks the same question
 	// of both, and a one-band panel is exactly the panel that existed before a mode did.
-	if (this->mascotMode != MascotMode::Stripes)
+	if (this->layoutFor(panel).mode != MascotMode::Stripes)
 		return 1;
-	return side == MascotSide::Left ? this->stripesLeftBands : this->stripesRightBands;
+	return this->stripesCountFor(panel);
 }
 
 bool MascotController::bandMirrorsLeft(int bandIndex) const
@@ -866,12 +908,12 @@ bool MascotController::bandMirrorsLeft(int bandIndex) const
 	// band i of the left panel exactly while the left panel has a band i to mirror -- the two
 	// configured counts do not have to agree, and a band with no counterpart keeps its own picks
 	// and its own clip timer rather than waiting for a commit that will never come.
-	return this->mirrorEnabled() && bandIndex >= 0 && bandIndex < this->bandCount(MascotSide::Left);
+	return this->mirrorEnabled() && bandIndex >= 0 && bandIndex < this->bandCount(MascotPanel::Left);
 }
 
-QVector<QRectF> MascotController::bandRects(MascotSide side) const
+QVector<QRectF> MascotController::bandRects(MascotPanel panel) const
 {
-	const SideState& state = this->stateFor(side);
+	const PanelState& state = this->stateFor(panel);
 	if (!state.surface)
 		return QVector<QRectF>();
 	// The mode's stacking axis. Every mode this task reads stacks its bands top to bottom (the
@@ -881,18 +923,19 @@ QVector<QRectF> MascotController::bandRects(MascotSide side) const
 	// (M3 Task 5: the key is read and the axis comes from stripesStackVertically(). A `Vertical`
 	// `Stripes` panel is sliced into columns instead, and every single-band mode still asks for the
 	// top-to-bottom answer -- which `slicedBandRects()` answers with the panel itself.)
-	return slicedBandRects(QRectF(state.surface->rect()), this->bandCount(side),
-		this->stripesStackVertically());
+	return slicedBandRects(QRectF(state.surface->rect()), this->bandCount(panel),
+		this->stripesStackVertically(panel));
 }
 
-bool MascotController::stripesStackVertically() const
+bool MascotController::stripesStackVertically(MascotPanel panel) const
 {
 	// M3 Task 5: the stacking axis, not the panning axis. `Horizontal` stripes are strips stacked
 	// top to bottom, which is `slicedBandRects()`'s `stackVertically` true; `Vertical` stripes are
 	// columns stacked left to right. A single-band mode (`Static`, `Scroll`) is the panel itself
 	// either way, so the top-to-bottom answer is also the shipped default there.
-	return this->mascotMode != MascotMode::Stripes
-		|| this->stripesOrientation == StripesOrientation::Horizontal;
+	const PanelLayout& layout = this->layoutFor(panel);
+	return layout.mode != MascotMode::Stripes
+		|| layout.orientation == StripesOrientation::Horizontal;
 }
 
 void MascotController::applyMode()
@@ -915,11 +958,11 @@ void MascotController::applyMode()
 	// Idempotent by construction: an Apply that changed neither the mode nor either panel's live
 	// band count has nothing to re-derive, and re-running the fill would walk the mascot directory
 	// for bands that already have content.
-	const bool modeChanged = this->mascotMode != this->appliedMode;
+	const bool modeChanged = this->columnsLayout.mode != this->columnsLayout.appliedMode;
 	bool countChanged = false;
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
-		const SideState& state = this->stateFor(side);
-		if (state.surface && state.configuredBandCount != this->bandCount(side))
+		const PanelState& state = this->stateFor(panelOf(side));
+		if (state.surface && state.configuredBandCount != this->bandCount(panelOf(side)))
 			countChanged = true;
 	}
 	// M3 Task 5: an orientation change alters the stacking axis without changing the band count,
@@ -927,26 +970,26 @@ void MascotController::applyMode()
 	// leave the old rectangles in place. It is only a `Stripes` question: no other mode derives a
 	// rectangle from the orientation, and asking it while `Static`/`Scroll` is up would make an
 	// orientation key nothing draws from re-lay the panels out.
-	const bool orientationChanged = this->modeApplied
-		&& this->mascotMode == MascotMode::Stripes
-		&& this->stripesOrientation != this->appliedStripesOrientation;
-	if (this->modeApplied && !modeChanged && !countChanged && !orientationChanged)
+	const bool orientationChanged = this->columnsLayout.applied
+		&& this->columnsLayout.mode == MascotMode::Stripes
+		&& this->columnsLayout.orientation != this->columnsLayout.appliedOrientation;
+	if (this->columnsLayout.applied && !modeChanged && !countChanged && !orientationChanged)
 		return;
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
-		SideState& state = this->stateFor(side);
+		PanelState& state = this->stateFor(panelOf(side));
 		if (state.surface)
-			this->syncBands(state, side);
+			this->syncBands(state, panelOf(side));
 	}
-	this->appliedMode = this->mascotMode;
-	this->appliedStripesOrientation = this->stripesOrientation;
-	this->modeApplied = true;
+	this->columnsLayout.appliedMode = this->columnsLayout.mode;
+	this->columnsLayout.appliedOrientation = this->columnsLayout.orientation;
+	this->columnsLayout.applied = true;
 	// M3 Task 4: a mode change starts a fresh pass -- the phase is a fraction of a travel whose
 	// meaning has just changed -- and re-arms the per-band zero-travel line, which is a statement
 	// about the layout and not about the session. A count change alone leaves both alone: the
 	// surviving bands keep their position, so a `Stripes` count change reads as a relayout rather
 	// than as a jump.
 	if (modeChanged) {
-		for (SideState* state : { &this->leftState, &this->rightState }) {
+		for (PanelState* state : { &this->leftState, &this->rightState }) {
 			state->scrollPhase = 0.0;
 			state->scrollZeroTravelLogged.fill(false);
 		}
@@ -969,7 +1012,7 @@ void MascotController::applyMode()
 	// other axis, and a speed of 0 would leave it there for good. The zero-travel latch re-arms
 	// because the layout it described has just moved under it.
 	if (orientationChanged) {
-		for (SideState* state : { &this->leftState, &this->rightState }) {
+		for (PanelState* state : { &this->leftState, &this->rightState }) {
 			MascotSurface* surface = state->surface.data();
 			if (surface) {
 				for (auto& owned : state->bands) {
@@ -1014,12 +1057,12 @@ void MascotController::applyMode()
 	QMetaObject::invokeMethod(this, [this]() { this->fillEmptyBands(); }, Qt::QueuedConnection);
 }
 
-void MascotController::syncBands(SideState& state, MascotSide side)
+void MascotController::syncBands(PanelState& state, MascotPanel panel)
 {
 	MascotSurface* surface = state.surface.data();
 	if (!surface)
 		return;
-	const int wanted = this->bandCount(side);
+	const int wanted = this->bandCount(panel);
 	// Shrink from the tail, before the slot count shrinks. A band's players draw into QVideoSinks
 	// that belong to its slot's QML delegate, and MascotVideoSlot's contract is that those sinks
 	// outlive its shutdown() -- so the bands that are going must be destroyed while their delegate
@@ -1077,7 +1120,7 @@ void MascotController::fillEmptyBands()
 	// counterpart to mirror, so it is filled like any other band.
 	const bool mirror = this->mirrorEnabled();
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
-		SideState& state = this->stateFor(side);
+		PanelState& state = this->stateFor(panelOf(side));
 		if (!state.surface)
 			continue;
 		const int count = static_cast<int>(state.bands.size());
@@ -1100,7 +1143,7 @@ void MascotController::fillEmptyBands()
 				// empty, or still loading, waits -- and a load arms the pending copy so its first
 				// frame does the copy.)
 				MascotBand* leftBand = this->leftState.band(i);
-				const bool mayOwn = this->bandMayOwnPlayer(side, i);
+				const bool mayOwn = this->bandMayOwnPlayer(panelOf(side), i);
 				if (mayOwn && leftBand
 					&& (leftBand->requestIsVideo() || leftBand->playback().videoPickRetryPending)) {
 					// Still loading: the first frame is where the pair's shared offset exists.
@@ -1117,7 +1160,7 @@ void MascotController::fillEmptyBands()
 					}
 					else {
 						this->preparePick(state, i, false);
-						this->showMedia(state, MascotSide::Right, leftBand->media(), false, true, i);
+						this->showMedia(state, MascotPanel::Right, leftBand->media(), false, true, i);
 						continue;
 					}
 				}
@@ -1169,7 +1212,7 @@ void MascotController::fillEmptyBands()
 				if (mirror)
 					this->nextBandImages(0, false);
 				else
-					this->pickFor(state, side, i, true);
+					this->pickFor(state, panelOf(side), i, true);
 				continue;
 			}
 			// A band past the first has no player in this task: the per-band decoder budget is
@@ -1195,7 +1238,7 @@ void MascotController::fillEmptyBands()
 			// -- is per band now (MascotBand::Playback), and the band's own player is the one
 			// pickFor()'s video branch loads into, so pickFor() is the right call here and a fill
 			// can no longer steal band 0's predecoded swap.)
-			this->pickFor(state, side, i, false);
+			this->pickFor(state, panelOf(side), i, false);
 		}
 	}
 }
@@ -1203,7 +1246,7 @@ void MascotController::fillEmptyBands()
 void MascotController::updateLayout()
 {
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
-		SideState& state = this->stateFor(side);
+		PanelState& state = this->stateFor(panelOf(side));
 		if (!state.surface)
 			continue;
 		// The slot fills the surface that hosts it, and the surface derives the content shift
@@ -1213,7 +1256,7 @@ void MascotController::updateLayout()
 		// M3 Task 2: one rectangle per band, from the mode's slices of this surface. A single-band
 		// panel gets the panel's own rectangle back unchanged (slicedBandRects() returns the panel
 		// itself for a count of one), so `Static` writes exactly the rectangle it always wrote.
-		const QVector<QRectF> rects = this->bandRects(side);
+		const QVector<QRectF> rects = this->bandRects(panelOf(side));
 		for (int i = 0; i < static_cast<int>(state.bands.size()) && i < rects.size(); ++i)
 			state.bands[static_cast<std::size_t>(i)]->setRect(rects.at(i));
 	}
@@ -1228,7 +1271,7 @@ void MascotController::updateLayout()
 	this->watchWindow(window);
 }
 
-double MascotController::scrollTravel(const MascotBand& band) const
+double MascotController::scrollTravel(MascotPanel panel, const MascotBand& band) const
 {
 	// The one geometry source (Task 3's seam): slotContentSize() answers the size the media is
 	// actually painted at -- an invalid slot gives (0,0) and a slot with no media gives its own
@@ -1238,7 +1281,7 @@ double MascotController::scrollTravel(const MascotBand& band) const
 	MascotSurface* surface = band.surface();
 	if (!surface)
 		return 0.0;
-	const bool vertical = this->scrollPanIsVertical();
+	const bool vertical = this->scrollPanIsVertical(panel);
 	const QSizeF content = surface->slotContentSize(band.slotIndex());
 	const QRectF rect = band.rect();
 	const double contentExtent = vertical ? content.height() : content.width();
@@ -1295,7 +1338,7 @@ bool MascotController::scrollShouldRun() const
 	// mode every task's regression gate draws. `Scroll` and `Stripes` both pan -- Task 5 owns a
 	// stripe's stagger and its alternate direction, not its motion -- so one comparison covers
 	// both.
-	if (this->mascotMode == MascotMode::Static)
+	if (this->columnsLayout.mode == MascotMode::Static)
 		return false;
 	if (!this->panelsVisible())
 		return false;
@@ -1307,7 +1350,7 @@ bool MascotController::scrollShouldRun() const
 
 bool MascotController::scrollCanTick() const
 {
-	if (!this->running || this->mascotMode == MascotMode::Static)
+	if (!this->running || this->columnsLayout.mode == MascotMode::Static)
 		return false;
 	MascotSurface* surface = this->leftState.surface ? this->leftState.surface.data()
 		: this->rightState.surface.data();
@@ -1336,7 +1379,7 @@ bool MascotController::panelsVisible() const
 	return window && utils::IsMyWindowVisible(window);
 }
 
-bool MascotController::scrollPanIsVertical() const
+bool MascotController::scrollPanIsVertical(MascotPanel panel) const
 {
 	// Ruling M3-4 in code: `Scroll` pans horizontally. §7.6 defines it as content sized wider than
 	// the panel, and effectiveFillMode() forces the matching HeightFit for it, so the overflow this
@@ -1348,27 +1391,30 @@ bool MascotController::scrollPanIsVertical() const
 	// overflow is its height and the pan runs down it; every other case stays horizontal. This is
 	// the *panning* axis, perpendicular to stripesStackVertically()'s stacking axis, and
 	// effectiveFillMode() must answer the matching normalised mode or the travel here is 0.)
-	return this->mascotMode == MascotMode::Stripes
-		&& this->stripesOrientation == StripesOrientation::Vertical;
+	const PanelLayout& layout = this->layoutFor(panel);
+	return layout.mode == MascotMode::Stripes
+		&& layout.orientation == StripesOrientation::Vertical;
 }
 
-bool MascotController::scrollDirectionReverses() const
+bool MascotController::scrollDirectionReverses(MascotPanel panel) const
 {
 	// The direction names the order a pass visits the content in, and the two "reverse" values are
 	// its opposite (see ScrollDirection). A band whose pan axis disagrees with the direction's
 	// therefore keeps its *sense* by keeping that order: TopToBottom on a horizontal band is the
 	// forward pass, BottomToTop the backward one (Ruling M3-4, logged once by applyConfig()).
-	return this->scrollDirection == ScrollDirection::RightToLeft
-		|| this->scrollDirection == ScrollDirection::BottomToTop;
+	const ScrollDirection direction = this->layoutFor(panel).scrollDirection;
+	return direction == ScrollDirection::RightToLeft
+		|| direction == ScrollDirection::BottomToTop;
 }
 
-bool MascotController::scrollDirectionIsVertical() const
+bool MascotController::scrollDirectionIsVertical(MascotPanel panel) const
 {
-	return this->scrollDirection == ScrollDirection::TopToBottom
-		|| this->scrollDirection == ScrollDirection::BottomToTop;
+	const ScrollDirection direction = this->layoutFor(panel).scrollDirection;
+	return direction == ScrollDirection::TopToBottom
+		|| direction == ScrollDirection::BottomToTop;
 }
 
-double MascotController::scrollPhaseOffset(const MascotBand& band) const
+double MascotController::scrollPhaseOffset(MascotPanel panel, const MascotBand& band) const
 {
 	// Task 5's seam (Ruling C1): the stagger is `index / count` of the pass, added to the panel's
 	// phase in the same travel-length units, so a staggered band is a band whose pass starts
@@ -1378,6 +1424,9 @@ double MascotController::scrollPhaseOffset(const MascotBand& band) const
 	// band's slot index, which is its position along the stacking axis. The lookup is how a band
 	// that carries only its slot index finds the count of the panel it belongs to; a single-band
 	// mode returns 0 without asking.
+	// (M4 Task 1: the panel is the caller's now, so the count comes from the panel the tick (or
+	// the beat) is holding rather than from a lookup over the pair; the paragraph above stays as
+	// the record of why the lookup existed.)
 	//
 	// Under pingpong the offsets are accepted as they are, not normalised: the triangle fold maps a
 	// phase x and 2-x to the same drawn position, so two staggered bands do coincide for an
@@ -1388,19 +1437,16 @@ double MascotController::scrollPhaseOffset(const MascotBand& band) const
 	// the bands never lock together; a momentary crossing is the woven look the stagger is for.
 	// Shortening the phase to dodge the fold was rejected: it would halve the stagger and still
 	// leave a collision for some count, because the fold is 2-to-1 whatever the offsets are.)
-	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
-		const SideState& state = this->stateFor(side);
-		if (state.band(band.slotIndex()) != &band)
-			continue;
-		const int count = this->bandCount(side);
-		if (count <= 1)
-			return 0.0;
-		return static_cast<double>(band.slotIndex()) / static_cast<double>(count);
-	}
-	return 0.0;
+	const PanelState& state = this->stateFor(panel);
+	if (state.band(band.slotIndex()) != &band)
+		return 0.0;
+	const int count = this->bandCount(panel);
+	if (count <= 1)
+		return 0.0;
+	return static_cast<double>(band.slotIndex()) / static_cast<double>(count);
 }
 
-bool MascotController::scrollReversed(const MascotBand& band) const
+bool MascotController::scrollReversed(MascotPanel panel, const MascotBand& band) const
 {
 	// Task 5's other seam (Ruling C1): `mascots_stripes_alternate` reverses odd bands. It is a
 	// per-band sign applied on top of the configured direction rather than folded into it, so the
@@ -1408,15 +1454,16 @@ bool MascotController::scrollReversed(const MascotBand& band) const
 	// reverses a band.
 	// (M3 Task 5: odd `Stripes` bands when the key is on; `Static` and `Scroll` have one band and
 	// no odd index, so they answer false whatever the key says.)
-	return this->mascotMode == MascotMode::Stripes
-		&& this->stripesAlternate
+	const PanelLayout& layout = this->layoutFor(panel);
+	return layout.mode == MascotMode::Stripes
+		&& layout.alternate
 		&& (band.slotIndex() % 2) != 0;
 }
 
 void MascotController::resetScrollOffsets()
 {
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
-		SideState& state = this->stateFor(side);
+		PanelState& state = this->stateFor(panelOf(side));
 		MascotSurface* surface = state.surface.data();
 		if (!surface)
 			continue;
@@ -1436,7 +1483,7 @@ void MascotController::resetScrollOffsets()
 	// (M3 Task 5: the same reasoning covers a change *between* two panning layouts -- a `Scroll`
 	// band's horizontal position means nothing on a column of a vertical `Stripes` panel -- which
 	// is why applyMode() now calls this on every mode change and not only into `Static`.)
-	for (SideState* state : { &this->leftState, &this->rightState })
+	for (PanelState* state : { &this->leftState, &this->rightState })
 		state->scrollPhase = 0.0;
 }
 
@@ -1478,9 +1525,6 @@ void MascotController::onScrollTick()
 	// measured dt over the panel's reference travel -- against one whole travel, so a narrow band
 	// on a fast tick is no longer frozen and a stalled frame that really did jump a pass is
 	// caught. The paragraph above is kept as the record of the first version.)
-	const bool vertical = this->scrollPanIsVertical();
-	const bool reverse = this->scrollDirectionReverses();
-	const bool pingpong = this->scrollPingpong;
 	// M3 Task 6A: the changes this tick's seams take out of their bands. They run after the loops
 	// below, never inside them: a commit is content work (the cadence's queued swap), and it must
 	// not be able to run while this tick still holds the `state`, `surface` and band pointers of
@@ -1489,7 +1533,12 @@ void MascotController::onScrollTick()
 	// in this function is iterating, and applyMode() still re-queues itself while a commit runs.
 	std::vector<MascotBand::WrapCommit> wrapCommits;
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
-		SideState& state = this->stateFor(side);
+		const MascotPanel panel = panelOf(side);
+		const PanelLayout& layout = this->layoutFor(panel);
+		const bool vertical = this->scrollPanIsVertical(panel);
+		const bool reverse = this->scrollDirectionReverses(panel);
+		const bool pingpong = layout.scrollPingpong;
+		PanelState& state = this->stateFor(panel);
 		MascotSurface* surface = state.surface.data();
 		if (!surface || state.bands.empty())
 			continue;
@@ -1500,15 +1549,15 @@ void MascotController::onScrollTick()
 		// its phase does not advance and every band below takes the still branch.
 		double referenceTravel = 0.0;
 		for (const auto& owned : state.bands)
-			referenceTravel = std::max(referenceTravel, this->scrollTravel(*owned));
+			referenceTravel = std::max(referenceTravel, this->scrollTravel(panel, *owned));
 		const double phaseBefore = state.scrollPhase;
 		double phaseRaw = phaseBefore;
 		double phaseDelta = 0.0;
-		if (referenceTravel > 0.0 && this->scrollSpeed > 0) {
+		if (referenceTravel > 0.0 && layout.scrollSpeed > 0) {
 			// px/s -> travel lengths/s -> this tick's slice of a travel. A speed of 0 is not "pan
 			// infinitely slowly", it is "do not pan": the phase is left alone so that turning the
 			// speed back up resumes where the band was instead of having moved invisibly.
-			const double delta = static_cast<double>(this->scrollSpeed) * dtSeconds / referenceTravel;
+			const double delta = static_cast<double>(layout.scrollSpeed) * dtSeconds / referenceTravel;
 			phaseDelta = delta;
 			phaseRaw = phaseBefore + delta;
 			state.scrollPhase = advancedScrollPhase(phaseBefore, delta);
@@ -1525,7 +1574,7 @@ void MascotController::onScrollTick()
 			MascotBand* band = state.band(i);
 			if (!band)
 				continue;
-			const double travel = this->scrollTravel(*band);
+			const double travel = this->scrollTravel(panel, *band);
 			// M3 Task 5: a positive travel shorter than one tick's step is the aliasing case, and
 			// it takes the still branch too. It cannot pan at frame rate, so it is centred and
 			// left there -- the same answer, and the same once-per-layout line (with a wording
@@ -1585,11 +1634,11 @@ void MascotController::onScrollTick()
 				}
 				continue;
 			}
-			const double offsetPhase = this->scrollPhaseOffset(*band);
+			const double offsetPhase = this->scrollPhaseOffset(panel, *band);
 			const double fraction = scrollFractionFor(state.scrollPhase, offsetPhase, pingpong);
 			// The configured direction and the band's own sign (Task 5's alternate) are one answer:
 			// two reversals cancel, exactly as two mirror flips would.
-			const double offset = scrollOffsetFor(fraction, travel, reverse != this->scrollReversed(*band));
+			const double offset = scrollOffsetFor(fraction, travel, reverse != this->scrollReversed(panel, *band));
 			// One property write per band per tick, and none at all when the offset has not moved:
 			// the band's record is the comparison, and setSlotScrollOffset() writes only the axis
 			// that differs from the mirrored one. The other axis is handed 0 so that a band that
@@ -1636,7 +1685,7 @@ void MascotController::nextImage(MascotSide side, bool updateHighlight)
 {
 	// M3 Task 6A: this is the policy band's entry point, so it names band 0; a `Stripes` band
 	// advances through pickFor() with its own index (or nextBandImages() when the pair moves).
-	this->pickFor(this->stateFor(side), side, 0, updateHighlight);
+	this->pickFor(this->stateFor(panelOf(side)), panelOf(side), 0, updateHighlight);
 }
 
 void MascotController::nextImages(bool forcedMirror)
@@ -1650,7 +1699,7 @@ void MascotController::nextBandImages(int bandIndex, bool forcedMirror)
 {
 	if (!this->running)
 		return;
-	const MascotMedia left = this->pickFor(this->leftState, MascotSide::Left, bandIndex,
+	const MascotMedia left = this->pickFor(this->leftState, MascotPanel::Left, bandIndex,
 		bandIndex == 0);
 	if (this->mirrorEnabled() || forcedMirror) {
 		MascotBand* leftBand = this->leftState.band(bandIndex);
@@ -1703,7 +1752,7 @@ void MascotController::nextBandImages(int bandIndex, bool forcedMirror)
 			// Both panels show the same media, each drawn by its own side rule, and the right
 			// panel gets it from the commit that just happened: no request, no decode.
 			this->preparePick(this->rightState, bandIndex, false);
-			this->showMedia(this->rightState, MascotSide::Right, left, false, true, bandIndex);
+			this->showMedia(this->rightState, MascotPanel::Right, left, false, true, bandIndex);
 			return;
 		}
 		// The left panel's pick is still in flight (H1): copy the path it is about to show, not
@@ -1714,13 +1763,13 @@ void MascotController::nextBandImages(int bandIndex, bool forcedMirror)
 		this->requestPath(this->rightState, leftBand->requestPath(), bandIndex);
 	}
 	else {
-		this->pickFor(this->rightState, MascotSide::Right, bandIndex, false);
+		this->pickFor(this->rightState, MascotPanel::Right, bandIndex, false);
 	}
 }
 
 void MascotController::flipSide(MascotSide side)
 {
-	SideState& state = this->stateFor(side);
+	PanelState& state = this->stateFor(panelOf(side));
 	MascotBand* band = state.band(0);
 	// The retired renderer's flip was a no-op on an empty pixmap, so flipping a panel that shows
 	// nothing is not a state change here either.
@@ -1736,7 +1785,7 @@ void MascotController::flipSide(MascotSide side)
 		MascotBand* flipped = state.band(i);
 		if (!flipped || flipped->media().path.isEmpty())
 			continue;
-		this->applyMirror(state, side, flipped->media().path, i);
+		this->applyMirror(state, panelOf(side), flipped->media().path, i);
 	}
 }
 
@@ -1758,7 +1807,7 @@ bool MascotController::flipForSide(const QString& path, MascotSide side) const
 
 color_area MascotController::colorFor(MascotSide side, bool weighted)
 {
-	const SideState& state = this->stateFor(side);
+	const PanelState& state = this->stateFor(panelOf(side));
 	const MascotBand* band = state.band(0);
 	// The retired renderer's getColor() semantics, unchanged, on the palette the decode already
 	// extracted (amendment H5): weight by area when asked, otherwise take the dominant area
@@ -1800,7 +1849,7 @@ void MascotController::showDroppedImage(MascotSide side, const QString& path)
 	// asked for.
 	if (!this->App || !this->App->debug_mode)
 		return;
-	SideState& state = this->stateFor(side);
+	PanelState& state = this->stateFor(panelOf(side));
 	if (!state.surface)
 		return;
 	// That entry point's behaviour: the dropped file is drawn unflipped on this panel
@@ -1816,7 +1865,7 @@ void MascotController::showDroppedImage(MascotSide side, const QString& path)
 
 	if (!this->mirrorEnabled())
 		return;
-	SideState& otherState = this->stateFor(other(side));
+	PanelState& otherState = this->stateFor(panelOf(other(side)));
 	if (!otherState.surface)
 		return;
 	otherState.mirrorOverrideEnabled = true;
@@ -1866,17 +1915,55 @@ bool MascotController::eventFilter(QObject* watched, QEvent* event)
 	return QObject::eventFilter(watched, event);
 }
 
-MascotController::SideState& MascotController::stateFor(MascotSide side)
+MascotController::PanelState& MascotController::stateFor(MascotPanel panel)
 {
-	return side == MascotSide::Left ? this->leftState : this->rightState;
+	if (panel == MascotPanel::Background)
+		return this->backgroundState;
+	return panel == MascotPanel::Right ? this->rightState : this->leftState;
 }
 
-const MascotController::SideState& MascotController::stateFor(MascotSide side) const
+const MascotController::PanelState& MascotController::stateFor(MascotPanel panel) const
 {
-	return side == MascotSide::Left ? this->leftState : this->rightState;
+	if (panel == MascotPanel::Background)
+		return this->backgroundState;
+	return panel == MascotPanel::Right ? this->rightState : this->leftState;
 }
 
-MascotBand* MascotController::SideState::band(int i) const
+MascotPanel MascotController::panelOf(MascotSide side)
+{
+	return side == MascotSide::Left ? MascotPanel::Left : MascotPanel::Right;
+}
+
+MascotController::PanelLayout& MascotController::layoutFor(MascotPanel panel)
+{
+	return panel == MascotPanel::Background ? this->backgroundLayout : this->columnsLayout;
+}
+
+const MascotController::PanelLayout& MascotController::layoutFor(MascotPanel panel) const
+{
+	return panel == MascotPanel::Background ? this->backgroundLayout : this->columnsLayout;
+}
+
+int MascotController::stripesCountFor(MascotPanel panel) const
+{
+	if (panel == MascotPanel::Background)
+		return this->backgroundStripes;
+	return panel == MascotPanel::Right ? this->stripesRightBands : this->stripesLeftBands;
+}
+
+bool MascotController::pairSideOf(const PanelState& state, MascotSide* side) const
+{
+	for (MascotSide candidate : { MascotSide::Left, MascotSide::Right }) {
+		if (&this->stateFor(panelOf(candidate)) == &state) {
+			if (side)
+				*side = candidate;
+			return true;
+		}
+	}
+	return false;
+}
+
+MascotBand* MascotController::PanelState::band(int i) const
 {
 	if (i < 0 || i >= static_cast<int>(this->bands.size()))
 		return nullptr;
@@ -1935,7 +2022,7 @@ void MascotController::createSurfaces()
 	this->setSurfaces(left, right);
 }
 
-void MascotController::configureSurface(SideState& state, MascotSide side)
+void MascotController::configureSurface(PanelState& state, MascotPanel panel)
 {
 	if (!state.surface)
 		return;
@@ -1946,7 +2033,7 @@ void MascotController::configureSurface(SideState& state, MascotSide side)
 	// writes the slot count, and hands every band its surface -- surviving bands keep their media
 	// and players, new indices get a band of their own, and a rebuilt surface retires the slot
 	// state that described the panel that has just gone.)
-	this->syncBands(state, side);
+	this->syncBands(state, panel);
 	// The image path's mode (M1): the media is scaled to the panel's height with its aspect
 	// ratio kept, which is what the old renderer's scaled(width, height, KeepAspectRatio)
 	// produced -- a tall panel keeps a narrow image's side margins and crops a wide one
@@ -1961,15 +2048,22 @@ void MascotController::configureSurface(SideState& state, MascotSide side)
 	// re-apply the per-band flip parity a surviving band had before the surface was rebuilt (a
 	// single-band panel still makes exactly the one call it made before bands were counted).
 	for (int i = 0; i < static_cast<int>(state.bands.size()); ++i)
-		this->applyMirror(state, side, state.bands[static_cast<std::size_t>(i)]->media().path, i);
+		this->applyMirror(state, panel, state.bands[static_cast<std::size_t>(i)]->media().path, i);
 	surface->installEventFilter(this);
-	connect(surface, &MascotSurface::clicked, this,
-		[this, side](int, Qt::MouseButton button, Qt::KeyboardModifiers modifiers) {
-			emit this->clicked(side, button, modifiers);
+	// M4 Task 1: a click and a drop are pair-only policy, so these connections exist only for the
+	// two states that have a pair side. Which side that is comes from the state itself rather than
+	// from a panel -> side conversion; a background surface (Task 2) owns neither state and wires
+	// neither signal.
+	MascotSide pairSide = MascotSide::Left;
+	if (this->pairSideOf(state, &pairSide)) {
+		connect(surface, &MascotSurface::clicked, this,
+			[this, pairSide](int, Qt::MouseButton button, Qt::KeyboardModifiers modifiers) {
+				emit this->clicked(pairSide, button, modifiers);
+			});
+		connect(surface, &MascotSurface::imageDropped, this, [this, pairSide](int, QString path) {
+			this->showDroppedImage(pairSide, path);
 		});
-	connect(surface, &MascotSurface::imageDropped, this, [this, side](int, QString path) {
-		this->showDroppedImage(side, path);
-	});
+	}
 	// M2: the player half of this panel, when the media setting and the decoder budget allow one.
 	// The sinks stay unbound until the first swap (see createVideoSlot).
 	// (M3 Task 1: createVideoSlot() calls the band's ensureVideo(), which binds them when the
@@ -1977,7 +2071,7 @@ void MascotController::configureSurface(SideState& state, MascotSide side)
 	this->ensureVideoSlots();
 }
 
-void MascotController::releaseSurface(SideState& state)
+void MascotController::releaseSurface(PanelState& state)
 {
 	if (!state.surface)
 		return;
@@ -2008,7 +2102,7 @@ void MascotController::releaseSurface(SideState& state)
 	state.surface = nullptr;
 }
 
-void MascotController::clearSide(SideState& state)
+void MascotController::clearSide(PanelState& state)
 {
 	// M3 Task 2: every band of the panel, not only its policy band. A `Stripes` panel shows a
 	// picture per band, so each band's path is an owner field the pin invariant has to see gone
@@ -2066,7 +2160,7 @@ bool MascotController::pinReferenced(const QString& path) const
 	// did before bands were counted.
 	// (M3 Task 6A: each band's *candidate* is one of those fields too -- it is a decoded media the
 	// band is about to show, so it is pinned exactly as band 0's candidate always was.)
-	for (const SideState* state : { &this->leftState, &this->rightState }) {
+	for (const PanelState* state : { &this->leftState, &this->rightState }) {
 		for (const auto& owned : state->bands) {
 			if (owned->media().path == path)
 				return true;
@@ -2086,7 +2180,7 @@ void MascotController::syncPin(const QString& path)
 		source->pin(path, this->pinReferenced(path));
 }
 
-void MascotController::applyDisplay(SideState& state, MascotSide side)
+void MascotController::applyDisplay(PanelState& state, MascotPanel panel)
 {
 	if (!state.surface)
 		return;
@@ -2103,17 +2197,17 @@ void MascotController::applyDisplay(SideState& state, MascotSide side)
 		const MascotMedia media = band->media();
 		if (media.path.isEmpty())
 			continue;
-		this->presentMedia(state, side, media, i);
+		this->presentMedia(state, panel, media, i);
 	}
 }
 
-void MascotController::presentMedia(SideState& state, MascotSide side, const MascotMedia& media,
+void MascotController::presentMedia(PanelState& state, MascotPanel panel, const MascotMedia& media,
 	int bandIndex)
 {
 	MascotBand* band = state.band(bandIndex);
 	if (!state.surface || !band)
 		return;
-	this->applyMirror(state, side, media.path, bandIndex);
+	this->applyMirror(state, panel, media.path, bandIndex);
 	// M2: the fill mode is written here rather than once per surface, because it now follows the
 	// media type. Both types ask for HeightFit (§8's ruling: a video resizes vertically to fit and
 	// centres horizontally, exactly like an image), so in practice the value only differs from
@@ -2125,7 +2219,7 @@ void MascotController::presentMedia(SideState& state, MascotSide side, const Mas
 	// mode's normalised panning axis in `Scroll`/`Stripes`, and the configured default is
 	// HeightFit -- so a default config still writes exactly the value this comment describes.
 	// The media type still plays no part in the choice, which is why the write stays here.)
-	band->applyFill(this->effectiveFillMode());
+	band->applyFill(this->effectiveFillMode(panel));
 	// M3 Task 1: the record and the write are one call on the band, and it comes after the
 	// mirror and the fill mode because the slot derives its content shift from both.
 	band->setMedia(media);
@@ -2178,7 +2272,19 @@ void MascotController::presentMedia(SideState& state, MascotSide side, const Mas
 		band->setContentOffset(QPointF(0.0, 0.0));
 }
 
-void MascotController::applyMirror(SideState& state, MascotSide side, const QString& path,
+bool MascotController::mirrorParityFor(MascotPanel panel, const QString& path) const
+{
+	// M4 Task 1: the parity a per-panel commit is written with. The pair panels keep the
+	// side-directory rule exactly as flipForSide() answers it; the background has no side
+	// directory rule of its own and no pair to mirror with, so it is never flipped.
+	if (panel == MascotPanel::Left)
+		return this->flipForSide(path, MascotSide::Left);
+	if (panel == MascotPanel::Right)
+		return this->flipForSide(path, MascotSide::Right);
+	return false;
+}
+
+void MascotController::applyMirror(PanelState& state, MascotPanel panel, const QString& path,
 	int bandIndex)
 {
 	MascotBand* band = state.band(bandIndex);
@@ -2188,7 +2294,7 @@ void MascotController::applyMirror(SideState& state, MascotSide side, const QStr
 	if (state.mirrorOverrideEnabled)
 		mirrored = state.mirrorOverrideValue;
 	else if (!path.isEmpty())
-		mirrored = this->flipForSide(path, side);
+		mirrored = this->mirrorParityFor(panel, path);
 	else
 		mirrored = false;
 	// The retired renderer toggled whatever the side rule had produced, and a new image reset that
@@ -2201,7 +2307,7 @@ void MascotController::applyMirror(SideState& state, MascotSide side, const QStr
 	band->applyMirror(mirrored);
 }
 
-void MascotController::requestPath(SideState& state, const QString& path, int bandIndex)
+void MascotController::requestPath(PanelState& state, const QString& path, int bandIndex)
 {
 	MascotBand* band = state.band(bandIndex);
 	if (!band)
@@ -2222,7 +2328,7 @@ void MascotController::requestPath(SideState& state, const QString& path, int ba
 		source->request(path);
 }
 
-MascotMedia MascotController::pickFor(SideState& state, MascotSide side, int bandIndex,
+MascotMedia MascotController::pickFor(PanelState& state, MascotPanel panel, int bandIndex,
 	bool updateHighlight)
 {
 	if (!this->running || !state.surface)
@@ -2236,7 +2342,7 @@ MascotMedia MascotController::pickFor(SideState& state, MascotSide side, int ban
 	// image candidate left over from an image-mode pick must not be shown over a video panel.
 	const MascotMedia::Type type = this->pickType(state);
 	if (type == MascotMedia::Video) {
-		switch (this->pickVideo(state, side, bandIndex, updateHighlight)) {
+		switch (this->pickVideo(state, panel, bandIndex, updateHighlight)) {
 		case VideoPick::Started:
 			return MascotMedia();
 		case VideoPick::Skip:
@@ -2261,7 +2367,7 @@ MascotMedia MascotController::pickFor(SideState& state, MascotSide side, int ban
 		if (state.lastTypeLogMs == 0 || (now - state.lastTypeLogMs) >= VIDEO_LOG_INTERVAL_MS) {
 			state.lastTypeLogMs = now;
 			this->logVideo(QStringLiteral("%1 pick=image pool=%2 media=%3")
-				.arg(bandLabel(side, bandIndex))
+				.arg(bandLabel(panel, bandIndex))
 				.arg(this->source.videoPoolSize())
 				.arg(this->mediaSetting));
 		}
@@ -2276,7 +2382,7 @@ MascotMedia MascotController::pickFor(SideState& state, MascotSide side, int ban
 	if (!band->playback().candidate.path.isEmpty()) {
 		const MascotMedia media = band->playback().candidate;
 		this->preparePick(state, bandIndex, updateHighlight);
-		this->showMedia(state, side, media, true, true, bandIndex);
+		this->showMedia(state, panel, media, true, true, bandIndex);
 		return media;
 	}
 
@@ -2317,7 +2423,7 @@ QString MascotController::nextSourcePath()
 	return this->source.nextImagePath();
 }
 
-void MascotController::preparePick(SideState& state, int bandIndex, bool updateHighlight)
+void MascotController::preparePick(PanelState& state, int bandIndex, bool updateHighlight)
 {
 	// A fresh pick resets what the previous media carried: the side-directory rule is
 	// authoritative again, and the theme colour follows this swap only if it was asked for.
@@ -2335,7 +2441,7 @@ void MascotController::preparePick(SideState& state, int bandIndex, bool updateH
 	state.highlightOnApply = updateHighlight;
 }
 
-void MascotController::showMedia(SideState& state, MascotSide side, const MascotMedia& media,
+void MascotController::showMedia(PanelState& state, MascotPanel panel, const MascotMedia& media,
 	bool fromReady, bool armCandidate, int bandIndex)
 {
 	MascotBand* band = state.band(bandIndex);
@@ -2389,7 +2495,7 @@ void MascotController::showMedia(SideState& state, MascotSide side, const Mascot
 	// M3 Task 1: the media is recorded and written by the presenter, at the point applyDisplay()
 	// used to write it -- after the mirror and the fill mode, so the commit's write order is the
 	// one the slot has always seen.
-	this->presentMedia(state, side, media, bandIndex);
+	this->presentMedia(state, panel, media, bandIndex);
 	this->syncPin(previousShown);
 	this->syncPin(previousCandidate);
 	// M3 Task 6A: a commit is this band's content arriving, so both retry budgets start over.
@@ -2400,7 +2506,7 @@ void MascotController::showMedia(SideState& state, MascotSide side, const Mascot
 	// The next swap is armed after this turn: the swap path must not walk the mascot directory.
 	// (M3 Task 6A: the committed band's own next media, through its own index.)
 	if (armCandidate)
-		this->armSpeculation(side, bandIndex);
+		this->armSpeculation(panel, bandIndex);
 
 	// M2: the left panel is the one the pair follows, so when it commits an *image* there is no
 	// video offset coming for the right panel to copy -- it was armed by a video pick that has
@@ -2409,14 +2515,19 @@ void MascotController::showMedia(SideState& state, MascotSide side, const Mascot
 	// commit is untouched: onVideoFirstFrame() reads the flag after this call.
 	// (M3 Task 6A: the copy that is dropped is the right panel's same-index band's, the one a
 	// degraded pick armed for this band.)
-	if (side == MascotSide::Left && media.type == MascotMedia::Image) {
+	if (panel == MascotPanel::Left && media.type == MascotMedia::Image) {
 		if (MascotBand* rightBand = this->rightState.band(bandIndex))
 			rightBand->playback().mirrorCopyPending = false;
 	}
 
+	// M4 Task 1: the accent is pair policy, so a per-panel commit reaches it through the pair
+	// state that owns the commit rather than by converting its panel back into a side. The
+	// background owns neither pair state and therefore emits no colour.
 	if (policyBand && state.highlightOnApply) {
 		state.highlightOnApply = false;
-		emit this->themeColorChanged(this->colorFor(side, true));
+		MascotSide pairSide = MascotSide::Left;
+		if (this->pairSideOf(state, &pairSide))
+			emit this->themeColorChanged(this->colorFor(pairSide, true));
 	}
 
 	// M3 Task 6A: the pair rule, extended from one band to N. Band 0's image copy is made by
@@ -2425,13 +2536,13 @@ void MascotController::showMedia(SideState& state, MascotSide side, const Mascot
 	// the right panel's same-index band, drawn by that panel's own side rule. A video commit is
 	// not copied here: its offset only exists at the first frame, and onVideoFirstFrame() is where
 	// the pair's copy starts.
-	if (this->mirrorEnabled() && side == MascotSide::Left && bandIndex > 0
+	if (this->mirrorEnabled() && panel == MascotPanel::Left && bandIndex > 0
 		&& media.type == MascotMedia::Image) {
-		SideState& right = this->rightState;
+		PanelState& right = this->rightState;
 		MascotBand* rightBand = right.band(bandIndex);
 		if (right.surface && rightBand) {
 			this->preparePick(right, bandIndex, false);
-			this->showMedia(right, MascotSide::Right, media, false, true, bandIndex);
+			this->showMedia(right, MascotPanel::Right, media, false, true, bandIndex);
 		}
 	}
 }
@@ -2449,18 +2560,18 @@ void MascotController::holdCandidate(MascotBand& band, const MascotMedia& media)
 	this->syncPin(previous);
 }
 
-void MascotController::armSpeculation(MascotSide side, int bandIndex)
+void MascotController::armSpeculation(MascotPanel panel, int bandIndex)
 {
 	// Queued rather than called: the pick walks the mascot directory and posts a decode, and
 	// neither may sit on the swap path (the swap must stay a property write). Queued to `this`,
 	// so a stopped or destroyed controller simply never runs it; speculate() is idempotent, so
 	// several commits in one turn collapse into one pick.
-	QMetaObject::invokeMethod(this, [this, side, bandIndex] {
-		this->speculate(this->stateFor(side), side, bandIndex);
+	QMetaObject::invokeMethod(this, [this, panel, bandIndex] {
+		this->speculate(this->stateFor(panel), panel, bandIndex);
 	}, Qt::QueuedConnection);
 }
 
-void MascotController::speculate(SideState& state, MascotSide side, int bandIndex)
+void MascotController::speculate(PanelState& state, MascotPanel panel, int bandIndex)
 {
 	if (!this->running || !state.surface)
 		return;
@@ -2479,7 +2590,7 @@ void MascotController::speculate(SideState& state, MascotSide side, int bandInde
 	// (M3 Task 6A: the rule is per band index now: a right-panel band the left panel mirrors needs
 	// no speculation of its own, while a right-panel band past the left panel's count is its own
 	// band and does.)
-	if (side == MascotSide::Right && this->bandMirrorsLeft(bandIndex))
+	if (panel == MascotPanel::Right && this->bandMirrorsLeft(bandIndex))
 		return;
 	// M2: a video panel has no use for a decoded image. Holding one would cost a decode, a cache
 	// entry and a pin per clip, and pickFor() would find it waiting when the panel's type
@@ -2517,11 +2628,11 @@ bool MascotController::mediaMayBeVideo() const
 	// none falls through pickVideo()'s no-slot branch to the image path.)
 	if (!this->mediaSettingWantsVideo())
 		return false;
-	return this->videoBandsFor(MascotSide::Left) > 0
-		|| this->videoBandsFor(MascotSide::Right) > 0;
+	return this->videoBandsFor(MascotPanel::Left) > 0
+		|| this->videoBandsFor(MascotPanel::Right) > 0;
 }
 
-int MascotController::videoBandsFor(MascotSide side) const
+int MascotController::videoBandsFor(MascotPanel panel) const
 {
 	// M3 Task 5: the panel's player entitlement. `Static` is M2's model: one band, and whether it
 	// gets two players (crossfade) or one (the clamp) is applyDecoderBudget()'s decision -- this
@@ -2529,29 +2640,33 @@ int MascotController::videoBandsFor(MascotSide side) const
 	// single player, and applyBandBudget() has already spent the budget across the two panels.
 	if (!this->mediaSettingWantsVideo())
 		return 0;
-	if (this->mascotMode == MascotMode::Static)
+	// M4 Task 1: the background has no allocation yet -- applyBandBudget() spends the pair's
+	// budget and Task 2 gives the background its own players -- so it owns none.
+	if (panel == MascotPanel::Background)
+		return 0;
+	if (this->layoutFor(panel).mode == MascotMode::Static)
 		return this->videoMode != VideoMode::Off ? 1 : 0;
-	return side == MascotSide::Left ? this->leftBandPlayers : this->rightBandPlayers;
+	return panel == MascotPanel::Left ? this->leftBandPlayers : this->rightBandPlayers;
 }
 
-bool MascotController::bandMayOwnPlayer(MascotSide side, int bandIndex) const
+bool MascotController::bandMayOwnPlayer(MascotPanel panel, int bandIndex) const
 {
 	// The allocation is a prefix of each panel's bands, so "may own" is one comparison. The band
 	// count is re-checked because a caller between a count change and the next applyBandBudget()
 	// could still be asking about an index the panel no longer has.
 	return bandIndex >= 0
-		&& bandIndex < this->bandCount(side)
-		&& bandIndex < this->videoBandsFor(side);
+		&& bandIndex < this->bandCount(panel)
+		&& bandIndex < this->videoBandsFor(panel);
 }
 
-bool MascotController::videoCrossfades() const
+bool MascotController::videoCrossfades(MascotPanel panel) const
 {
 	// §7.5: a crossfade is the two-player design, and only `Static` keeps it. `Scroll` and
 	// `Stripes` give a band one player, so a swap reloads the output already on screen and there
 	// is nothing to blend; they take the hard cut and never consult `mascots_crossfade_ms`. This
 	// is the one question fadeInVideo() and setSinglePlayer() both ask, so the two cannot disagree
 	// about a mode that has no fade to show.
-	return this->mascotMode == MascotMode::Static
+	return this->layoutFor(panel).mode == MascotMode::Static
 		&& this->videoMode == VideoMode::Crossfade;
 }
 
@@ -2581,7 +2696,7 @@ void MascotController::invalidateVideoPoolIfStale()
 	this->source.invalidateVideoPool();
 }
 
-MascotMedia::Type MascotController::pickType(SideState& state)
+MascotMedia::Type MascotController::pickType(PanelState& state)
 {
 	if (!this->mediaMayBeVideo())
 		return MascotMedia::Image;
@@ -2605,7 +2720,7 @@ MascotMedia::Type MascotController::pickType(SideState& state)
 	return pool > 0 ? MascotMedia::Video : MascotMedia::Image;
 }
 
-MascotController::VideoPick MascotController::pickVideo(SideState& state, MascotSide side,
+MascotController::VideoPick MascotController::pickVideo(PanelState& state, MascotPanel panel,
 	int bandIndex, bool updateHighlight)
 {
 	MascotBand* band = state.band(bandIndex);
@@ -2640,17 +2755,17 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 			|| (now - state.lastPreviewDeferLogMs) >= VIDEO_LOG_INTERVAL_MS) {
 			state.lastPreviewDeferLogMs = now;
 			this->logVideo(QStringLiteral("%1 swap waits: a preview tooltip is playing")
-				.arg(bandLabel(side, bandIndex)));
+				.arg(bandLabel(panel, bandIndex)));
 		}
 		// The same flag the sink retry sets, for the same reason: this panel is about to start a
 		// load, so under the mirror key the other panel's copy has to be armed from that load's
 		// first frame rather than left waiting for a commit it will not see on its own.
 		band->playback().videoPickRetryPending = true;
-		QTimer::singleShot(this->busyDeferMs, this, [this, side, bandIndex]() {
+		QTimer::singleShot(this->busyDeferMs, this, [this, panel, bandIndex]() {
 			if (!this->running)
 				return;
-			SideState& panel = this->stateFor(side);
-			MascotBand* panelBand = panel.band(bandIndex);
+			PanelState& panelState = this->stateFor(panel);
+			MascotBand* panelBand = panelState.band(bandIndex);
 			MascotVideoSlot* panelVideo = panelBand ? panelBand->video() : nullptr;
 			// A load that started in the meantime (a click, the other panel's pair) is newer than
 			// this deferral: it owns the panel's next frame.
@@ -2661,7 +2776,7 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 			if (!panelBand || !panelVideo || panelBand->requestIsVideo()
 				|| (panelVideo->isBusy() && !panelVideo->preloading()))
 				return;
-			this->pickFor(panel, side, bandIndex, bandIndex == 0);
+			this->pickFor(panelState, panel, bandIndex, bandIndex == 0);
 		});
 		return VideoPick::Skip;
 	}
@@ -2685,13 +2800,13 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 			// mirror pair follows, so the right panel's copy has to be armed from its firstFrame
 			// rather than left waiting for a commit that the right panel never sees.
 			band->playback().videoPickRetryPending = true;
-			QTimer::singleShot(this->retryIntervalMs, this, [this, side, bandIndex]() {
+			QTimer::singleShot(this->retryIntervalMs, this, [this, panel, bandIndex]() {
 				if (!this->running)
 					return;
-				SideState& panel = this->stateFor(side);
-				MascotBand* panelBand = panel.band(bandIndex);
+				PanelState& panelState = this->stateFor(panel);
+				MascotBand* panelBand = panelState.band(bandIndex);
 				if (panelBand && panelBand->media().path.isEmpty())
-					this->pickFor(panel, side, bandIndex, bandIndex == 0);
+					this->pickFor(panelState, panel, bandIndex, bandIndex == 0);
 			});
 			return VideoPick::Skip;
 		}
@@ -2728,7 +2843,7 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 		this->preparePick(state, bandIndex, updateHighlight);
 		// The offset is passed rather than left as -1: it is the number that was actually seeked to,
 		// and passing it is what lets the log print it and a mirrored pair agree on it.
-		this->startVideoLoad(state, side, bandIndex, parkedPath, parkedOffsetMs);
+		this->startVideoLoad(state, panel, bandIndex, parkedPath, parkedOffsetMs);
 		return VideoPick::Started;
 	}
 	// The source reads no config, so the seed and the weighted switch are pushed before the pick
@@ -2749,11 +2864,11 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 	}
 	band->playback().prefetchPath.clear();
 	this->preparePick(state, bandIndex, updateHighlight);
-	this->startVideoLoad(state, side, bandIndex, path, -1);
+	this->startVideoLoad(state, panel, bandIndex, path, -1);
 	return VideoPick::Started;
 }
 
-void MascotController::startVideoLoad(SideState& state, MascotSide side, int bandIndex,
+void MascotController::startVideoLoad(PanelState& state, MascotPanel panel, int bandIndex,
 	const QString& path, qint64 offsetMs)
 {
 	MascotBand* band = state.band(bandIndex);
@@ -2774,18 +2889,18 @@ void MascotController::startVideoLoad(SideState& state, MascotSide side, int ban
 	if (!band->ensureVideo(0)) {
 		if (band->playback().videoLoadRetries++ < this->retryAttempts) {
 			this->logVideo(QStringLiteral("%1 has no video sink yet; retrying the same load")
-				.arg(bandLabel(side, bandIndex)));
+				.arg(bandLabel(panel, bandIndex)));
 			// The same flag a retried pick sets, because from outside this is the same situation:
 			// this panel is about to start a load, so a mirrored pair has to arm the other panel's
 			// copy from that load's first frame.
 			band->playback().videoPickRetryPending = true;
-			QTimer::singleShot(this->retryIntervalMs, this, [this, side, bandIndex, path, offsetMs]() {
+			QTimer::singleShot(this->retryIntervalMs, this, [this, panel, bandIndex, path, offsetMs]() {
 				if (!this->running)
 					return;
-				SideState& panel = this->stateFor(side);
-				MascotBand* panelBand = panel.band(bandIndex);
+				PanelState& panelState = this->stateFor(panel);
+				MascotBand* panelBand = panelState.band(bandIndex);
 				if (panelBand && panelBand->video())
-					this->startVideoLoad(panel, side, bandIndex, path, offsetMs);
+					this->startVideoLoad(panelState, panel, bandIndex, path, offsetMs);
 			});
 			return;
 		}
@@ -2799,7 +2914,7 @@ void MascotController::startVideoLoad(SideState& state, MascotSide side, int ban
 		if (!this->warnedVideoSinkGiveUp) {
 			this->warnedVideoSinkGiveUp = true;
 			this->logVideo(QStringLiteral("%1 could not start its load (%2 retries, no sink); the next swap re-pairs the panels")
-				.arg(bandLabel(side, bandIndex))
+				.arg(bandLabel(panel, bandIndex))
 				.arg(this->retryAttempts));
 		}
 		return;
@@ -2836,7 +2951,7 @@ void MascotController::startVideoLoad(SideState& state, MascotSide side, int ban
 	// (M3 Task 6A: the copy is owed by the right panel's *same-index* band, which is the band this
 	// load's frame will have to satisfy. A right-panel band past the left panel's count owes
 	// nothing, because the left panel has no band for it to mirror.)
-	if (side == MascotSide::Left && this->mirrorEnabled()) {
+	if (panel == MascotPanel::Left && this->mirrorEnabled()) {
 		if (MascotBand* rightBand = this->rightState.band(bandIndex))
 			rightBand->playback().mirrorCopyPending = true;
 	}
@@ -2844,7 +2959,7 @@ void MascotController::startVideoLoad(SideState& state, MascotSide side, int ban
 	// prints the offset it was parked at and can be paired with the "preloaded" line that preceded
 	// it, while `preloaded=no` is a swap that paid for its own load.
 	this->logVideo(QStringLiteral("%1 swap #%2 pool=%3 offset=%4 path=\"%5\" preloaded=%6")
-		.arg(bandLabel(side, bandIndex))
+		.arg(bandLabel(panel, bandIndex))
 		.arg(band->playback().videoSeq)
 		.arg(this->source.videoPoolSize())
 		.arg(effectiveOffsetMs < 0 ? QStringLiteral("random") : QString::number(effectiveOffsetMs))
@@ -2858,12 +2973,12 @@ void MascotController::startVideoLoad(SideState& state, MascotSide side, int ban
 	slot->swapTo(path, offsetMs);
 }
 
-void MascotController::onVideoFirstFrame(MascotSide side, int bandIndex, const QString& path, int ab,
-	const QSize& frameSize, qint64 offsetMs)
+void MascotController::onVideoFirstFrame(MascotPanel panel, int bandIndex, const QString& path,
+	int ab, const QSize& frameSize, qint64 offsetMs)
 {
 	if (!this->running)
 		return;
-	SideState& state = this->stateFor(side);
+	PanelState& state = this->stateFor(panel);
 	MascotBand* band = state.band(bandIndex);
 	if (!state.surface || !band || !band->video())
 		return;
@@ -2886,11 +3001,11 @@ void MascotController::onVideoFirstFrame(MascotSide side, int bandIndex, const Q
 	// Committed through the same call an image takes, which is what keeps the pins, the mirror
 	// reset, highlightOnApply and the theme-colour emission working without a second copy of any
 	// of them. `armCandidate` is false: a video panel has no image candidate to arm.
-	this->showMedia(state, side, media, false, false, bandIndex);
-	this->fadeInVideo(state, side, bandIndex, ab);
-	this->restartClipTimer(side, bandIndex);
+	this->showMedia(state, panel, media, false, false, bandIndex);
+	this->fadeInVideo(state, panel, bandIndex, ab);
+	this->restartClipTimer(panel, bandIndex);
 	this->logVideo(QStringLiteral("%1 first frame #%2 ab=%3 %4x%5 offset=%6ms delta=%7ms path=\"%8\"")
-		.arg(bandLabel(side, bandIndex))
+		.arg(bandLabel(panel, bandIndex))
 		.arg(band->playback().videoSeq)
 		.arg(ab)
 		.arg(frameSize.width())
@@ -2903,7 +3018,7 @@ void MascotController::onVideoFirstFrame(MascotSide side, int bandIndex, const Q
 	// offset finally exists -- so this is the moment the right panel can be started on it.
 	// (M3 Task 6A: the pending copy is the right panel's same-index band's; band i's frame can
 	// therefore only ever satisfy band i's copy.)
-	if (side == MascotSide::Left) {
+	if (panel == MascotPanel::Left) {
 		MascotBand* rightBand = this->rightState.band(bandIndex);
 		if (rightBand && rightBand->playback().mirrorCopyPending) {
 			rightBand->playback().mirrorCopyPending = false;
@@ -2913,7 +3028,7 @@ void MascotController::onVideoFirstFrame(MascotSide side, int bandIndex, const Q
 	}
 }
 
-void MascotController::fadeInVideo(SideState& state, MascotSide side, int bandIndex, int ab)
+void MascotController::fadeInVideo(PanelState& state, MascotPanel panel, int bandIndex, int ab)
 {
 	MascotBand* band = state.band(bandIndex);
 	MascotVideoSlot* slot = band ? band->video() : nullptr;
@@ -2926,7 +3041,7 @@ void MascotController::fadeInVideo(SideState& state, MascotSide side, int bandIn
 	// never has it whatever the decoder count: one player per band means nothing can blend, so the
 	// duration is 0 there too. videoCrossfades() is the single answer both this and
 	// setSinglePlayer() read, so a mode cannot pay for a fade it cannot show.)
-	const int fade = this->videoCrossfades() ? this->crossfadeMs : 0;
+	const int fade = this->videoCrossfades(panel) ? this->crossfadeMs : 0;
 	band->setVideoOpacity(ab, 1.0, fade);
 	band->setVideoOpacity(1 - ab, 0.0, fade);
 	if (fade <= 0) {
@@ -2940,33 +3055,33 @@ void MascotController::fadeInVideo(SideState& state, MascotSide side, int bandIn
 		// preload there could never be parked and asking would only draw a file from the pool that
 		// nothing could use.)
 		if (bandIndex == 0)
-			this->preloadNext(side);
+			this->preloadNext(panel);
 		return;
 	}
 	// The retirement ends the crossfade: until then the outgoing player is what is still partly
 	// visible, which is the only reason its decoder is still open. Queued on `this`, so a
 	// controller that was stopped in between simply never runs it.
-	QTimer::singleShot(fade, this, [this, side, bandIndex]() {
-		SideState& panel = this->stateFor(side);
-		MascotBand* panelBand = panel.band(bandIndex);
+	QTimer::singleShot(fade, this, [this, panel, bandIndex]() {
+		PanelState& panelState = this->stateFor(panel);
+		MascotBand* panelBand = panelState.band(bandIndex);
 		if (MascotVideoSlot* panelSlot = panelBand ? panelBand->video() : nullptr)
 			panelSlot->retireInactive();
 		// The same ordering rule as the hard cut above: the preload follows the retirement, because
 		// until it has happened the output a preload would pick is the outgoing clip's.
 		if (bandIndex == 0)
-			this->preloadNext(side);
+			this->preloadNext(panel);
 	});
 }
 
-void MascotController::preloadNext(MascotSide side)
+void MascotController::preloadNext(MascotPanel panel)
 {
 	// Queued for the same reason armSpeculation() is: the pick reads the pool and the preload posts
 	// a load, and neither may sit inside the commit or the fade callback that asked for them. Queued
 	// to `this`, so a controller that was stopped or destroyed in between simply never runs it.
-	QMetaObject::invokeMethod(this, [this, side] { this->startPreload(side); }, Qt::QueuedConnection);
+	QMetaObject::invokeMethod(this, [this, panel] { this->startPreload(panel); }, Qt::QueuedConnection);
 }
 
-void MascotController::startPreload(MascotSide side)
+void MascotController::startPreload(MascotPanel panel)
 {
 	if (!this->running || !this->preloadEnabled || !this->mediaMayBeVideo())
 		return;
@@ -2976,9 +3091,9 @@ void MascotController::startPreload(MascotSide side)
 	// Asking anyway would draw a file from the pool that nothing could ever use and shift the
 	// seeded sequence by one draw per clip, so the decision is made here rather than paying for a
 	// preload that cannot exist. `Static` keeps M2's path exactly, one-player clamp included.
-	if (this->mascotMode != MascotMode::Static)
+	if (this->layoutFor(panel).mode != MascotMode::Static)
 		return;
-	SideState& state = this->stateFor(side);
+	PanelState& state = this->stateFor(panel);
 	MascotSurface* surface = state.surface.data();
 	MascotBand* band = state.band(0);
 	MascotVideoSlot* slot = band ? band->video() : nullptr;
@@ -3002,7 +3117,7 @@ void MascotController::startPreload(MascotSide side)
 	// left panel: the right panel's preload is started from the left's preloaded() report, which is
 	// where the offset it has to match exists. A right panel that drew its own file here would
 	// desync the pair -- the rule startMirrorVideo() enforces for swaps, applied one step earlier.
-	if (side == MascotSide::Right && this->mirrorEnabled())
+	if (panel == MascotPanel::Right && this->mirrorEnabled())
 		return;
 	// A missing sink is the delegate being a turn behind. The swap path has its own retry budget for
 	// exactly that, so a preload does not compete for it: it simply waits for the next commit.
@@ -3027,19 +3142,19 @@ void MascotController::startPreload(MascotSide side)
 	slot->preload(path, -1);
 }
 
-void MascotController::onVideoPreloaded(MascotSide side, int bandIndex, const QString& path,
+void MascotController::onVideoPreloaded(MascotPanel panel, int bandIndex, const QString& path,
 	qint64 offsetMs, const QSize& frameSize)
 {
 	if (!this->running || path.isEmpty())
 		return;
-	SideState& state = this->stateFor(side);
+	PanelState& state = this->stateFor(panel);
 	MascotBand* band = state.band(bandIndex);
 	if (!state.surface || !band || !band->video())
 		return;
 	// The gate's evidence that a swap was served from a preload is this line followed by a
 	// `swap #n ... preloaded=yes` for the same path and offset.
 	this->logVideo(QStringLiteral("%1 preloaded path=\"%2\" offset=%3ms %4x%5")
-		.arg(bandLabel(side, bandIndex))
+		.arg(bandLabel(panel, bandIndex))
 		.arg(path)
 		.arg(offsetMs)
 		.arg(frameSize.width())
@@ -3051,9 +3166,9 @@ void MascotController::onVideoPreloaded(MascotSide side, int bandIndex, const QS
 	// (M3 Task 6A: the copy is parked on the right panel's same-index band. Only band 0 preloads --
 	// the panning modes have one player per band, so nothing there can be parked -- which is why
 	// every report this method sees names band 0.)
-	if (side != MascotSide::Left || !this->mirrorEnabled())
+	if (panel != MascotPanel::Left || !this->mirrorEnabled())
 		return;
-	SideState& right = this->rightState;
+	PanelState& right = this->rightState;
 	MascotBand* rightBand = right.band(bandIndex);
 	MascotVideoSlot* rightVideo = rightBand ? rightBand->video() : nullptr;
 	if (!right.surface || !rightBand || !rightVideo)
@@ -3070,7 +3185,7 @@ void MascotController::onVideoPreloaded(MascotSide side, int bandIndex, const QS
 
 void MascotController::startMirrorVideo(int bandIndex, const QString& path, qint64 offsetMs)
 {
-	SideState& right = this->rightState;
+	PanelState& right = this->rightState;
 	MascotBand* rightBand = right.band(bandIndex);
 	if (!right.surface || !rightBand || !rightBand->video() || path.isEmpty())
 		return;
@@ -3078,15 +3193,15 @@ void MascotController::startMirrorVideo(int bandIndex, const QString& path, qint
 	// offset. A second random start would show two different moments of the same clip, which is
 	// the one thing the mirror key exists to prevent.
 	this->preparePick(right, bandIndex, false);
-	this->startVideoLoad(right, MascotSide::Right, bandIndex, path, offsetMs);
+	this->startVideoLoad(right, MascotPanel::Right, bandIndex, path, offsetMs);
 }
 
-void MascotController::onVideoFailed(MascotSide side, int bandIndex, const QString& path,
+void MascotController::onVideoFailed(MascotPanel panel, int bandIndex, const QString& path,
 	MascotVideoSlot::FailKind kind, bool timedOut)
 {
 	if (!this->running)
 		return;
-	SideState& state = this->stateFor(side);
+	PanelState& state = this->stateFor(panel);
 	MascotBand* band = state.band(bandIndex);
 	if (!state.surface || !band || !band->video())
 		return;
@@ -3132,7 +3247,7 @@ void MascotController::onVideoFailed(MascotSide side, int bandIndex, const QStri
 	// flag set would park a copy that waits for a report which is not coming.
 	// (M3 Task 6A: the copy that is dropped is the right panel's same-index band's -- a band 2
 	// failure cannot un-pair band 0.)
-	if (side == MascotSide::Left) {
+	if (panel == MascotPanel::Left) {
 		if (MascotBand* rightBand = this->rightState.band(bandIndex))
 			rightBand->playback().mirrorCopyPending = false;
 		if (wasLoading)
@@ -3154,7 +3269,7 @@ void MascotController::onVideoFailed(MascotSide side, int bandIndex, const QStri
 		band->playback().lastFailedVideoPath = key;
 		band->playback().lastFailedVideoLogMs = now;
 		this->logVideo(QStringLiteral("%1 %2 #%3 onScreen=%4 path=\"%5\" kind=%6")
-			.arg(bandLabel(side, bandIndex))
+			.arg(bandLabel(panel, bandIndex))
 			.arg(timedOut ? QStringLiteral("timed out") : QStringLiteral("failed"))
 			.arg(band->playback().videoSeq)
 			.arg(band->media().path.isEmpty() ? QStringLiteral("no") : QStringLiteral("yes"))
@@ -3179,17 +3294,17 @@ void MascotController::onVideoFailed(MascotSide side, int bandIndex, const QStri
 	// picks, not by a pick of its own -- drawing a fresh file here would break the pair it exists
 	// to keep. A failed copy therefore waits for the next left commit at that same index, which is
 	// exactly what the M2 sentence above does for band 0.
-	if (side == MascotSide::Right && this->bandMirrorsLeft(bandIndex))
+	if (panel == MascotPanel::Right && this->bandMirrorsLeft(bandIndex))
 		return;
 	if (band->playback().videoFailures > VIDEO_FAILURE_LIMIT) {
 		if (band->playback().videoFailures == VIDEO_FAILURE_LIMIT + 1) {
 			this->logVideo(QStringLiteral("%1 gave up after %2 failures in a row; the next beat or clip timer tries again")
-				.arg(bandLabel(side, bandIndex))
+				.arg(bandLabel(panel, bandIndex))
 				.arg(VIDEO_FAILURE_LIMIT));
 		}
 		return;
 	}
-	this->queueBandRefill(side, bandIndex, false);
+	this->queueBandRefill(panel, bandIndex, false);
 }
 
 bool MascotController::ensureVideoSlots()
@@ -3199,7 +3314,7 @@ bool MascotController::ensureVideoSlots()
 	// yet (Task 6 owns it), so it is re-filled through the image path once this method is done.
 	bool refillExtraBands = false;
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
-		SideState& state = this->stateFor(side);
+		PanelState& state = this->stateFor(panelOf(side));
 		if (!state.surface)
 			continue;
 		// M3 Task 2: the panel's policy band only. A `Stripes` panel's extra bands get no player in
@@ -3214,9 +3329,9 @@ bool MascotController::ensureVideoSlots()
 			MascotBand* band = state.band(i);
 			if (!band)
 				continue;
-			const bool mayOwnPlayer = this->bandMayOwnPlayer(side, i);
+			const bool mayOwnPlayer = this->bandMayOwnPlayer(panelOf(side), i);
 			if (mayOwnPlayer && !band->video()) {
-				this->createVideoSlot(state, side, i);
+				this->createVideoSlot(state, panelOf(side), i);
 				// M3 Task 6A fix: a band that has just been *given* a player -- a live budget
 				// increase, an Images -> Videos apply -- is still showing whatever it showed
 				// without one, and nothing else would ask again: `fillEmptyBands()` skips a band
@@ -3226,7 +3341,7 @@ bool MascotController::ensureVideoSlots()
 				// showing a video is left alone, and the refill itself is mirror-aware, so a
 				// mirrored right band waits for the left band's copy instead of drawing its own.
 				if (band->media().type != MascotMedia::Video)
-					this->queueBandRefill(side, i, false);
+					this->queueBandRefill(panelOf(side), i, false);
 			}
 			else if (!mayOwnPlayer && band->video()) {
 				// The setting is images-only, or the budget cannot carry a panel: the players go.
@@ -3269,7 +3384,7 @@ bool MascotController::ensureVideoSlots()
 				}
 			}
 			if (MascotVideoSlot* slot = band->video())
-				slot->setSinglePlayer(!this->videoCrossfades());
+				slot->setSinglePlayer(!this->videoCrossfades(panelOf(side)));
 		}
 	}
 	if (refillExtraBands) {
@@ -3281,14 +3396,14 @@ bool MascotController::ensureVideoSlots()
 	return downgraded;
 }
 
-void MascotController::createVideoSlot(SideState& state, MascotSide side, int bandIndex)
+void MascotController::createVideoSlot(PanelState& state, MascotPanel panel, int bandIndex)
 {
 	MascotBand* band = state.band(bandIndex);
 	if (!state.surface || !band || band->video())
 		return;
 	// A child of this controller, not of the surface: releaseSurface() destroys it *before* the
 	// surface, because the sinks it draws into belong to the surface's QML delegate.
-	// (M3 Task 1: a child of the band now, which the controller owns through SideState. The
+	// (M3 Task 1: a child of the band now, which the controller owns through PanelState. The
 	// destruction order the sentence above describes is unchanged: destroyVideo() still runs from
 	// releaseSurface() before the surface is deleted.)
 	// (M3 Task 5: `bandIndex` is the band inside the budget this slot belongs to. Only the policy
@@ -3306,31 +3421,31 @@ void MascotController::createVideoSlot(SideState& state, MascotSide side, int ba
 	// The decoder budget and the clip rules are applied here as well as when they change, so a
 	// slot created later (an Images -> Videos settings apply) starts from the current
 	// configuration instead of from the class defaults.
-	slot->setSinglePlayer(!this->videoCrossfades());
+	slot->setSinglePlayer(!this->videoCrossfades(panel));
 	slot->setRandomStart(this->randomStart, this->clipSeconds);
 	// The waits come from config, not from the slot's defaults: a slot created after an Apply has to
 	// start from the configured values, or a panel enabled later would use a deadline the user had
 	// already changed.
 	slot->setTimings(this->swapTimeoutMs, this->retryIntervalMs, this->retryAttempts);
 	connect(slot, &MascotVideoSlot::firstFrame, this,
-		[this, side, bandIndex](const QString& path, int ab, const QSize& frameSize, qint64 offsetMs) {
-			this->onVideoFirstFrame(side, bandIndex, path, ab, frameSize, offsetMs);
+		[this, panel, bandIndex](const QString& path, int ab, const QSize& frameSize, qint64 offsetMs) {
+			this->onVideoFirstFrame(panel, bandIndex, path, ab, frameSize, offsetMs);
 		});
 	connect(slot, &MascotVideoSlot::failed, this,
-		[this, side, bandIndex](const QString& path, MascotVideoSlot::FailKind kind) {
-			this->onVideoFailed(side, bandIndex, path, kind, false);
+		[this, panel, bandIndex](const QString& path, MascotVideoSlot::FailKind kind) {
+			this->onVideoFailed(panel, bandIndex, path, kind, false);
 		});
 	connect(slot, &MascotVideoSlot::timedOut, this,
-		[this, side, bandIndex](const QString& path) {
+		[this, panel, bandIndex](const QString& path) {
 			// A deadline passed. `kind` is only read when the log words the line, and the ruled
 			// rule never drops a file for a timeout, so the shipped value is the honest one.
-			this->onVideoFailed(side, bandIndex, path, MascotVideoSlot::FailKind::Decode, true);
+			this->onVideoFailed(panel, bandIndex, path, MascotVideoSlot::FailKind::Decode, true);
 		});
 	// A parked clip is not a commit: nothing of it is on screen, so the only thing the controller
 	// does with the report is start the mirror pair's copy of the same file at the same offset.
 	connect(slot, &MascotVideoSlot::preloaded, this,
-		[this, side, bandIndex](const QString& path, qint64 offsetMs, const QSize& frameSize) {
-			this->onVideoPreloaded(side, bandIndex, path, offsetMs, frameSize);
+		[this, panel, bandIndex](const QString& path, qint64 offsetMs, const QSize& frameSize) {
+			this->onVideoPreloaded(panel, bandIndex, path, offsetMs, frameSize);
 		});
 	// A panel built while the window cannot be seen starts paused, exactly like one that was
 	// already running when the window went away.
@@ -3341,7 +3456,7 @@ void MascotController::createVideoSlot(SideState& state, MascotSide side, int ba
 	slot->setPaused(this->videoPaused);
 }
 
-void MascotController::destroyVideoSlot(SideState& state, int bandIndex)
+void MascotController::destroyVideoSlot(PanelState& state, int bandIndex)
 {
 	MascotBand* band = state.band(bandIndex);
 	if (!band || !band->video())
@@ -3360,7 +3475,7 @@ void MascotController::destroyVideoSlot(SideState& state, int bandIndex)
 	band->playback().videoLoadRetries = 0;
 }
 
-void MascotController::destroyVideoSlot(SideState& state)
+void MascotController::destroyVideoSlot(PanelState& state)
 {
 	// M3 Task 2: every band of the panel, not only its policy band. This is the method
 	// releaseSurface() and stop() reach for through releaseSurface(), so it is the one place the
@@ -3394,7 +3509,7 @@ void MascotController::applyDecoderBudget()
 	// question there is how many *bands* keep a player, which applyBandBudget() spends and logs;
 	// this method only records that no crossfade is possible, so nothing here writes the M2 line,
 	// which would describe a fade these modes do not have.
-	if (this->mascotMode != MascotMode::Static) {
+	if (this->columnsLayout.mode != MascotMode::Static) {
 		this->videoMode = this->maxDecoders > 0 ? VideoMode::SinglePlayer : VideoMode::Off;
 		return;
 	}
@@ -3429,7 +3544,7 @@ void MascotController::applyBandBudget()
 	// is M2's model and this method does not touch it: one band per panel, and whether it gets two
 	// players (crossfade) or one (the clamp) is applyDecoderBudget()'s answer. That also means a
 	// default `Static` config writes nothing and allocates nothing.
-	if (this->mascotMode == MascotMode::Static) {
+	if (this->columnsLayout.mode == MascotMode::Static) {
 		this->leftBandPlayers = 0;
 		this->rightBandPlayers = 0;
 		// The latch describes a panning allocation. A `Static` interlude has none, so the next
@@ -3442,8 +3557,8 @@ void MascotController::applyBandBudget()
 		return;
 	}
 	// Panning modes: one player per band, so the bands are the players that are wanted.
-	const int wantedLeft = this->bandCount(MascotSide::Left);
-	const int wantedRight = this->bandCount(MascotSide::Right);
+	const int wantedLeft = this->bandCount(MascotPanel::Left);
+	const int wantedRight = this->bandCount(MascotPanel::Right);
 	const int wanted = wantedLeft + wantedRight;
 	int allowedLeft = wantedLeft;
 	int allowedRight = wantedRight;
@@ -3513,26 +3628,26 @@ void MascotController::applyBandBudget()
 		&& this->loggedBandBudgetAllowed == allowed
 		&& this->loggedBandBudgetLeft == allowedLeft
 		&& this->loggedBandBudgetRight == allowedRight
-		&& this->loggedBandBudgetMode == this->mascotMode)
+		&& this->loggedBandBudgetMode == this->columnsLayout.mode)
 		return;
 	this->loggedBandBudgetDecoders = this->maxDecoders;
 	this->loggedBandBudgetWanted = wanted;
 	this->loggedBandBudgetAllowed = allowed;
 	this->loggedBandBudgetLeft = allowedLeft;
 	this->loggedBandBudgetRight = allowedRight;
-	this->loggedBandBudgetMode = this->mascotMode;
+	this->loggedBandBudgetMode = this->columnsLayout.mode;
 	if (pairDegraded) {
 		this->logVideo(QStringLiteral("mascots_max_decoders=%1 cannot give both panels a player (%2 %3 bands ask for one each); neither panel keeps one, so both show images on the beat")
 			.arg(this->maxDecoders)
 			.arg(wanted)
-			.arg(modeLabel(this->mascotMode)));
+			.arg(modeLabel(this->columnsLayout.mode)));
 		return;
 	}
 	if (allowed < wanted) {
 		this->logVideo(QStringLiteral("mascots_max_decoders=%1 is below what %2 %3 bands ask for (one player each); %4 bands keep a player (left %5, right %6) and the rest show images")
 			.arg(this->maxDecoders)
 			.arg(wanted)
-			.arg(modeLabel(this->mascotMode))
+			.arg(modeLabel(this->columnsLayout.mode))
 			.arg(allowed)
 			.arg(allowedLeft)
 			.arg(allowedRight));
@@ -3541,14 +3656,14 @@ void MascotController::applyBandBudget()
 	this->logVideo(QStringLiteral("mascots_max_decoders=%1 covers %2 %3 bands, one player each (left %4, right %5), hard cut")
 		.arg(this->maxDecoders)
 		.arg(wanted)
-		.arg(modeLabel(this->mascotMode))
+		.arg(modeLabel(this->columnsLayout.mode))
 		.arg(allowedLeft)
 		.arg(allowedRight));
 }
 
-void MascotController::restartClipTimer(MascotSide side, int bandIndex)
+void MascotController::restartClipTimer(MascotPanel panel, int bandIndex)
 {
-	SideState& state = this->stateFor(side);
+	PanelState& state = this->stateFor(panel);
 	MascotBand* band = state.band(bandIndex);
 	if (!band)
 		return;
@@ -3560,8 +3675,8 @@ void MascotController::restartClipTimer(MascotSide side, int bandIndex)
 	// has. The controller still connects its timeout, because the band has no controller to tell.)
 	if (!band->clipTimer()) {
 		QTimer* timer = band->ensureClipTimer();
-		connect(timer, &QTimer::timeout, this, [this, side, bandIndex]() {
-			this->onClipTimer(side, bandIndex);
+		connect(timer, &QTimer::timeout, this, [this, panel, bandIndex]() {
+			this->onClipTimer(panel, bandIndex);
 		});
 	}
 	QTimer* timer = band->clipTimer();
@@ -3576,18 +3691,18 @@ void MascotController::restartClipTimer(MascotSide side, int bandIndex)
 	// (M3 Task 6A: "the left panel's" is the left panel's *same-index band's* now. A right-panel
 	// band numbered past the left panel's count is not mirrored, so it is advanced by its own
 	// timer and this rule leaves it running.)
-	if (side == MascotSide::Right && this->bandMirrorsLeft(bandIndex)) {
+	if (panel == MascotPanel::Right && this->bandMirrorsLeft(bandIndex)) {
 		timer->stop();
 		return;
 	}
 	timer->start(std::min(this->clipSeconds * 1000, MAX_CLIP_TIMER_MS));
 }
 
-void MascotController::onClipTimer(MascotSide side, int bandIndex)
+void MascotController::onClipTimer(MascotPanel panel, int bandIndex)
 {
 	if (!this->running)
 		return;
-	SideState& state = this->stateFor(side);
+	PanelState& state = this->stateFor(panel);
 	MascotBand* band = state.band(bandIndex);
 	if (!band || !band->video() || band->media().type != MascotMedia::Video)
 		return;
@@ -3596,16 +3711,16 @@ void MascotController::onClipTimer(MascotSide side, int bandIndex)
 	// (M3 Task 6A: "the panel" is the band that owns the timer, which is what keeps a stripe's
 	// cadence off band 0; "the pair" is the same band index on both panels. Four stripes with
 	// `mascots_clip_seconds > 0` therefore run four independent cadences.)
-	if (side == MascotSide::Left && this->bandMirrorsLeft(bandIndex)) {
+	if (panel == MascotPanel::Left && this->bandMirrorsLeft(bandIndex)) {
 		this->nextBandImages(bandIndex, false);
 		return;
 	}
-	this->pickFor(state, side, bandIndex, bandIndex == 0);
+	this->pickFor(state, panel, bandIndex, bandIndex == 0);
 }
 
 void MascotController::stopClipTimers()
 {
-	for (SideState* state : { &this->leftState, &this->rightState }) {
+	for (PanelState* state : { &this->leftState, &this->rightState }) {
 		for (auto& owned : state->bands) {
 			if (QTimer* timer = owned->clipTimer())
 				timer->stop();
@@ -3657,7 +3772,7 @@ void MascotController::applyVideoPaused()
 		return;
 	this->videoPaused = pause;
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
-		SideState& state = this->stateFor(side);
+		PanelState& state = this->stateFor(panelOf(side));
 		// M3 Task 5: the pause rule reaches every band's players, not only the policy band's. A
 		// band given a player by the decoder budget is playing (or parked) just as the policy band
 		// is, and a paused panel must hold no decoder on any of them. `Static` has one band and
@@ -3692,7 +3807,7 @@ void MascotController::applyVideoPaused()
 			else if (band->media().type == MascotMedia::Video && !band->media().path.isEmpty()) {
 				// The clip on screen is resumed by the player itself; its cadence starts again from here.
 				// (M3 Task 6A: this band's own cadence, on this band's own timer.)
-				this->restartClipTimer(side, i);
+				this->restartClipTimer(panelOf(side), i);
 				// And the next clip is armed here rather than left to the next commit: the preload that
 				// would have been parked was refused while the panel was hidden (a parked decoder is
 				// exactly the cost the pause rule removes), so this is where the panel catches up -- one
@@ -3700,7 +3815,7 @@ void MascotController::applyVideoPaused()
 				// (M3 Task 6A: only the policy band preloads; startPreload() itself only acts in
 				// `Static`, where a second player exists to park a clip on.)
 				if (i == 0)
-					this->preloadNext(side);
+					this->preloadNext(panelOf(side));
 			}
 		}
 	}
@@ -3811,7 +3926,7 @@ void MascotController::onBeat(bool swapWanted)
 		this->flipBoth();
 		return;
 	}
-	if (this->mascotMode == MascotMode::Static) {
+	if (this->columnsLayout.mode == MascotMode::Static) {
 		// M1, untouched: the pair advances together and the mirror key decides whether the right
 		// panel copies the left one.
 		// (M3 Task 6B: one band index at a time now, and a one-band mode advances the pair through
@@ -3839,11 +3954,11 @@ void MascotController::onBeat(bool swapWanted)
 			return;
 		}
 		if (leftMay) {
-			this->pickFor(this->leftState, MascotSide::Left, 0, true);
+			this->pickFor(this->leftState, MascotPanel::Left, 0, true);
 			return;
 		}
 		if (rightMay) {
-			this->pickFor(this->rightState, MascotSide::Right, 0, false);
+			this->pickFor(this->rightState, MascotPanel::Right, 0, false);
 			return;
 		}
 		this->flipBoth();
@@ -3867,11 +3982,11 @@ void MascotController::onBeat(bool swapWanted)
 				|| !this->bandMayAdvance(*leftBand) || !this->bandMayAdvance(*rightBand))
 				continue;
 			advanced = true;
-			this->scheduleBeatAdvance(MascotSide::Left, i);
+			this->scheduleBeatAdvance(MascotPanel::Left, i);
 			continue;
 		}
 		for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
-			SideState& state = this->stateFor(side);
+			PanelState& state = this->stateFor(panelOf(side));
 			if (!state.surface)
 				continue;
 			MascotBand* band = state.band(i);
@@ -3880,7 +3995,7 @@ void MascotController::onBeat(bool swapWanted)
 			if (!this->bandMayAdvance(*band))
 				continue;
 			advanced = true;
-			this->scheduleBeatAdvance(side, i);
+			this->scheduleBeatAdvance(panelOf(side), i);
 		}
 	}
 	// Nothing could advance, so the beat is a flip rather than nothing at all.
@@ -3908,13 +4023,14 @@ bool MascotController::bandMayAdvance(const MascotBand& band) const
 	return now - committedAt >= static_cast<qint64>(this->clipSeconds) * 500;
 }
 
-bool MascotController::bandReachesSeam(const MascotBand& band) const
+bool MascotController::bandReachesSeam(MascotPanel panel, const MascotBand& band) const
 {
 	// (M3 Task 6B: whether a pass is actually running for this band. A queued wrap commit has no
 	// seam when the driver is stopped or would take a still branch, so onBeat() must commit now
 	// rather than wait for a trigger that never comes. Every term below is one of the reasons
 	// onScrollTick()'s band loop would not reach a seam.)
-	if (!this->running || this->mascotMode == MascotMode::Static)
+	const PanelLayout& layout = this->layoutFor(panel);
+	if (!this->running || layout.mode == MascotMode::Static)
 		return false;
 	if (!this->scrollTimer || !this->scrollTimer->isActive())
 		return false;
@@ -3922,58 +4038,51 @@ bool MascotController::bandReachesSeam(const MascotBand& band) const
 	// stops the timer on these. Asked here as well so a missed event cannot strand a queued change.
 	if (!this->scrollCanTick())
 		return false;
-	if (this->scrollSpeed <= 0)
+	if (layout.scrollSpeed <= 0)
 		return false;
-	const double travel = this->scrollTravel(band);
+	const double travel = this->scrollTravel(panel, band);
 	if (travel <= 0.0)
 		return false;
 	// The tick measures its phase advance against the panel's widest band. A band whose own share
 	// of that advance is a whole travel or more is the sub-tick still branch, and it has no seam.
-	const SideState* owner = nullptr;
-	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
-		const SideState& state = this->stateFor(side);
-		if (state.band(band.slotIndex()) == &band) {
-			owner = &state;
-			break;
-		}
-	}
-	if (!owner)
+	const PanelState& owner = this->stateFor(panel);
+	if (owner.band(band.slotIndex()) != &band)
 		return false;
 	double referenceTravel = 0.0;
-	for (const auto& owned : owner->bands)
-		referenceTravel = std::max(referenceTravel, this->scrollTravel(*owned));
+	for (const auto& owned : owner.bands)
+		referenceTravel = std::max(referenceTravel, this->scrollTravel(panel, *owned));
 	if (referenceTravel <= 0.0)
 		return false;
-	const double tickDelta = static_cast<double>(this->scrollSpeed)
+	const double tickDelta = static_cast<double>(layout.scrollSpeed)
 		* (static_cast<double>(SCROLL_TICK_MS) / 1000.0) / referenceTravel;
 	return tickDelta < 1.0;
 }
 
-void MascotController::scheduleBeatAdvance(MascotSide side, int bandIndex)
+void MascotController::scheduleBeatAdvance(MascotPanel panel, int bandIndex)
 {
-	SideState& state = this->stateFor(side);
+	PanelState& state = this->stateFor(panel);
 	MascotBand* band = state.band(bandIndex);
 	if (!band)
 		return;
-	if (this->bandReachesSeam(*band)) {
+	if (this->bandReachesSeam(panel, *band)) {
 		// (M3 Task 6B: the change is deferred to this band's next wrap point. The closure names
 		// only the side and the index and resolves the band fresh when the seam runs, so a band
 		// destroyed between the beat and the seam cannot be written through a stale pointer.)
-		band->queueWrapCommit([this, side, bandIndex]() {
-			this->commitBeatAdvance(side, bandIndex);
+		band->queueWrapCommit([this, panel, bandIndex]() {
+			this->commitBeatAdvance(panel, bandIndex);
 		});
 		return;
 	}
 	// (M3 Task 6B: no pass is running, so there is no seam to defer to and the change is applied
 	// now. Waiting would let a stopped driver hold the swap forever.)
-	this->commitBeatAdvance(side, bandIndex);
+	this->commitBeatAdvance(panel, bandIndex);
 }
 
-void MascotController::commitBeatAdvance(MascotSide side, int bandIndex)
+void MascotController::commitBeatAdvance(MascotPanel panel, int bandIndex)
 {
 	if (!this->running)
 		return;
-	SideState& state = this->stateFor(side);
+	PanelState& state = this->stateFor(panel);
 	if (!state.surface)
 		return;
 	MascotBand* band = state.band(bandIndex);
@@ -3982,7 +4091,7 @@ void MascotController::commitBeatAdvance(MascotSide side, int bandIndex)
 	// (M3 Task 6B: a mirrored right band is advanced by the left band's commit, which carries the
 	// pair, so committing it here as well would replace the same media twice. Everything below is
 	// content work only: no applyConfig() and no configureSurface() is reachable from a beat.)
-	if (side == MascotSide::Right && this->bandMirrorsLeft(bandIndex))
+	if (panel == MascotPanel::Right && this->bandMirrorsLeft(bandIndex))
 		return;
 	// (M3 whole-branch fix: this commit may be running at a seam a whole clip after the beat that
 	// queued it, so the conditions that allowed it are asked again. Without the re-ask, a
@@ -3991,14 +4100,14 @@ void MascotController::commitBeatAdvance(MascotSide side, int bandIndex)
 	// current configuration does not permit, from a beat that no longer reflects it.)
 	if (!this->swapOnBeat || !this->bandMayAdvance(*band))
 		return;
-	if (side == MascotSide::Left && this->bandMirrorsLeft(bandIndex)) {
+	if (panel == MascotPanel::Left && this->bandMirrorsLeft(bandIndex)) {
 		MascotBand* rightBand = this->rightState.band(bandIndex);
 		if (!rightBand || !this->bandMayAdvance(*rightBand))
 			return;
 		this->nextBandImages(bandIndex, false);
 		return;
 	}
-	this->pickFor(state, side, bandIndex, bandIndex == 0);
+	this->pickFor(state, panel, bandIndex, bandIndex == 0);
 }
 
 bool MascotController::beatsAllowed() const
@@ -4022,7 +4131,7 @@ void MascotController::onMediaReady(const MascotMedia& media)
 	// stopped) is dropped rather than shown, which is what makes a request a request and not a
 	// promise (amendment H1).
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
-		SideState& state = this->stateFor(side);
+		PanelState& state = this->stateFor(panelOf(side));
 		if (!state.surface)
 			continue;
 		// M3 Task 2: a delivery may be for any band of the panel, because a `Stripes` panel fills
@@ -4047,7 +4156,7 @@ void MascotController::onMediaReady(const MascotMedia& media)
 			// extra band has nothing to speculate for.)
 			// (M3 Task 6A: every band arms its own speculation now, so `armCandidate` is true for
 			// every band; `showMedia()` arms the band it committed.)
-			this->showMedia(state, side, media, false, true, i);
+			this->showMedia(state, panelOf(side), media, false, true, i);
 		}
 		// The speculative half stays with band 0: `prefetchPath` and the candidate are one deep
 		// *per panel* until Task 5/6 give the bands their own (M3 Task 2). A policy band that is
@@ -4073,7 +4182,7 @@ void MascotController::onMediaFailed(const QString& path)
 	// same path from landing on a panel that has moved on, and what lets the next commit arm a
 	// fresh candidate instead of waiting for one that will never come.
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
-		SideState& state = this->stateFor(side);
+		PanelState& state = this->stateFor(panelOf(side));
 		// M3 Task 2: every band, so an extra band whose fill failed is not left holding a request
 		// that will never be satisfied (fillEmptyBands() reads that request to decide whether the
 		// band already has content coming). A failed fill is not retried here: the panel's next
@@ -4103,12 +4212,12 @@ void MascotController::onMediaFailed(const QString& path)
 			if (failures > VIDEO_FAILURE_LIMIT) {
 				if (failures == VIDEO_FAILURE_LIMIT + 1) {
 					this->logVideo(QStringLiteral("%1 gave up after %2 failed fills; the next layout or media change tries again")
-						.arg(bandLabel(side, i))
+						.arg(bandLabel(panelOf(side), i))
 						.arg(VIDEO_FAILURE_LIMIT));
 				}
 				continue;
 			}
-			this->queueBandRefill(side, i, true);
+			this->queueBandRefill(panelOf(side), i, true);
 		}
 		// (M3 Task 6A: the speculative path is the band's, so every band's is cleared.)
 		for (auto& owned : state.bands) {
@@ -4118,19 +4227,19 @@ void MascotController::onMediaFailed(const QString& path)
 	}
 }
 
-void MascotController::queueBandRefill(MascotSide side, int bandIndex, bool onlyIfEmpty)
+void MascotController::queueBandRefill(MascotPanel panel, int bandIndex, bool onlyIfEmpty)
 {
 	if (!this->running)
 		return;
 	// Queued on `this`, for the reason onVideoFailed()'s older ask was: this runs out of a decode
 	// or player signal, and the refill draws from the pool and posts work. A controller stopped in
 	// between simply never runs it.
-	QMetaObject::invokeMethod(this, [this, side, bandIndex, onlyIfEmpty]() {
+	QMetaObject::invokeMethod(this, [this, panel, bandIndex, onlyIfEmpty]() {
 		if (!this->running)
 			return;
-		SideState& panel = this->stateFor(side);
-		MascotBand* band = panel.band(bandIndex);
-		if (!panel.surface || !band)
+		PanelState& panelState = this->stateFor(panel);
+		MascotBand* band = panelState.band(bandIndex);
+		if (!panelState.surface || !band)
 			return;
 		// The failure this ask answers may have been superseded by a commit in the same turn. A
 		// blank band is the case `onlyIfEmpty` names; otherwise a band that is now showing a live
@@ -4148,12 +4257,12 @@ void MascotController::queueBandRefill(MascotSide side, int bandIndex, bool only
 		// of its own here -- that would unpair it -- and a left band that is mirrored advances the
 		// pair through nextBandImages(), whose copy is what the right band receives. A right-panel
 		// band past the left panel's count, and every band when the key is off, picks on its own.
-		if (side == MascotSide::Right && this->bandMirrorsLeft(bandIndex))
+		if (panel == MascotPanel::Right && this->bandMirrorsLeft(bandIndex))
 			return;
-		if (side == MascotSide::Left && this->bandMirrorsLeft(bandIndex)) {
+		if (panel == MascotPanel::Left && this->bandMirrorsLeft(bandIndex)) {
 			this->nextBandImages(bandIndex, false);
 			return;
 		}
-		this->pickFor(panel, side, bandIndex, bandIndex == 0);
+		this->pickFor(panelState, panel, bandIndex, bandIndex == 0);
 	}, Qt::QueuedConnection);
 }

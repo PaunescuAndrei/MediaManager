@@ -162,9 +162,10 @@ public:
     // revert has to be a config write too -- a snapshot cannot drift the way one `old_*` field per
     // control could.
     QHash<QString, QString> mascotConfigSnapshot;
-    // Writes every control on the Mascots page to config and applies live; shared by the page's
-    // change signals and by MainWindow::applySettings(), so a key has one writer.
-    void syncMascotConfig();
+    // Writes every control on the Mascots page to config and applies; shared by the page's change
+    // signals and by MainWindow::applySettings(), so a key has one writer. A non-empty `changedKey`
+    // scopes the apply to that key (M5 review fix I7); empty is the Apply/OK/Cancel baseline.
+    void syncMascotConfig(const QString& changedKey = QString());
     // Puts the snapshot back and re-applies it; called from MainWindow's reject branch.
     void restoreMascotConfig();
     // (M5 review fix: re-reads the snapshot from config after an Apply, so Cancel stops being able

@@ -552,26 +552,25 @@ void MascotController::applyConfig()
 	// three keys stay shared "on purpose" and nothing asked for a split; this is the ask. Each value falls
 	// back to the columns' key when it is absent, so a config written before these existed renders
 	// exactly as it did: the split only begins when something writes the layer's number.)
-	const bool columnsRandomChange = config->get_bool(QStringLiteral("mascots_random_change"));
-	const double columnsRandomChance =
-		std::clamp(config->get_double(QStringLiteral("mascots_random_chance"), 10.0) / 100.0, 0.0, 1.0);
-	this->columnsRandomChance = columnsRandomChance;
-	// (M5 review fix I2: read *before* the layer's fallbacks below. `backgroundSwapOnBeat` follows the
-	// columns' key when its own is absent, and it used to read `this->swapOnBeat` a few lines before this
-	// assignment -- so the first Apply after launch fell back to whatever the previous configuration had
-	// left there, and a config with the columns' beat swap off could beat-swap the layer until the next
-	// Apply.)
+	// (M5 review: that fallback is gone, on the user's call -- the layer's keys are ordinary settings with
+	// their own defaults in config.cpp, so there is nothing left to follow. The columns' dice are not read
+	// here any more; `columnsRandomChance` went with the half-clip floor that was its only reader.)
+	// (M5 review fix I2: read *before* the layer's keys below. It used to be assigned after them, so anything
+	// that borrowed it read the previous configuration's value on the first Apply of a run.)
 	// (M3 Task 6B: `mascots_swap_on_beat`, read here under the same "one reader" rule as every key
 	// above so onBeat() decides from the cached value and no beat path re-reads the config.)
 	this->swapOnBeat = config->get_bool(QStringLiteral("mascots_swap_on_beat"));
+	// (M5 review fix: ordinary settings now -- each has a default in config.cpp and is read with the same
+	// idioms as its columns twin. The "absent means follow the columns" wiring is gone, because the writer
+	// always writes them and the bespoke fallback only existed to make an old file behave.)
 	this->backgroundClipSeconds = clampedConfigInt(config,
-		QStringLiteral("mascots_background_clip_seconds"), this->clipSeconds, 0, MAX_CLIP_SECONDS);
+		QStringLiteral("mascots_background_clip_seconds"), 30, 0, MAX_CLIP_SECONDS);
 	this->backgroundSwapOnBeat = configBoolWithFallback(config,
-		QStringLiteral("mascots_background_swap_on_beat"), this->swapOnBeat);
+		QStringLiteral("mascots_background_swap_on_beat"), true);
 	this->backgroundRandomChange = configBoolWithFallback(config,
-		QStringLiteral("mascots_background_random_change"), columnsRandomChange);
+		QStringLiteral("mascots_background_random_change"), true);
 	this->backgroundRandomChance = std::clamp(config->get_double(
-		QStringLiteral("mascots_background_random_chance"), columnsRandomChance * 100.0) / 100.0, 0.0, 1.0);
+		QStringLiteral("mascots_background_random_chance"), 10.0) / 100.0, 0.0, 1.0);
 	// (M3 whole-branch fix: a change queued at a beat waits for that band's scroll seam, and a
 	// seam can be a whole clip away -- long enough for this Apply to have turned
 	// `mascots_swap_on_beat` off, changed the clip length, or left the panel in `Static` where

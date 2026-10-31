@@ -1081,7 +1081,9 @@ private:
 	// (M5 fix: the columns'' dice, cached here so bandMayAdvance() can tell a 100% chance from the
 	// default one without reading config at beat time. MainApp owns the thread's copy; this is the value
 	// the same key held at the last Apply.)
-	double columnsRandomChance = 0.1;
+	// (M5 review: the member is gone with its last reader. `bandMayAdvance()` was deleted with the half-clip
+	// floor, and the layer's dice have their own keys now, so nothing here read it. The comment stays as the
+	// record of what it was for.)
 	int backgroundClipSeconds = 30;
 	bool backgroundSwapOnBeat = true;
 	bool backgroundRandomChange = true;

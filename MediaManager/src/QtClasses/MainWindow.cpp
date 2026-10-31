@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <QDebug>
+#include <QSet>
 #include "ini.h"
 #include "definitions.h"
 #include "utils.h"
@@ -664,7 +665,7 @@ void MainWindow::applyBackgroundVeil() {
     int alternateAlpha = rowAlpha;
     if (this->App->config) {
         const double configured = this->App->config->get_double(
-            "mascots_background_alternate_alpha", rowAlpha / 255.0);
+            "mascots_background_alternate_alpha", 0.85);
         alternateAlpha = qBound(0, qRound(configured * 255.0), 255);
     }
     // (M5 review fix: at 1.00 the veil covers the layer completely, so every surface that exists only to
@@ -2981,12 +2982,12 @@ void MainWindow::handleMascotClickEvents(MascotSide mascot, Qt::MouseButton butt
     }
 }
 
-void MainWindow::applyLiveMascotRows() {
+void MainWindow::applyLegacyMascotEffects() {
     Config* config = this->App->config;
     if (!config)
         return;
     // (M5 review fix: the legacy rows' runtime half. The config keys below are written by
-    // SettingsDialog::syncMascotConfig() on every change now; this pushes the ones that are not read live
+    // SettingsDialog::syncMascotConfig() on every change; this pushes the ones that are not read live
     // by their consumer.
     //  - the animation thread holds its cadence and its dice as members, so a key change alone reaches it
     //    only on the next start; pushed here, which also makes Animated start and stop the engine.
@@ -3011,6 +3012,59 @@ void MainWindow::applyLiveMascotRows() {
             this->App->mascotPrefetcher->setExtractColors(extractColours);
         this->resetPalette();
     }
+}
+
+void MainWindow::applyLiveMascotRows() {
+    this->applyLegacyMascotEffects();
+    this->applyMascotSettings();
+}
+
+void MainWindow::applyMascotKey(const QString& key) {
+    // (M5 review fix I7: one live change, one effect. The page has ~50 controls and each used to run the
+    // whole path -- four palette rebuilds, two scrollbar re-polishes, a full list repaint, three panels
+    // re-presented and every video band's clip timer restarted -- so nudging "Cache entries" restarted the
+    // clip cadence and changing the veil re-presented the mascots. This maps a key to the consumer(s) that
+    // can see it:
+    //  - the veil's own keys: the veil, and the columns-below simulation that is derived from its alpha.
+    //  - width: the layout.
+    //  - the cache bounds: the cache.
+    //  - the beat engine's own rows: the pushes applyLegacyMascotEffects() makes (no panels, no veil).
+    //  - everything else: a panel or the layer, i.e. the controller's config plus the columns' visibility.
+    static const QSet<QString> veilKeys = {
+        QStringLiteral("mascots_background_opacity"),
+        QStringLiteral("mascots_columns_z"),
+        QStringLiteral("mascots_background_list_alpha"),
+        QStringLiteral("mascots_background_alternate_alpha"),
+        QStringLiteral("mascots_background_scrollbar_alpha"),
+    };
+    static const QSet<QString> engineKeys = {
+        QStringLiteral("mascots_frequency"),
+        QStringLiteral("mascots_random_chance"),
+        QStringLiteral("mascots_random_change"),
+        QStringLiteral("mascots_animated"),
+        QStringLiteral("mascots_color_theme"),
+    };
+    if (veilKeys.contains(key)) {
+        this->applyBackgroundVeil();
+        this->mascotController->refreshColumnsVeil();
+        return;
+    }
+    if (key == QStringLiteral("mascots_width_percent")) {
+        this->applyMascotWidth(this->width(), this->App->config->get_double(key, 15.0));
+        return;
+    }
+    if (key == QStringLiteral("mascots_image_cache_mb")
+        || key == QStringLiteral("mascots_image_cache_max_items")) {
+        this->App->updateMascotCacheLimits();
+        return;
+    }
+    if (engineKeys.contains(key)) {
+        this->applyLegacyMascotEffects();
+        return;
+    }
+    // A panel or layer key: the columns' visibility, the controller's cached config and the layer's state
+    // machine are one body (applyMascotSettings()) and its parts are not separable -- which is why this is
+    // the largest bucket, and the three above are the ones that are.
     this->applyMascotSettings();
 }
 

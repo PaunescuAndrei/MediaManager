@@ -1142,10 +1142,20 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     // (M5 Task 10: the layer's own cadence. Until now the layer borrowed `mascots_clip_seconds`,
     // `mascots_swap_on_beat` and the image dice from the columns; these four rows are its own, and each
     // one starts from the columns' value so a config that never touches them behaves as before.)
+    // (M5 review fix: "starts from the columns' value" is over -- on the user's call the four keys are
+    // ordinary settings with defaults in config.cpp, so each row starts from its own key and falls back to
+    // that documented default (the columns' own default) when the file predates the key.)
+    const auto mascotIntDefault = [config](const QString& key, int fallback) {
+        bool ok = false;
+        const int parsed = config->get(key).toInt(&ok);
+        return ok ? parsed : fallback;
+    };
+    const auto mascotBoolDefault = [config](const QString& key, bool fallback) {
+        const QString value = config->get(key);
+        return value.isEmpty() ? fallback : utils::text_to_bool(value.toStdString());
+    };
     mascotBackgroundClipSpinBox = makeSpinBox(0, 3600, 5,
-        config->get(QStringLiteral("mascots_background_clip_seconds")).isEmpty()
-            ? config->get(QStringLiteral("mascots_clip_seconds")).toInt()
-            : config->get(QStringLiteral("mascots_background_clip_seconds")).toInt());
+        mascotIntDefault(QStringLiteral("mascots_background_clip_seconds"), 30));
     addRow(backgroundLayout, "Layer clip length (s):",
         "How long one layer clip stays before the layer's own timer advances it -- independent of the "
         "columns' Clip length. 0 disables it, so only a swap beat moves the layer.",
@@ -1153,9 +1163,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
 
     mascotBackgroundSwapOnBeatCheckBox = new QCheckBox("Let a music beat swap the layer");
     mascotBackgroundSwapOnBeatCheckBox->setChecked(
-        config->get(QStringLiteral("mascots_background_swap_on_beat")).isEmpty()
-            ? config->get_bool(QStringLiteral("mascots_swap_on_beat"))
-            : config->get_bool(QStringLiteral("mascots_background_swap_on_beat")));
+        mascotBoolDefault(QStringLiteral("mascots_background_swap_on_beat"), true));
     mascotBackgroundSwapOnBeatCheckBox->setToolTip(
         "Whether the layer may advance on a beat at all. Independent of the columns' Swap on the music "
         "beat: the layer can swap on beats the columns flip on.");
@@ -1163,16 +1171,12 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
 
     mascotBackgroundRandomChangeCheckBox = new QCheckBox("Random layer change (Music Beat)");
     mascotBackgroundRandomChangeCheckBox->setChecked(
-        config->get(QStringLiteral("mascots_background_random_change")).isEmpty()
-            ? config->get_bool(QStringLiteral("mascots_random_change"))
-            : config->get_bool(QStringLiteral("mascots_background_random_change")));
+        mascotBoolDefault(QStringLiteral("mascots_background_random_change"), true));
     mascotBackgroundRandomChangeCheckBox->setToolTip(
         "Whether the layer rolls for a change at all. Off means the beat never moves it and only the "
         "layer clip length does. 100% means every beat.");
     mascotBackgroundChanceSpinBox = makeSpinBox(0, 100, 1,
-        config->get(QStringLiteral("mascots_background_random_chance")).isEmpty()
-            ? config->get(QStringLiteral("mascots_random_chance")).toInt()
-            : config->get(QStringLiteral("mascots_background_random_chance")).toInt());
+        mascotIntDefault(QStringLiteral("mascots_background_random_chance"), 10));
     // (M5 fix: one row, the way the Mascots page shows the same pair -- the checkbox on the left, its
     // chance right-aligned on the same line. It was a checkbox followed by its own labelled row, which read
     // as two unrelated controls.)
@@ -1227,54 +1231,89 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     this->ui.settingsStack->insertWidget(3, scrollArea);
     this->ui.categoryList->insertItem(3, "Mascots");
 
-    // M5 Task 3: one writer and one applier. Every control on the page feeds the same function, so
-    // a change cannot write its key and skip the apply, and the matrix is recomputed from the same
+    // M5 Task 3: one writer and one applier. Every control on the page feeds the same writer, so a
+    // change cannot write its key and skip the apply, and the matrix is recomputed from the same
     // widget state the apply reads.
-    const QList<QWidget*> mascotControls = {
-        mascotMediaCombo, mascotModeCombo, mascotFillCombo, mascotWeightedCheckBox,
-        mascotClipSecondsSpinBox, mascotCrossfadeSpinBox, mascotSwapOnBeatCheckBox,
-        mascotRandomStartCheckBox, mascotPreloadCheckBox, mascotPauseUnfocusedCheckBox,
-        mascotLowLatencyCheckBox, mascotPairScrollCombo, mascotPairFlipCheckBox,
-        mascotMaxDecodersSpinBox, mascotScrollSpeedSpinBox, mascotScrollDirectionCombo,
-        mascotScrollPingpongCheckBox, mascotStripesLeftSpinBox, mascotStripesRightSpinBox,
-        mascotStripesOrientationCombo, mascotStripesAlternateCheckBox, mascotBackgroundCheckBox,
-        mascotBackgroundOpacitySpinBox, mascotListAlphaSpinBox, mascotAltAlphaSpinBox, mascotScrollbarAlphaSpinBox, mascotColumnsZCombo, mascotBackgroundModeCombo,
-        mascotBackgroundFillCombo, mascotBackgroundStripesSpinBox,
-        mascotBackgroundOrientationCombo, mascotBackgroundAlternateCheckBox,
-        mascotBackgroundScrollSpeedSpinBox, mascotBackgroundScrollDirectionCombo,
-        mascotBackgroundClipSpinBox, mascotBackgroundSwapOnBeatCheckBox,
-        mascotBackgroundRandomChangeCheckBox, mascotBackgroundChanceSpinBox,
-        mascotBackgroundScrollPingpongCheckBox, mascotCacheMbSpinBox, mascotCacheItemsSpinBox,
-        // (M5 review fix: the legacy rows, in the same live path. Their runtime side effects are
-        // MainWindow::applyLiveMascotRows()'s; the config writes are at the top of syncMascotConfig().)
-        this->ui.mascotsOnOff, this->ui.mascotsAnimated, this->ui.mascotsRandomChange,
-        this->ui.mascotsChanceSpinBox, this->ui.mascotsFreqSpinBox, this->ui.mascotsWidthSpinBox,
-        this->ui.mascotsExtractColor, this->ui.mascotsCenterContent,
-    };
-    for (QWidget* widget : mascotControls) {
+    // (M5 review fix I7: each control also names the key it owns, so the *apply* can be scoped to what
+    // changed. The writer still writes every key -- that is a few string assignments and it keeps OK/Apply
+    // and Cancel's baseline simple -- but a change to "Cache entries" no longer repaints the window and
+    // restarts every clip timer, and a change to the veil no longer re-presents three panels.)
+    const auto live = [this](QWidget* widget, const QString& key) {
+        const QString owned = key;
         if (auto* combo = qobject_cast<QComboBox*>(widget))
-            connect(combo, &QComboBox::currentIndexChanged, this, &SettingsDialog::syncMascotConfig);
+            connect(combo, &QComboBox::currentIndexChanged, this,
+                [this, owned] { this->syncMascotConfig(owned); });
         else if (auto* checkBox = qobject_cast<QCheckBox*>(widget))
-            connect(checkBox, &QCheckBox::toggled, this, &SettingsDialog::syncMascotConfig);
+            connect(checkBox, &QCheckBox::toggled, this,
+                [this, owned] { this->syncMascotConfig(owned); });
         else if (auto* spinBox = qobject_cast<QSpinBox*>(widget))
-            connect(spinBox, &QSpinBox::valueChanged, this, &SettingsDialog::syncMascotConfig);
+            connect(spinBox, &QSpinBox::valueChanged, this,
+                [this, owned] { this->syncMascotConfig(owned); });
         else if (auto* doubleSpinBox = qobject_cast<QDoubleSpinBox*>(widget))
-            connect(doubleSpinBox, &QDoubleSpinBox::valueChanged, this, &SettingsDialog::syncMascotConfig);
-    }
+            connect(doubleSpinBox, &QDoubleSpinBox::valueChanged, this,
+                [this, owned] { this->syncMascotConfig(owned); });
+    };
+    live(mascotMediaCombo, QStringLiteral("mascots_media"));
+    live(mascotModeCombo, QStringLiteral("mascots_mode"));
+    live(mascotFillCombo, QStringLiteral("mascots_fill"));
+    live(mascotWeightedCheckBox, QStringLiteral("mascots_weighted_random"));
+    live(mascotClipSecondsSpinBox, QStringLiteral("mascots_clip_seconds"));
+    live(mascotCrossfadeSpinBox, QStringLiteral("mascots_crossfade_ms"));
+    live(mascotSwapOnBeatCheckBox, QStringLiteral("mascots_swap_on_beat"));
+    live(mascotRandomStartCheckBox, QStringLiteral("mascots_random_start"));
+    live(mascotPreloadCheckBox, QStringLiteral("mascots_preload"));
+    live(mascotPauseUnfocusedCheckBox, QStringLiteral("mascots_pause_unfocused"));
+    live(mascotLowLatencyCheckBox, QStringLiteral("mascots_low_latency"));
+    live(mascotPairScrollCombo, QStringLiteral("mascots_pair_scroll"));
+    live(mascotPairFlipCheckBox, QStringLiteral("mascots_pair_flip"));
+    live(mascotMaxDecodersSpinBox, QStringLiteral("mascots_max_decoders"));
+    live(mascotScrollSpeedSpinBox, QStringLiteral("mascots_scroll_speed"));
+    live(mascotScrollDirectionCombo, QStringLiteral("mascots_scroll_direction"));
+    live(mascotScrollPingpongCheckBox, QStringLiteral("mascots_scroll_pingpong"));
+    live(mascotStripesLeftSpinBox, QStringLiteral("mascots_stripes_left"));
+    live(mascotStripesRightSpinBox, QStringLiteral("mascots_stripes_right"));
+    live(mascotStripesOrientationCombo, QStringLiteral("mascots_stripes_orientation"));
+    live(mascotStripesAlternateCheckBox, QStringLiteral("mascots_stripes_alternate"));
+    live(mascotBackgroundCheckBox, QStringLiteral("mascots_background"));
+    live(mascotBackgroundOpacitySpinBox, QStringLiteral("mascots_background_opacity"));
+    live(mascotColumnsZCombo, QStringLiteral("mascots_columns_z"));
+    live(mascotListAlphaSpinBox, QStringLiteral("mascots_background_list_alpha"));
+    live(mascotAltAlphaSpinBox, QStringLiteral("mascots_background_alternate_alpha"));
+    live(mascotScrollbarAlphaSpinBox, QStringLiteral("mascots_background_scrollbar_alpha"));
+    live(mascotBackgroundModeCombo, QStringLiteral("mascots_background_mode"));
+    live(mascotBackgroundFillCombo, QStringLiteral("mascots_background_fill"));
+    live(mascotBackgroundStripesSpinBox, QStringLiteral("mascots_background_stripes"));
+    live(mascotBackgroundOrientationCombo, QStringLiteral("mascots_background_stripes_orientation"));
+    live(mascotBackgroundAlternateCheckBox, QStringLiteral("mascots_background_stripes_alternate"));
+    live(mascotBackgroundScrollSpeedSpinBox, QStringLiteral("mascots_background_scroll_speed"));
+    live(mascotBackgroundScrollDirectionCombo, QStringLiteral("mascots_background_scroll_direction"));
+    live(mascotBackgroundClipSpinBox, QStringLiteral("mascots_background_clip_seconds"));
+    live(mascotBackgroundSwapOnBeatCheckBox, QStringLiteral("mascots_background_swap_on_beat"));
+    live(mascotBackgroundRandomChangeCheckBox, QStringLiteral("mascots_background_random_change"));
+    live(mascotBackgroundChanceSpinBox, QStringLiteral("mascots_background_random_chance"));
+    live(mascotBackgroundScrollPingpongCheckBox, QStringLiteral("mascots_background_scroll_pingpong"));
+    live(mascotCacheMbSpinBox, QStringLiteral("mascots_image_cache_mb"));
+    live(mascotCacheItemsSpinBox, QStringLiteral("mascots_image_cache_max_items"));
+    // (M5 review fix: the legacy rows, in the same live path, each with its own key. Their runtime side
+    // effects are MainWindow::applyLiveMascotRows()'s; the config writes are at the top of
+    // syncMascotConfig().)
+    live(this->ui.mascotsOnOff, QStringLiteral("mascots"));
+    live(this->ui.mascotsAnimated, QStringLiteral("mascots_animated"));
+    live(this->ui.mascotsRandomChange, QStringLiteral("mascots_random_change"));
+    live(this->ui.mascotsChanceSpinBox, QStringLiteral("mascots_random_chance"));
+    live(this->ui.mascotsFreqSpinBox, QStringLiteral("mascots_frequency"));
+    live(this->ui.mascotsWidthSpinBox, QStringLiteral("mascots_width_percent"));
+    live(this->ui.mascotsExtractColor, QStringLiteral("mascots_color_theme"));
+    live(this->ui.mascotsCenterContent, QStringLiteral("mascots_center_content"));
+    live(this->ui.mascotsMirror, QStringLiteral("mascots_mirror"));
     // The master switch is not one of the page's own keys, but row 1 of the matrix is about it: the
     // groups have to follow the checkbox at once, not on the next Apply.
     connect(this->ui.mascotsOnOff, &QCheckBox::toggled, this, [this] { updateMascotControlStates(); });
-    // (M5 review fix C1: Mirror is one of the legacy rows -- its config write lives in
-    // MainWindow::applySettings -- but it is the switch the two pair controls depend on, and the two of
-    // them are live. It joins the live path here so the page has one rule: a control that decides something
-    // on screen takes effect when it is clicked. That is also what lets the controller see the 0->1
-    // transition and re-pair the columns.)
-    connect(this->ui.mascotsMirror, &QCheckBox::toggled, this, [this] { this->syncMascotConfig(); });
 
     updateMascotControlStates();
 }
 
-void SettingsDialog::syncMascotConfig()
+void SettingsDialog::syncMascotConfig(const QString& changedKey)
 {
     MainWindow* mw = static_cast<MainWindow*>(this->parent());
     Config* config = mw->App->config;
@@ -1345,10 +1384,14 @@ void SettingsDialog::syncMascotConfig()
     config->set("mascots_image_cache_max_items", QString::number(mascotCacheItemsSpinBox->value()));
 
     updateMascotControlStates();
-    // (M5 review fix: the live entry point that also pushes the legacy rows' runtime half -- engine
-    // cadence/dice, host width, palette. It ends in applyMascotSettings(), so the page's own controls are
-    // applied exactly as before.)
-    mw->applyLiveMascotRows();
+    // (M5 review fix I7: a live change applies only what it can have affected -- `applyMascotKey()` reads
+    // the key. The empty-key form is the Apply/OK/Cancel baseline and still runs the whole path, because
+    // those are the moments everything is expected to be consistent. The legacy rows' runtime half is part
+    // of both: `applyMascotKey()` reaches it through applyLiveMascotRows() for the rows that need it.)
+    if (changedKey.isEmpty())
+        mw->applyLiveMascotRows();
+    else
+        mw->applyMascotKey(changedKey);
 }
 
 void SettingsDialog::restoreMascotConfig()

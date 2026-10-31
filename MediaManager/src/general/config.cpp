@@ -133,6 +133,19 @@ void Config::init_defaults() {
 		{"mascots_background_scroll_speed", "50"},
 		{"mascots_background_scroll_direction", "LeftToRight"},
 		{"mascots_background_scroll_pingpong", "False"},
+		// (M5 review: the layer's own cadence, as ordinary settings. These four were deliberately absent so
+		// that "no line" meant "follow the columns", which needed a bespoke empty-aware reader and let the
+		// page's writer pin them by writing the columns' values on the first OK. On the user's call they are
+		// normal keys now: a documented default (the columns' own default, so the out-of-box look is
+		// unchanged), written like every other key, and read with the same get()/get_bool() idioms.)
+		{"mascots_background_clip_seconds", "30"},
+		{"mascots_background_swap_on_beat", "True"},
+		{"mascots_background_random_change", "True"},
+		{"mascots_background_random_chance", "10"},
+		// (M5 review: the two alphas the layer group writes. They had no defaults either, so a file that had
+		// never been through the page lacked them and their readers carried private fallbacks.)
+		{"mascots_background_alternate_alpha", "0.85"},
+		{"mascots_background_scrollbar_alpha", "1.00"},
 		// M4: full strength, not half. The layer's only visible surface is through the list's rows,
 		// and a row fill is already an 85% scrim, so half opacity left the video at ~7% of a row --
 		// measurable, and invisible in a screenshot. At 1.0 the same rows carry it at ~15%: the media

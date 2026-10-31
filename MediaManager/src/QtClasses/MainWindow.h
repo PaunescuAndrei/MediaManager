@@ -271,6 +271,13 @@ public:
     // that half: it pushes those effects from the keys and then runs applyMascotSettings(). Called on every
     // live change and on Cancel, so a row means the same thing whichever button the user presses.)
     void applyLiveMascotRows();
+    // (M5 review fix I7: the scoped apply. One key changed, so only the consumers that can see it run --
+    // see the classification in the definition. Called by SettingsDialog for a live control change; the
+    // empty-key form of the writer keeps the whole path for OK/Apply/Cancel.)
+    void applyMascotKey(const QString& key);
+    // (M5 review fix: the legacy rows' runtime half on its own, without the panels' and the layer's state
+    // machine. A spin-box tick for frequency, chance or colour extraction must not re-present three panels.)
+    void applyLegacyMascotEffects();
     void applyMascotWidth(int windowWidth, double percent);
     void setDebugMode(bool debug);
     void settingsDialogButton();

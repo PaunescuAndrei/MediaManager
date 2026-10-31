@@ -652,6 +652,32 @@ void MainWindow::applyListTransparency() {
         : appPalette;
     this->ui.videosWidget->setPalette(rowPalette);
     this->ui.videosWidget->viewport()->setPalette(viewportPalette);
+    // (M4 follow-up: the strip above the list had one opaque row. The current-video label sits in a
+    // QScrollArea, and that row is filled twice over: `qt_scrollarea_viewport` *and* the
+    // `scrollAreaWidgetContents` widget both autofill, with the `Window` role -- so the row stayed at
+    // the opaque strip colour while the scrim let the layer through everywhere else, and the label
+    // read as a solid patch inside an otherwise translucent strip. The first attempt at this cleared
+    // only the viewport and changed nothing, which is what the geometry dump was for: the contents
+    // widget was painting over it. Both are cleared here.
+    // The restore below is the measured default, not the documented one: both widgets were created
+    // autofilling `Window` (the dump says `autoFill=1 role=10`), not `Base`, which is why an earlier
+    // version that restored `Base` moved the off state by 18 levels.)
+    QWidget* currentVideoFills[2] = {
+        this->ui.currentVideoScrollArea->viewport(),
+        this->ui.currentVideoScrollArea->widget()
+    };
+    for (QWidget* fill : currentVideoFills) {
+        if (!fill)
+            continue;
+        if (backgroundEnabled) {
+            fill->setBackgroundRole(QPalette::NoRole);
+            fill->setAutoFillBackground(false);
+        }
+        else {
+            fill->setBackgroundRole(QPalette::Window);
+            fill->setAutoFillBackground(true);
+        }
+    }
     // M4 Task 3b: the strip above the list is the same Base colour in this app's design, so it takes
     // the same scrim -- otherwise the layer is held back under the rows and runs at full strength
     // across the buttons and the title, and the two areas read as different transparencies.

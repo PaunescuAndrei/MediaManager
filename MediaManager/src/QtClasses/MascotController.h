@@ -1064,6 +1064,10 @@ private:
 	// `mascots_background_swap_on_beat`, `mascots_background_random_change` and
 	// `mascots_background_random_chance`, each falling back to its columns twin when absent. The M4 note
 	// at bandMayAdvance() said these stay shared "on purpose, and nothing asks for that"; the user asked.)
+	// (M5 fix: the columns'' dice, cached here so bandMayAdvance() can tell a 100% chance from the
+	// default one without reading config at beat time. MainApp owns the thread's copy; this is the value
+	// the same key held at the last Apply.)
+	double columnsRandomChance = 0.1;
 	int backgroundClipSeconds = 30;
 	bool backgroundSwapOnBeat = true;
 	bool backgroundRandomChange = true;

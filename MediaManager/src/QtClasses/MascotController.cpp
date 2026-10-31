@@ -554,6 +554,7 @@ void MascotController::applyConfig()
 	const bool columnsRandomChange = config->get_bool(QStringLiteral("mascots_random_change"));
 	const double columnsRandomChance =
 		std::clamp(config->get_double(QStringLiteral("mascots_random_chance"), 10.0) / 100.0, 0.0, 1.0);
+	this->columnsRandomChance = columnsRandomChance;
 	this->backgroundClipSeconds = clampedConfigInt(config,
 		QStringLiteral("mascots_background_clip_seconds"), this->clipSeconds, 0, MAX_CLIP_SECONDS);
 	this->backgroundSwapOnBeat = configBoolWithFallback(config,
@@ -2235,6 +2236,10 @@ void MascotController::nextImages(bool forcedMirror)
 
 void MascotController::nextBandImages(int bandIndex, bool forcedMirror)
 {
+	// (M5 fix: the pair advances here rather than through scheduleBeatAdvance(), which is why a beat-driven
+	// change of the two columns was invisible to the harness. No source tag: in a run whose clip timers cannot
+	// fire (60 s clips, 10 s run) every line of this kind is a beat advance.)
+	this->logVideo(QStringLiteral("MASCOT-ADVANCE pair band=%1 source=pair").arg(bandIndex));
 	if (!this->running)
 		return;
 	const MascotMedia left = this->pickFor(this->leftState, MascotPanel::Left, bandIndex,
@@ -4579,6 +4584,8 @@ void MascotController::onClipTimer(MascotPanel panel, int bandIndex)
 	// (M3 Task 6A: "the panel" is the band that owns the timer, which is what keeps a stripe's
 	// cadence off band 0; "the pair" is the same band index on both panels. Four stripes with
 	// `mascots_clip_seconds > 0` therefore run four independent cadences.)
+	// (M5 fix: the clip half of the cadence observer -- see scheduleBeatAdvance().)
+	this->logVideo(QStringLiteral("MASCOT-ADVANCE %1 band=%2 source=clip").arg(panelLabel(panel)).arg(bandIndex));
 	if (panel == MascotPanel::Left && this->bandMirrorsLeft(bandIndex)) {
 		this->nextBandImages(bandIndex, false);
 		return;
@@ -4964,6 +4971,15 @@ bool MascotController::bandMayAdvance(MascotPanel panel, const MascotBand& band)
 	// timers and nothing shared moves. The panel's number is read through clipSecondsFor().)
 	if (band.media().type != MascotMedia::Video)
 		return true;
+	// (M5 fix: 100% means every beat. The half-clip floor below is what makes a *swap* beat pass over a band
+	// younger than half its clip, so the default dice (about one beat in ten, a beat a second) cannot churn a
+	// 30 s clip. A user who sets the chance to 100% is asking for the beat to *be* the cadence, and the floor
+	// was silently answering no to every one of those beats -- which reads as "chance 100% changes nothing,
+	// it still only moves on the timer". At 100% the floor stands aside.)
+	const double chance = panel == MascotPanel::Background
+		? this->backgroundRandomChance : this->columnsRandomChance;
+	if (chance >= 1.0)
+		return true;
 	const int clip = this->clipSecondsFor(panel);
 	if (clip <= 0)
 		return true;
@@ -5027,6 +5043,10 @@ bool MascotController::bandReachesSeam(MascotPanel panel, const MascotBand& band
 
 void MascotController::scheduleBeatAdvance(MascotPanel panel, int bandIndex)
 {
+	// (M5 fix: the cadence observer. Nothing said which panel a beat had just advanced, so a cadence question
+	// -- "does a 100% chance move the layer on the beat?" -- could only be argued from the source. This line
+	// names the panel and the reason, under the existing debug gate, so the harness can count it.)
+	this->logVideo(QStringLiteral("MASCOT-ADVANCE %1 band=%2 source=beat").arg(panelLabel(panel)).arg(bandIndex));
 	PanelState& state = this->stateFor(panel);
 	MascotBand* band = state.band(bandIndex);
 	if (!band)

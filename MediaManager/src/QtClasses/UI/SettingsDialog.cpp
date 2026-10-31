@@ -1073,17 +1073,25 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
             : config->get_bool(QStringLiteral("mascots_background_random_change")));
     mascotBackgroundRandomChangeCheckBox->setToolTip(
         "Whether the layer rolls for a change at all. Off means the beat never moves it and only the "
-        "layer clip length does.");
-    backgroundLayout->addWidget(mascotBackgroundRandomChangeCheckBox);
-
+        "layer clip length does. 100% means every beat.");
     mascotBackgroundChanceSpinBox = makeSpinBox(0, 100, 1,
         config->get(QStringLiteral("mascots_background_random_chance")).isEmpty()
             ? config->get(QStringLiteral("mascots_random_chance")).toInt()
             : config->get(QStringLiteral("mascots_background_random_chance")).toInt());
-    addRow(backgroundLayout, "Layer chance (%):",
+    // (M5 fix: one row, the way the Mascots page shows the same pair -- the checkbox on the left, its
+    // chance right-aligned on the same line. It was a checkbox followed by its own labelled row, which read
+    // as two unrelated controls.)
+    QHBoxLayout* layerDiceRow = new QHBoxLayout();
+    layerDiceRow->addWidget(mascotBackgroundRandomChangeCheckBox);
+    layerDiceRow->addStretch();
+    QLabel* layerChanceLabel = new QLabel("Chance:");
+    layerChanceLabel->setToolTip(
         "The layer's own dice: the chance per beat that it changes, rolled separately from the columns' "
-        "chance so one can be quiet while the other moves.",
-        mascotBackgroundChanceSpinBox);
+        "chance so one can be quiet while the other moves. 100% means every beat.");
+    mascotBackgroundChanceSpinBox->setToolTip(layerChanceLabel->toolTip());
+    layerDiceRow->addWidget(layerChanceLabel);
+    layerDiceRow->addWidget(mascotBackgroundChanceSpinBox);
+    backgroundLayout->addLayout(layerDiceRow);
 
     // (M5 Task 9: the layer group is appearance, not behaviour -- it decides how the window looks and
     // nothing about what runs -- so it is built here and added to the Appearance page, above that page's

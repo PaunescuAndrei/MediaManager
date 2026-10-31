@@ -100,7 +100,8 @@ namespace {
 	}
 }
 
-MascotSurface::MascotSurface(MascotImageCache* cache, QWidget* parent) : QWidget(parent)
+MascotSurface::MascotSurface(MascotImageCache* cache, QWidget* parent, bool alwaysStackOnTop)
+	: QWidget(parent)
 {
 	this->setAttribute(Qt::WA_NoSystemBackground, true);
 	this->setAutoFillBackground(false);
@@ -127,11 +128,20 @@ MascotSurface::MascotSurface(MascotImageCache* cache, QWidget* parent) : QWidget
 	// attribute; the wrapper's own background is already suppressed above.
 	this->setAttribute(Qt::WA_TranslucentBackground, true);
 	this->quick->setAttribute(Qt::WA_TranslucentBackground, true);
-	// Draw last, so this widget's alpha composites over whatever the window painted beneath.
-	// This is the documented way to get a see-through quick widget over ordinary widgets:
-	// QQuickWidget otherwise blits its offscreen buffer opaquely, turning every transparent
-	// pixel of a mascot PNG black (verified at runtime: without this the panel reads #000000).
-	this->quick->setAttribute(Qt::WA_AlwaysStackOnTop, true);
+	if (alwaysStackOnTop) {
+		// Draw last, so this widget's alpha composites over whatever the window painted beneath.
+		// This is the documented way to get a see-through quick widget over ordinary widgets:
+		// QQuickWidget otherwise blits its offscreen buffer opaquely, turning every transparent
+		// pixel of a mascot PNG black (verified at runtime: without this the panel reads #000000).
+		// (M4: the paragraph above is the panel's case, and it is why this became conditional rather
+		// than being removed. A QQuickWidget carrying this attribute is drawn above every other
+		// widget in the window regardless of stacking order -- which is exactly what a panel beside
+		// the UI wants and exactly what a background layer cannot have, because lower() cannot
+		// outrank it. The background passes false and draws in ordinary order; it accepts the opaque
+		// blit the paragraph describes, which for a layer that video covers edge to edge is the right
+		// trade, and the alternative was a wallpaper painted over the list.)
+		this->quick->setAttribute(Qt::WA_AlwaysStackOnTop, true);
+	}
 	this->quick->setAttribute(Qt::WA_TransparentForMouseEvents, true);
 	this->quick->setResizeMode(QQuickWidget::SizeRootObjectToView);
 	this->quick->setSource(QUrl(QStringLiteral("qrc:/qml/MascotSurface.qml")));

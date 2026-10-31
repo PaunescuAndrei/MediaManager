@@ -44,7 +44,15 @@ public:
 
 	// `cache` is used to construct the image provider and is not stored; it must outlive the
 	// shared QML engine, which owns the provider.
-	explicit MascotSurface(MascotImageCache* cache, QWidget* parent = nullptr);
+	// (M4: `alwaysStackOnTop` is the panel's compositing rule and the background layer's undoing. A
+	// panel sits beside the rest of the UI and needs its own alpha composited over the window, which
+	// Qt only does reliably for a QQuickWidget that draws last. The background sits *underneath* the
+	// UI, so the same attribute makes it paint over the very widgets it is meant to sit behind:
+	// measured at runtime, a window-sized layer with it set moved the list's pixels by 50/255 of
+	// luminance while every video line said the layer was drawing. The background therefore passes
+	// false and is drawn in ordinary stacking order, beneath its siblings.)
+	explicit MascotSurface(MascotImageCache* cache, QWidget* parent = nullptr,
+		bool alwaysStackOnTop = true);
 
 	// Only a count change creates or destroys delegate items; every other setter writes into
 	// the slot that already exists.

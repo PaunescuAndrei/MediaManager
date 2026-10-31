@@ -2346,7 +2346,12 @@ void MascotController::createBackgroundSurface()
 	// No layout on the host: the panel path gives its surface a zero-margin layout because the
 	// host is a fixed column the layout sizes, while the background is positioned by hand from the
 	// host's rectangle in updateLayout(). A layout here would fight that write for the geometry.
-	auto* surface = new MascotSurface(this->cache, host);
+	// The third argument is the layer's whole reason for existing: `false` keeps the quick widget in
+	// ordinary stacking order so `lower()` below really puts it beneath the UI. With the panel's
+	// default (`true`) the QQuickWidget is drawn above every other widget in the window regardless of
+	// stacking order and the wallpaper covers the list -- measured, 50/255 of luminance of
+	// difference across the list region while the log said the layer was drawing.
+	auto* surface = new MascotSurface(this->cache, host, false);
 	this->backgroundState.surface = surface;
 	// The bands are the funded prefix bandCount() derives from backgroundPlayers, and
 	// configureSurface() builds the slots, the players and the (pair-only) connections.

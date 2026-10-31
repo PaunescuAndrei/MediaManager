@@ -9,6 +9,8 @@
 #include <QString>
 #include <functional>
 
+class QTimer;
+
 // One band of one mascot panel: the slot it draws into, the media that slot carries, the players
 // that play a video into it, and the request bookkeeping that says what it is waiting for.
 //
@@ -102,6 +104,77 @@ public:
 	qint64 wantedOffsetMs() const;
 	void setWantedOffsetMs(qint64 offsetMs);
 
+	// ---- M3 Task 6A: this band's own content pipeline ----
+	// One record for the pipeline's memory about this band, because it is one subject: what the
+	// band is waiting for, what is being made ready for it, and how many times it has failed to
+	// get either. Public as a struct rather than a member per accessor because every rule about
+	// *when* one of these values changes is MascotController's -- exactly as it was when SideState
+	// held them for band 0 -- and the band's job is only to keep the record alive with it.
+	struct Playback {
+		// The speculative pick: the path requested ahead of the next swap, and the decoded
+		// media it produced once it arrives. Exactly one deep -- a queue is deliberately not
+		// kept -- and both empty when nothing is armed.
+		// (M3 Task 6A: the record is the *band's* now, one per band, because a `Stripes` panel
+		// gives every band its own next media and band 0's predecoded swap must not be consumed by
+		// a stripe's fill.)
+		QString prefetchPath;
+		MascotMedia candidate;
+		// Set on the right panel while the left panel's pick -- the one the pair mirrors -- is
+		// still loading: the copy starts from the left panel's firstFrame(), which is where its
+		// offset finally exists.
+		// (M3 Task 6A: the flag is the right panel's *band's*, and the "left panel's pick" it waits
+		// for is the left panel's same-index band, because the pair is paired per band index now.)
+		bool mirrorCopyPending = false;
+		// Counts the video swaps this panel has asked for. A swap line and its first-frame line
+		// carry the same number, which is what lets the gate pair them and read the delta.
+		// (M3 Task 6A: "this panel" is this band; each band's sequence starts over with the band,
+		// and the lines name the band beside the number so they still pair.)
+		quint64 videoSeq = 0;
+		// When the outstanding swap was asked for (milliseconds since the epoch), for that delta.
+		qint64 requestedAtMs = 0;
+		// Failures since the last committed media, so a broken clip is not retried forever and a
+		// panel that cannot play anything stops asking rather than walking the whole library.
+		// (M3 Task 6A: the budget is this band's. A stripe that cannot play anything has no beat
+		// above it, so its own re-pick and this budget are what keep a bad pool from being walked at
+		// load speed.)
+		int videoFailures = 0;
+		// The same budget for this band's image fills: a stripe filled through the
+		// request/delivery path is not advanced by the beat, so a failed decode there has to ask
+		// again itself -- and stop asking when the pool cannot serve it.
+		int imageFailures = 0;
+		// How many times this panel has re-asked for a video pick because its QML delegate (and
+		// therefore its sink) did not exist yet. A delegate created a turn later is normal; one
+		// that never appears has to fall back to images instead of asking forever.
+		// (M3 Task 6A: per band, and the sink asked about is that band's own slot.)
+		int videoSinkRetries = 0;
+		// Set while a pick is waiting for that retry. nextImages() reads it: a panel that is about
+		// to retry is still the panel whose pick the pair mirrors, so the right panel's copy has to
+		// be armed now rather than left unpaired.
+		// (M3 Task 6A: nextBandImages() reads it, for the band the retry belongs to.)
+		bool videoPickRetryPending = false;
+		// The same count, for one *specific* load: a mirror copy's file at a fixed offset. A copy
+		// that cannot find its sink has to be retried as that same load, because its offset is the
+		// pair's invariant and a fresh pick would choose a different one.
+		int videoLoadRetries = 0;
+		// The last path this panel was told failed, and when it was reported, so one unusable
+		// file produces one line instead of one per swap.
+		// (M3 Task 6A: each band rate-limits its own files, so one band's noise cannot hide
+		// another's.)
+		QString lastFailedVideoPath;
+		qint64 lastFailedVideoLogMs = 0;
+	};
+	Playback& playback();
+	const Playback& playback() const;
+
+	// The clip timer, and the only cadence a video panel has: restarted on every committed
+	// video, never started for an image panel (M1's beat-driven cadence is untouched). Owned
+	// by the controller, so it survives the enable/disable cycles the surfaces do not.
+	// (M3 Task 6A: one per band now, owned by the band instead -- it dies with the band it
+	// advanced and cannot tick for a band the panel no longer has. The controller still connects
+	// its timeout, because the band has no controller to tell.)
+	QTimer* clipTimer() const;
+	QTimer* ensureClipTimer();
+
 	// The offset the band last wrote for the scroll driver, so a tick writes only on change. (M3
 	// Task 4 owns the write into the surface; this is its record until then.)
 	// (M3 Task 4: the driver is that write now -- it calls the surface's one-write setter and then
@@ -171,4 +244,11 @@ private:
 	// The change a seam will commit (M3 Task 4). Empty when nothing is queued, which is the state
 	// a tick reads on every band and therefore the state that must cost nothing.
 	WrapCommit m_wrapCommit;
+	// The band's own content-pipeline record (M3 Task 6A), replacing the fields SideState used to
+	// keep for band 0. One per band now, so a stripe's candidate, retry budget and sequence cannot
+	// be consumed by another band's commit.
+	Playback m_playback;
+	// The band's own clip timer (M3 Task 6A). Created lazily by ensureClipTimer(), so a band that
+	// never shows a video allocates nothing.
+	QTimer* m_clipTimer = nullptr;
 };

@@ -71,6 +71,17 @@ namespace {
 		return side == MascotSide::Left ? QStringLiteral("left") : QStringLiteral("right");
 	}
 
+	// M3 Task 6A: the panel a line is about, plus the band when it is not the policy band. Band 0
+	// keeps exactly the text it had, which is what keeps a `Static` run's log unchanged; a
+	// `Stripes` panel's extra bands are named so a swap line and its first-frame line still pair
+	// up, and so two bands' lines cannot be mistaken for one band swapping twice.
+	QString bandLabel(MascotSide side, int bandIndex)
+	{
+		if (bandIndex == 0)
+			return sideLabel(side);
+		return QStringLiteral("%1 band %2").arg(sideLabel(side)).arg(bandIndex);
+	}
+
 	int clampedCrossfadeMs(Config* config)
 	{
 		if (!config)
@@ -386,6 +397,10 @@ void MascotController::applyConfig()
 	// video keys are read in the same place and for the same reason -- this method is this
 	// class's only config reader -- and pickType() decides from the cached values, so a settings
 	// change cannot land one pick late and no swap path reads the config at all.
+	// M3 Task 6A: the value the last Apply cached, so a change of media setting can be told apart
+	// from an Apply that changed something else -- only the former has to re-fill bands that
+	// already have content in the other media kind.
+	const QString previousMediaSetting = this->mediaSetting;
 	this->mediaSetting = config->get(QStringLiteral("mascots_media"));
 	this->clipSeconds = clampedClipSeconds(config);
 	this->randomStart = config->get_bool(QStringLiteral("mascots_random_start"));
@@ -666,11 +681,16 @@ void MascotController::applyConfig()
 	// key off mid-run would otherwise leave that panel on its clip until its next commit. The cost
 	// is that an Apply pushes the next swap out by a whole clip, which is what the new length asks
 	// for anyway.
+	// (M3 Task 6A: every band that is showing a video re-derives its own timer -- a `Stripes` panel
+	// has one cadence per band now, and an Apply that reached band 0 alone would leave three
+	// stripes on the old length. `Static` is one band and restarts exactly the one timer it did.)
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
 		SideState& state = this->stateFor(side);
-		MascotBand* band = state.band(0);
-		if (band && band->media().type == MascotMedia::Video && !band->media().path.isEmpty())
-			this->restartClipTimer(state, side);
+		for (int i = 0; i < static_cast<int>(state.bands.size()); ++i) {
+			MascotBand* band = state.band(i);
+			if (band && band->media().type == MascotMedia::Video && !band->media().path.isEmpty())
+				this->restartClipTimer(side, i);
+		}
 	}
 	// A panel that lost its players is drawing nothing, and nothing else will fill it: the beat
 	// skips a panel by what it shows (which is now nothing) and the clip timer belonged to players
@@ -682,6 +702,18 @@ void MascotController::applyConfig()
 		this->logVideo(QStringLiteral("panels downgraded from video to images; repainting them"));
 		QMetaObject::invokeMethod(this, [this]() { this->nextImages(false); }, Qt::QueuedConnection);
 	}
+	// M3 Task 6A: a `mascots_media` change while a `Stripes` panel is up is the one thing that can
+	// leave its bands on the wrong kind of content for the session: the bands past the first are
+	// filled once and have no beat of their own in this task, so nothing would re-ask them. Queued
+	// for the reason the downgrade pick above is: this runs inside a settings handler and a pick
+	// walks the mascot directory. A single-band panel is deliberately left alone -- its own next
+	// swap (the beat, or the clip timer) already follows the new setting, and picking it here would
+	// add a swap the shipped path never makes.
+	const bool mediaChanged = previousMediaSetting.compare(this->mediaSetting,
+		Qt::CaseInsensitive) != 0;
+	if (mediaChanged && this->running && this->mascotMode == MascotMode::Stripes)
+		QMetaObject::invokeMethod(this, [this]() { this->refillBandsForMediaChange(); },
+			Qt::QueuedConnection);
 }
 
 void MascotController::applySeedSource()
@@ -808,6 +840,15 @@ int MascotController::bandCount(MascotSide side) const
 	return side == MascotSide::Left ? this->stripesLeftBands : this->stripesRightBands;
 }
 
+bool MascotController::bandMirrorsLeft(int bandIndex) const
+{
+	// M3 Task 6A: the pair rule extended from one band to N. Band i of the right panel mirrors
+	// band i of the left panel exactly while the left panel has a band i to mirror -- the two
+	// configured counts do not have to agree, and a band with no counterpart keeps its own picks
+	// and its own clip timer rather than waiting for a commit that will never come.
+	return this->mirrorEnabled() && bandIndex >= 0 && bandIndex < this->bandCount(MascotSide::Left);
+}
+
 QVector<QRectF> MascotController::bandRects(MascotSide side) const
 {
 	const SideState& state = this->stateFor(side);
@@ -836,6 +877,15 @@ bool MascotController::stripesStackVertically() const
 
 void MascotController::applyMode()
 {
+	// M3 Task 6A: never from inside a wrap-point commit. Such a commit runs between the scroll
+	// driver's band loop and the next event-loop turn (onScrollTick() runs the collected commits
+	// after the loop, so no band or surface pointer is held across it), but a content commit has
+	// no business rebuilding the band vector at all. Re-queued instead of applied, so a change
+	// that arrives that way still happens -- on the next turn, with no tick iterating anything.
+	if (this->wrapCommitDepth > 0) {
+		QMetaObject::invokeMethod(this, [this]() { this->applyMode(); }, Qt::QueuedConnection);
+		return;
+	}
 	// Nothing to lay out yet: applyConfig() runs before createSurfaces() on the enable path, so
 	// the first Apply has no panel to act on. configureSurface() applies the same layout when the
 	// surface does appear and start() fills the bands it has; nothing is recorded here, which is
@@ -958,6 +1008,10 @@ void MascotController::syncBands(SideState& state, MascotSide side)
 	QStringList removedShown;
 	while (static_cast<int>(state.bands.size()) > wanted) {
 		removedShown.push_back(state.bands.back()->media().path);
+		// (M3 Task 6A: the band's speculative candidate goes with it. It is a pinned decode, so a
+		// destroyed band that held one would otherwise leave its path pinned for the session --
+		// the shrink path's own version of the owner-field invariant below.)
+		removedShown.push_back(state.bands.back()->playback().candidate.path);
 		state.bands.pop_back();
 	}
 	// The count is what makes QML create the delegates the rectangles below are written into, so
@@ -995,6 +1049,13 @@ void MascotController::fillEmptyBands()
 {
 	if (!this->running)
 		return;
+	// M3 Task 6A: the pair fills one band index at a time, and the left panel is the one that
+	// chooses it. Under the mirror key a right-panel band the left panel has is filled from the
+	// left band's pick and commit (nextBandImages() for the policy band, showMedia()'s image copy
+	// and the video first-frame copy for the rest), so drawing for it here would give it a file of
+	// its own and start a second load. A right-panel band past the left panel's count has no
+	// counterpart to mirror, so it is filled like any other band.
+	const bool mirror = this->mirrorEnabled();
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
 		SideState& state = this->stateFor(side);
 		if (!state.surface)
@@ -1004,11 +1065,26 @@ void MascotController::fillEmptyBands()
 			MascotBand* band = state.band(i);
 			if (!band || !band->media().path.isEmpty())
 				continue;
+			if (mirror && side == MascotSide::Right && this->bandMirrorsLeft(i)
+				&& this->bandMayOwnPlayer(side, i)) {
+				// M3 Task 6A: the skip is only for a band the mirror path can actually fill. A
+				// decoder-short right band cannot receive a clip, so a video commit could never
+				// reach it and it would blank -- Ruling M3-8's answer is that such a band shows an
+				// image, which is what the fill below gives it (pickFor()'s video branch falls back
+				// to images when the band has no player).
+				continue;
+			}
 			// A request in flight *is* this band's content: asking again would post a second
 			// decode for one band, and for band 0 would walk the mascot directory twice for one
 			// fill. `isPending` is asked rather than the path alone for the reason pickFor() asks
 			// it -- a request that produced nothing at all must not wedge the band.
+			// (M3 Task 6A: a video load is in flight exactly while requestIsVideo() is set, and the
+			// prefetcher only knows about image decodes, so `isPending` would always answer "no"
+			// for a clip that is opening and the band would be picked a second time over its own
+			// load. The flag is asked first for that reason.)
 			if (!band->requestPath().isEmpty()) {
+				if (band->requestIsVideo())
+					continue;
 				MascotPrefetcher* source = this->prefetcher.data();
 				if (!source || source->isPending(band->requestPath()))
 					continue;
@@ -1018,7 +1094,10 @@ void MascotController::fillEmptyBands()
 				// the beat and the clip timer all make -- so a single-band panel (`Static`,
 				// `Scroll`) fills exactly as it did before bands were counted, candidate path and
 				// all. That is the loop's one iteration in `Static`.
-				this->pickFor(state, side, true);
+				// (M3 Task 6A: the same call, naming the band by its index now; every band below
+				// takes that same path, so this is the first iteration of one rule rather than the
+				// only one.)
+				this->pickFor(state, side, i, true);
 				continue;
 			}
 			// A band past the first has no player in this task: the per-band decoder budget is
@@ -1039,11 +1118,12 @@ void MascotController::fillEmptyBands()
 			// which belong to band 0 until Task 5/6 give the bands their own. A pick that consumed
 			// the panel's candidate for a picture on band 1 would cost band 0 its predecoded swap,
 			// and one that started a video load would start it with no player to receive it.
-			const QString path = this->nextSourcePath();
-			if (path.isEmpty())
-				continue;
-			band->setRequestIsVideo(false);
-			this->requestPath(state, path, i);
+			// (M3 Task 6A: no longer true, which is exactly what this task changed. The state that
+			// made a shared pick unsafe -- the candidate, its prefetched path and the video sequence
+			// -- is per band now (MascotBand::Playback), and the band's own player is the one
+			// pickFor()'s video branch loads into, so pickFor() is the right call here and a fill
+			// can no longer steal band 0's predecoded swap.)
+			this->pickFor(state, side, i, false);
 		}
 	}
 }
@@ -1329,6 +1409,13 @@ void MascotController::onScrollTick()
 	const bool vertical = this->scrollPanIsVertical();
 	const bool reverse = this->scrollDirectionReverses();
 	const bool pingpong = this->scrollPingpong;
+	// M3 Task 6A: the changes this tick's seams take out of their bands. They run after the loops
+	// below, never inside them: a commit is content work (the cadence's queued swap), and it must
+	// not be able to run while this tick still holds the `state`, `surface` and band pointers of
+	// the loop it was found in. Running them afterwards is what makes applyMode()/syncBands()/
+	// stop()/releaseSurface() from a commit harmless instead of a use-after-free: by then nothing
+	// in this function is iterating, and applyMode() still re-queues itself while a commit runs.
+	std::vector<MascotBand::WrapCommit> wrapCommits;
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
 		SideState& state = this->stateFor(side);
 		MascotSurface* surface = state.surface.data();
@@ -1450,27 +1537,57 @@ void MascotController::onScrollTick()
 				// M3-5: a wrap is a reposition, never a fade).
 				const bool seam = std::floor(phaseRaw + offsetPhase) != std::floor(phaseBefore + offsetPhase);
 				if (seam) {
+					// Taken here, run after the loops: one seam can never run the same change
+					// twice, and the change cannot touch the vectors it was found in while they
+					// are still being walked (M3 Task 6A).
 					MascotBand::WrapCommit commit = band->takeWrapCommit();
 					if (commit)
-						commit();
+						wrapCommits.push_back(std::move(commit));
 				}
 			}
 		}
+	}
+	// M3 Task 6A: the seams' changes, now that no band, surface or state pointer from the loops
+	// above is in use. A commit that stopped the controller ends the run rather than calling the
+	// remaining changes with bands that no longer exist; a commit that only re-queued a layout
+	// change leaves `running` alone and the rest still run.
+	for (MascotBand::WrapCommit& commit : wrapCommits) {
+		if (!this->running)
+			break;
+		++this->wrapCommitDepth;
+		commit();
+		--this->wrapCommitDepth;
 	}
 }
 
 void MascotController::nextImage(MascotSide side, bool updateHighlight)
 {
-	this->pickFor(this->stateFor(side), side, updateHighlight);
+	// M3 Task 6A: this is the policy band's entry point, so it names band 0; a `Stripes` band
+	// advances through pickFor() with its own index (or nextBandImages() when the pair moves).
+	this->pickFor(this->stateFor(side), side, 0, updateHighlight);
 }
 
 void MascotController::nextImages(bool forcedMirror)
 {
+	// M3 Task 6A: the pair swap is one band index at a time now. A one-band panel's pair *is* its
+	// band 0, so `Static` and `Scroll` run exactly the code this method ran before, one band deep.
+	this->nextBandImages(0, forcedMirror);
+}
+
+void MascotController::nextBandImages(int bandIndex, bool forcedMirror)
+{
 	if (!this->running)
 		return;
-	const MascotMedia left = this->pickFor(this->leftState, MascotSide::Left, true);
+	const MascotMedia left = this->pickFor(this->leftState, MascotSide::Left, bandIndex,
+		bandIndex == 0);
 	if (this->mirrorEnabled() || forcedMirror) {
+		MascotBand* leftBand = this->leftState.band(bandIndex);
+		if (!leftBand)
+			return;
 		if (!this->rightState.surface)
+			return;
+		MascotBand* rightBand = this->rightState.band(bandIndex);
+		if (!rightBand)
 			return;
 		// M2: a video pick cannot be copied the way an image can. An image's media is the pick
 		// (the decode happens later but the media already names the file and its geometry); a
@@ -1478,30 +1595,32 @@ void MascotController::nextImages(bool forcedMirror)
 		// to share is the file *and the start offset*, and the offset is only known once the left
 		// panel's load reports it. This branch therefore either waits for that report or starts
 		// the right panel from the media the left panel is already showing.
-		MascotBand* leftBand = this->leftState.band(0);
-		if (!leftBand)
-			return;
-		if (leftBand->requestIsVideo() || this->leftState.videoPickRetryPending) {
+		// (M3 Task 6A: every sentence below is about band `bandIndex` of both panels now. The
+		// offset a copy waits for is the left band's own first frame, so a frame from band 2 can
+		// never satisfy the copy owed by band 0 -- and the copy pending flag is the right band's,
+		// on that same index.)
+		if (leftBand->requestIsVideo() || leftBand->playback().videoPickRetryPending) {
 			MascotVideoSlot* leftVideo = leftBand->video();
 			if (leftVideo && leftVideo->isBusy()) {
 				// Still in flight: the right panel's copy is started from the left panel's
 				// firstFrame(), which carries the offset the pair has to agree on.
 				this->preparePick(this->rightState, false);
-				this->rightState.mirrorCopyPending = true;
+				rightBand->playback().mirrorCopyPending = true;
 				return;
 			}
-			if (this->leftState.videoPickRetryPending) {
+			if (leftBand->playback().videoPickRetryPending) {
 				// The left panel's pick is waiting for its QML delegate. That retry will start a
 				// load, and that load's first frame is where the pair's offset exists -- so the copy
 				// is armed now. Without this the pair would be silently unpaired for a whole clip:
 				// under the mirror key nothing else ever advances the right panel.
 				this->preparePick(this->rightState, false);
-				this->rightState.mirrorCopyPending = true;
+				rightBand->playback().mirrorCopyPending = true;
 				return;
 			}
 			if (leftBand->media().type == MascotMedia::Video && !leftBand->media().path.isEmpty()) {
 				// Already showing: the offset is committed, so the copy needs no report.
-				this->startMirrorVideo(leftBand->media().path, leftBand->media().startOffsetMs);
+				this->startMirrorVideo(bandIndex, leftBand->media().path,
+					leftBand->media().startOffsetMs);
 				return;
 			}
 			// Neither loading nor showing: the left panel's pick produced nothing (its players
@@ -1512,7 +1631,7 @@ void MascotController::nextImages(bool forcedMirror)
 			// Both panels show the same media, each drawn by its own side rule, and the right
 			// panel gets it from the commit that just happened: no request, no decode.
 			this->preparePick(this->rightState, false);
-			this->showMedia(this->rightState, MascotSide::Right, left, false, true, 0);
+			this->showMedia(this->rightState, MascotSide::Right, left, false, true, bandIndex);
 			return;
 		}
 		// The left panel's pick is still in flight (H1): copy the path it is about to show, not
@@ -1520,10 +1639,10 @@ void MascotController::nextImages(bool forcedMirror)
 		if (leftBand->requestPath().isEmpty())
 			return;
 		this->preparePick(this->rightState, false);
-		this->requestPath(this->rightState, leftBand->requestPath(), 0);
+		this->requestPath(this->rightState, leftBand->requestPath(), bandIndex);
 	}
 	else {
-		this->pickFor(this->rightState, MascotSide::Right, false);
+		this->pickFor(this->rightState, MascotSide::Right, bandIndex, false);
 	}
 }
 
@@ -1817,7 +1936,11 @@ void MascotController::clearSide(SideState& state)
 	QStringList previousShown;
 	for (auto& owned : state.bands)
 		previousShown.push_back(owned->media().path);
-	const QString previousCandidate = state.candidate.path;
+	// M3 Task 6A: the candidate is the band's now, so every band's speculative path is an owner
+	// field the pin invariant has to see gone before the pins are re-evaluated.
+	QStringList previousCandidates;
+	for (auto& owned : state.bands)
+		previousCandidates.push_back(owned->playback().candidate.path);
 	// M2: a cleared panel must not keep a clip playing into a slot nobody draws, and `clearSlot()`
 	// deliberately leaves the video state alone (Task 1's interface fact), so both halves are done
 	// here: the players are stopped and their outputs hidden.
@@ -1825,18 +1948,16 @@ void MascotController::clearSide(SideState& state)
 	// and forgets the media; stopping the players is still here, because whether they live is the
 	// caller's decision.)
 	// (M3 Task 2: "the players" is every band's players for the same reason the paths above are.)
-	if (state.clipTimer)
-		state.clipTimer->stop();
+	// (M3 Task 6A: the cadence is every band's too. A band's timer left armed would advance a panel
+	// nobody draws, so the timers stop here and the bands' own clear() stops them again.)
 	for (auto& owned : state.bands) {
+		if (QTimer* timer = owned->clipTimer())
+			timer->stop();
 		if (owned->video())
 			owned->video()->stopAll();
 	}
-	state.mirrorCopyPending = false;
-	state.videoFailures = 0;
 	for (auto& owned : state.bands)
 		owned->clear();
-	state.prefetchPath.clear();
-	state.candidate = MascotMedia();
 	state.flipToggled = false;
 	state.mirrorOverrideEnabled = false;
 	state.mirrorOverrideValue = false;
@@ -1847,7 +1968,8 @@ void MascotController::clearSide(SideState& state)
 	// cache has grown past every bound.
 	for (const QString& path : previousShown)
 		this->syncPin(path);
-	this->syncPin(previousCandidate);
+	for (const QString& path : previousCandidates)
+		this->syncPin(path);
 }
 
 bool MascotController::pinReferenced(const QString& path) const
@@ -1860,13 +1982,17 @@ bool MascotController::pinReferenced(const QString& path) const
 	// is on screen but not named here could be evicted from the cache under the slot drawing it,
 	// so the question has to be asked of all of them; a single-band panel answers exactly as it
 	// did before bands were counted.
+	// (M3 Task 6A: each band's *candidate* is one of those fields too -- it is a decoded media the
+	// band is about to show, so it is pinned exactly as band 0's candidate always was.)
 	for (const SideState* state : { &this->leftState, &this->rightState }) {
 		for (const auto& owned : state->bands) {
 			if (owned->media().path == path)
 				return true;
+			if (owned->playback().candidate.path == path)
+				return true;
 		}
 	}
-	return this->leftState.candidate.path == path || this->rightState.candidate.path == path;
+	return false;
 }
 
 void MascotController::syncPin(const QString& path)
@@ -1957,8 +2083,11 @@ void MascotController::presentMedia(SideState& state, MascotSide side, const Mas
 	// stop it. A `Stripes` panel's extra band showing a still must not kill the clip timer that is
 	// advancing the video on band 0 -- the per-band cadence is Task 6's, and until then the
 	// panel's one timer is the only cadence there is.)
-	if (bandIndex == 0 && state.clipTimer)
-		state.clipTimer->stop();
+	// (M3 Task 6A: the timer is the *band's* now, and this stops the one belonging to the band
+	// that just committed an image. Band 0's image commit and a stripe's are therefore independent
+	// cadences: neither can stop the other, which is what the Task 5 note above was waiting for.)
+	if (QTimer* timer = band->clipTimer())
+		timer->stop();
 	// `mascots_center_content` off means "centre the whole image, not its content", which is
 	// the surface's own shift set to zero. The media write above resets any previous
 	// override, so this has to come after it (amendment R: the surface owns the arithmetic,
@@ -2003,18 +2132,20 @@ void MascotController::requestPath(SideState& state, const QString& path, int ba
 	// The pending mirror copy is the *panel pair's* state: it says the right panel owes a copy of
 	// the left panel's next video commit. A `Stripes` fill of one of the extra bands is not that
 	// panel's next clip, so only the policy band's request may clear it (M3 Task 2).
-	if (bandIndex == 0)
-		state.mirrorCopyPending = false;
+	// (M3 Task 6A: it is the *band's* now -- the pair is paired per index -- so an image request on
+	// band i clears band i's copy and leaves every other band's copy alone.)
+	band->playback().mirrorCopyPending = false;
 	MascotPrefetcher* source = this->prefetcher.data();
 	if (source)
 		source->request(path);
 }
 
-MascotMedia MascotController::pickFor(SideState& state, MascotSide side, bool updateHighlight)
+MascotMedia MascotController::pickFor(SideState& state, MascotSide side, int bandIndex,
+	bool updateHighlight)
 {
 	if (!this->running || !state.surface)
 		return MascotMedia();
-	MascotBand* band = state.band(0);
+	MascotBand* band = state.band(bandIndex);
 	if (!band)
 		return MascotMedia();
 
@@ -2023,7 +2154,7 @@ MascotMedia MascotController::pickFor(SideState& state, MascotSide side, bool up
 	// image candidate left over from an image-mode pick must not be shown over a video panel.
 	const MascotMedia::Type type = this->pickType(state);
 	if (type == MascotMedia::Video) {
-		switch (this->pickVideo(state, side, updateHighlight)) {
+		switch (this->pickVideo(state, side, bandIndex, updateHighlight)) {
 		case VideoPick::Started:
 			return MascotMedia();
 		case VideoPick::Skip:
@@ -2041,11 +2172,14 @@ MascotMedia MascotController::pickFor(SideState& state, MascotSide side, bool up
 		// One line per swap while a video configuration is in play, so the gate can see which
 		// branch served each pick and how big the pool was. Never written for an Images setting,
 		// which is what keeps an images run's log identical to merged master's.
+		// (M3 Task 6A: the line names the band when it is not the policy band; band 0's text is
+		// unchanged. The rate limit stays the panel's -- the line is about which pool branch served
+		// a pick, not about one band.)
 		const qint64 now = QDateTime::currentMSecsSinceEpoch();
 		if (state.lastTypeLogMs == 0 || (now - state.lastTypeLogMs) >= VIDEO_LOG_INTERVAL_MS) {
 			state.lastTypeLogMs = now;
 			this->logVideo(QStringLiteral("%1 pick=image pool=%2 media=%3")
-				.arg(sideLabel(side))
+				.arg(bandLabel(side, bandIndex))
 				.arg(this->source.videoPoolSize())
 				.arg(this->mediaSetting));
 		}
@@ -2055,10 +2189,12 @@ MascotMedia MascotController::pickFor(SideState& state, MascotSide side, bool up
 	// it is a property write -- no decode, no directory walk and no request on this path. Any
 	// older request this panel still had in flight is dropped by showMedia (Important #1), so a
 	// late delivery for it can no longer overwrite what is shown here.
-	if (!state.candidate.path.isEmpty()) {
-		const MascotMedia media = state.candidate;
-		this->preparePick(state, updateHighlight);
-		this->showMedia(state, side, media, true, true, 0);
+	// (M3 Task 6A: the candidate is the band's own, so a stripe's commit consumes the stripe's
+	// predecoded media and nothing of band 0's.)
+	if (!band->playback().candidate.path.isEmpty()) {
+		const MascotMedia media = band->playback().candidate;
+		this->preparePick(state, updateHighlight && bandIndex == 0);
+		this->showMedia(state, side, media, true, true, bandIndex);
 		return media;
 	}
 
@@ -2080,10 +2216,13 @@ MascotMedia MascotController::pickFor(SideState& state, MascotSide side, bool up
 	if (path.isEmpty())
 		return MascotMedia();
 
-	this->preparePick(state, updateHighlight);
+	this->preparePick(state, updateHighlight && bandIndex == 0);
 	// Band 0 is the band this pick path serves: the panel's candidate, its speculation and its
 	// video sequence are all band 0's (M3 Task 2).
-	this->requestPath(state, path, 0);
+	// (M3 Task 6A: the band this pick path serves is `bandIndex`; its candidate, speculation and
+	// video sequence are that band's own, so the sentence above now describes the index the
+	// caller passed -- 0 for every pre-mode call site and for the policy band.)
+	this->requestPath(state, path, bandIndex);
 	return MascotMedia();
 }
 
@@ -2117,6 +2256,10 @@ void MascotController::showMedia(SideState& state, MascotSide side, const Mascot
 	// panel's policy and live on band 0; a `Stripes` panel's extra bands are filled outside all of
 	// it, so their commits must not consume the panel's predecoded candidate or drop the pair's
 	// pending copy. `Static` is always band 0, so this is the path it always ran.
+	// (M3 Task 6A: the candidate, the speculation and the mirror-copy wait are the band's now, so
+	// every band's commit consumes and arms its own. The flip parity stays the panel's -- a stripe
+	// swapping must not clear a flip the user made on the panel -- and the theme colour stays band
+	// 0's, because the accent belongs to the panel and four stripes swapping would strobe it.)
 	const bool policyBand = bandIndex == 0;
 
 	// Amendment H2: the owner fields change first and the pins are re-evaluated afterwards, so a
@@ -2124,9 +2267,9 @@ void MascotController::showMedia(SideState& state, MascotSide side, const Mascot
 	// panel showing the same file -- is never unpinned even for one statement, which would let
 	// eviction take the pixels between the two.
 	const QString previousShown = band->media().path;
-	const QString previousCandidate = state.candidate.path;
-	if (policyBand && fromReady)
-		state.candidate = MascotMedia(); // consumed by this commit
+	const QString previousCandidate = band->playback().candidate.path;
+	if (fromReady)
+		band->playback().candidate = MascotMedia(); // consumed by this commit
 	// Recorded here, before the pins are re-evaluated, and written by presentMedia() below: that
 	// is the order the commit has always run in (amendment H2 needs the new path to be the shown
 	// one when pinReferenced() runs, and the slot write needs the mirror settled first).
@@ -2141,8 +2284,9 @@ void MascotController::showMedia(SideState& state, MascotSide side, const Mascot
 	// M2: the wait this commit supersedes is the image one; a video wait cannot survive a commit
 	// either, and clearing the flag is what makes a late first frame of an older clip ignorable.
 	band->setRequestIsVideo(false);
-	if (policyBand)
-		state.prefetchPath.clear();
+	// (M3 Task 6A: every commit drops the *committed band's* prefetched path, not the policy
+	// band's: a stripe's speculative media belongs to the stripe.)
+	band->playback().prefetchPath.clear();
 	// The media that just became visible is pinned *before* the two paths it replaced are
 	// re-evaluated: each syncPin() can run eviction, and at the configured floor the entry eviction
 	// would then be free to take is exactly this one (M1).
@@ -2153,31 +2297,56 @@ void MascotController::showMedia(SideState& state, MascotSide side, const Mascot
 	this->presentMedia(state, side, media, bandIndex);
 	this->syncPin(previousShown);
 	this->syncPin(previousCandidate);
+	// M3 Task 6A: a commit is this band's content arriving, so both retry budgets start over.
+	// A band that was re-picking after failures is done asking until it fails again.
+	band->playback().videoFailures = 0;
+	band->playback().imageFailures = 0;
 
 	// The next swap is armed after this turn: the swap path must not walk the mascot directory.
-	if (policyBand && armCandidate)
-		this->armSpeculation(side);
+	// (M3 Task 6A: the committed band's own next media, through its own index.)
+	if (armCandidate)
+		this->armSpeculation(side, bandIndex);
 
 	// M2: the left panel is the one the pair follows, so when it commits an *image* there is no
 	// video offset coming for the right panel to copy -- it was armed by a video pick that has
 	// since degraded (its sink never appeared, its pool emptied). Dropped here rather than only in
 	// onVideoFailed(), because a give-up downgrade never produces a failure to hear about. A video
 	// commit is untouched: onVideoFirstFrame() reads the flag after this call.
-	if (policyBand && side == MascotSide::Left && media.type == MascotMedia::Image)
-		this->rightState.mirrorCopyPending = false;
+	// (M3 Task 6A: the copy that is dropped is the right panel's same-index band's, the one a
+	// degraded pick armed for this band.)
+	if (side == MascotSide::Left && media.type == MascotMedia::Image) {
+		if (MascotBand* rightBand = this->rightState.band(bandIndex))
+			rightBand->playback().mirrorCopyPending = false;
+	}
 
 	if (policyBand && state.highlightOnApply) {
 		state.highlightOnApply = false;
 		emit this->themeColorChanged(this->colorFor(side, true));
 	}
+
+	// M3 Task 6A: the pair rule, extended from one band to N. Band 0's image copy is made by
+	// nextBandImages(), which copies the *request* so one delivery fills both panels; a stripe's
+	// fill does not go through that pair path, so its commit is mirrored here -- the same file on
+	// the right panel's same-index band, drawn by that panel's own side rule. A video commit is
+	// not copied here: its offset only exists at the first frame, and onVideoFirstFrame() is where
+	// the pair's copy starts.
+	if (this->mirrorEnabled() && side == MascotSide::Left && bandIndex > 0
+		&& media.type == MascotMedia::Image) {
+		SideState& right = this->rightState;
+		MascotBand* rightBand = right.band(bandIndex);
+		if (right.surface && rightBand) {
+			this->preparePick(right, false);
+			this->showMedia(right, MascotSide::Right, media, false, true, bandIndex);
+		}
+	}
 }
 
-void MascotController::holdCandidate(SideState& state, const MascotMedia& media)
+void MascotController::holdCandidate(MascotBand& band, const MascotMedia& media)
 {
 	if (media.path.isEmpty())
 		return;
-	const QString previous = state.candidate.path;
-	state.candidate = media;
+	const QString previous = band.playback().candidate.path;
+	band.playback().candidate = media;
 	// Pinned as soon as it exists, and before the candidate it replaces is re-evaluated: a
 	// candidate whose pixels were evicted before its swap would put a blank id in the slot, and
 	// the unpin below can run eviction.
@@ -2185,28 +2354,37 @@ void MascotController::holdCandidate(SideState& state, const MascotMedia& media)
 	this->syncPin(previous);
 }
 
-void MascotController::armSpeculation(MascotSide side)
+void MascotController::armSpeculation(MascotSide side, int bandIndex)
 {
 	// Queued rather than called: the pick walks the mascot directory and posts a decode, and
 	// neither may sit on the swap path (the swap must stay a property write). Queued to `this`,
 	// so a stopped or destroyed controller simply never runs it; speculate() is idempotent, so
 	// several commits in one turn collapse into one pick.
-	QMetaObject::invokeMethod(this, [this, side] { this->speculate(this->stateFor(side), side); },
-		Qt::QueuedConnection);
+	QMetaObject::invokeMethod(this, [this, side, bandIndex] {
+		this->speculate(this->stateFor(side), side, bandIndex);
+	}, Qt::QueuedConnection);
 }
 
-void MascotController::speculate(SideState& state, MascotSide side)
+void MascotController::speculate(SideState& state, MascotSide side, int bandIndex)
 {
 	if (!this->running || !state.surface)
 		return;
+	MascotBand* band = state.band(bandIndex);
+	if (!band)
+		return;
 	// Exactly one deep, per panel: while a candidate is held or its decode is in flight there is
 	// nothing to do, and no queue is kept.
-	if (!state.candidate.path.isEmpty() || !state.prefetchPath.isEmpty())
+	// (M3 Task 6A: per band now -- a `Stripes` panel gives every band the same one-deep lookahead
+	// band 0 has always had, so each band's next media is decoded before its swap is due.)
+	if (!band->playback().candidate.path.isEmpty() || !band->playback().prefetchPath.isEmpty())
 		return;
 	// With the mirror key on, the right panel always shows what the left panel shows, so a
 	// speculative pick for it would spend a draw nobody displays (and would shift a seeded
 	// sequence). It arms itself again the moment it is updated on its own.
-	if (side == MascotSide::Right && this->mirrorEnabled())
+	// (M3 Task 6A: the rule is per band index now: a right-panel band the left panel mirrors needs
+	// no speculation of its own, while a right-panel band past the left panel's count is its own
+	// band and does.)
+	if (side == MascotSide::Right && this->bandMirrorsLeft(bandIndex))
 		return;
 	// M2: a video panel has no use for a decoded image. Holding one would cost a decode, a cache
 	// entry and a pin per clip, and pickFor() would find it waiting when the panel's type
@@ -2216,7 +2394,7 @@ void MascotController::speculate(SideState& state, MascotSide side)
 	const QString path = this->nextSourcePath();
 	if (path.isEmpty())
 		return;
-	state.prefetchPath = path;
+	band->playback().prefetchPath = path;
 	MascotPrefetcher* source = this->prefetcher.data();
 	if (source)
 		source->request(path);
@@ -2333,9 +2511,9 @@ MascotMedia::Type MascotController::pickType(SideState& state)
 }
 
 MascotController::VideoPick MascotController::pickVideo(SideState& state, MascotSide side,
-	bool updateHighlight)
+	int bandIndex, bool updateHighlight)
 {
-	MascotBand* band = state.band(0);
+	MascotBand* band = state.band(bandIndex);
 	MascotVideoSlot* slot = band ? band->video() : nullptr;
 	if (!slot)
 		return VideoPick::Fallback;
@@ -2366,17 +2544,18 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 		if (state.lastPreviewDeferLogMs == 0
 			|| (now - state.lastPreviewDeferLogMs) >= VIDEO_LOG_INTERVAL_MS) {
 			state.lastPreviewDeferLogMs = now;
-			this->logVideo(QStringLiteral("%1 swap waits: a preview tooltip is playing").arg(sideLabel(side)));
+			this->logVideo(QStringLiteral("%1 swap waits: a preview tooltip is playing")
+				.arg(bandLabel(side, bandIndex)));
 		}
 		// The same flag the sink retry sets, for the same reason: this panel is about to start a
 		// load, so under the mirror key the other panel's copy has to be armed from that load's
 		// first frame rather than left waiting for a commit it will not see on its own.
-		state.videoPickRetryPending = true;
-		QTimer::singleShot(this->busyDeferMs, this, [this, side]() {
+		band->playback().videoPickRetryPending = true;
+		QTimer::singleShot(this->busyDeferMs, this, [this, side, bandIndex]() {
 			if (!this->running)
 				return;
 			SideState& panel = this->stateFor(side);
-			MascotBand* panelBand = panel.band(0);
+			MascotBand* panelBand = panel.band(bandIndex);
 			MascotVideoSlot* panelVideo = panelBand ? panelBand->video() : nullptr;
 			// A load that started in the meantime (a click, the other panel's pair) is newer than
 			// this deferral: it owns the panel's next frame.
@@ -2387,7 +2566,7 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 			if (!panelBand || !panelVideo || panelBand->requestIsVideo()
 				|| (panelVideo->isBusy() && !panelVideo->preloading()))
 				return;
-			this->pickFor(panel, side, true);
+			this->pickFor(panel, side, bandIndex, bandIndex == 0);
 		});
 		return VideoPick::Skip;
 	}
@@ -2398,9 +2577,11 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 	// Task 6: the budget and the interval are `mascots_retry_attempts` / `mascots_retry_interval_ms`
 	// (§7.11): a delegate is normally there by the time the surface has applied its slot count, so
 	// this is the belt to that braces.
+	// (M3 Task 6A: the sink asked about is this band's own slot -- the hardcoded slot 0 was the
+	// policy band's, and a stripe whose own delegate existed would never get its pick started.)
 	MascotSurface* surface = state.surface.data();
-	if (!surface || !surface->slotSink(0, 0)) {
-		if (state.videoSinkRetries++ < this->retryAttempts) {
+	if (!surface || !surface->slotSink(bandIndex, 0)) {
+		if (band->playback().videoSinkRetries++ < this->retryAttempts) {
 			if (!this->warnedVideoSink) {
 				this->warnedVideoSink = true;
 				this->logVideo(QStringLiteral("no video sink for the panel yet; retrying the pick"));
@@ -2408,14 +2589,14 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 			// Recorded for nextImages(): while the pick is waiting, this panel is still the one the
 			// mirror pair follows, so the right panel's copy has to be armed from its firstFrame
 			// rather than left waiting for a commit that the right panel never sees.
-			state.videoPickRetryPending = true;
-			QTimer::singleShot(this->retryIntervalMs, this, [this, side]() {
+			band->playback().videoPickRetryPending = true;
+			QTimer::singleShot(this->retryIntervalMs, this, [this, side, bandIndex]() {
 				if (!this->running)
 					return;
 				SideState& panel = this->stateFor(side);
-				MascotBand* panelBand = panel.band(0);
+				MascotBand* panelBand = panel.band(bandIndex);
 				if (panelBand && panelBand->media().path.isEmpty())
-					this->pickFor(panel, side, true);
+					this->pickFor(panel, side, bandIndex, bandIndex == 0);
 			});
 			return VideoPick::Skip;
 		}
@@ -2423,8 +2604,8 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 		// once per process, not once per episode, because the retry budget below is reset so a
 		// delegate that arrives later gets its own. The counter is reset here so a recovered
 		// delegate is not decided by an exhausted budget.
-		state.videoPickRetryPending = false;
-		state.videoSinkRetries = 0;
+		band->playback().videoPickRetryPending = false;
+		band->playback().videoSinkRetries = 0;
 		if (!this->warnedVideoSinkGiveUp) {
 			this->warnedVideoSinkGiveUp = true;
 			this->logVideo(QStringLiteral("no video sink for the panel after %1 retries; showing images instead")
@@ -2432,8 +2613,8 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 		}
 		return VideoPick::Fallback;
 	}
-	state.videoSinkRetries = 0;
-	state.videoPickRetryPending = false;
+	band->playback().videoSinkRetries = 0;
+	band->playback().videoPickRetryPending = false;
 	// The clip this swap will show may already be chosen and opened: a preload decides the next
 	// path when the previous clip commits, so consuming it here is what makes the swap an opacity
 	// change. Drawing again would skip the parked file and shift the seeded sequence by one draw per
@@ -2443,16 +2624,16 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 	if (!parkedPath.isEmpty()) {
 		const qint64 parkedOffsetMs = slot->preloadedOffsetMs();
 		// A video pick owns the panel exactly as it does below, for the same reasons.
-		if (!state.candidate.path.isEmpty()) {
-			const QString dropped = state.candidate.path;
-			state.candidate = MascotMedia();
+		if (!band->playback().candidate.path.isEmpty()) {
+			const QString dropped = band->playback().candidate.path;
+			band->playback().candidate = MascotMedia();
 			this->syncPin(dropped);
 		}
-		state.prefetchPath.clear();
-		this->preparePick(state, updateHighlight);
+		band->playback().prefetchPath.clear();
+		this->preparePick(state, updateHighlight && bandIndex == 0);
 		// The offset is passed rather than left as -1: it is the number that was actually seeked to,
 		// and passing it is what lets the log print it and a mirrored pair agree on it.
-		this->startVideoLoad(state, side, parkedPath, parkedOffsetMs);
+		this->startVideoLoad(state, side, bandIndex, parkedPath, parkedOffsetMs);
 		return VideoPick::Started;
 	}
 	// The source reads no config, so the seed and the weighted switch are pushed before the pick
@@ -2466,21 +2647,21 @@ MascotController::VideoPick MascotController::pickVideo(SideState& state, Mascot
 	// A video pick owns the panel: an image candidate held from an image-mode pick would be shown
 	// over this clip the moment the panel's type came back, and a decode still in flight for it
 	// would be a decode nobody ever sees.
-	if (!state.candidate.path.isEmpty()) {
-		const QString dropped = state.candidate.path;
-		state.candidate = MascotMedia();
+	if (!band->playback().candidate.path.isEmpty()) {
+		const QString dropped = band->playback().candidate.path;
+		band->playback().candidate = MascotMedia();
 		this->syncPin(dropped);
 	}
-	state.prefetchPath.clear();
-	this->preparePick(state, updateHighlight);
-	this->startVideoLoad(state, side, path, -1);
+	band->playback().prefetchPath.clear();
+	this->preparePick(state, updateHighlight && bandIndex == 0);
+	this->startVideoLoad(state, side, bandIndex, path, -1);
 	return VideoPick::Started;
 }
 
-void MascotController::startVideoLoad(SideState& state, MascotSide side, const QString& path,
-	qint64 offsetMs)
+void MascotController::startVideoLoad(SideState& state, MascotSide side, int bandIndex,
+	const QString& path, qint64 offsetMs)
 {
-	MascotBand* band = state.band(0);
+	MascotBand* band = state.band(bandIndex);
 	MascotVideoSlot* slot = band ? band->video() : nullptr;
 	if (!state.surface || !band || !slot || path.isEmpty())
 		return;
@@ -2496,25 +2677,25 @@ void MascotController::startVideoLoad(SideState& state, MascotSide side, const Q
 	// (M3 Task 1: the band's ensureVideo() is that binding now, and it is what this gate asks --
 	// false means the delegate has no sink yet, which is the retry case.)
 	if (!band->ensureVideo(0)) {
-		if (state.videoLoadRetries++ < this->retryAttempts) {
+		if (band->playback().videoLoadRetries++ < this->retryAttempts) {
 			this->logVideo(QStringLiteral("%1 has no video sink yet; retrying the same load")
-				.arg(sideLabel(side)));
+				.arg(bandLabel(side, bandIndex)));
 			// The same flag a retried pick sets, because from outside this is the same situation:
 			// this panel is about to start a load, so a mirrored pair has to arm the other panel's
 			// copy from that load's first frame.
-			state.videoPickRetryPending = true;
-			QTimer::singleShot(this->retryIntervalMs, this, [this, side, path, offsetMs]() {
+			band->playback().videoPickRetryPending = true;
+			QTimer::singleShot(this->retryIntervalMs, this, [this, side, bandIndex, path, offsetMs]() {
 				if (!this->running)
 					return;
 				SideState& panel = this->stateFor(side);
-				MascotBand* panelBand = panel.band(0);
+				MascotBand* panelBand = panel.band(bandIndex);
 				if (panelBand && panelBand->video())
-					this->startVideoLoad(panel, side, path, offsetMs);
+					this->startVideoLoad(panel, side, bandIndex, path, offsetMs);
 			});
 			return;
 		}
-		state.videoLoadRetries = 0;
-		state.videoPickRetryPending = false;
+		band->playback().videoLoadRetries = 0;
+		band->playback().videoPickRetryPending = false;
 		// A parked clip this panel cannot start is not going to become startable: it is dropped so
 		// the next swap draws a fresh one instead of retrying a clip whose output has no sink.
 		slot->discardPreload();
@@ -2523,13 +2704,13 @@ void MascotController::startVideoLoad(SideState& state, MascotSide side, const Q
 		if (!this->warnedVideoSinkGiveUp) {
 			this->warnedVideoSinkGiveUp = true;
 			this->logVideo(QStringLiteral("%1 could not start its load (%2 retries, no sink); the next swap re-pairs the panels")
-				.arg(sideLabel(side))
+				.arg(bandLabel(side, bandIndex))
 				.arg(this->retryAttempts));
 		}
 		return;
 	}
-	state.videoLoadRetries = 0;
-	state.videoPickRetryPending = false;
+	band->playback().videoLoadRetries = 0;
+	band->playback().videoPickRetryPending = false;
 	// §7.5's ordering, ruled into this task: the output is made visible *before* the clip is asked
 	// for, at the opacity it already carries (0 on a fresh panel), so the sink is receiving frames
 	// while the first-frame gate waits. Making it visible on the frame instead would have the gate
@@ -2550,21 +2731,26 @@ void MascotController::startVideoLoad(SideState& state, MascotSide side, const Q
 	band->setRequestPath(path);
 	band->setRequestIsVideo(true);
 	band->setWantedOffsetMs(effectiveOffsetMs);
-	state.requestedAtMs = QDateTime::currentMSecsSinceEpoch();
-	++state.videoSeq;
+	band->playback().requestedAtMs = QDateTime::currentMSecsSinceEpoch();
+	++band->playback().videoSeq;
 	// A left-panel video load is what the pair follows, so the right panel's copy is armed here
 	// rather than only in nextImages(): a swap served from a preload completes *inside*
 	// pickVideo(), which is before nextImages() could have armed anything, and the pair would then
 	// never be copied. Arming it at the start of every left video load covers both timings with one
 	// rule -- from this moment the right panel owes a copy of this panel's next commit.
-	if (side == MascotSide::Left && this->mirrorEnabled())
-		this->rightState.mirrorCopyPending = true;
+	// (M3 Task 6A: the copy is owed by the right panel's *same-index* band, which is the band this
+	// load's frame will have to satisfy. A right-panel band past the left panel's count owes
+	// nothing, because the left panel has no band for it to mirror.)
+	if (side == MascotSide::Left && this->mirrorEnabled()) {
+		if (MascotBand* rightBand = this->rightState.band(bandIndex))
+			rightBand->playback().mirrorCopyPending = true;
+	}
 	// The `preloaded=` field is how the log tells the two apart: a swap served from a parked clip
 	// prints the offset it was parked at and can be paired with the "preloaded" line that preceded
 	// it, while `preloaded=no` is a swap that paid for its own load.
 	this->logVideo(QStringLiteral("%1 swap #%2 pool=%3 offset=%4 path=\"%5\" preloaded=%6")
-		.arg(sideLabel(side))
-		.arg(state.videoSeq)
+		.arg(bandLabel(side, bandIndex))
+		.arg(band->playback().videoSeq)
 		.arg(this->source.videoPoolSize())
 		.arg(effectiveOffsetMs < 0 ? QStringLiteral("random") : QString::number(effectiveOffsetMs))
 		.arg(path)
@@ -2577,38 +2763,40 @@ void MascotController::startVideoLoad(SideState& state, MascotSide side, const Q
 	slot->swapTo(path, offsetMs);
 }
 
-void MascotController::onVideoFirstFrame(MascotSide side, const QString& path, int ab,
+void MascotController::onVideoFirstFrame(MascotSide side, int bandIndex, const QString& path, int ab,
 	const QSize& frameSize, qint64 offsetMs)
 {
 	if (!this->running)
 		return;
 	SideState& state = this->stateFor(side);
-	MascotBand* band = state.band(0);
+	MascotBand* band = state.band(bandIndex);
 	if (!state.surface || !band || !band->video())
 		return;
 	// Only the load this panel is waiting for may be committed: a superseded load's frame (a swap
 	// that arrived mid-load) is not this panel's media, exactly as a late image delivery is not
 	// (amendment H1).
+	// (M3 Task 6A: "this panel" is this band now, and the slot that reported is the band's own --
+	// the connection carries the index, and the request record it is matched against is the band's,
+	// so a frame from band 2 can never be committed to band 0.)
 	if (!band->requestIsVideo() || band->requestPath() != path)
 		return;
 
-	const qint64 delta = QDateTime::currentMSecsSinceEpoch() - state.requestedAtMs;
+	const qint64 delta = QDateTime::currentMSecsSinceEpoch() - band->playback().requestedAtMs;
 	MascotMedia media;
 	media.type = MascotMedia::Video;
 	media.path = path;
 	media.nativeSize = frameSize;
 	media.startOffsetMs = offsetMs;
 
-	state.videoFailures = 0;
 	// Committed through the same call an image takes, which is what keeps the pins, the mirror
 	// reset, highlightOnApply and the theme-colour emission working without a second copy of any
 	// of them. `armCandidate` is false: a video panel has no image candidate to arm.
-	this->showMedia(state, side, media, false, false, 0);
-	this->fadeInVideo(state, side, ab);
-	this->restartClipTimer(state, side);
+	this->showMedia(state, side, media, false, false, bandIndex);
+	this->fadeInVideo(state, side, bandIndex, ab);
+	this->restartClipTimer(side, bandIndex);
 	this->logVideo(QStringLiteral("%1 first frame #%2 ab=%3 %4x%5 offset=%6ms delta=%7ms path=\"%8\"")
-		.arg(sideLabel(side))
-		.arg(state.videoSeq)
+		.arg(bandLabel(side, bandIndex))
+		.arg(band->playback().videoSeq)
 		.arg(ab)
 		.arg(frameSize.width())
 		.arg(frameSize.height())
@@ -2618,17 +2806,21 @@ void MascotController::onVideoFirstFrame(MascotSide side, const QString& path, i
 
 	// A mirror pair shares the file *and* the offset, and the left panel's frame is where the
 	// offset finally exists -- so this is the moment the right panel can be started on it.
-	if (side == MascotSide::Left && this->rightState.mirrorCopyPending) {
-		this->rightState.mirrorCopyPending = false;
-		MascotBand* rightBand = this->rightState.band(0);
-		if (this->rightState.surface && rightBand && rightBand->video())
-			this->startMirrorVideo(path, offsetMs);
+	// (M3 Task 6A: the pending copy is the right panel's same-index band's; band i's frame can
+	// therefore only ever satisfy band i's copy.)
+	if (side == MascotSide::Left) {
+		MascotBand* rightBand = this->rightState.band(bandIndex);
+		if (rightBand && rightBand->playback().mirrorCopyPending) {
+			rightBand->playback().mirrorCopyPending = false;
+			if (this->rightState.surface && rightBand->video())
+				this->startMirrorVideo(bandIndex, path, offsetMs);
+		}
 	}
 }
 
-void MascotController::fadeInVideo(SideState& state, MascotSide side, int ab)
+void MascotController::fadeInVideo(SideState& state, MascotSide side, int bandIndex, int ab)
 {
-	MascotBand* band = state.band(0);
+	MascotBand* band = state.band(bandIndex);
 	MascotVideoSlot* slot = band ? band->video() : nullptr;
 	if (!state.surface || !band || !slot || ab < 0 || ab > 1)
 		return;
@@ -2648,20 +2840,26 @@ void MascotController::fadeInVideo(SideState& state, MascotSide side, int ab)
 		// And only now, with the outgoing player retired, is the idle output the one the *next*
 		// swap will use -- so this is the earliest moment a preload can be parked on the right
 		// player. Parked before the retire it would be thrown away by it.
-		this->preloadNext(side);
+		// (M3 Task 6A: only the policy band asks for one, and startPreload() itself only acts in
+		// `Static`, where a second player exists. A panning mode's band has one player, so a
+		// preload there could never be parked and asking would only draw a file from the pool that
+		// nothing could use.)
+		if (bandIndex == 0)
+			this->preloadNext(side);
 		return;
 	}
 	// The retirement ends the crossfade: until then the outgoing player is what is still partly
 	// visible, which is the only reason its decoder is still open. Queued on `this`, so a
 	// controller that was stopped in between simply never runs it.
-	QTimer::singleShot(fade, this, [this, side]() {
+	QTimer::singleShot(fade, this, [this, side, bandIndex]() {
 		SideState& panel = this->stateFor(side);
-		MascotBand* panelBand = panel.band(0);
+		MascotBand* panelBand = panel.band(bandIndex);
 		if (MascotVideoSlot* panelSlot = panelBand ? panelBand->video() : nullptr)
 			panelSlot->retireInactive();
 		// The same ordering rule as the hard cut above: the preload follows the retirement, because
 		// until it has happened the output a preload would pick is the outgoing clip's.
-		this->preloadNext(side);
+		if (bandIndex == 0)
+			this->preloadNext(side);
 	});
 }
 
@@ -2676,6 +2874,14 @@ void MascotController::preloadNext(MascotSide side)
 void MascotController::startPreload(MascotSide side)
 {
 	if (!this->running || !this->preloadEnabled || !this->mediaMayBeVideo())
+		return;
+	// M3 Task 6A: a preload needs a second player to park on, and only `Static`'s crossfade has
+	// one. `Scroll` and `Stripes` give every band a single player, so `MascotVideoSlot::preload()`
+	// refuses to park on the output that is on screen -- the only one -- after the first clip.
+	// Asking anyway would draw a file from the pool that nothing could ever use and shift the
+	// seeded sequence by one draw per clip, so the decision is made here rather than paying for a
+	// preload that cannot exist. `Static` keeps M2's path exactly, one-player clamp included.
+	if (this->mascotMode != MascotMode::Static)
 		return;
 	SideState& state = this->stateFor(side);
 	MascotSurface* surface = state.surface.data();
@@ -2726,19 +2932,19 @@ void MascotController::startPreload(MascotSide side)
 	slot->preload(path, -1);
 }
 
-void MascotController::onVideoPreloaded(MascotSide side, const QString& path, qint64 offsetMs,
-	const QSize& frameSize)
+void MascotController::onVideoPreloaded(MascotSide side, int bandIndex, const QString& path,
+	qint64 offsetMs, const QSize& frameSize)
 {
 	if (!this->running || path.isEmpty())
 		return;
 	SideState& state = this->stateFor(side);
-	MascotBand* band = state.band(0);
+	MascotBand* band = state.band(bandIndex);
 	if (!state.surface || !band || !band->video())
 		return;
 	// The gate's evidence that a swap was served from a preload is this line followed by a
 	// `swap #n ... preloaded=yes` for the same path and offset.
 	this->logVideo(QStringLiteral("%1 preloaded path=\"%2\" offset=%3ms %4x%5")
-		.arg(sideLabel(side))
+		.arg(bandLabel(side, bandIndex))
 		.arg(path)
 		.arg(offsetMs)
 		.arg(frameSize.width())
@@ -2747,10 +2953,13 @@ void MascotController::onVideoPreloaded(MascotSide side, const QString& path, qi
 	// reported it -- so the right panel's copy of the pair is parked here rather than chosen by its
 	// own preload. Both panels are then parked on the same frame, and the swap is two flips in the
 	// same turn instead of one panel waiting for the other's first frame.
+	// (M3 Task 6A: the copy is parked on the right panel's same-index band. Only band 0 preloads --
+	// the panning modes have one player per band, so nothing there can be parked -- which is why
+	// every report this method sees names band 0.)
 	if (side != MascotSide::Left || !this->mirrorEnabled())
 		return;
 	SideState& right = this->rightState;
-	MascotBand* rightBand = right.band(0);
+	MascotBand* rightBand = right.band(bandIndex);
 	MascotVideoSlot* rightVideo = rightBand ? rightBand->video() : nullptr;
 	if (!right.surface || !rightBand || !rightVideo)
 		return;
@@ -2764,26 +2973,26 @@ void MascotController::onVideoPreloaded(MascotSide side, const QString& path, qi
 	rightVideo->preload(path, offsetMs);
 }
 
-void MascotController::startMirrorVideo(const QString& path, qint64 offsetMs)
+void MascotController::startMirrorVideo(int bandIndex, const QString& path, qint64 offsetMs)
 {
 	SideState& right = this->rightState;
-	MascotBand* rightBand = right.band(0);
+	MascotBand* rightBand = right.band(bandIndex);
 	if (!right.surface || !rightBand || !rightBand->video() || path.isEmpty())
 		return;
 	// The pair shows one media, so the right panel's pick *is* the left panel's: same file, same
 	// offset. A second random start would show two different moments of the same clip, which is
 	// the one thing the mirror key exists to prevent.
 	this->preparePick(right, false);
-	this->startVideoLoad(right, MascotSide::Right, path, offsetMs);
+	this->startVideoLoad(right, MascotSide::Right, bandIndex, path, offsetMs);
 }
 
-void MascotController::onVideoFailed(MascotSide side, const QString& path,
+void MascotController::onVideoFailed(MascotSide side, int bandIndex, const QString& path,
 	MascotVideoSlot::FailKind kind, bool timedOut)
 {
 	if (!this->running)
 		return;
 	SideState& state = this->stateFor(side);
-	MascotBand* band = state.band(0);
+	MascotBand* band = state.band(bandIndex);
 	if (!state.surface || !band || !band->video())
 		return;
 	// §7.8: "failed files are dropped for the session". Recorded here because this is where a
@@ -2819,15 +3028,18 @@ void MascotController::onVideoFailed(MascotSide side, const QString& path,
 		band->setRequestIsVideo(false);
 		band->setRequestPath(QString());
 		band->setWantedOffsetMs(-1);
-		++state.videoFailures;
+		++band->playback().videoFailures;
 	}
 	// The other panel may be waiting for this panel's offset to start its copy of the pair. It
 	// will never arrive now, and the next committed media re-pairs them.
 	// Cleared whether or not this failure was the left panel's own swap: a left panel that just
 	// failed anything is not going to commit a pair the right panel could copy, and leaving the
 	// flag set would park a copy that waits for a report which is not coming.
+	// (M3 Task 6A: the copy that is dropped is the right panel's same-index band's -- a band 2
+	// failure cannot un-pair band 0.)
 	if (side == MascotSide::Left) {
-		this->rightState.mirrorCopyPending = false;
+		if (MascotBand* rightBand = this->rightState.band(bandIndex))
+			rightBand->playback().mirrorCopyPending = false;
 		if (wasLoading)
 			this->logVideo(QStringLiteral("the mirrored pair is unpaired for now; the next swap re-pairs it"));
 	}
@@ -2841,15 +3053,15 @@ void MascotController::onVideoFailed(MascotSide side, const QString& path,
 		: (kind == MascotVideoSlot::FailKind::Decode ? QStringLiteral("decode") : QStringLiteral("wiring"));
 	const QString key = path + QStringLiteral("|") + kindLabel;
 	const qint64 now = QDateTime::currentMSecsSinceEpoch();
-	const bool repeat = state.lastFailedVideoPath == key
-		&& (now - state.lastFailedVideoLogMs) < VIDEO_LOG_INTERVAL_MS;
+	const bool repeat = band->playback().lastFailedVideoPath == key
+		&& (now - band->playback().lastFailedVideoLogMs) < VIDEO_LOG_INTERVAL_MS;
 	if (!repeat) {
-		state.lastFailedVideoPath = key;
-		state.lastFailedVideoLogMs = now;
+		band->playback().lastFailedVideoPath = key;
+		band->playback().lastFailedVideoLogMs = now;
 		this->logVideo(QStringLiteral("%1 %2 #%3 onScreen=%4 path=\"%5\" kind=%6")
-			.arg(sideLabel(side))
+			.arg(bandLabel(side, bandIndex))
 			.arg(timedOut ? QStringLiteral("timed out") : QStringLiteral("failed"))
-			.arg(state.videoSeq)
+			.arg(band->playback().videoSeq)
 			.arg(band->media().path.isEmpty() ? QStringLiteral("no") : QStringLiteral("yes"))
 			.arg(path)
 			.arg(kindLabel));
@@ -2859,26 +3071,30 @@ void MascotController::onVideoFailed(MascotSide side, const QString& path,
 	// nothing would have nothing to advance it, so it asks for a replacement itself -- queued, so
 	// this never recurses out of a player's signal, and bounded, so a library the backend cannot
 	// decode cannot be walked through at load speed.
-	if (!band->media().path.isEmpty()) {
+	// (M3 Task 6A: the rule is per band. The policy band keeps the M2 answer above -- whatever it
+	// is drawing is advanced by the beat or its clip timer. A stripe showing a live clip is
+	// advanced by its own clip timer, so it is left alone too; a stripe left on a *still* because
+	// its trailer failed has no cadence above it, so it asks again rather than staying an image for
+	// the session, and its own failure budget stops that ask when the pool cannot serve it.)
+	if (!band->media().path.isEmpty()
+		&& (bandIndex == 0 || band->media().type == MascotMedia::Video)) {
 		return;
 	}
-	if (state.videoFailures > VIDEO_FAILURE_LIMIT) {
-		if (state.videoFailures == VIDEO_FAILURE_LIMIT + 1) {
+	// M3 Task 6A: a right-panel band the left panel mirrors is advanced by the left band's own
+	// picks, not by a pick of its own -- drawing a fresh file here would break the pair it exists
+	// to keep. A failed copy therefore waits for the next left commit at that same index, which is
+	// exactly what the M2 sentence above does for band 0.
+	if (side == MascotSide::Right && this->bandMirrorsLeft(bandIndex))
+		return;
+	if (band->playback().videoFailures > VIDEO_FAILURE_LIMIT) {
+		if (band->playback().videoFailures == VIDEO_FAILURE_LIMIT + 1) {
 			this->logVideo(QStringLiteral("%1 gave up after %2 failures in a row; the next beat or clip timer tries again")
-				.arg(sideLabel(side))
+				.arg(bandLabel(side, bandIndex))
 				.arg(VIDEO_FAILURE_LIMIT));
 		}
 		return;
 	}
-	QMetaObject::invokeMethod(this, [this, side]() {
-		if (!this->running)
-			return;
-		SideState& panel = this->stateFor(side);
-		MascotBand* panelBand = panel.band(0);
-		if (!panel.surface || !panelBand || !panelBand->media().path.isEmpty())
-			return;
-		this->pickFor(panel, side, true);
-	}, Qt::QueuedConnection);
+	this->queueBandRefill(side, bandIndex, false);
 }
 
 bool MascotController::ensureVideoSlots()
@@ -2909,8 +3125,11 @@ bool MascotController::ensureVideoSlots()
 			}
 			else if (!mayOwnPlayer && band->video()) {
 				// The setting is images-only, or the budget cannot carry a panel: the players go.
-				if (i == 0 && state.clipTimer)
-					state.clipTimer->stop();
+				// (M3 Task 6A: the cadence that goes with them is this band's own timer, not the
+				// panel's, so a budget change cannot leave a stripe tick over a band it no longer
+				// drives.)
+				if (QTimer* timer = band->clipTimer())
+					timer->stop();
 				// A clip that was on screen has no player behind it any more, so `shown` must stop
 				// saying it is one. That claim is what onSwapBeat() reads to decide a panel's cadence:
 				// a panel still claiming video would be skipped by the beat *and* have no clip timer,
@@ -2960,6 +3179,10 @@ void MascotController::createVideoSlot(SideState& state, MascotSide side, int ba
 	// band's reports are connected below: the per-band cadence that gives the other bands' players
 	// work and a commit path is Task 6's, and wiring them to the panel-level handlers now would
 	// attribute another band's frame to band 0.)
+	// (M3 Task 6A: every band's reports are connected now, each with its own index. The seam the
+	// sentence above anticipated is this one: a player on any band reports through the same four
+	// signals, and the handler is told which band it belongs to, so a frame from band 2 can never be
+	// committed to band 0.)
 	band->ensureVideo(0);
 	MascotVideoSlot* slot = band->video();
 	if (!slot)
@@ -2973,30 +3196,32 @@ void MascotController::createVideoSlot(SideState& state, MascotSide side, int ba
 	// start from the configured values, or a panel enabled later would use a deadline the user had
 	// already changed.
 	slot->setTimings(this->swapTimeoutMs, this->retryIntervalMs, this->retryAttempts);
-	if (bandIndex == 0) {
-		connect(slot, &MascotVideoSlot::firstFrame, this,
-			[this, side](const QString& path, int ab, const QSize& frameSize, qint64 offsetMs) {
-				this->onVideoFirstFrame(side, path, ab, frameSize, offsetMs);
-			});
-		connect(slot, &MascotVideoSlot::failed, this,
-			[this, side](const QString& path, MascotVideoSlot::FailKind kind) {
-				this->onVideoFailed(side, path, kind, false);
-			});
-		connect(slot, &MascotVideoSlot::timedOut, this,
-			[this, side](const QString& path) {
-				// A deadline passed. `kind` is only read when the log words the line, and the ruled
-				// rule never drops a file for a timeout, so the shipped value is the honest one.
-				this->onVideoFailed(side, path, MascotVideoSlot::FailKind::Decode, true);
-			});
-		// A parked clip is not a commit: nothing of it is on screen, so the only thing the controller
-		// does with the report is start the mirror pair's copy of the same file at the same offset.
-		connect(slot, &MascotVideoSlot::preloaded, this,
-			[this, side](const QString& path, qint64 offsetMs, const QSize& frameSize) {
-				this->onVideoPreloaded(side, path, offsetMs, frameSize);
-			});
-	}
+	connect(slot, &MascotVideoSlot::firstFrame, this,
+		[this, side, bandIndex](const QString& path, int ab, const QSize& frameSize, qint64 offsetMs) {
+			this->onVideoFirstFrame(side, bandIndex, path, ab, frameSize, offsetMs);
+		});
+	connect(slot, &MascotVideoSlot::failed, this,
+		[this, side, bandIndex](const QString& path, MascotVideoSlot::FailKind kind) {
+			this->onVideoFailed(side, bandIndex, path, kind, false);
+		});
+	connect(slot, &MascotVideoSlot::timedOut, this,
+		[this, side, bandIndex](const QString& path) {
+			// A deadline passed. `kind` is only read when the log words the line, and the ruled
+			// rule never drops a file for a timeout, so the shipped value is the honest one.
+			this->onVideoFailed(side, bandIndex, path, MascotVideoSlot::FailKind::Decode, true);
+		});
+	// A parked clip is not a commit: nothing of it is on screen, so the only thing the controller
+	// does with the report is start the mirror pair's copy of the same file at the same offset.
+	connect(slot, &MascotVideoSlot::preloaded, this,
+		[this, side, bandIndex](const QString& path, qint64 offsetMs, const QSize& frameSize) {
+			this->onVideoPreloaded(side, bandIndex, path, offsetMs, frameSize);
+		});
 	// A panel built while the window cannot be seen starts paused, exactly like one that was
 	// already running when the window went away.
+	// (M3 Task 6A: this is the explicit pause state every newly created player gets. The pause
+	// path early-outs when the derived state has not changed, so inheritance is not an option -- a
+	// slot created after the last applyVideoPaused() would otherwise run while the window is
+	// hidden. It is set on every band's slot here, at the one place a slot is ever built.)
 	slot->setPaused(this->videoPaused);
 }
 
@@ -3005,15 +3230,18 @@ void MascotController::destroyVideoSlot(SideState& state, int bandIndex)
 	MascotBand* band = state.band(bandIndex);
 	if (!band || !band->video())
 		return;
+	// M3 Task 6A: the cadence goes with the player it advanced, whatever the band index.
+	if (QTimer* timer = band->clipTimer())
+		timer->stop();
 	band->destroyVideo();
 	band->setRequestIsVideo(false);
 	band->setWantedOffsetMs(-1);
 	// The panel-level waits are the policy band's, exactly as the requests they guard are.
-	if (bandIndex == 0) {
-		state.mirrorCopyPending = false;
-		state.videoPickRetryPending = false;
-		state.videoLoadRetries = 0;
-	}
+	// (M3 Task 6A: the waits are the band's own now, for the same reason the requests are: dropping
+	// this band's player drops this band's copy/retry bookkeeping and nothing of another band's.)
+	band->playback().mirrorCopyPending = false;
+	band->playback().videoPickRetryPending = false;
+	band->playback().videoLoadRetries = 0;
 }
 
 void MascotController::destroyVideoSlot(SideState& state)
@@ -3029,9 +3257,6 @@ void MascotController::destroyVideoSlot(SideState& state)
 	// whole panel in one place, which is what releaseSurface() calls.)
 	for (int i = 0; i < static_cast<int>(state.bands.size()); ++i)
 		this->destroyVideoSlot(state, i);
-	state.mirrorCopyPending = false;
-	state.videoPickRetryPending = false;
-	state.videoLoadRetries = 0;
 }
 
 void MascotController::applyDecoderBudget()
@@ -3203,53 +3428,70 @@ void MascotController::applyBandBudget()
 		.arg(allowedRight));
 }
 
-void MascotController::restartClipTimer(SideState& state, MascotSide side)
+void MascotController::restartClipTimer(MascotSide side, int bandIndex)
 {
-	if (!state.clipTimer) {
-		// One timer per panel, owned by the controller so it survives the enable/disable cycles the
-		// surfaces do not, and single-shot because every tick is answered by a fresh commit that
-		// re-arms it.
-		state.clipTimer = new QTimer(this);
-		state.clipTimer->setSingleShot(true);
-		connect(state.clipTimer, &QTimer::timeout, this, [this, side]() { this->onClipTimer(side); });
+	SideState& state = this->stateFor(side);
+	MascotBand* band = state.band(bandIndex);
+	if (!band)
+		return;
+	// One timer per panel, owned by the controller so it survives the enable/disable cycles the
+	// surfaces do not, and single-shot because every tick is answered by a fresh commit that
+	// re-arms it.
+	// (M3 Task 6A: one timer per band, owned by the band, for the same two reasons and one more --
+	// it dies with the band it advanced, so no cadence can tick for a band the panel no longer
+	// has. The controller still connects its timeout, because the band has no controller to tell.)
+	if (!band->clipTimer()) {
+		QTimer* timer = band->ensureClipTimer();
+		connect(timer, &QTimer::timeout, this, [this, side, bandIndex]() {
+			this->onClipTimer(side, bandIndex);
+		});
 	}
+	QTimer* timer = band->clipTimer();
 	// 0 disables the timer entirely: the clip loops and the panel advances only on the beat.
 	if (this->clipSeconds <= 0 || this->videoPaused) {
-		state.clipTimer->stop();
+		timer->stop();
 		return;
 	}
 	// Under the mirror key the pair shows one media, so one timer advances it: the left panel's.
 	// Two timers armed a few milliseconds apart would each ask for a swap and the second would
 	// supersede the first -- two loads per clip.
-	if (this->mirrorEnabled() && side == MascotSide::Right) {
-		state.clipTimer->stop();
+	// (M3 Task 6A: "the left panel's" is the left panel's *same-index band's* now. A right-panel
+	// band numbered past the left panel's count is not mirrored, so it is advanced by its own
+	// timer and this rule leaves it running.)
+	if (side == MascotSide::Right && this->bandMirrorsLeft(bandIndex)) {
+		timer->stop();
 		return;
 	}
-	state.clipTimer->start(std::min(this->clipSeconds * 1000, MAX_CLIP_TIMER_MS));
+	timer->start(std::min(this->clipSeconds * 1000, MAX_CLIP_TIMER_MS));
 }
 
-void MascotController::onClipTimer(MascotSide side)
+void MascotController::onClipTimer(MascotSide side, int bandIndex)
 {
 	if (!this->running)
 		return;
 	SideState& state = this->stateFor(side);
-	MascotBand* band = state.band(0);
+	MascotBand* band = state.band(bandIndex);
 	if (!band || !band->video() || band->media().type != MascotMedia::Video)
 		return;
 	// The panel that timed out advances. Under the mirror key the pair advances together, which
 	// only the left panel's timer ever asks for (restartClipTimer keeps the right one stopped).
-	if (this->mirrorEnabled()) {
-		this->nextImages(false);
+	// (M3 Task 6A: "the panel" is the band that owns the timer, which is what keeps a stripe's
+	// cadence off band 0; "the pair" is the same band index on both panels. Four stripes with
+	// `mascots_clip_seconds > 0` therefore run four independent cadences.)
+	if (side == MascotSide::Left && this->bandMirrorsLeft(bandIndex)) {
+		this->nextBandImages(bandIndex, false);
 		return;
 	}
-	this->nextImage(side, true);
+	this->pickFor(state, side, bandIndex, bandIndex == 0);
 }
 
 void MascotController::stopClipTimers()
 {
 	for (SideState* state : { &this->leftState, &this->rightState }) {
-		if (state->clipTimer)
-			state->clipTimer->stop();
+		for (auto& owned : state->bands) {
+			if (QTimer* timer = owned->clipTimer())
+				timer->stop();
+		}
 	}
 }
 
@@ -3298,49 +3540,50 @@ void MascotController::applyVideoPaused()
 	this->videoPaused = pause;
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
 		SideState& state = this->stateFor(side);
-		MascotBand* band = state.band(0);
-		MascotVideoSlot* slot = band ? band->video() : nullptr;
-		if (slot)
-			slot->setPaused(pause);
 		// M3 Task 5: the pause rule reaches every band's players, not only the policy band's. A
 		// band given a player by the decoder budget is playing (or parked) just as the policy band
 		// is, and a paused panel must hold no decoder on any of them. `Static` has one band and
 		// makes exactly the calls it made before.
-		for (int i = 1; i < static_cast<int>(state.bands.size()); ++i) {
-			MascotBand* extra = state.band(i);
-			MascotVideoSlot* extraSlot = extra ? extra->video() : nullptr;
-			if (!extraSlot)
+		// (M3 Task 6A: one loop for every band, the policy band's first. The blocker below that
+		// handled an extra band's player and the policy band's separately is gone with the
+		// policy-band-only timer: each band's own cadence and its own slot are answered together.)
+		for (int i = 0; i < static_cast<int>(state.bands.size()); ++i) {
+			MascotBand* band = state.band(i);
+			MascotVideoSlot* slot = band ? band->video() : nullptr;
+			if (!slot)
 				continue;
-			extraSlot->setPaused(pause);
-			if (pause)
-				extraSlot->discardPreload();
-		}
-		if (!state.clipTimer) {
-			// A panel that is being paused still has to give up a parked clip: the decoder it holds
-			// is open for a panel nobody can see, which is the cost this rule removes. The resume
-			// branch below arms a fresh one, so nothing is lost but the lead time.
-			if (pause && slot)
+			slot->setPaused(pause);
+			if (pause) {
+				// A panel that is being paused still has to give up a parked clip: the decoder it holds
+				// is open for a panel nobody can see, which is the cost this rule removes. The resume
+				// branch below arms a fresh one, so nothing is lost but the lead time.
+				// (M3 Task 6A: the merged loop below is the `if (!state.clipTimer)` branch and the
+				// timer branch together -- every band has a player here, each with its own timer, so
+				// the two cases are one.)
+				// Nothing may advance while nothing can be seen: a timer that fired here would start a
+				// load whose first frame is what the gate reads as "a swap happened".
+				// (M3 Task 6A: the timer is this band's, and a paused panel stops every one of them;
+				// a single shared timer used to be all a panel had.)
+				if (QTimer* timer = band->clipTimer())
+					timer->stop();
+				// And the parked clip goes with the cadence: it is the next swap made ready, and a paused
+				// panel has no next swap to make it ready for. Kept, it would hold a decoder open on a
+				// panel nobody can see -- exactly what the pause rule exists to stop.
 				slot->discardPreload();
-			continue;
-		}
-		if (pause) {
-			// Nothing may advance while nothing can be seen: a timer that fired here would start a
-			// load whose first frame is what the gate reads as "a swap happened".
-			state.clipTimer->stop();
-			// And the parked clip goes with the cadence: it is the next swap made ready, and a paused
-			// panel has no next swap to make it ready for. Kept, it would hold a decoder open on a
-			// panel nobody can see -- exactly what the pause rule exists to stop.
-			if (slot)
-				slot->discardPreload();
-		}
-		else if (band && band->media().type == MascotMedia::Video && !band->media().path.isEmpty()) {
-			// The clip on screen is resumed by the player itself; its cadence starts again from here.
-			this->restartClipTimer(state, side);
-			// And the next clip is armed here rather than left to the next commit: the preload that
-			// would have been parked was refused while the panel was hidden (a parked decoder is
-			// exactly the cost the pause rule removes), so this is where the panel catches up -- one
-			// clip of lead time before the timer that was just restarted asks for it.
-			this->preloadNext(side);
+			}
+			else if (band->media().type == MascotMedia::Video && !band->media().path.isEmpty()) {
+				// The clip on screen is resumed by the player itself; its cadence starts again from here.
+				// (M3 Task 6A: this band's own cadence, on this band's own timer.)
+				this->restartClipTimer(side, i);
+				// And the next clip is armed here rather than left to the next commit: the preload that
+				// would have been parked was refused while the panel was hidden (a parked decoder is
+				// exactly the cost the pause rule removes), so this is where the panel catches up -- one
+				// clip of lead time before the timer that was just restarted asks for it.
+				// (M3 Task 6A: only the policy band preloads; startPreload() itself only acts in
+				// `Static`, where a second player exists to park a clip on.)
+				if (i == 0)
+					this->preloadNext(side);
+			}
 		}
 	}
 	// Debug-gated like every line below it, and silent for an images-only setting: a pause that no
@@ -3507,17 +3750,23 @@ void MascotController::onMediaReady(const MascotMedia& media)
 			// (M3 Task 2: "both" is that one band's request and the panel's speculation, so the
 			// drop stays per band; `armCandidate` is the policy band's only because a fill of an
 			// extra band has nothing to speculate for.)
-			this->showMedia(state, side, media, false, i == 0, i);
+			// (M3 Task 6A: every band arms its own speculation now, so `armCandidate` is true for
+			// every band; `showMedia()` arms the band it committed.)
+			this->showMedia(state, side, media, false, true, i);
 		}
 		// The speculative half stays with band 0: `prefetchPath` and the candidate are one deep
 		// *per panel* until Task 5/6 give the bands their own (M3 Task 2). A policy band that is
 		// waiting for a video keeps its wait, exactly as it did before bands were counted.
-		MascotBand* band = state.band(0);
-		if (!band || band->requestIsVideo())
-			continue;
-		if (state.prefetchPath == media.path) {
-			state.prefetchPath.clear();
-			this->holdCandidate(state, media);
+		// (M3 Task 6A: one deep *per band* now, so every band the delivery belongs to is asked,
+		// not only band 0. A band waiting for a video keeps its wait for the same reason.)
+		for (int i = 0; i < static_cast<int>(state.bands.size()); ++i) {
+			MascotBand* band = state.band(i);
+			if (!band || band->requestIsVideo())
+				continue;
+			if (band->playback().prefetchPath == media.path) {
+				band->playback().prefetchPath.clear();
+				this->holdCandidate(*band, media);
+			}
 		}
 	}
 }
@@ -3528,14 +3777,20 @@ void MascotController::onMediaFailed(const QString& path)
 	// next swap re-rolls. Clearing both waits is what keeps a later successful delivery of the
 	// same path from landing on a panel that has moved on, and what lets the next commit arm a
 	// fresh candidate instead of waiting for one that will never come.
-	for (SideState* state : { &this->leftState, &this->rightState }) {
+	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
+		SideState& state = this->stateFor(side);
 		// M3 Task 2: every band, so an extra band whose fill failed is not left holding a request
 		// that will never be satisfied (fillEmptyBands() reads that request to decide whether the
 		// band already has content coming). A failed fill is not retried here: the panel's next
 		// swap re-rolls band 0, and an extra band is re-filled by the next layout change -- the
 		// per-band cadence that would retry it is Task 6's.
-		for (auto& owned : state->bands) {
-			MascotBand* band = owned.get();
+		// (M3 Task 6A: a failed fill *is* retried here for a band past the first. Such a band has
+		// no beat above it, so without this ask one undecodable file would leave a stripe blank
+		// for the session -- the hole the Task 2 review named. The ask is queued and bounded by the
+		// band's own failure budget, which a commit resets, so a pool the backend cannot decode is
+		// not walked at decode speed.)
+		for (int i = 0; i < static_cast<int>(state.bands.size()); ++i) {
+			MascotBand* band = state.band(i);
 			if (!band)
 				continue;
 			// M2: an image decode failing says nothing about the video a panel may be loading, so a
@@ -3544,10 +3799,94 @@ void MascotController::onMediaFailed(const QString& path)
 			// happen in this task, but the rule is per band either way.)
 			if (band->requestIsVideo())
 				continue;
-			if (band->requestPath() == path)
-				band->setRequestPath(QString());
+			if (band->requestPath() != path)
+				continue;
+			band->setRequestPath(QString());
+			if (i == 0 || !band->media().path.isEmpty())
+				continue;
+			const int failures = ++band->playback().imageFailures;
+			if (failures > VIDEO_FAILURE_LIMIT) {
+				if (failures == VIDEO_FAILURE_LIMIT + 1) {
+					this->logVideo(QStringLiteral("%1 gave up after %2 failed fills; the next layout or media change tries again")
+						.arg(bandLabel(side, i))
+						.arg(VIDEO_FAILURE_LIMIT));
+				}
+				continue;
+			}
+			this->queueBandRefill(side, i, true);
 		}
-		if (state->prefetchPath == path)
-			state->prefetchPath.clear();
+		// (M3 Task 6A: the speculative path is the band's, so every band's is cleared.)
+		for (auto& owned : state.bands) {
+			if (owned->playback().prefetchPath == path)
+				owned->playback().prefetchPath.clear();
+		}
+	}
+}
+
+void MascotController::queueBandRefill(MascotSide side, int bandIndex, bool onlyIfEmpty)
+{
+	if (!this->running)
+		return;
+	// Queued on `this`, for the reason onVideoFailed()'s older ask was: this runs out of a decode
+	// or player signal, and the refill draws from the pool and posts work. A controller stopped in
+	// between simply never runs it.
+	QMetaObject::invokeMethod(this, [this, side, bandIndex, onlyIfEmpty]() {
+		if (!this->running)
+			return;
+		SideState& panel = this->stateFor(side);
+		MascotBand* band = panel.band(bandIndex);
+		if (!panel.surface || !band)
+			return;
+		// The failure this ask answers may have been superseded by a commit in the same turn. A
+		// blank band is the case `onlyIfEmpty` names; otherwise a band that is now showing a live
+		// clip must keep it -- its own clip timer advances it -- while a band still on a still is
+		// the one that asked for another try.
+		if (onlyIfEmpty) {
+			if (!band->media().path.isEmpty())
+				return;
+		}
+		else if (band->media().type == MascotMedia::Video && !band->media().path.isEmpty()) {
+			return;
+		}
+		this->pickFor(panel, side, bandIndex, bandIndex == 0);
+	}, Qt::QueuedConnection);
+}
+
+void MascotController::refillBandsForMediaChange()
+{
+	if (!this->running || this->mascotMode != MascotMode::Stripes)
+		return;
+	// Every band, not only the empty ones: the whole point is that a band which already has content
+	// adopts the new media kind instead of keeping the old one for the session. The current content
+	// is left on screen until the new media lands -- an image stays until a video's first frame, a
+	// video's last frame stays until an image commits -- so a media change never blanks a stripe.
+	// Under the mirror key the left panel still chooses, and band 0 goes through the pair path so
+	// its request (images) or its load (videos) is copied to the right panel in the same turn; a
+	// right-panel band past the left panel's count is its own band and is picked here.
+	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
+		SideState& state = this->stateFor(side);
+		if (!state.surface)
+			continue;
+		const bool mirroredPanel = this->mirrorEnabled() && side == MascotSide::Right;
+		for (int i = 0; i < static_cast<int>(state.bands.size()); ++i) {
+			MascotBand* band = state.band(i);
+			if (!band)
+				continue;
+			if (mirroredPanel) {
+				// A mirrored band is filled by the left panel's pick -- but only one that can own a
+				// player: a decoder-short right band cannot receive a clip, so it takes this loop's
+				// own pick (which degrades to an image when the new setting asks for video) rather
+				// than waiting for a mirror copy that could never arrive (M3 Task 6A).
+				if (this->bandMirrorsLeft(i) && this->bandMayOwnPlayer(side, i))
+					continue;
+				this->pickFor(state, side, i, false);
+				continue;
+			}
+			if (i == 0 && this->mirrorEnabled()) {
+				this->nextBandImages(0, false);
+				continue;
+			}
+			this->pickFor(state, side, i, i == 0);
+		}
 	}
 }

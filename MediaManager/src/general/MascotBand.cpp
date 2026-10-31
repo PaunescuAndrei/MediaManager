@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include "MascotBand.h"
+#include <QTimer>
 #include <utility>
 
 MascotBand::MascotBand(int slotIndex, QObject* parent)
@@ -170,6 +171,12 @@ void MascotBand::clear()
 	// band has just been emptied, so a change parked against the picture that is no longer there
 	// must not fire at the first seam after the panel is enabled again.)
 	this->m_wrapCommit = WrapCommit();
+	// (M3 Task 6A: the band's own cadence and content pipeline go with the content they were
+	// serving. A timer left armed here would advance a band this panel no longer fills, and a
+	// candidate left held would keep a pin on pixels nothing will show.)
+	if (this->m_clipTimer)
+		this->m_clipTimer->stop();
+	this->m_playback = Playback();
 }
 
 QString MascotBand::requestPath() const
@@ -200,6 +207,33 @@ qint64 MascotBand::wantedOffsetMs() const
 void MascotBand::setWantedOffsetMs(qint64 offsetMs)
 {
 	this->m_wantedOffsetMs = offsetMs;
+}
+
+MascotBand::Playback& MascotBand::playback()
+{
+	return this->m_playback;
+}
+
+const MascotBand::Playback& MascotBand::playback() const
+{
+	return this->m_playback;
+}
+
+QTimer* MascotBand::clipTimer() const
+{
+	return this->m_clipTimer;
+}
+
+QTimer* MascotBand::ensureClipTimer()
+{
+	if (!this->m_clipTimer) {
+		// Single-shot, like the panel timer it replaces: every tick is answered by a fresh commit
+		// that re-arms it. A child of the band, so the band's end stops it even if the controller
+		// never does.
+		this->m_clipTimer = new QTimer(this);
+		this->m_clipTimer->setSingleShot(true);
+	}
+	return this->m_clipTimer;
 }
 
 double MascotBand::scrollOffset() const

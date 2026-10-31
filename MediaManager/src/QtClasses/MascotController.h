@@ -203,10 +203,18 @@ public:
 	// Replaces what `side` shows: served from the panel's speculative candidate when it has one
 	// (a committed MascotMedia, no decode), otherwise picked, requested and written when
 	// mediaReady delivers it (amendment H1).
+	// (M3 Task 6A: this is the policy band's (band 0's) entry point. Every other band of a
+	// `Stripes` panel advances through pickFor() with its own index, or through nextBandImages()
+	// when the pair has to move together.)
 	void nextImage(MascotSide side, bool updateHighlight = false);
 	// The both-panel swap: a new left media plus either the same media on the right (the
 	// mirror key, or `forcedMirror` from the click map) or an independently picked one.
 	void nextImages(bool forcedMirror);
+	// M3 Task 6A: the same pair swap for one band index. `nextImages()` is this call with index 0
+	// -- the band a one-band panel has -- so `Static` keeps running exactly the code it ran
+	// before, and a `Stripes` panel's band i gets the same pair rule (same file, same offset)
+	// applied to its own band instead of to band 0.
+	void nextBandImages(int bandIndex, bool forcedMirror);
 
 	void flipSide(MascotSide side);
 	void flipBoth();
@@ -274,8 +282,9 @@ private:
 		// The speculative pick: the path requested ahead of the next swap, and the decoded
 		// media it produced once it arrives. Exactly one deep -- a queue is deliberately not
 		// kept -- and both empty when nothing is armed.
-		QString prefetchPath;
-		MascotMedia candidate;
+		// (M3 Task 6A: the candidate and its prefetched path are the *band's* now, one record per
+		// band (MascotBand::Playback), because a `Stripes` panel gives every band its own next
+		// media and band 0's predecoded swap must not be consumed by a stripe's fill.)
 		// The user's flip parity since the media last changed: a flip is a toggle, and a new
 		// image resets it.
 		bool flipToggled = false;
@@ -287,38 +296,13 @@ private:
 		bool highlightOnApply = false;
 
 		// ---- M2: the video half of one panel ----
-		// Set on the right panel while the left panel's pick -- the one the pair mirrors -- is
-		// still loading: the copy starts from the left panel's firstFrame(), which is where its
-		// offset finally exists.
-		bool mirrorCopyPending = false;
-		// Counts the video swaps this panel has asked for. A swap line and its first-frame line
-		// carry the same number, which is what lets the gate pair them and read the delta.
-		quint64 videoSeq = 0;
-		// When the outstanding swap was asked for (milliseconds since the epoch), for that delta.
-		qint64 requestedAtMs = 0;
-		// The clip timer, and the only cadence a video panel has: restarted on every committed
-		// video, never started for an image panel (M1's beat-driven cadence is untouched). Owned
-		// by the controller, so it survives the enable/disable cycles the surfaces do not.
-		QTimer* clipTimer = nullptr;
-		// Failures since the last committed media, so a broken clip is not retried forever and a
-		// panel that cannot play anything stops asking rather than walking the whole library.
-		int videoFailures = 0;
-		// How many times this panel has re-asked for a video pick because its QML delegate (and
-		// therefore its sink) did not exist yet. A delegate created a turn later is normal; one
-		// that never appears has to fall back to images instead of asking forever.
-		int videoSinkRetries = 0;
-		// Set while a pick is waiting for that retry. nextImages() reads it: a panel that is about
-		// to retry is still the panel whose pick the pair mirrors, so the right panel's copy has to
-		// be armed now rather than left unpaired.
-		bool videoPickRetryPending = false;
-		// The same count, for one *specific* load: a mirror copy's file at a fixed offset. A copy
-		// that cannot find its sink has to be retried as that same load, because its offset is the
-		// pair's invariant and a fresh pick would choose a different one.
-		int videoLoadRetries = 0;
-		// The last path this panel was told failed, and when it was reported, so one unusable
-		// file produces one line instead of one per swap.
-		QString lastFailedVideoPath;
-		qint64 lastFailedVideoLogMs = 0;
+		// (M3 Task 6A: the per-band half of this block -- the mirrored copy wait, the video
+		// sequence, the request timestamp, the retry counters and the clip timer -- moved to
+		// MascotBand::Playback and MascotBand's own timer, because a `Stripes` panel gives every
+		// band a player and a cadence of its own. What remains here are the two latches below,
+		// which are statements about the *panel* -- the pool, the branch that served a pick and
+		// the preview tooltip -- rather than about one band.)
+		//
 		// When this panel last wrote a media-type line, for the rate-limited ones (pool empty,
 		// which branch picked).
 		qint64 lastTypeLogMs = 0;
@@ -329,6 +313,9 @@ private:
 		// (Task 6: that interval is the configured `mascots_busy_defer_ms` now -- the constant the
 		// sentence above names was the shipped default, not a name this class still holds. The
 		// reason for the separate rate limit is unchanged.)
+		// (M3 Task 6A: both latches stay panel-wide. The two statements they rate-limit are about
+		// the panel's configuration and the window's tooltip, not about one band, so four stripes
+		// share one line instead of writing four.)
 		qint64 lastPreviewDeferLogMs = 0;
 	};
 
@@ -357,6 +344,11 @@ private:
 	// after a layout change. Band 0 takes the panel's existing pick path; the extra bands of a
 	// `Stripes` panel are image-only for this task (the per-band player budget is Task 5), so
 	// they are filled through the same image request/delivery path and keep that picture.
+	// (M3 Task 6A: every band takes the panel's own pick path now, through its own index, so a
+	// `Stripes` panel fills each band with whatever `mascots_media` asks for -- a video when the
+	// band has a player -- instead of always giving the extra bands a still. Under the mirror key
+	// the pair is filled from the left panel's picks, and only a right-panel band past the left
+	// panel's count is filled on its own.)
 	void fillEmptyBands();
 
 	// ---- M3 Task 4: the scroll driver's own half ----
@@ -480,20 +472,32 @@ private:
 	// M3 Task 2: `bandIndex` names the band the media is committed to. The panel-level policy
 	// below -- the candidate, the speculation, the flip parity, the mirror pair, the theme colour
 	// -- is band 0's and runs for band 0 only, so a fill of an extra band cannot disturb it.
+	// (M3 Task 6A: the candidate, the speculation and the mirror-copy wait are the *band's* now,
+	// so `fromReady` consumes the committed band's own candidate and a commit arms that band's own
+	// speculation. The flip parity stays the panel's -- a stripe commit must not clear a flip the
+	// user made on the panel -- and the theme colour stays band 0's, because the accent is the
+	// panel's and four stripes swapping would strobe it. A commit on an extra band under the
+	// mirror key also copies the media onto the right panel's same-index band here, which is where
+	// the pair rule extends from one band to N.)
 	void showMedia(SideState& state, MascotSide side, const MascotMedia& media, bool fromReady,
 		bool armCandidate, int bandIndex);
 	// Stores a decoded speculative media, pinned, until the next swap takes it.
-	void holdCandidate(SideState& state, const MascotMedia& media);
+	// (M3 Task 6A: the candidate belongs to the band the speculation was armed for, so this takes
+	// the band rather than the panel's state.)
+	void holdCandidate(MascotBand& band, const MascotMedia& media);
 	// Requests the path for the panel's *next* swap. Exactly one deep per panel; does nothing
 	// while a candidate is held or its decode is in flight.
-	void speculate(SideState& state, MascotSide side);
+	// (M3 Task 6A: one band's *next* swap, exactly one deep per band, for the reason the sentence
+	// above gives -- a `Stripes` panel gives every band its own next media.)
+	void speculate(SideState& state, MascotSide side, int bandIndex);
 	// Arms that speculation at the end of the current turn, so the swap path itself never walks
 	// the mascot directory.
-	void armSpeculation(MascotSide side);
+	void armSpeculation(MascotSide side, int bandIndex);
 	// Serves one panel's next media. Returns the media when the pick could be committed at once
 	// (a ready candidate), i.e. with no decode and no request on this path; an empty media means
 	// the pick is in flight and will be shown through mediaReady (amendment H1).
-	MascotMedia pickFor(SideState& state, MascotSide side, bool updateHighlight);
+	// (M3 Task 6A: one band's next media, named by its index.)
+	MascotMedia pickFor(SideState& state, MascotSide side, int bandIndex, bool updateHighlight);
 	// The state a fresh pick starts from, also used when a pick is copied to the other panel.
 	void preparePick(SideState& state, bool updateHighlight);
 
@@ -528,25 +532,33 @@ private:
 
 	// Starts one load into `path` at `offsetMs` (-1 means the configured random start) and
 	// records the wait. The shared tail of a fresh pick and of a mirror copy.
-	void startVideoLoad(SideState& state, MascotSide side, const QString& path, qint64 offsetMs);
+	// (M3 Task 6A: `bandIndex` is the band whose player carries the load, and whose request
+	// record remembers it. A frame can then only ever be committed to the band that asked.)
+	void startVideoLoad(SideState& state, MascotSide side, int bandIndex, const QString& path,
+		qint64 offsetMs);
 	// The video branch of pickFor(). Started means a load is in flight and this pick is done;
 	// Skip means the panel already has a load in flight or is about to retry, so nothing must be
 	// picked at all; Fallback means video cannot serve this pick and the image path should.
 	enum class VideoPick { Started, Skip, Fallback };
-	VideoPick pickVideo(SideState& state, MascotSide side, bool updateHighlight);
-	void onVideoFirstFrame(MascotSide side, const QString& path, int ab, const QSize& frameSize,
-		qint64 offsetMs);
+	VideoPick pickVideo(SideState& state, MascotSide side, int bandIndex, bool updateHighlight);
+	// (M3 Task 6A: every one of these is told which band reported, so a frame from band 2 can
+	// never be committed to band 0. The slot objects are connected per band by createVideoSlot().)
+	void onVideoFirstFrame(MascotSide side, int bandIndex, const QString& path, int ab,
+		const QSize& frameSize, qint64 offsetMs);
 	// A load -- or a clip already on screen -- that failed or timed out. Never blanks the panel:
 	// whatever it is drawing keeps playing, and the panel is armed for a replacement.
 	// Task 6: `kind` is the slot's own distinction between a decode failure and a wiring report,
 	// which is what decides whether the *file* may be dropped for the session (§7.8).
-	void onVideoFailed(MascotSide side, const QString& path, MascotVideoSlot::FailKind kind,
-		bool timedOut);
+	// (M3 Task 6A: a failed band re-picks its own index, under its own failure budget, instead of
+	// leaving the stripe blank or on a still for the session.)
+	void onVideoFailed(MascotSide side, int bandIndex, const QString& path,
+		MascotVideoSlot::FailKind kind, bool timedOut);
 	// Fades the output the new clip landed on in, the previous one out, and schedules the
 	// outgoing player's retirement for the end of the fade (immediately when there is no fade).
-	void fadeInVideo(SideState& state, MascotSide side, int ab);
+	void fadeInVideo(SideState& state, MascotSide side, int bandIndex, int ab);
 	// Copies the left panel's committed video onto the right panel: same file, same offset.
-	void startMirrorVideo(const QString& path, qint64 offsetMs);
+	// (M3 Task 6A: onto the right panel's `bandIndex`, because the pair rule is per band index now.)
+	void startMirrorVideo(int bandIndex, const QString& path, qint64 offsetMs);
 
 	// ---- M2 (Task 6): the preload ----
 	// Chooses the panel's next clip *now* and parks it on the player the next swap will use, so
@@ -558,7 +570,9 @@ private:
 	// A clip is parked. The mirror pair starts its copy of it here, because this is the moment the
 	// offset the right panel has to match exists -- which is the whole reason a preloaded pair can
 	// swap in one turn instead of waiting for the left panel's first frame.
-	void onVideoPreloaded(MascotSide side, const QString& path, qint64 offsetMs,
+	// (M3 Task 6A: only band 0 preloads; the index is carried so the pair step of a preloaded
+	// commit still names the band it belongs to.)
+	void onVideoPreloaded(MascotSide side, int bandIndex, const QString& path, qint64 offsetMs,
 		const QSize& frameSize);
 
 	// Builds or drops the player half of each panel from the media setting and the decoder budget.
@@ -592,9 +606,23 @@ private:
 	// that has one band per panel, where the answer only selects which equivalent slice of the
 	// panel `slicedBandRects()` returns. This is the stacking axis; the pan axis is the other one.
 	bool stripesStackVertically() const;
-	void restartClipTimer(SideState& state, MascotSide side);
-	void onClipTimer(MascotSide side);
+	void restartClipTimer(MascotSide side, int bandIndex);
+	void onClipTimer(MascotSide side, int bandIndex);
 	void stopClipTimers();
+	// M3 Task 6A: whether band `bandIndex` is one the mirror key pairs with the left panel. True
+	// for every index the left panel has; a right-panel band numbered past the left panel's count
+	// has no counterpart to mirror, so it lives its own life (its own picks, its own clip timer).
+	bool bandMirrorsLeft(int bandIndex) const;
+	// M3 Task 6A: asks for a fresh media for one band after a failure, bounded per band. Queued on
+	// `this`, so it never recurses out of a player's signal; `onlyIfEmpty` keeps a band that is
+	// drawing something from being replaced when only a blank band owed the retry, while a failed
+	// video attempt on a band left showing a still may replace that still (a stripe has no beat to
+	// move it on).
+	void queueBandRefill(MascotSide side, int bandIndex, bool onlyIfEmpty);
+	// M3 Task 6A: gives every band of a `Stripes` panel a pick under the *new* `mascots_media`, so
+	// a setting switched while the stripes are up is adopted by bands that already had content
+	// instead of leaving them showing the old kind for the session. Queued from applyConfig().
+	void refillBandsForMediaChange();
 
 	// Pauses or resumes both panels' players from the window's state and
 	// `mascots_pause_unfocused`. Idempotent, so the event filter can call it on every event.
@@ -623,6 +651,13 @@ private:
 	SideState leftState;
 	SideState rightState;
 	bool running = false;
+	// M3 Task 6A: non-zero while a wrap-point commit a band queued is running. A commit is content
+	// work, and it must not tear the layout down from inside the scroll driver's band loop; the
+	// commits are run after that loop (onScrollTick() collects them), and applyMode() re-queues
+	// itself while this is non-zero, so a commit that reaches the one layout entry a content path
+	// could call cannot rebuild the band vector underneath a tick. Nothing else in the class may
+	// write it.
+	int wrapCommitDepth = 0;
 	// Set by the first applyConfig() that finds an unsupported `mascots_media`: the warning is a
 	// statement about the configuration, so it is made once rather than on every Apply.
 	bool warnedUnsupportedMedia = false;

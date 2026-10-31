@@ -657,8 +657,18 @@ void MainWindow::applyBackgroundVeil() {
             "mascots_background_list_alpha", BACKGROUND_ROW_ALPHA / 255.0);
         rowAlpha = qBound(0, qRound(configured * 255.0), 255);
     }
+    // (M5 Task 8d: the alternate row has its own alpha. It is the row colour that does not match the
+    // window's background, so it is the one that decides how much of the layer shows through every
+    // other row -- which is a readability question, not a taste one. A key that is missing or empty
+    // follows the list alpha, so a config written before this existed keeps exactly its old look.)
+    int alternateAlpha = rowAlpha;
+    if (this->App->config) {
+        const double configured = this->App->config->get_double(
+            "mascots_background_alternate_alpha", rowAlpha / 255.0);
+        alternateAlpha = qBound(0, qRound(configured * 255.0), 255);
+    }
     const QPalette rowPalette = backgroundEnabled
-        ? get_background_row_palette(appPalette, rowAlpha)
+        ? get_background_row_palette(appPalette, rowAlpha, alternateAlpha)
         : appPalette;
     // The view and its viewport: the viewport paints the rows' backdrop and the rows paint their
     // own fill on top, so both have to carry the alpha. Nothing else -- no stylesheet, no
@@ -671,7 +681,7 @@ void MainWindow::applyBackgroundVeil() {
     // 0: it stops painting a scrim between the media and the row fill, and the row fill becomes the
     // only one. Both row colours still carry the one row alpha the requirement asks for.)
     const QPalette viewportPalette = backgroundEnabled
-        ? get_background_row_palette(appPalette, 0)
+        ? get_background_row_palette(appPalette, 0, 0)
         : appPalette;
     this->ui.videosWidget->setPalette(rowPalette);
     this->ui.videosWidget->viewport()->setPalette(viewportPalette);
@@ -766,7 +776,10 @@ void MainWindow::applyBackgroundVeil() {
             // changes -- a search bar or a date column appearing does not resize the window.
             this->ui.videosWidget->installEventFilter(this);
         }
-        this->backgroundScrim->setPalette(get_background_row_palette(appPalette, rowAlpha));
+        // (M5 Task 8d: the strip is the Base colour, so it follows the list alpha and not the alternate
+        // row's -- it is the row the strip has to match.)
+        this->backgroundScrim->setPalette(
+            get_background_row_palette(appPalette, rowAlpha, alternateAlpha));
         // Below every sibling: the strip's own widgets paint on top of the scrim.
         this->backgroundScrim->lower();
         this->backgroundScrim->show();

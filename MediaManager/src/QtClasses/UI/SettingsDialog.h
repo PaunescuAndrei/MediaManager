@@ -128,6 +128,9 @@ public:
     // (M5 Task 8: the list's own opacity, back after a commit that removed it. The veil above is the
     // window; this is the list's row fill, which is what makes the rows alternate.)
     QDoubleSpinBox* mascotListAlphaSpinBox = nullptr;
+    // (M5 Task 8d: the alternate rows' own alpha -- the row colour that does not match the window's
+    // background, so it is the one that decides readability over the layer.)
+    QDoubleSpinBox* mascotAltAlphaSpinBox = nullptr;
     QComboBox* mascotColumnsZCombo = nullptr;
     QComboBox* mascotBackgroundModeCombo = nullptr;
     QComboBox* mascotBackgroundFillCombo = nullptr;

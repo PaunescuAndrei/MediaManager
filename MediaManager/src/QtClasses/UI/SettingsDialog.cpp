@@ -956,11 +956,22 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     mascotListAlphaSpinBox = makeDoubleSpinBox(0.00, 1.00, 0.05,
         config->get_double(QStringLiteral("mascots_background_list_alpha"), 0.85));
     addRow(backgroundLayout, "List & strip opacity:",
-        "Opacity of the centre pane over the veil: the list's rows and the strip above them, one alpha "
-        "for both, so the top matches the list. The rows keep their Base/AlternateBase alternation at "
-        "that alpha. 1.00 is an opaque centre pane, 0.00 lets whatever the veil leaves reach the text "
-        "at full strength. Different from the veil above: this one is only the centre pane.",
+        "Opacity of the centre pane over the veil: the list's even rows and the strip above them, one "
+        "alpha for both, so the top matches the list. 1.00 is an opaque centre pane, 0.00 lets whatever "
+        "the veil leaves reach the text at full strength. The alternate rows have their own alpha "
+        "below; the veil above is the whole window.",
         mascotListAlphaSpinBox);
+
+    // Falls back to the list alpha when the key is absent, which is what a config from before this
+    // control existed gets: the list looks exactly as it did.
+    mascotAltAlphaSpinBox = makeDoubleSpinBox(0.00, 1.00, 0.05,
+        config->get_double(QStringLiteral("mascots_background_alternate_alpha"),
+            config->get_double(QStringLiteral("mascots_background_list_alpha"), 0.85)));
+    addRow(backgroundLayout, "Alternate row opacity:",
+        "Opacity of the alternate rows only -- the row colour that does not match the window's "
+        "background. Lower it to see more of the layer through every other row, raise it for more "
+        "contrast behind the text. Equal to the line above is an even list.",
+        mascotAltAlphaSpinBox);
 
     mascotColumnsZCombo = makeComboBox({ QStringLiteral("Above"), QStringLiteral("Below") },
         config->get(QStringLiteral("mascots_columns_z")));
@@ -1066,7 +1077,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         mascotMaxDecodersSpinBox, mascotScrollSpeedSpinBox, mascotScrollDirectionCombo,
         mascotScrollPingpongCheckBox, mascotStripesLeftSpinBox, mascotStripesRightSpinBox,
         mascotStripesOrientationCombo, mascotStripesAlternateCheckBox, mascotBackgroundCheckBox,
-        mascotBackgroundOpacitySpinBox, mascotListAlphaSpinBox, mascotColumnsZCombo, mascotBackgroundModeCombo,
+        mascotBackgroundOpacitySpinBox, mascotListAlphaSpinBox, mascotAltAlphaSpinBox, mascotColumnsZCombo, mascotBackgroundModeCombo,
         mascotBackgroundFillCombo, mascotBackgroundStripesSpinBox,
         mascotBackgroundOrientationCombo, mascotBackgroundAlternateCheckBox,
         mascotBackgroundScrollSpeedSpinBox, mascotBackgroundScrollDirectionCombo,
@@ -1118,6 +1129,7 @@ void SettingsDialog::syncMascotConfig()
     config->set("mascots_background_opacity", QString::number(mascotBackgroundOpacitySpinBox->value(), 'f', 2));
     config->set("mascots_columns_z", mascotColumnsZCombo->currentText());
     config->set("mascots_background_list_alpha", QString::number(mascotListAlphaSpinBox->value(), 'f', 2));
+    config->set("mascots_background_alternate_alpha", QString::number(mascotAltAlphaSpinBox->value(), 'f', 2));
     config->set("mascots_background_mode", mascotBackgroundModeCombo->currentText());
     config->set("mascots_background_fill", mascotBackgroundFillCombo->currentText());
     config->set("mascots_background_stripes", QString::number(mascotBackgroundStripesSpinBox->value()));
@@ -1193,6 +1205,7 @@ void SettingsDialog::updateMascotControlStates()
     const bool backgroundOn = mascotBackgroundCheckBox->isChecked();
     mascotBackgroundOpacitySpinBox->setEnabled(backgroundOn);
     mascotListAlphaSpinBox->setEnabled(backgroundOn);
+    mascotAltAlphaSpinBox->setEnabled(backgroundOn);
     mascotColumnsZCombo->setEnabled(backgroundOn);
     mascotBackgroundModeCombo->setEnabled(backgroundOn);
     mascotBackgroundFillCombo->setEnabled(backgroundOn);

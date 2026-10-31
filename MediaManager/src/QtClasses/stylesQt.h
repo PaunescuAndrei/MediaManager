@@ -30,7 +30,12 @@ QBrush get_highlighted_text_brush(QPalette current_palette);
 // completely invisible layer. The viewport is therefore given alpha 0, so the media reaches the row
 // fill exactly once. This is not a second row alpha: the one-alpha-for-both-ROW-colours rule of
 // 7.7.1 is still the single value in BACKGROUND_ROW_ALPHA, and both of the row colours keep it.)
-QPalette get_background_row_palette(const QPalette& appPalette, int alpha);
+// (M5 Task 8d: the two row colours now carry *different* alphas, which is the one thing the rule above
+// forbade. The reason it did -- that two alphas "pull one band towards the video more than the other" --
+// is exactly what the user wants here: the alternate row is the colour that does not match the window's
+// background, so its own opacity is the control for reading text over the layer. `alternateAlpha` is
+// the caller's, and passing the same value for both keeps the old look.)
+QPalette get_background_row_palette(const QPalette& appPalette, int alpha, int alternateAlpha);
 // (M5 Task 8: the rows are given alpha 0 through the function above now -- they paint no fill at
 // all -- and this is the palette that replaced their scrim: one veil, `QPalette::Window` at the
 // configured alpha, behind every pane of the window. The colour is the window's own and not the

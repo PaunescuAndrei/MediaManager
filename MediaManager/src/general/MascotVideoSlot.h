@@ -144,6 +144,12 @@ public:
 	// still loads -- it just does not play, and its deadline starts on resume instead of running
 	// down behind a player that is not painting.
 	void setPaused(bool paused);
+	// (M5: `mascots_low_latency`. The intent a player is created with, and the one the next media open
+	// uses; a swap re-applies it, so a live change lands on the next clip rather than the next restart.)
+	void setLowLatency(bool lowLatency);
+	// (M5: see setLowLatency().)
+	bool lowLatency = true;
+	void applyPlaybackIntent(ThreadedMediaPlayer* player) const;
 	bool paused() const { return m_paused; }
 
 	// Output index (0 = A, 1 = B) and path of the clip last reported through firstFrame(); -1 and

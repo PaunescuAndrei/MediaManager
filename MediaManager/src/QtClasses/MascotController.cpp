@@ -583,6 +583,10 @@ void MascotController::applyConfig()
 		}
 	}
 	this->randomStart = config->get_bool(QStringLiteral("mascots_random_start"));
+	// (M5: `mascots_low_latency` -- Qt's low-latency intent reduces buffering at the cost of a higher chance
+	// of dropped frames or glitches, so it is the user's call. Read here with the other player keys and
+	// pushed to a slot when the slot is created; a running player keeps the intent it was built with.)
+	this->lowLatency = config->get_bool(QStringLiteral("mascots_low_latency"));
 	this->crossfadeMs = clampedCrossfadeMs(config);
 	this->maxDecoders = std::max(0, config->get(QStringLiteral("mascots_max_decoders")).toInt());
 	this->pauseUnfocused = config->get_bool(QStringLiteral("mascots_pause_unfocused"));
@@ -4206,6 +4210,7 @@ void MascotController::createVideoSlot(PanelState& state, MascotPanel panel, int
 	// configuration instead of from the class defaults.
 	slot->setSinglePlayer(!this->videoCrossfades(panel));
 	slot->setRandomStart(this->randomStart, this->clipSecondsFor(panel));
+	slot->setLowLatency(this->lowLatency);
 	// The waits come from config, not from the slot's defaults: a slot created after an Apply has to
 	// start from the configured values, or a panel enabled later would use a deadline the user had
 	// already changed.

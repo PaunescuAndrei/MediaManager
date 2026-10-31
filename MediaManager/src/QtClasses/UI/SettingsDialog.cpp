@@ -855,6 +855,27 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "Open the next clip in the idle player ahead of the swap, so a swap costs a visibility "
         "change instead of a load. Read only while the columns show videos.");
     playbackLayout->addWidget(mascotPreloadCheckBox);
+    // (M5: Qt low-latency playback intent. On is what the mascots have always used; off asks for the
+    // backend normal buffering, which Qt documents as smoother at the cost of a slower first frame. The
+    // intent is fixed for the lifetime of a player, so a change reaches the next player a panel builds.)
+    mascotLowLatencyCheckBox = new QCheckBox("Low-latency video playback");
+    mascotLowLatencyCheckBox->setChecked(config->get_bool(QStringLiteral("mascots_low_latency")));
+    mascotLowLatencyCheckBox->setToolTip(
+        "On, the player buffers as little as possible so a mascot clip appears sooner. Qt notes that this "
+        "comes with a higher likelihood of lost frames or other glitches during playback; turn it off for "
+        "smooth playback at a slower first frame. Applies to the next player a panel builds.");
+    playbackLayout->addWidget(mascotLowLatencyCheckBox);
+
+
+
+
+
+
+
+
+
+
+
 
     // (M5 Task 9: the label follows the rule the fix gave it. It said "not focused", which is exactly what
     // it must not do any more.)
@@ -1134,6 +1155,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         mascotMediaCombo, mascotModeCombo, mascotFillCombo, mascotWeightedCheckBox,
         mascotClipSecondsSpinBox, mascotCrossfadeSpinBox, mascotSwapOnBeatCheckBox,
         mascotRandomStartCheckBox, mascotPreloadCheckBox, mascotPauseUnfocusedCheckBox,
+        mascotLowLatencyCheckBox,
         mascotMaxDecodersSpinBox, mascotScrollSpeedSpinBox, mascotScrollDirectionCombo,
         mascotScrollPingpongCheckBox, mascotStripesLeftSpinBox, mascotStripesRightSpinBox,
         mascotStripesOrientationCombo, mascotStripesAlternateCheckBox, mascotBackgroundCheckBox,
@@ -1179,6 +1201,7 @@ void SettingsDialog::syncMascotConfig()
     config->set("mascots_random_start", mascotRandomStartCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_preload", mascotPreloadCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_pause_unfocused", mascotPauseUnfocusedCheckBox->isChecked() ? "True" : "False");
+    config->set("mascots_low_latency", mascotLowLatencyCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_max_decoders", QString::number(mascotMaxDecodersSpinBox->value()));
     config->set("mascots_scroll_speed", QString::number(mascotScrollSpeedSpinBox->value()));
     config->set("mascots_scroll_direction", mascotScrollDirectionCombo->currentText());
@@ -1254,6 +1277,8 @@ void SettingsDialog::updateMascotControlStates()
     mascotPreloadCheckBox->setEnabled(videoColumns);
     mascotMaxDecodersSpinBox->setEnabled(true);
     mascotPauseUnfocusedCheckBox->setEnabled(true);
+    mascotLowLatencyCheckBox->setEnabled(true);
+
 
     // Rows 3-5: Scroll and Stripes share this group, so the rows go dark individually instead of
     // the whole box: each mode owns its half and neither owns the other's.

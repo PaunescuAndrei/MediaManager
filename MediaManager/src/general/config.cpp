@@ -96,6 +96,9 @@ void Config::init_defaults() {
 		{"mascots_image_cache_mb", "128"},
 		{"mascots_image_cache_max_items", "12"},
 		{"mascots_clip_seconds", "30"},
+		// M5: Qt's low-latency playback intent. True is what the mascots have always used; False asks for the
+		// backend's normal buffering instead -- smoother playback, a slower first frame.
+		{"mascots_low_latency", "True"},
 		{"mascots_swap_on_beat", "True"},
 		{"mascots_random_start", "True"},
 		{"mascots_crossfade_ms", "600"},

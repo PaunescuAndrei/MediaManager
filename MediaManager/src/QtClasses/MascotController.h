@@ -1060,6 +1060,9 @@ private:
 	// `mascots_clip_seconds`: how long one clip stays on screen. 0 disables the clip timer
 	// entirely, which leaves the clip looping and the panel advancing on the existing beat.
 	int clipSeconds = 30;
+	// (M5: `mascots_low_latency`. Pushed into every slot at creation -- the intent is fixed for a player's
+	// lifetime, so a change reaches the next player rather than the running one.)
+	bool lowLatency = true;
 	// (M5 Task 10: the layer's own cadence. `mascots_background_clip_seconds`,
 	// `mascots_background_swap_on_beat`, `mascots_background_random_change` and
 	// `mascots_background_random_chance`, each falling back to its columns twin when absent. The M4 note

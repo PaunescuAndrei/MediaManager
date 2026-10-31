@@ -135,6 +135,8 @@ public:
     // with the Window role and the row palette only gestures at Base and AlternateBase.)
     QDoubleSpinBox* mascotScrollbarAlphaSpinBox = nullptr;
     // (M5 Task 10: the layer's own cadence -- clip length, beat swap, random change and its chance.)
+    // (M5: Qt's low-latency playback intent, which trades buffering for a higher chance of dropped frames.)
+    QCheckBox* mascotLowLatencyCheckBox = nullptr;
     QSpinBox* mascotBackgroundClipSpinBox = nullptr;
     QCheckBox* mascotBackgroundSwapOnBeatCheckBox = nullptr;
     QCheckBox* mascotBackgroundRandomChangeCheckBox = nullptr;

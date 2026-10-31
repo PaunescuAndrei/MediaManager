@@ -99,6 +99,14 @@ public:
 	// after this one overrides that slot only. There is no separate root property to drift out
 	// of step with what is drawn.
 	void setMirror(bool mirror);
+	// M4 Task 2: the whole layer's opacity, one value for the surface rather than one per slot.
+	// The background layer is one number for the picture behind the window, so it is written on
+	// the QML root item: that keeps the value inside the scene graph, where the quick widget's
+	// own composition already applies it, instead of giving the widget a QGraphicsOpacityEffect,
+	// which would add a second offscreen composition per frame for a value Qt Quick can simply
+	// draw with. Clamped the way setSlotOpacity() clamps, and there is deliberately no slot
+	// equivalent for it: a per-slot opacity is setSlotOpacity() and stays a different thing.
+	void setSurfaceOpacity(double opacity);
 
 signals:
 	// Emitted for a release over a slot; `slot` is always a valid index, so a release outside

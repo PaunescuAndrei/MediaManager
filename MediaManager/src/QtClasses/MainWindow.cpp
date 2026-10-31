@@ -126,8 +126,12 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     // The one renderer: the controller owns the QML surfaces inside the two hosts (built on
     // enable) and is the only thing that writes what a panel displays. The cache and the
     // prefetcher are MainApp's, process-lifetime, so nothing here can outlive them.
+    // (M4 Task 2: the third host is the window's central widget -- the background layer spans the
+    // window behind the layout rather than a column, so it is parented there and positioned from
+    // its rectangle by the controller.)
     this->mascotController = new MascotController(this->App, this->App->mascotImageCache,
-        this->App->mascotPrefetcher, this->ui.mascotLeftHost, this->ui.mascotRightHost, this);
+        this->App->mascotPrefetcher, this->ui.mascotLeftHost, this->ui.mascotRightHost,
+        this->ui.centralwidget, this);
     connect(this->mascotController, &MascotController::clicked, this,
         [this](MascotSide side, Qt::MouseButton button, Qt::KeyboardModifiers modifiers) {
             this->handleMascotClickEvents(side, button, modifiers);
@@ -461,6 +465,15 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
             // showMascots() starts the controller, which seeds both panels itself. The old
             // code needed updateMascots() here because its panels were already visible.
             this->showMascots();
+        }, Qt::QueuedConnection);
+    } else if (this->App->config->get_bool("mascots_background")) {
+        QMetaObject::invokeMethod(this, [this] {
+            // M4 Task 2: the background runs without the columns. The two hosts stay hidden --
+            // start() builds the layer itself, and the columns' width plays no part in a layer
+            // that spans the window -- so this is start() rather than showMascots().
+            this->ui.mascotLeftHost->hide();
+            this->ui.mascotRightHost->hide();
+            this->mascotController->start();
         }, Qt::QueuedConnection);
     } else {
         this->hideMascots();
@@ -1531,7 +1544,14 @@ void MainWindow::showMascots()
 
 void MainWindow::hideMascots()
 {
-    this->mascotController->stop();
+    // M4 Task 2: with `mascots_background` on, turning the columns off must not kill the layer
+    // behind them: only the pair is torn down (stopPanels()), the hosts are hidden, and the
+    // controller keeps running the background. With the key off this is the full stop() it always
+    // was -- the background has nothing to keep and the teardown is the same as before.
+    if (this->App->config->get_bool("mascots_background"))
+        this->mascotController->stopPanels();
+    else
+        this->mascotController->stop();
     this->ui.mascotLeftHost->hide();
     this->ui.mascotRightHost->hide();
     //QTimer::singleShot(20, [this] {this->resize_center(800, this->height()); });

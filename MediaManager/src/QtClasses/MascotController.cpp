@@ -24,6 +24,10 @@ namespace {
 	// separate Logger type so a run can be read for the pan alone, and so a config that never pans
 	// logs nothing under it at all.
 	const QString SCROLL_LOG_TAG = QStringLiteral("MASCOT-SCROLL: ");
+	// M4 Task 2: the background layer's own tag, for the same reason the two above have one: the
+	// allocation and the gating can be read apart from the columns' video lines, and a run with
+	// `mascots_background` off writes nothing under it at all.
+	const QString BACKGROUND_LOG_TAG = QStringLiteral("MASCOT-BG: ");
 
 	// Two panels, two players each for the crossfade: the budget `mascots_max_decoders` has to
 	// fit before the full design is possible. The second tier -- one player per panel -- is what
@@ -272,7 +276,7 @@ namespace {
 }
 
 MascotController::MascotController(MainApp* App, MascotImageCache* cache, MascotPrefetcher* prefetcher,
-	QWidget* leftHost, QWidget* rightHost, QObject* parent)
+	QWidget* leftHost, QWidget* rightHost, QWidget* backgroundHost, QObject* parent)
 	: QObject(parent), source(App)
 {
 	this->App = App;
@@ -280,6 +284,9 @@ MascotController::MascotController(MainApp* App, MascotImageCache* cache, Mascot
 	this->prefetcher = prefetcher;
 	this->leftHost = leftHost;
 	this->rightHost = rightHost;
+	// M4 Task 2: the window-sized host the background layer is a child of. It is the window's
+	// central widget, so it is the one rectangle every resize of the window goes through.
+	this->backgroundHost = backgroundHost;
 
 	// mediaReady and mediaFailed are emitted on the GUI thread (the prefetcher queues its
 	// decode results back to it), so these connections are direct and a media is applied in
@@ -326,27 +333,59 @@ void MascotController::setSurfaces(MascotSurface* left, MascotSurface* right)
 
 void MascotController::start()
 {
-	if (this->running)
+	// M4 Task 2: `running` alone is no longer "nothing to do". A controller the background keeps
+	// alive can be missing its pair -- stopPanels() took the columns down while the layer went on
+	// drawing -- and showMascots() reaches this same entry point to bring them back. So the old
+	// idempotence is kept by "the pair is here", and a start() that finds it missing rebuilds it.
+	const bool pairPresent = this->leftState.surface && this->rightState.surface;
+	if (this->running && pairPresent)
 		return;
+	const bool alreadyRunning = this->running;
 	// Config first: createSurfaces() applies it to the slots it builds.
 	this->applyConfig();
 	this->createSurfaces();
-	this->running = true;
-	this->connectBeats();
+	if (!alreadyRunning) {
+		this->running = true;
+		// M4 Task 2: after `running`, because the background surface exists if and only if this
+		// controller is running and `mascots_background` is on -- and applyConfig() above ran
+		// while `running` was still false.
+		this->syncBackgroundSurface();
+		this->connectBeats();
+	}
 	// M2: the pause state is derived from the window the surfaces have just landed in, so a panel
 	// enabled while the window is minimized or in the background starts paused instead of loading
 	// a clip nobody can see.
 	this->applyVideoPaused();
 	// Both panels were empty when the old code ran updateMascots() right before
 	// showMascots(); one seeding swap does both jobs now.
-	this->nextImages(false);
-	// M3 Task 2: `nextImages()` seeds the band the panel's policy lives on; a `Stripes` panel has
-	// more than one band, and the rest are filled here so an enabled Stripes panel is never half
-	// blank. A one-band panel is asked for nothing at all -- it has already been seeded, and this
-	// is the only place `Static` and `Scroll` could have paid an extra pick they never paid
-	// before -- while in Stripes the loop's per-band guards skip the band that is already loading.
-	if (this->bandCount(MascotPanel::Left) > 1 || this->bandCount(MascotPanel::Right) > 1)
-		this->fillEmptyBands();
+	// (M4 Task 2: only when the columns are on. A controller started for the background alone
+	// must not walk the mascot directory for two panels nobody shows, and a start() that rebuilds
+	// the columns after stopPanels() seeds them on exactly the path the first enable used.)
+	if (this->columnsEnabled) {
+		this->nextImages(false);
+		// M3 Task 2: `nextImages()` seeds the band the panel's policy lives on; a `Stripes` panel has
+		// more than one band, and the rest are filled here so an enabled Stripes panel is never half
+		// blank. A one-band panel is asked for nothing at all -- it has already been seeded, and this
+		// is the only place `Static` and `Scroll` could have paid an extra pick they never paid
+		// before -- while in Stripes the loop's per-band guards skip the band that is already loading.
+		if (this->bandCount(MascotPanel::Left) > 1 || this->bandCount(MascotPanel::Right) > 1)
+			this->fillEmptyBands();
+	}
+	// M4 Task 2: the background's bands are seeded through their own video-only pick path, one
+	// pick per band, when the layer was built. A zero-player background has no bands at all, so
+	// this is also the case the zero-player line describes: nothing is drawn and nothing is asked.
+	if (this->backgroundEnabled && this->backgroundState.surface) {
+		const int count = static_cast<int>(this->backgroundState.bands.size());
+		for (int i = 0; i < count; ++i) {
+			MascotBand* band = this->backgroundState.band(i);
+			// A band that is already loading or drawing is left alone: start() can also be the
+			// entry point that brings the columns back under a running background, and re-seeding
+			// the layer then would replace a clip that is already on screen.
+			if (!band || !band->media().path.isEmpty() || !band->requestPath().isEmpty())
+				continue;
+			this->pickFor(this->backgroundState, MascotPanel::Background, i, i == 0);
+		}
+	}
 	// M3 Task 4: the pan starts here. It is asked rather than assumed because the answer also
 	// depends on the window the surfaces just landed in: a controller enabled while its window is
 	// minimized starts with the driver stopped, exactly as it starts with the players paused.
@@ -391,6 +430,40 @@ void MascotController::stop()
 	this->clearSide(this->rightState);
 	this->releaseSurface(this->leftState);
 	this->releaseSurface(this->rightState);
+	// M4 Task 2: the background goes through its own invariant, which is the only place it is
+	// built or dropped. `running` is false by now, so this is precisely "tear the layer down":
+	// its bands' players are shut down, the slots and pins are cleared, and the surface is
+	// released -- the pair's order above, for the pair's reason.
+	this->syncBackgroundSurface();
+}
+
+void MascotController::stopPanels()
+{
+	// M4 Task 2: the pair's half of stop(), leaving the background layer running. It is what
+	// MainWindow::hideMascots() reaches for while `mascots_background` is on, because turning the
+	// columns off must not kill the layer behind them; with the background off the window calls
+	// stop() and gets the full teardown it always got.
+	for (PanelState* state : { &this->leftState, &this->rightState }) {
+		for (auto& owned : state->bands) {
+			if (owned->video())
+				owned->video()->shutdown();
+		}
+	}
+	// The same "nothing may be applied after this point" clearing stop() does, so a decode still
+	// in flight for a column cannot land in a slot that is being released. The background never
+	// requests an image decode (it is video-only), so clearing the shared prefetcher costs it
+	// nothing.
+	MascotPrefetcher* source = this->prefetcher.data();
+	if (source)
+		source->clear();
+	this->clearSide(this->leftState);
+	this->clearSide(this->rightState);
+	this->releaseSurface(this->leftState);
+	this->releaseSurface(this->rightState);
+	// The pair may have been the only reason the driver was running; the background may be the
+	// only reason it still is. Reconciled here rather than left to the next window event, so a
+	// stopped column cannot leave a timer ticking for it.
+	this->updateScrollDriver();
 }
 
 bool MascotController::isRunning() const
@@ -630,6 +703,10 @@ void MascotController::applyConfig()
 	// parsed here so the keys have exactly one reader and the background cannot pick up its layout
 	// one Apply late; nothing below draws from them yet. The background's applied latches stay at
 	// their defaults until Task 2 gives it a surface.)
+	// (M4 Task 2: the surface exists now, and these are the values it draws from. `mascots` is read
+	// beside them because start() has to know which layer it is enabling -- the pair is seeded only
+	// while the columns are on -- and one reader for both switches keeps them in step.)
+	this->columnsEnabled = config->get_bool(QStringLiteral("mascots"));
 	this->backgroundEnabled = config->get_bool(QStringLiteral("mascots_background"));
 	this->backgroundLayout.mode = MascotController::modeFromString(
 		config->get(QStringLiteral("mascots_background_mode")), nullptr);
@@ -670,6 +747,25 @@ void MascotController::applyConfig()
 	// applyMode() because that is what has settled each panel's band count, and before the loop
 	// that pushes the live player settings because that loop now reaches every band's players.
 	this->applyBandBudget();
+	// M4 Task 2: columns first, background last -- what is left of the decoder budget after the
+	// pair's allocation above is the background's, and this is the one place it is spent. It runs
+	// after applyBandBudget() so the pair's entitlement exists to subtract, and before
+	// ensureVideoSlots() below so every player the layer builds is one the budget funded.
+	this->applyBackgroundBudget();
+	// The layer follows the two switches from here: a settings Apply turns it on or off live,
+	// without a restart. The budget above has settled how many players it may spend, so the bands
+	// the surface is given are the funded prefix bandCount() derives from them.
+	this->syncBackgroundSurface();
+	if (this->backgroundState.surface) {
+		// The bands follow the allocation: a shrink retires them from the tail through syncBands(),
+		// which is the background's answer to losing players (it never takes an image in their
+		// place).
+		this->syncBands(this->backgroundState, MascotPanel::Background);
+		// `mascots_background_opacity` is presentation, not a gate: zero is applied like any other
+		// value, because the band logic -- picks, cadence, the player budget -- must not depend on
+		// how visible the layer currently is.
+		this->backgroundState.surface->setSurfaceOpacity(this->backgroundOpacity);
+	}
 
 	const bool mirror = this->mirrorEnabled();
 	// M3 Task 2: the player half below stays on `band(0)` for now. The extra bands a `Stripes`
@@ -719,10 +815,29 @@ void MascotController::applyConfig()
 				band->video()->discardPreload();
 		}
 	}
+	// M4 Task 2: the background's players take the same three live settings, but the two
+	// panel-level writes above them are the pair's: the background never mirrors (mirrorParityFor()
+	// is false for it) and has no flip parity to reset. Its own loop keeps that separation, so the
+	// pair's block above reads exactly as it did.
+	if (this->backgroundState.surface) {
+		for (auto& owned : this->backgroundState.bands) {
+			MascotBand* band = owned.get();
+			if (!band || !band->video())
+				continue;
+			band->video()->setRandomStart(this->randomStart, this->clipSeconds);
+			band->video()->setTimings(this->swapTimeoutMs, this->retryIntervalMs, this->retryAttempts);
+			if (!this->preloadEnabled)
+				band->video()->discardPreload();
+		}
+	}
 	// A mode change repaints what is already on screen; the surface default alone would only
 	// affect a slot created later.
 	this->applyDisplay(this->leftState, MascotPanel::Left);
 	this->applyDisplay(this->rightState, MascotPanel::Right);
+	// M4 Task 2: the background's fill mode is `mascots_background_fill` in its `Static` shape, so
+	// a settings Apply repaints the clip already on screen with the new one, exactly as the pair's
+	// two calls just did for theirs.
+	this->applyDisplay(this->backgroundState, MascotPanel::Background);
 	this->updateLayout();
 	// The player half follows the new media setting and the new budget: an `Images` setting, or a
 	// budget below what a panel needs, gives the panel back its memory instead of leaving idle
@@ -744,12 +859,17 @@ void MascotController::applyConfig()
 	// (M3 Task 6A: every band that is showing a video re-derives its own timer -- a `Stripes` panel
 	// has one cadence per band now, and an Apply that reached band 0 alone would leave three
 	// stripes on the old length. `Static` is one band and restarts exactly the one timer it did.)
-	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
-		PanelState& state = this->stateFor(panelOf(side));
+	// (M4 Task 2: the background's bands are in this list now. The clip timer is a per-panel
+	// cadence, not pair policy, so a clip length or mirror change reaches the layer's own timers the
+	// same way it reaches the columns'.)
+	for (MascotPanel panel : { MascotPanel::Left, MascotPanel::Right, MascotPanel::Background }) {
+		PanelState& state = this->stateFor(panel);
+		if (!state.surface)
+			continue;
 		for (int i = 0; i < static_cast<int>(state.bands.size()); ++i) {
 			MascotBand* band = state.band(i);
 			if (band && band->media().type == MascotMedia::Video && !band->media().path.isEmpty())
-				this->restartClipTimer(panelOf(side), i);
+				this->restartClipTimer(panel, i);
 		}
 	}
 	// A panel that lost its players is drawing nothing, and nothing else will fill it: the beat
@@ -759,8 +879,12 @@ void MascotController::applyConfig()
 	// pair rather than one per panel, so the mirror key keeps deciding whether the two panels show
 	// the same file.
 	if (downgraded && this->running) {
-		this->logVideo(QStringLiteral("panels downgraded from video to images; repainting them"));
-		QMetaObject::invokeMethod(this, [this]() { this->nextImages(false); }, Qt::QueuedConnection);
+		// M4 Task 2: the pair is only repainted when it is on. With the columns off there is nothing
+		// showing the media a downgrade would replace, and the pick would decode for hidden hosts.
+		if (this->columnsEnabled) {
+			this->logVideo(QStringLiteral("panels downgraded from video to images; repainting them"));
+			QMetaObject::invokeMethod(this, [this]() { this->nextImages(false); }, Qt::QueuedConnection);
+		}
 	}
 	// M3 Task 6A: a `mascots_media` change while a `Stripes` panel is up is the one thing that can
 	// leave its bands on the wrong kind of content for the session: the bands past the first are
@@ -775,6 +899,21 @@ void MascotController::applyConfig()
 	// band is not showing a video, which is exactly an Images -> Videos apply, and the other
 	// direction keeps the downgrade path above. One content action per band instead of three
 	// competing ones on the same Apply.)
+	// M4 Task 2: a background that has just been turned on (or given more bands by a budget
+	// increase) has bands with nothing in them, and the pair's fill above deliberately refuses it
+	// -- an image is the one thing the layer must never show. One pick per empty band, through its
+	// own video-only path, queued for the same reason the two picks above are.
+	if (this->running && this->backgroundState.surface) {
+		for (int i = 0; i < static_cast<int>(this->backgroundState.bands.size()); ++i) {
+			MascotBand* band = this->backgroundState.band(i);
+			if (!band || !band->media().path.isEmpty() || !band->requestPath().isEmpty())
+				continue;
+			QMetaObject::invokeMethod(this, [this, i]() {
+				if (this->running && this->backgroundState.surface)
+					this->pickFor(this->backgroundState, MascotPanel::Background, i, i == 0);
+			}, Qt::QueuedConnection);
+		}
+	}
 }
 
 void MascotController::applySeedSource()
@@ -897,9 +1036,24 @@ int MascotController::bandCount(MascotPanel panel) const
 	// `Static` and `Scroll` are one band by definition -- Scroll's band *is* the panel, and only
 	// the content inside it moves (Task 4) -- so this task's whole layout asks the same question
 	// of both, and a one-band panel is exactly the panel that existed before a mode did.
+	// M4 Task 2: the background's count comes from its players instead of from its mode's counts,
+	// because a band with no player behind it would be a band drawing nothing: 0 with no player, 1
+	// for `Static`/`Scroll` when it has one, and the funded prefix for `Stripes`. That is the clamp
+	// a shrinking budget uses -- syncBands() retires the bands this stops counting.
+	if (panel == MascotPanel::Background)
+		return this->backgroundBandCount();
 	if (this->layoutFor(panel).mode != MascotMode::Stripes)
 		return 1;
 	return this->stripesCountFor(panel);
+}
+
+int MascotController::backgroundBandCount() const
+{
+	if (this->backgroundPlayers <= 0)
+		return 0;
+	if (this->backgroundLayout.mode == MascotMode::Stripes)
+		return std::min(this->backgroundStripes, this->backgroundPlayers);
+	return 1;
 }
 
 bool MascotController::bandMirrorsLeft(int bandIndex) const
@@ -953,7 +1107,9 @@ void MascotController::applyMode()
 	// the first Apply has no panel to act on. configureSurface() applies the same layout when the
 	// surface does appear and start() fills the bands it has; nothing is recorded here, which is
 	// what makes the next Apply with surfaces run this again.
-	if (!this->leftState.surface && !this->rightState.surface)
+	// (M4 Task 2: the background counts as a panel to act on -- a controller with the columns off
+	// but the layer on still has a layout to settle.)
+	if (!this->leftState.surface && !this->rightState.surface && !this->backgroundState.surface)
 		return;
 	// Idempotent by construction: an Apply that changed neither the mode nor either panel's live
 	// band count has nothing to re-derive, and re-running the fill would walk the mascot directory
@@ -973,16 +1129,37 @@ void MascotController::applyMode()
 	const bool orientationChanged = this->columnsLayout.applied
 		&& this->columnsLayout.mode == MascotMode::Stripes
 		&& this->columnsLayout.orientation != this->columnsLayout.appliedOrientation;
-	if (this->columnsLayout.applied && !modeChanged && !countChanged && !orientationChanged)
+	// M4 Task 2: the background's layout is compared on its own latches, because it is not the
+	// pair's layout and its band count comes from its players rather than from its mode. Only a
+	// surface that exists is asked: a layer that is off has no bands to lay out, and its latches
+	// are written when it is built.
+	const bool backgroundModeChanged = this->backgroundState.surface
+		&& this->backgroundLayout.mode != this->backgroundLayout.appliedMode;
+	const bool backgroundCountChanged = this->backgroundState.surface
+		&& this->backgroundState.configuredBandCount != this->bandCount(MascotPanel::Background);
+	const bool backgroundOrientationChanged = this->backgroundState.surface
+		&& this->backgroundLayout.applied
+		&& this->backgroundLayout.mode == MascotMode::Stripes
+		&& this->backgroundLayout.orientation != this->backgroundLayout.appliedOrientation;
+	if (this->columnsLayout.applied && !modeChanged && !countChanged && !orientationChanged
+		&& !backgroundModeChanged && !backgroundCountChanged && !backgroundOrientationChanged)
 		return;
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
 		PanelState& state = this->stateFor(panelOf(side));
 		if (state.surface)
 			this->syncBands(state, panelOf(side));
 	}
+	// M4 Task 2: the background's bands are reconciled here too -- this is the one layout entry,
+	// so its count is brought in line with bandCount(Background) on the same turn the pair's is.
+	if (this->backgroundState.surface)
+		this->syncBands(this->backgroundState, MascotPanel::Background);
 	this->columnsLayout.appliedMode = this->columnsLayout.mode;
 	this->columnsLayout.appliedOrientation = this->columnsLayout.orientation;
 	this->columnsLayout.applied = true;
+	// M4 Task 2: the background's latches describe the layout syncBands() has just applied to it.
+	this->backgroundLayout.appliedMode = this->backgroundLayout.mode;
+	this->backgroundLayout.appliedOrientation = this->backgroundLayout.orientation;
+	this->backgroundLayout.applied = true;
 	// M3 Task 4: a mode change starts a fresh pass -- the phase is a fraction of a travel whose
 	// meaning has just changed -- and re-arms the per-band zero-travel line, which is a statement
 	// about the layout and not about the session. A count change alone leaves both alone: the
@@ -1002,6 +1179,14 @@ void MascotController::applyMode()
 		// measured on the previous one -- and a band entering a vertically panning layout cannot
 		// keep an offset that was written on the horizontal axis, which no tick would clear while
 		// the speed is 0. `Static` is the case the original sentence describes and is unchanged.)
+		this->resetScrollOffsets();
+	}
+	// M4 Task 2: the background's mode is its own, so it resets its own pass when *its* mode
+	// changes -- the pair's phase above is not touched by a background relayout, and the reset
+	// below reaches the layer's bands as well because resetScrollOffsets() is a per-panel walk.
+	if (backgroundModeChanged) {
+		this->backgroundState.scrollPhase = 0.0;
+		this->backgroundState.scrollZeroTravelLogged.fill(false);
 		this->resetScrollOffsets();
 	}
 	// M3 Task 5: an orientation change keeps the phase -- the fraction is axis-agnostic, so the
@@ -1028,6 +1213,22 @@ void MascotController::applyMode()
 			state->scrollZeroTravelLogged.fill(false);
 		}
 	}
+	// M4 Task 2: the same rule for the background's own stacking axis. The background has a
+	// separate layout, so its orientation change is its own: the offsets it wrote on the old axis
+	// go, and the zero-travel latch re-arms because the layout it described has moved.
+	if (backgroundOrientationChanged) {
+		MascotSurface* surface = this->backgroundState.surface.data();
+		if (surface) {
+			for (auto& owned : this->backgroundState.bands) {
+				MascotBand* band = owned.get();
+				if (!band || band->scrollOffset() == 0.0)
+					continue;
+				surface->setSlotScrollOffset(band->slotIndex(), 0.0, 0.0);
+				band->setScrollOffset(0.0);
+			}
+		}
+		this->backgroundState.scrollZeroTravelLogged.fill(false);
+	}
 	// The rectangles follow a count or a mode change, and the surface is resized in place rather
 	// than replaced: a band that survives the change keeps its media and its players (Review
 	// Focus 1), and the thing drawing the panel never goes away underneath it. A first run after
@@ -1049,7 +1250,9 @@ void MascotController::applyMode()
 	// path stays: syncBands() has just changed the slot count, and the layout must be settled
 	// before applyDisplay() below repaints into it. `orientationChanged` still makes applyMode()
 	// run, for the offset and zero-travel-latch clearing above, which no later call performs.)
-	if (countChanged)
+	// M4 Task 2: a background count change moves the layer's rectangles too, so it asks for the
+	// same relayout the pair's count change does.
+	if (countChanged || backgroundCountChanged)
 		this->updateLayout();
 	// Bands the change added have no content. Queued, because this runs inside a settings handler
 	// and a pick walks the mascot directory and posts a decode; a controller that was stopped in
@@ -1112,6 +1315,16 @@ void MascotController::fillEmptyBands()
 {
 	if (!this->running)
 		return;
+	// M4 Task 2: the pair's fill has nothing to do while the columns are off. The background keeps
+	// the controller running in that state, so a layout Apply would otherwise walk the mascot
+	// directory and decode a picture for two hidden panels that never draw it.
+	if (!this->columnsEnabled)
+		return;
+	// M4 Task 2: this fill refuses the background, and the refusal is structural: it is a fill with
+	// an *image*, and the background shows video only (a portrait still stretched across the window
+	// is exactly what the layer must never draw). The loop below is therefore the pair's and stays
+	// the pair's -- appending Background to it would hand the layer a still. The background's answer
+	// to a band with no player is the band-count clamp in bandCount(), applied by syncBands().
 	// M3 Task 6A: the pair fills one band index at a time, and the left panel is the one that
 	// chooses it. Under the mirror key a right-panel band the left panel has is filled from the
 	// left band's pick and commit (nextBandImages() for the policy band, showMedia()'s image copy
@@ -1260,6 +1473,23 @@ void MascotController::updateLayout()
 		for (int i = 0; i < static_cast<int>(state.bands.size()) && i < rects.size(); ++i)
 			state.bands[static_cast<std::size_t>(i)]->setRect(rects.at(i));
 	}
+	// M4 Task 2: the background layer is the window's rectangle, not a slice of a column, so its
+	// geometry is written here from its host -- it is in no layout, which is exactly why nothing
+	// else can size it. This is reached from every window resize (MainWindow::event() ->
+	// applyMascotWidth() -> updateLayout()), so there is deliberately no second resize hook. A
+	// host that has not been laid out yet (a zero rectangle) is skipped: positioning the layer at
+	// a degenerate size would only be corrected by the next event, and the bands below would be
+	// sliced from geometry nobody asked for.
+	if (this->backgroundState.surface) {
+		QWidget* host = this->backgroundHost.data();
+		if (host && host->width() > 0 && host->height() > 0)
+			this->backgroundState.surface->setGeometry(host->rect());
+		// One band in this task's `Static` shape, N in a later mode's -- the same slices the pair
+		// above receives, from the background's own layout and the surface's own rectangle.
+		const QVector<QRectF> rects = this->bandRects(MascotPanel::Background);
+		for (int i = 0; i < static_cast<int>(this->backgroundState.bands.size()) && i < rects.size(); ++i)
+			this->backgroundState.bands[static_cast<std::size_t>(i)]->setRect(rects.at(i));
+	}
 	// M2: the panel's window is what the pause rule watches, and this is the place a surface
 	// learns which window it ended up in (it is parented to a host inside the main window). Only
 	// the first call for a given window does anything: watchWindow() returns early otherwise.
@@ -1268,6 +1498,10 @@ void MascotController::updateLayout()
 		window = this->leftState.surface->window();
 	if (!window && this->rightState.surface)
 		window = this->rightState.surface->window();
+	// M4 Task 2: with the columns off, the background is the only surface that can supply the
+	// window the pause rule watches; without this a background-only run would never learn it.
+	if (!window && this->backgroundState.surface)
+		window = this->backgroundState.surface->window();
 	this->watchWindow(window);
 }
 
@@ -1338,7 +1572,10 @@ bool MascotController::scrollShouldRun() const
 	// mode every task's regression gate draws. `Scroll` and `Stripes` both pan -- Task 5 owns a
 	// stripe's stagger and its alternate direction, not its motion -- so one comparison covers
 	// both.
-	if (this->columnsLayout.mode == MascotMode::Static)
+	// (M4 Task 2: the comparison is per panel now, because the background has its own layout: a
+	// `Static` column layout no longer means nothing can pan, and a panning background alone has to
+	// start the driver. Nothing exists to pan when there is no surface at all.)
+	if (!this->panModeActive())
 		return false;
 	if (!this->panelsVisible())
 		return false;
@@ -1350,11 +1587,26 @@ bool MascotController::scrollShouldRun() const
 
 bool MascotController::scrollCanTick() const
 {
-	if (!this->running || this->columnsLayout.mode == MascotMode::Static)
+	if (!this->running)
 		return false;
-	MascotSurface* surface = this->leftState.surface ? this->leftState.surface.data()
-		: this->rightState.surface.data();
-	if (!surface || !surface->isVisible())
+	// M4 Task 2: the mode gate is per panel here too (see scrollShouldRun()). The surface that is
+	// asked is the first existing one that actually pans, so a `Static` column pair cannot hide a
+	// panning background -- and the pair's own answer is unchanged when no background exists.
+	MascotSurface* surface = nullptr;
+	for (MascotPanel panel : { MascotPanel::Left, MascotPanel::Right, MascotPanel::Background }) {
+		const PanelState& state = this->stateFor(panel);
+		MascotSurface* candidate = state.surface.data();
+		if (!candidate || this->layoutFor(panel).mode == MascotMode::Static)
+			continue;
+		// A panel that cannot be seen has no tick of its own, but it must not decide the answer for
+		// one that can: the background may be the only surface on screen while a hidden column is
+		// still configured for `Scroll`.
+		if (!candidate->isVisible() || !windowOnScreen(candidate->window()))
+			continue;
+		surface = candidate;
+		break;
+	}
+	if (!surface)
 		return false;
 	// Hidden and minimized are "cannot be seen" whatever the config says, so they are tested here
 	// and not left to `mascots_pause_unfocused` (videoShouldPause() answers false as soon as that
@@ -1362,21 +1614,44 @@ bool MascotController::scrollCanTick() const
 	// case is deliberately not asked: IsMyWindowVisible() costs more per call than a whole tick
 	// does, and the event-driven reconciliation stops the driver when the window itself changes
 	// state.
-	if (!windowOnScreen(surface->window()))
-		return false;
 	return !this->videoShouldPause();
 }
 
 bool MascotController::panelsVisible() const
 {
-	MascotSurface* surface = this->leftState.surface ? this->leftState.surface.data()
-		: this->rightState.surface.data();
-	if (!surface || !surface->isVisible())
-		return false;
-	QWidget* window = surface->window();
-	// IsMyWindowVisible() is the honest "a user can see it": a minimized window is still visible in
-	// Qt's sense and a covered one is not visible in the OS's.
-	return window && utils::IsMyWindowVisible(window);
+	// M4 Task 2: "the panels" is every surface this controller drives now -- see
+	// anySurfaceVisible(). With no background surface this is exactly the pair's answer it was.
+	return this->anySurfaceVisible();
+}
+
+bool MascotController::anySurfaceVisible() const
+{
+	for (MascotPanel panel : { MascotPanel::Left, MascotPanel::Right, MascotPanel::Background }) {
+		const PanelState& state = this->stateFor(panel);
+		MascotSurface* surface = state.surface.data();
+		if (!surface || !surface->isVisible())
+			continue;
+		QWidget* window = surface->window();
+		// IsMyWindowVisible() is the honest "a user can see it": a minimized window is still visible in
+		// Qt's sense and a covered one is not visible in the OS's.
+		if (window && utils::IsMyWindowVisible(window))
+			return true;
+	}
+	return false;
+}
+
+bool MascotController::panModeActive() const
+{
+	for (MascotPanel panel : { MascotPanel::Left, MascotPanel::Right, MascotPanel::Background }) {
+		MascotSurface* surface = this->stateFor(panel).surface.data();
+		// A panel nobody can see has no pass to run: with the columns off, a still-configured
+		// `mascots_mode=Scroll` must not keep the driver alive for a layer that draws `Static`.
+		if (!surface || !surface->isVisible())
+			continue;
+		if (this->layoutFor(panel).mode != MascotMode::Static)
+			return true;
+	}
+	return false;
 }
 
 bool MascotController::scrollPanIsVertical(MascotPanel panel) const
@@ -1462,8 +1737,10 @@ bool MascotController::scrollReversed(MascotPanel panel, const MascotBand& band)
 
 void MascotController::resetScrollOffsets()
 {
-	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
-		PanelState& state = this->stateFor(panelOf(side));
+	// M4 Task 2: every panel that has a surface, the background included -- the offset it writes
+	// is a per-panel one, so a layout change on any of them takes the pan off that panel's slots.
+	for (MascotPanel panel : { MascotPanel::Left, MascotPanel::Right, MascotPanel::Background }) {
+		PanelState& state = this->stateFor(panel);
 		MascotSurface* surface = state.surface.data();
 		if (!surface)
 			continue;
@@ -1483,7 +1760,7 @@ void MascotController::resetScrollOffsets()
 	// (M3 Task 5: the same reasoning covers a change *between* two panning layouts -- a `Scroll`
 	// band's horizontal position means nothing on a column of a vertical `Stripes` panel -- which
 	// is why applyMode() now calls this on every mode change and not only into `Static`.)
-	for (PanelState* state : { &this->leftState, &this->rightState })
+	for (PanelState* state : { &this->leftState, &this->rightState, &this->backgroundState })
 		state->scrollPhase = 0.0;
 }
 
@@ -1532,9 +1809,18 @@ void MascotController::onScrollTick()
 	// stop()/releaseSurface() from a commit harmless instead of a use-after-free: by then nothing
 	// in this function is iterating, and applyMode() still re-queues itself while a commit runs.
 	std::vector<MascotBand::WrapCommit> wrapCommits;
-	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
-		const MascotPanel panel = panelOf(side);
+	// M4 Task 2: one pass per panel that has a surface, the background included -- the phase, the
+	// layout and the direction are all panel-typed, so this is the same tick applied to the layer's
+	// own bands. The log text is namespaced by panelLabel(), which spells the two pair panels
+	// exactly as sideLabel() did, so a columns-only run's lines are unchanged.
+	for (MascotPanel panel : { MascotPanel::Left, MascotPanel::Right, MascotPanel::Background }) {
 		const PanelLayout& layout = this->layoutFor(panel);
+		// M4 Task 2: a panel whose own layout is `Static` has no pass to advance. The pair can never
+		// reach this loop in `Static` (the driver does not run for it), but the background can: the
+		// driver may be alive for a panning column pair while the layer draws this task's
+		// one-full-window-band `Static` shape, and a tick must not move it.
+		if (layout.mode == MascotMode::Static)
+			continue;
 		const bool vertical = this->scrollPanIsVertical(panel);
 		const bool reverse = this->scrollDirectionReverses(panel);
 		const bool pingpong = layout.scrollPingpong;
@@ -1615,7 +1901,7 @@ void MascotController::onScrollTick()
 					state.scrollZeroTravelLogged[i] = true;
 					if (travelAliases) {
 						this->logScroll(QStringLiteral("%1 band %2 stands still: one %3ms tick advances the pass %4 times (its travel is %5px)")
-							.arg(sideLabel(side))
+							.arg(panelLabel(panel))
 							.arg(i)
 							.arg(elapsedMs)
 							.arg(phaseDelta, 0, 'f', 2)
@@ -1624,7 +1910,7 @@ void MascotController::onScrollTick()
 					else {
 						const QSizeF content = surface->slotContentSize(band->slotIndex());
 						this->logScroll(QStringLiteral("%1 band %2 stands still: its content is %3x%4 and its band is %5x%6")
-							.arg(sideLabel(side))
+							.arg(panelLabel(panel))
 							.arg(i)
 							.arg(content.width(), 0, 'f', 0)
 							.arg(content.height(), 0, 'f', 0)
@@ -1884,6 +2170,13 @@ bool MascotController::eventFilter(QObject* watched, QEvent* event)
 			|| (this->rightState.surface && watched == this->rightState.surface.data())) {
 			this->updateLayout();
 		}
+		// M4 Task 2: the background surface is in no layout, so nothing sizes it but updateLayout(),
+		// and its geometry is derived from the host's rectangle -- which is final only when the
+		// host's own resize event arrives, after MainWindow::event() has already asked for a
+		// layout. Watching the host is therefore the background's equivalent of the second pass
+		// the columns get from their surfaces' own resize events.
+		if (this->backgroundState.surface && watched == this->backgroundHost.data())
+			this->updateLayout();
 	}
 	// M2: the pause rule (amendment §7.13). The window's own events are the only honest source
 	// for "the user cannot see the panel": a minimized window is still visible in Qt's sense,
@@ -2015,11 +2308,93 @@ void MascotController::createSurfaces()
 	};
 	MascotSurface* left = this->leftState.surface.data();
 	MascotSurface* right = this->rightState.surface.data();
-	if (!left)
-		left = build(this->leftHost.data());
-	if (!right)
-		right = build(this->rightHost.data());
+	// M4 Task 2: with the columns off the pair is not built at all. The background keeps the
+	// controller running in that state, so a pair of hidden, never-seeded surfaces behind it would
+	// be idle Qt Quick cost and an empty pair that a later start() (the columns coming back) would
+	// mistake for one already being on. With the columns on this is the two builds it always was.
+	if (this->columnsEnabled) {
+		if (!left)
+			left = build(this->leftHost.data());
+		if (!right)
+			right = build(this->rightHost.data());
+	}
 	this->setSurfaces(left, right);
+}
+
+void MascotController::syncBackgroundSurface()
+{
+	// The layer's whole invariant, in one place: the surface exists if and only if this controller
+	// is running and `mascots_background` is on. Everything that builds or drops one goes through
+	// here -- the enable and disable paths, the settings Apply -- so no other path has to know it,
+	// and a background that is off costs neither a surface nor a decode.
+	const bool wanted = this->running && this->backgroundEnabled;
+	if (!wanted) {
+		if (this->backgroundState.surface)
+			this->destroyBackgroundSurface();
+		return;
+	}
+	if (this->backgroundState.surface)
+		return;
+	this->createBackgroundSurface();
+}
+
+void MascotController::createBackgroundSurface()
+{
+	QWidget* host = this->backgroundHost.data();
+	if (!host || !this->cache)
+		return;
+	// No layout on the host: the panel path gives its surface a zero-margin layout because the
+	// host is a fixed column the layout sizes, while the background is positioned by hand from the
+	// host's rectangle in updateLayout(). A layout here would fight that write for the geometry.
+	auto* surface = new MascotSurface(this->cache, host);
+	this->backgroundState.surface = surface;
+	// The bands are the funded prefix bandCount() derives from backgroundPlayers, and
+	// configureSurface() builds the slots, the players and the (pair-only) connections.
+	this->configureSurface(this->backgroundState, MascotPanel::Background);
+	// Geometry, stacking order and visibility, in that order. `lower()` puts the layer beneath the
+	// layout's widgets -- it is the window's backmost child -- and a child created after its parent
+	// was shown is created hidden, so show() is what makes the layer appear on the very first
+	// enable (the same reason the panel path shows its surface).
+	surface->setGeometry(host->rect());
+	surface->lower();
+	surface->show();
+	// M4 Task 2: the host's resize is what makes the layer's final rectangle, since the surface is
+	// in no layout (see the resize branch of eventFilter()). Installed here and removed with the
+	// surface, so a controller that never runs the layer watches nothing.
+	host->installEventFilter(this);
+	// The latches describe the layout this surface was built from, so the next applyMode() compares
+	// against what is actually drawn rather than against a default.
+	this->backgroundLayout.appliedMode = this->backgroundLayout.mode;
+	this->backgroundLayout.appliedOrientation = this->backgroundLayout.orientation;
+	this->backgroundLayout.applied = true;
+	// The opacity the last Apply asked for, so a layer built by that Apply comes back at the
+	// configured presentation instead of at the QML default. Zero is applied like any other value:
+	// it is presentation, and no band decision reads it.
+	surface->setSurfaceOpacity(this->backgroundOpacity);
+	// The slot rectangles are written from the surface's geometry, so the layout is settled here:
+	// the enable path reaches this before any window resize (applyConfig() also calls updateLayout()
+	// later in the same turn, which is idempotent). Without it a surface created after
+	// createSurfaces() would draw its first frames at a rect nobody had written.
+	this->updateLayout();
+}
+
+void MascotController::destroyBackgroundSurface()
+{
+	if (!this->backgroundState.surface)
+		return;
+	// The host filter installed by createBackgroundSurface() goes with the layer it was watching.
+	if (QWidget* host = this->backgroundHost.data())
+		host->removeEventFilter(this);
+	// The pair's order, for the pair's reason: the players draw into QVideoSinks that belong to
+	// the surface's QML delegates, so they are shut down while those delegates still exist.
+	// clearSide() then drops the slots, the requests and the pins, and releaseSurface() destroys
+	// the players that remain and deletes the surface.
+	for (auto& owned : this->backgroundState.bands) {
+		if (owned->video())
+			owned->video()->shutdown();
+	}
+	this->clearSide(this->backgroundState);
+	this->releaseSurface(this->backgroundState);
 }
 
 void MascotController::configureSurface(PanelState& state, MascotPanel panel)
@@ -2042,7 +2417,13 @@ void MascotController::configureSurface(PanelState& state, MascotPanel panel)
 	// M2: that milestone is this one, so the write moved to applyDisplay(), which picks the mode
 	// per media type -- and both types pick HeightFit (§8 M2 ruling), so what is drawn is the
 	// mode this comment describes. The comment stays as the record of why.
-	surface->setMirror(this->mirrorEnabled());
+	// M4 Task 2: the surface-wide mirror default is the pair's rule. A background surface never
+	// mirrors (mirrorParityFor() is false for it), so it starts from false and keeps it -- a slot
+	// created by a later setSlotCount() would otherwise inherit the columns' default and draw the
+	// layer flipped until its next commit. The pair's answer is unchanged.
+	MascotSide pairSide = MascotSide::Left;
+	const bool hasPairSide = this->pairSideOf(state, &pairSide);
+	surface->setMirror(hasPairSide ? this->mirrorEnabled() : false);
 	// M3 Task 2: one mirror per band, from the media that band already carries. setMirror() above
 	// is only the bulk default a slot created by setSlotCount() starts from; these calls are what
 	// re-apply the per-band flip parity a surviving band had before the surface was rebuilt (a
@@ -2054,8 +2435,7 @@ void MascotController::configureSurface(PanelState& state, MascotPanel panel)
 	// two states that have a pair side. Which side that is comes from the state itself rather than
 	// from a panel -> side conversion; a background surface (Task 2) owns neither state and wires
 	// neither signal.
-	MascotSide pairSide = MascotSide::Left;
-	if (this->pairSideOf(state, &pairSide)) {
+	if (hasPairSide) {
 		connect(surface, &MascotSurface::clicked, this,
 			[this, pairSide](int, Qt::MouseButton button, Qt::KeyboardModifiers modifiers) {
 				emit this->clicked(pairSide, button, modifiers);
@@ -2340,7 +2720,7 @@ MascotMedia MascotController::pickFor(PanelState& state, MascotPanel panel, int 
 	// M2: what kind of media this pick is, decided before the candidate block below because a
 	// video pick has no candidate to be served from (its media is the first frame) and because an
 	// image candidate left over from an image-mode pick must not be shown over a video panel.
-	const MascotMedia::Type type = this->pickType(state);
+	const MascotMedia::Type type = this->pickType(state, panel);
 	if (type == MascotMedia::Video) {
 		switch (this->pickVideo(state, panel, bandIndex, updateHighlight)) {
 		case VideoPick::Started:
@@ -2350,13 +2730,23 @@ MascotMedia MascotController::pickFor(PanelState& state, MascotPanel panel, int 
 			// this swap is done: falling through would put an image over a video panel.
 			return MascotMedia();
 		case VideoPick::Fallback:
+			// M4 Task 2: the background has no image path to fall back to. An empty video pool (or
+			// no player left) means the layer stays blank, said once per episode rather than once
+			// per beat; it must never be filled with a still.
+			if (panel == MascotPanel::Background) {
+				if (!this->backgroundEmptyPoolLogged) {
+					this->backgroundEmptyPoolLogged = true;
+					this->logBackground(QStringLiteral("the video pool is empty; the background has no clip to show and stays blank"));
+				}
+				return MascotMedia();
+			}
 			// Video cannot serve this pick -- the pool emptied between the size and the draw, or
 			// the player half is gone. The image path below serves it instead of leaving the panel
 			// without one, and the pick line under this switch records that it did.
 			break;
 		}
 	}
-	if (this->mediaMayBeVideo() && this->App && this->App->debug_mode) {
+	if (this->mediaMayBeVideo(panel) && this->App && this->App->debug_mode) {
 		// One line per swap while a video configuration is in play, so the gate can see which
 		// branch served each pick and how big the pool was. Never written for an Images setting,
 		// which is what keeps an images run's log identical to merged master's.
@@ -2595,7 +2985,7 @@ void MascotController::speculate(PanelState& state, MascotPanel panel, int bandI
 	// M2: a video panel has no use for a decoded image. Holding one would cost a decode, a cache
 	// entry and a pin per clip, and pickFor() would find it waiting when the panel's type
 	// changed back -- so the speculation is not armed at all while the panel shows video.
-	if (this->pickType(state) == MascotMedia::Video)
+	if (this->pickType(state, panel) == MascotMedia::Video)
 		return;
 	const QString path = this->nextSourcePath();
 	if (path.isEmpty())
@@ -2618,7 +3008,7 @@ bool MascotController::mediaSettingWantsVideo() const
 		|| this->mediaSetting.compare(QStringLiteral("Mixed"), Qt::CaseInsensitive) == 0;
 }
 
-bool MascotController::mediaMayBeVideo() const
+bool MascotController::mediaMayBeVideo(MascotPanel panel) const
 {
 	// Both halves are needed: a budget below two players leaves no panel a player at all, and an
 	// images-only setting has no use for the pool. Everything video costs hangs off this answer.
@@ -2626,6 +3016,12 @@ bool MascotController::mediaMayBeVideo() const
 	// panel verdict, which only `Static` still uses. A panning mode gives one player per band, so
 	// the answer is whether the allocation gave either panel a band with one; a panel that got
 	// none falls through pickVideo()'s no-slot branch to the image path.)
+	// (M4 Task 2: per panel, and the background asks it about itself. The pair panels keep exactly
+	// this answer -- the setting plus an allocation across the pair -- while the background is
+	// video-only and answers from its own funded band prefix, which is why the question could not
+	// stay global: the pair's answer says nothing about whether the layer may show a clip.)
+	if (panel == MascotPanel::Background)
+		return this->backgroundBandCount() > 0;
 	if (!this->mediaSettingWantsVideo())
 		return false;
 	return this->videoBandsFor(MascotPanel::Left) > 0
@@ -2638,11 +3034,20 @@ int MascotController::videoBandsFor(MascotPanel panel) const
 	// gets two players (crossfade) or one (the clamp) is applyDecoderBudget()'s decision -- this
 	// answer only says the band may own players at all. A panning mode gives each band its own
 	// single player, and applyBandBudget() has already spent the budget across the two panels.
-	if (!this->mediaSettingWantsVideo())
-		return 0;
 	// M4 Task 1: the background has no allocation yet -- applyBandBudget() spends the pair's
 	// budget and Task 2 gives the background its own players -- so it owns none.
+	// (M4 Task 2: that allocation is applyBackgroundBudget()'s now, and the background answers with
+	// its funded prefix -- the same number bandCount(Background) answers, so no band can exist
+	// that the budget did not carry. It is deliberately answered before the `mascots_media` guard
+	// below: the layer is video-only whatever the columns' setting says.)
 	if (panel == MascotPanel::Background)
+		return this->backgroundBandCount();
+	// M4 Task 2: with the columns off there is no pair to show, so no pair band may own a player --
+	// a background-only run must not build idle decoders behind two hidden hosts. A columns-on run
+	// answers exactly as before (the setting and the allocation below).
+	if (!this->columnsEnabled)
+		return 0;
+	if (!this->mediaSettingWantsVideo())
 		return 0;
 	if (this->layoutFor(panel).mode == MascotMode::Static)
 		return this->videoMode != VideoMode::Off ? 1 : 0;
@@ -2666,6 +3071,12 @@ bool MascotController::videoCrossfades(MascotPanel panel) const
 	// is nothing to blend; they take the hard cut and never consult `mascots_crossfade_ms`. This
 	// is the one question fadeInVideo() and setSinglePlayer() both ask, so the two cannot disagree
 	// about a mode that has no fade to show.
+	// M4 Task 2: per panel, because the background's budget is its own. Its answer is
+	// applyBackgroundBudget()'s -- `Static` with both of its players -- and the columns' answer
+	// below is unchanged: the setting's mode and the pair's videoMode, and nothing about the
+	// background's entitlement can move it.
+	if (panel == MascotPanel::Background)
+		return this->backgroundCrossfades;
 	return this->layoutFor(panel).mode == MascotMode::Static
 		&& this->videoMode == VideoMode::Crossfade;
 }
@@ -2696,9 +3107,20 @@ void MascotController::invalidateVideoPoolIfStale()
 	this->source.invalidateVideoPool();
 }
 
-MascotMedia::Type MascotController::pickType(PanelState& state)
+MascotMedia::Type MascotController::pickType(PanelState& state, MascotPanel panel)
 {
-	if (!this->mediaMayBeVideo())
+	// M4 Task 2: the background shows video and nothing else. The image pool is portrait stills,
+	// and a portrait still stretched across a window is the one look the layer must never draw, so
+	// this answer does not consult `mascots_media` at all -- an images-only setting is a statement
+	// about the columns.
+	if (panel == MascotPanel::Background) {
+		// M4 Task 2: the pool is the layer's only source, so a database, filter or row-count change
+		// has to invalidate the cached scan here exactly as the pair branch below does -- otherwise
+		// a background-only run would keep drawing clips from the library it saw at startup.
+		this->invalidateVideoPoolIfStale();
+		return MascotMedia::Video;
+	}
+	if (!this->mediaMayBeVideo(panel))
 		return MascotMedia::Image;
 	this->invalidateVideoPoolIfStale();
 	// The size is what decides, and it answers by scanning the pool if that has not happened yet
@@ -2708,6 +3130,9 @@ MascotMedia::Type MascotController::pickType(PanelState& state)
 		// `videoPoolSize() == 0` means "no row passed the filters" *or* "the query failed", and
 		// the two are not distinguishable from here: either way the honest answer is images, and
 		// the line is rate-limited because it describes the configuration, not an event.
+		// (M4 Task 2: the background never reaches this branch returning Image -- its own answer
+		// is above -- and its empty-pool case is the single MASCOT-BG line pickFor() writes when
+		// its video pick comes back with nothing.)
 		const qint64 now = QDateTime::currentMSecsSinceEpoch();
 		if (state.lastTypeLogMs == 0 || (now - state.lastTypeLogMs) >= VIDEO_LOG_INTERVAL_MS) {
 			state.lastTypeLogMs = now;
@@ -2921,6 +3346,10 @@ void MascotController::startVideoLoad(PanelState& state, MascotPanel panel, int 
 	}
 	band->playback().videoLoadRetries = 0;
 	band->playback().videoPickRetryPending = false;
+	// M4 Task 2: a load that actually starts means the pool had something to give, so the
+	// background's empty-pool line is armed again for the next time it has nothing.
+	if (panel == MascotPanel::Background)
+		this->backgroundEmptyPoolLogged = false;
 	// §7.5's ordering, ruled into this task: the output is made visible *before* the clip is asked
 	// for, at the opacity it already carries (0 on a fresh panel), so the sink is receiving frames
 	// while the first-frame gate waits. Making it visible on the frame instead would have the gate
@@ -3083,7 +3512,13 @@ void MascotController::preloadNext(MascotPanel panel)
 
 void MascotController::startPreload(MascotPanel panel)
 {
-	if (!this->running || !this->preloadEnabled || !this->mediaMayBeVideo())
+	// M4 Task 2: the preload stays pair-only. It parks a clip on the idle output of a crossfading
+	// column pair, which the background does not have a use for (its cadence is the beat and its
+	// clip timer, and a parked clip would hold a decoder the budget did not give it), so the layer
+	// is refused here as well as at the call sites that ask.
+	if (panel == MascotPanel::Background)
+		return;
+	if (!this->running || !this->preloadEnabled || !this->mediaMayBeVideo(panel))
 		return;
 	// M3 Task 6A: a preload needs a second player to park on, and only `Static`'s crossfade has
 	// one. `Scroll` and `Stripes` give every band a single player, so `MascotVideoSlot::preload()`
@@ -3127,7 +3562,7 @@ void MascotController::startPreload(MascotPanel panel)
 		return;
 	// Which branch serves this pick is the same question the swap asks, and the pool it asks about
 	// is the pool this preload will draw from: a panel whose type is not video has nothing to park.
-	if (this->pickType(state) != MascotMedia::Video)
+	if (this->pickType(state, panel) != MascotMedia::Video)
 		return;
 	// The seed and the weighted switch are pushed here for the same reason pickVideo() pushes them:
 	// the source reads no config, and the clip chosen at preload time is chosen with whatever the
@@ -3313,10 +3748,15 @@ bool MascotController::ensureVideoSlots()
 	// A band past the first that lost a player while showing a video has no cadence of its own
 	// yet (Task 6 owns it), so it is re-filled through the image path once this method is done.
 	bool refillExtraBands = false;
-	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
-		PanelState& state = this->stateFor(panelOf(side));
+	// M4 Task 2: the background is in this walk now (it is a per-panel operation, not pair policy),
+	// but it is not a pair panel: it never shows images, so losing a player must not queue the image
+	// refill or the pair's repaint below. Its bands are the funded prefix, so the band-count clamp
+	// has already retired any band the budget stopped carrying.
+	for (MascotPanel panel : { MascotPanel::Left, MascotPanel::Right, MascotPanel::Background }) {
+		PanelState& state = this->stateFor(panel);
 		if (!state.surface)
 			continue;
+		const bool pairPanel = panel != MascotPanel::Background;
 		// M3 Task 2: the panel's policy band only. A `Stripes` panel's extra bands get no player in
 		// this task -- that is Task 5's per-band decoder budget -- and they show images instead, by
 		// design (fillEmptyBands() says so where the fill happens). Once Task 5 generalises this
@@ -3329,9 +3769,9 @@ bool MascotController::ensureVideoSlots()
 			MascotBand* band = state.band(i);
 			if (!band)
 				continue;
-			const bool mayOwnPlayer = this->bandMayOwnPlayer(panelOf(side), i);
+			const bool mayOwnPlayer = this->bandMayOwnPlayer(panel, i);
 			if (mayOwnPlayer && !band->video()) {
-				this->createVideoSlot(state, panelOf(side), i);
+				this->createVideoSlot(state, panel, i);
 				// M3 Task 6A fix: a band that has just been *given* a player -- a live budget
 				// increase, an Images -> Videos apply -- is still showing whatever it showed
 				// without one, and nothing else would ask again: `fillEmptyBands()` skips a band
@@ -3340,8 +3780,8 @@ bool MascotController::ensureVideoSlots()
 				// uses. The same queued refill the failure path uses asks for a clip; a band already
 				// showing a video is left alone, and the refill itself is mirror-aware, so a
 				// mirrored right band waits for the left band's copy instead of drawing its own.
-				if (band->media().type != MascotMedia::Video)
-					this->queueBandRefill(panelOf(side), i, false);
+				if (pairPanel && band->media().type != MascotMedia::Video)
+					this->queueBandRefill(panel, i, false);
 			}
 			else if (!mayOwnPlayer && band->video()) {
 				// The setting is images-only, or the budget cannot carry a panel: the players go.
@@ -3377,14 +3817,20 @@ bool MascotController::ensureVideoSlots()
 				// which is the shipped default, nothing else would ever ask that band again, so it
 				// would stay blank for the session. The flag is set for either case.)
 				if (hadVideo || band->media().path.isEmpty()) {
-					if (i == 0)
-						downgraded = true;
-					else
-						refillExtraBands = true;
+					// (M4 Task 2: only a pair panel owes a repaint or a refill. A background band
+					// that lost its player is retired by the band-count clamp; handing it an image
+					// would put a portrait still behind the window, which is the one thing this
+					// layer must never draw.)
+					if (pairPanel) {
+						if (i == 0)
+							downgraded = true;
+						else
+							refillExtraBands = true;
+					}
 				}
 			}
 			if (MascotVideoSlot* slot = band->video())
-				slot->setSinglePlayer(!this->videoCrossfades(panelOf(side)));
+				slot->setSinglePlayer(!this->videoCrossfades(panel));
 		}
 	}
 	if (refillExtraBands) {
@@ -3661,6 +4107,75 @@ void MascotController::applyBandBudget()
 		.arg(allowedRight));
 }
 
+void MascotController::applyBackgroundBudget()
+{
+	// M4 Task 2: columns first, background last. The pair keeps exactly the entitlement
+	// applyDecoderBudget() and applyBandBudget() above gave it -- neither is recomputed here, and
+	// neither's line changes -- so the layer is spent what is left of `mascots_max_decoders`.
+	int pairPlayers = this->leftBandPlayers + this->rightBandPlayers;
+	if (this->columnsLayout.mode == MascotMode::Static) {
+		// A `Static` pair has no per-band allocation to read: each panel's one band owns two
+		// players in `Crossfade` and one in the clamp, and `Off` owns none. That is
+		// applyDecoderBudget()'s answer restated as the players it spends.
+		const int perPanel = this->videoMode == VideoMode::Crossfade ? PLAYERS_PER_PANEL
+			: (this->videoMode == VideoMode::SinglePlayer ? 1 : 0);
+		pairPlayers = perPanel * VIDEO_PANEL_COUNT;
+	}
+	if (!this->backgroundEnabled) {
+		// A layer that is off owns nothing and says nothing. The latches are reset with it, so a
+		// later enable states its allocation instead of comparing against a previous episode.
+		this->backgroundPlayers = 0;
+		this->backgroundCrossfades = false;
+		this->loggedBackgroundDecoders = -1;
+		this->loggedBackgroundPlayers = -1;
+		this->loggedBackgroundBands = -1;
+		this->loggedBackgroundMode = MascotMode::Static;
+		return;
+	}
+	const int remaining = std::max(0, this->maxDecoders - pairPlayers);
+	const MascotMode mode = this->backgroundLayout.mode;
+	int players = 0;
+	if (mode == MascotMode::Static) {
+		// One band, and it may own two players -- one fades out while the other fades in -- so the
+		// spend is what the crossfade design asks for, clamped by what is left.
+		players = std::min(remaining, PLAYERS_PER_PANEL);
+	}
+	else {
+		// `Scroll` and `Stripes` give every band one player, so the spend is one per band the mode
+		// has: one band for `Scroll`, `mascots_background_stripes` for `Stripes`. The clamp by
+		// `remaining` is what makes the band count a funded prefix rather than a wish.
+		const int wantedBands = mode == MascotMode::Stripes ? this->backgroundStripes : 1;
+		players = std::min(remaining, wantedBands);
+	}
+	this->backgroundPlayers = players;
+	this->backgroundCrossfades = mode == MascotMode::Static && players == PLAYERS_PER_PANEL;
+	const int bands = this->backgroundBandCount();
+	// One line per change of the tuple -- the budget, the players and the bands they bought -- for
+	// the reason the M2 clamp line has one: the allocation is a statement about the configuration,
+	// not an event, so repeating it on every Apply would only bury the rest of the log.
+	if (this->loggedBackgroundDecoders == this->maxDecoders
+		&& this->loggedBackgroundPlayers == players
+		&& this->loggedBackgroundBands == bands
+		&& this->loggedBackgroundMode == mode)
+		return;
+	this->loggedBackgroundDecoders = this->maxDecoders;
+	this->loggedBackgroundPlayers = players;
+	this->loggedBackgroundBands = bands;
+	this->loggedBackgroundMode = mode;
+	if (players <= 0) {
+		this->logBackground(QStringLiteral("mascots_max_decoders=%1: no player left for the background after the columns' %2; the layer stays blank")
+			.arg(this->maxDecoders)
+			.arg(pairPlayers));
+		return;
+	}
+	this->logBackground(QStringLiteral("mascots_max_decoders=%1: the background keeps %2 player(s) across %3 band(s) in %4, %5")
+		.arg(this->maxDecoders)
+		.arg(players)
+		.arg(bands)
+		.arg(modeLabel(mode))
+		.arg(this->backgroundCrossfades ? QStringLiteral("crossfade") : QStringLiteral("hard cut")));
+}
+
 void MascotController::restartClipTimer(MascotPanel panel, int bandIndex)
 {
 	PanelState& state = this->stateFor(panel);
@@ -3720,7 +4235,9 @@ void MascotController::onClipTimer(MascotPanel panel, int bandIndex)
 
 void MascotController::stopClipTimers()
 {
-	for (PanelState* state : { &this->leftState, &this->rightState }) {
+	// M4 Task 2: every panel's bands, the background's included -- a timer is a per-band cadence,
+	// and one that survived a disable would advance a layer that is no longer there.
+	for (PanelState* state : { &this->leftState, &this->rightState, &this->backgroundState }) {
 		for (auto& owned : state->bands) {
 			if (QTimer* timer = owned->clipTimer())
 				timer->stop();
@@ -3771,8 +4288,11 @@ void MascotController::applyVideoPaused()
 	if (pause == this->videoPaused)
 		return;
 	this->videoPaused = pause;
-	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
-		PanelState& state = this->stateFor(panelOf(side));
+	// M4 Task 2: the background's bands are in this walk now, because the pause rule is a per-panel
+	// one -- a layer whose columns are off must still release its decoders when the window cannot
+	// be seen. Its own clips resume and re-arm exactly like a column's.
+	for (MascotPanel panel : { MascotPanel::Left, MascotPanel::Right, MascotPanel::Background }) {
+		PanelState& state = this->stateFor(panel);
 		// M3 Task 5: the pause rule reaches every band's players, not only the policy band's. A
 		// band given a player by the decoder budget is playing (or parked) just as the policy band
 		// is, and a paused panel must hold no decoder on any of them. `Static` has one band and
@@ -3802,27 +4322,33 @@ void MascotController::applyVideoPaused()
 				// And the parked clip goes with the cadence: it is the next swap made ready, and a paused
 				// panel has no next swap to make it ready for. Kept, it would hold a decoder open on a
 				// panel nobody can see -- exactly what the pause rule exists to stop.
+				// (M4 Task 2: the background never preloads, so a parked clip is only ever a column's --
+				// discarding it here is a no-op for the layer, and the call stays for the reason above.)
 				slot->discardPreload();
 			}
 			else if (band->media().type == MascotMedia::Video && !band->media().path.isEmpty()) {
 				// The clip on screen is resumed by the player itself; its cadence starts again from here.
 				// (M3 Task 6A: this band's own cadence, on this band's own timer.)
-				this->restartClipTimer(panelOf(side), i);
+				this->restartClipTimer(panel, i);
 				// And the next clip is armed here rather than left to the next commit: the preload that
 				// would have been parked was refused while the panel was hidden (a parked decoder is
 				// exactly the cost the pause rule removes), so this is where the panel catches up -- one
 				// clip of lead time before the timer that was just restarted asks for it.
 				// (M3 Task 6A: only the policy band preloads; startPreload() itself only acts in
 				// `Static`, where a second player exists to park a clip on.)
-				if (i == 0)
-					this->preloadNext(panelOf(side));
+				// (M4 Task 2: and the background never preloads at all -- startPreload() refuses it --
+				// so the layer's resume is the cadence above and nothing else.)
+				if (i == 0 && panel != MascotPanel::Background)
+					this->preloadNext(panel);
 			}
 		}
 	}
 	// Debug-gated like every line below it, and silent for an images-only setting: a pause that no
 	// player observes is not something the gate should read, and the images run's log has to stay
 	// what merged master's was.
-	if (this->mediaSettingWantsVideo()) {
+	// (M4 Task 2: unless the background is drawing -- it is video-only, so its players observe the
+	// pause whatever `mascots_media` says about the columns.)
+	if (this->mediaSettingWantsVideo() || this->backgroundBandCount() > 0) {
 		this->logVideo(pause ? QStringLiteral("paused (the window cannot be seen)")
 			: QStringLiteral("resumed (the window is visible and active)"));
 	}
@@ -3867,6 +4393,18 @@ void MascotController::logScroll(const QString& message) const
 	if (!this->App || !this->App->debug_mode || !this->App->logger)
 		return;
 	this->App->logger->log(SCROLL_LOG_TAG + message, QStringLiteral("MASCOT-SCROLL"));
+}
+
+void MascotController::logBackground(const QString& message) const
+{
+	// M4 Task 2: debug-gated exactly like logVideo()/logScroll(), and for the same reason: the
+	// Logger writes to the log window always and to OutputDebugString only in debug mode, so gating
+	// here means an ordinary run writes nothing while the gate (which runs with -debug) reads every
+	// line. A tag of its own -- MASCOT-BG -- so the layer's allocation and gating can be counted
+	// apart from the columns' video lines, and so a run with `mascots_background` off writes none.
+	if (!this->App || !this->App->debug_mode || !this->App->logger)
+		return;
+	this->App->logger->log(BACKGROUND_LOG_TAG + message, QStringLiteral("MASCOT-BG"));
 }
 
 void MascotController::connectBeats()
@@ -3920,12 +4458,36 @@ void MascotController::onBeat(bool swapWanted)
 	// above is kept as the record of the two-signal cadence the floor replaces.)
 	if (!this->running || !this->beatsAllowed())
 		return;
+	// M4 Task 2: the background's cadence rides the swap beat, and only it -- the layer has no flip
+	// state and no pair, so on a non-swap beat (or with `mascots_swap_on_beat` off) it does nothing
+	// at all: it is not flipped with the pair below and does not add to it. The block sits *here*,
+	// immediately after the visibility guard, because everything from the next `if` on is the pair's
+	// flip path and a background case placed after it would never run. Each band that the half-clip
+	// floor accepts is advanced through the same scheduleBeatAdvance()/commitBeatAdvance() pair a
+	// column band uses, so a panning background later defers to its own seam for free.
+	if (swapWanted && this->swapOnBeat && this->backgroundState.surface) {
+		for (int i = 0; i < static_cast<int>(this->backgroundState.bands.size()); ++i) {
+			MascotBand* band = this->backgroundState.band(i);
+			if (!band || !this->bandMayAdvance(*band))
+				continue;
+			this->scheduleBeatAdvance(MascotPanel::Background, i);
+		}
+	}
 	// A non-swap beat, or `mascots_swap_on_beat = False`, is the retired flip signal's whole
 	// action: both panels flip, and no band advances on this beat.
 	if (!swapWanted || !this->swapOnBeat) {
-		this->flipBoth();
+		// M4 Task 2: the flip is the pair's, so it happens only while the columns are on. A
+		// background-only run keeps the beat alive for the layer above and has no pair to flip.
+		if (this->columnsEnabled)
+			this->flipBoth();
 		return;
 	}
+	// M4 Task 2: with the columns off the pair has no cadence at all. The background block above
+	// has already taken its advance; returning here stops the pair's own swap/flip path from
+	// decoding and writing for two hidden hosts, which is the same "do neither" the seed path keeps
+	// on start().
+	if (!this->columnsEnabled)
+		return;
 	if (this->columnsLayout.mode == MascotMode::Static) {
 		// M1, untouched: the pair advances together and the mirror key decides whether the right
 		// panel copies the left one.
@@ -4012,6 +4574,10 @@ bool MascotController::bandMayAdvance(const MascotBand& band) const
 	// video. An image band has no clip of its own; its rate limit is the existing dice
 	// (`mascots_random_change`/`mascots_random_chance`), which keeps a default `Images`
 	// configuration byte-identical to def041d.)
+	// (M4 Task 2: `mascots_clip_seconds` stays shared between the columns and the background on
+	// purpose -- there is one cadence clock, and the clip length is not part of the background's
+	// layout. Do not give the layer a clip length of its own: two clocks would let the pair and the
+	// layer drift apart, and nothing asks for that.)
 	if (band.media().type != MascotMedia::Video)
 		return true;
 	if (this->clipSeconds <= 0)
@@ -4230,6 +4796,13 @@ void MascotController::onMediaFailed(const QString& path)
 void MascotController::queueBandRefill(MascotPanel panel, int bandIndex, bool onlyIfEmpty)
 {
 	if (!this->running)
+		return;
+	// M4 Task 2: the background refuses a refill outright. A refill's answer is an image -- the one
+	// thing the layer must never show -- so a background band that lost its player (or its clip)
+	// gets no replacement here: the budget's answer is the band-count clamp in bandCount(), which
+	// syncBands() applies by retiring the band, and a band that keeps its player is left to its own
+	// pick path (the beat or its clip timer).
+	if (panel == MascotPanel::Background)
 		return;
 	// Queued on `this`, for the reason onVideoFailed()'s older ask was: this runs out of a decode
 	// or player signal, and the refill draws from the pool and posts work. A controller stopped in

@@ -121,8 +121,13 @@ public:
 	// mapping. All pointers must outlive this object: the cache and the prefetcher are
 	// process-lifetime members of MainApp (amendment U) and the hosts are children of the
 	// window this controller is a child of.
+	// (M4 Task 2: `backgroundHost` is the window-sized host the background layer is parented to
+	// -- MainWindow passes it `centralwidget`, because the layer covers the whole window rather
+	// than a column. Like the two column hosts it is a child of that window, so it outlives
+	// this controller; unlike them it gets no layout, because updateLayout() positions the
+	// surface by hand from the host's rectangle.)
 	MascotController(MainApp* App, MascotImageCache* cache, MascotPrefetcher* prefetcher,
-		QWidget* leftHost, QWidget* rightHost, QObject* parent = nullptr);
+		QWidget* leftHost, QWidget* rightHost, QWidget* backgroundHost, QObject* parent = nullptr);
 	~MascotController() override;
 
 	// Binds the surfaces this controller drives. Called with the surfaces start() built;
@@ -132,11 +137,23 @@ public:
 
 	// Enables the panels: builds the surfaces (a user who never enables the renderer pays no
 	// Qt Quick cost), applies config, takes the beat connections and seeds both panels.
+	// (M4 Task 2: the background layer is built here too, and only while its own switch is on --
+	// the invariant syncBackgroundSurface() keeps. The pair is seeded only when `mascots` is on,
+	// so a controller started for the background alone does not walk the mascot directory for
+	// two panels nobody shows; and a start() that arrives while the background kept this object
+	// running rebuilds the pair that stopPanels() took down, which is how the columns come back.)
 	void start();
 	// Disables them: drops queued work, unpins everything, clears both slots and deletes the
 	// surfaces. Idempotent, and safe to call from a shutdown path.
+	// (M4 Task 2: the background surface goes the same way, through the same invariant.)
 	void stop();
 	bool isRunning() const;
+	// M4 Task 2: tears down only the two column panels -- their players, their slots, their
+	// pins and their surfaces -- and leaves the background layer running. MainWindow::hideMascots()
+	// reaches for this when `mascots_background` is on, because turning the columns off must not
+	// kill the layer behind them; the full stop() is still what an off background gets. Safe to
+	// call while the background is off too: it is then the pair's half of stop().
+	void stopPanels();
 
 	// Re-reads every config value this class consumes and re-applies it to the surfaces
 	// (surface default mirror, slot geometry, the centred-content override).
@@ -162,6 +179,11 @@ public:
 	// How many bands `side` has in the current mode: one for `Static` and `Scroll`, the
 	// configured `mascots_stripes_left`/`_right` for `Stripes`. The number both panels' layouts
 	// are derived from, so Task 5's decoder budget can ask it without knowing the mode.
+	// (M4 Task 2: the background's answer is derived from its *players*, not from its mode's band
+	// count: 0 when `backgroundPlayers` is 0 -- no decoders means no background at all -- 1 for
+	// `Static`/`Scroll` when it has any player, and `min(backgroundStripes, backgroundPlayers)`
+	// for `Stripes`. That is what makes losing a player retire the bands that were spending it
+	// through syncBands(), instead of leaving a band with nothing behind it.)
 	int bandCount(MascotPanel panel) const;
 	// `bandCount()` equal slices of that panel's rectangle along the mode's stacking axis,
 	// rounded so they sum to the panel exactly. Empty while `side` has no surface.
@@ -262,6 +284,10 @@ private:
 	// answers from a cached value and never re-reads the config. The two columns share one instance
 	// (`columnsLayout`) because they are one mirror pair; the background owns `backgroundLayout`,
 	// which nothing draws from until Task 2 adds its surface.
+	// (M4 Task 2: `backgroundLayout` draws now -- bandCount(), bandRects(), effectiveFillMode(),
+	// stripesStackVertically() and videoCrossfades() all answer from it for the background, and
+	// syncBands() lays its bands out from it. It stays a separate instance exactly because it is
+	// not the pair's layout.)
 	struct PanelLayout {
 		// `mascots_mode`, cached: bandCount()/bandRects()/applyMode() answer from this one value, so
 		// a settings change cannot land on one panel and not the other, and no layout path re-reads
@@ -435,6 +461,22 @@ private:
 	// panel's count is filled on its own.)
 	void fillEmptyBands();
 
+	// ---- M4 Task 2: the background surface's own lifecycle ----
+	// Keeps the invariant the layer is defined by: the background surface exists if and only if
+	// this controller is running *and* `mascots_background` is on. Called from applyConfig() (so a
+	// settings Apply turns the layer on and off live) and from start()/stop(); everything that
+	// builds or drops one goes through here, so no other path has to know the rule.
+	void syncBackgroundSurface();
+	// Builds the window-sized surface: parented to backgroundHost, with no layout (updateLayout()
+	// positions it from the host's rectangle), lowered beneath the layout's widgets and shown. The
+	// bands are the funded prefix bandCount() derives from backgroundPlayers, so a surface with no
+	// player behind it is simply an empty one.
+	void createBackgroundSurface();
+	// Drops it in the pair's order and for the pair's reason: the bands' players are shut down
+	// first (they draw into QVideoSinks the surface's QML delegates own), then clearSide() drops
+	// the slots and the pins, then releaseSurface() deletes it.
+	void destroyBackgroundSurface();
+
 	// ---- M3 Task 4: the scroll driver's own half ----
 	// Starts or stops the driver to match the current state. The one place the "should it be
 	// running" question is asked, so every path that can change the answer (enable, disable, a
@@ -454,7 +496,19 @@ private:
 	// Whether the panels are on screen, by the same test the beat cadence uses: the surface is
 	// visible and its window is visible, unminimized and not covered. `beatsAllowed()` is this
 	// answer now, and the scroll driver is its second caller.
+	// (M4 Task 2: this delegates to anySurfaceVisible(), because the background is now a surface
+	// that can be on screen on its own -- with `mascots` off and `mascots_background` on, beats and
+	// clip timers must still run. Nothing else in this class uses the pair-only reading, so the
+	// old meaning is kept as a name rather than as a second copy of the question.)
 	bool panelsVisible() const;
+	// M4 Task 2: whether any surface this controller drives -- either column panel or the
+	// background layer -- is on screen by the test panelsVisible() has always used. The helper the
+	// cadence and the scroll driver ask, so neither has to grow a background case of its own.
+	bool anySurfaceVisible() const;
+	// M4 Task 2: whether any surface that currently exists is in a mode with a pan in it. The
+	// scroll driver's mode gate, per panel now: the background has its own layout, so "the columns
+	// are `Static`" is no longer the whole answer to whether there is anything to pan.
+	bool panModeActive() const;
 	// The axis the pan travels along, from the mode's stacking axis (Ruling M3-4). `Scroll` is
 	// horizontal by definition -- §7.6 sizes its content wider than the panel, and
 	// effectiveFillMode() forces the matching HeightFit for it -- and `Stripes` stacks the same way
@@ -632,12 +686,20 @@ private:
 	// Which kind of media one panel displays for this pick. Decides from the value applyConfig()
 	// cached rather than from the config, for the same reason the source reads none: a settings
 	// change must not land one pick late. Its diagnostics are rate-limited per panel.
-	MascotMedia::Type pickType(PanelState& state);
+	// (M4 Task 2: `panel` is asked because the answer is now per panel -- the background is
+	// video-only whatever `mascots_media` says, while the pair panels answer from the setting and
+	// their own player allocation. The state alone could not distinguish them: the background's
+	// state is just a third PanelState.)
+	MascotMedia::Type pickType(PanelState& state, MascotPanel panel);
 	// True when the media setting wants video at all (Videos or Mixed). What keeps an images-only
 	// configuration free of video work, and what decides whether a clamp line is worth writing.
 	bool mediaSettingWantsVideo() const;
 	// True when the media setting wants video *and* the decoder budget allows a player.
-	bool mediaMayBeVideo() const;
+	// (M4 Task 2: per panel, because the background is video-only and has its own allocation: a
+	// pair panel answers exactly as before -- the setting plus an allocation -- while the
+	// background answers from its own funded band prefix and ignores `mascots_media` entirely.
+	// Every caller asks about the panel it is working on.)
+	bool mediaMayBeVideo(MascotPanel panel) const;
 	// Re-reads the pool's invalidation fingerprint -- the database, the filter settings and the
 	// model's row count -- and drops the cached scan when any of them moved (§7.8's triggers).
 	void invalidateVideoPoolIfStale();
@@ -706,6 +768,19 @@ private:
 	// and a `Static` run's log stays what merged master's was. The shortfall line is written once
 	// per change of budget, band count or allocation (the M2 clamp-line pattern).
 	void applyBandBudget();
+	// M4 Task 2: spends what is left of `mascots_max_decoders` after applyDecoderBudget() and
+	// applyBandBudget() have given the pair exactly the entitlement they always had -- columns
+	// first, background last. `Static` background mode spends up to two players on its one band
+	// (a crossfade), `Scroll` and `Stripes` spend one per band, and the answer is recorded in
+	// backgroundPlayers/backgroundCrossfades so bandCount() can derive the background's bands from
+	// it. A background with no player left gets none of these and draws nothing (the zero-player
+	// line). One MASCOT-BG line per change of the tuple, never per Apply.
+	void applyBackgroundBudget();
+	// M4 Task 2: the background's band count, derived from the players it was given: 0 with no
+	// player, 1 for `Static`/`Scroll` with one, and the funded prefix
+	// `min(mascots_background_stripes, backgroundPlayers)` for `Stripes`. bandCount() and
+	// videoBandsFor() both answer with it, so the two can never disagree about a band existing.
+	int backgroundBandCount() const;
 	// Whether `bandIndex` of `side` may own a player under the current mode and budget: the guard
 	// ensureVideoSlots() creates from and the answer Task 6's pick path will ask before it lets a
 	// band become a video. `Static` is band 0 only.
@@ -713,6 +788,10 @@ private:
 	// Whether a mode fades between two players at all. Only `Static` does (§7.5): `Scroll` and
 	// `Stripes` give a band one player, so a swap reloads the output on screen and there is nothing
 	// to blend -- they take the hard cut and never consult `mascots_crossfade_ms`.
+	// (M4 Task 2: the background's answer is its own -- backgroundCrossfades, set by
+	// applyBackgroundBudget() from its mode and its own player count -- while the pair panels keep
+	// exactly the answer above. The background's budget is spent separately, so its crossfade
+	// cannot be inferred from the columns' videoMode.)
 	bool videoCrossfades(MascotPanel panel) const;
 	// Whether `Stripes` stacks its bands top to bottom (horizontal strips). True for every mode
 	// that has one band per panel, where the answer only selects which equivalent slice of the
@@ -751,6 +830,11 @@ private:
 	// Writes one MASCOT-VIDEO line, debug-gated the way MainApp's MASCOT-CACHE line is: an
 	// ordinary run pays nothing, and the gate (which runs with -debug) reads every line.
 	void logVideo(const QString& message) const;
+	// M4 Task 2: writes one MASCOT-BG line, gated exactly like logVideo()/logScroll(): an
+	// ordinary run pays nothing, and a run with -debug reads every line. A tag of its own so the
+	// background's allocation and gating can be read apart from the columns' video lines, and so
+	// a run with `mascots_background` off writes neither.
+	void logBackground(const QString& message) const;
 
 	MainApp* App = nullptr;
 	MascotImageCache* cache = nullptr;
@@ -759,11 +843,18 @@ private:
 	QPointer<MascotPrefetcher> prefetcher;
 	QPointer<QWidget> leftHost;
 	QPointer<QWidget> rightHost;
+	// M4 Task 2: the window-sized host (MainWindow's `centralwidget`). The background surface is
+	// its child and is positioned by hand from its rectangle -- no layout is installed on it, so
+	// nothing else can size or move the layer.
+	QPointer<QWidget> backgroundHost;
 	MascotMediaSource source;
 	PanelState leftState;
 	PanelState rightState;
 	// M4 Task 1: the background panel's state. It stays empty -- no surface and no bands -- until
 	// Task 2 builds them; every per-panel function already tolerates both.
+	// (M4 Task 2: this is the surface and bands' owner now. They exist exactly while `running &&
+	// backgroundEnabled`, which is the invariant syncBackgroundSurface() keeps; the state itself
+	// outlives both, exactly as leftState/rightState do.)
 	PanelState backgroundState;
 	bool running = false;
 	// M3 Task 6A: non-zero while a wrap-point commit a band queued is running. A commit is content
@@ -807,12 +898,44 @@ private:
 	int stripesRightBands = 2;
 	// M4 Task 1: `mascots_background_stripes`, clamped to [1, 8] like the two column counts. Only
 	// the background's `Stripes` mode reads it; the surface that draws from it arrives in Task 2.
+	// (M4 Task 2: the surface draws from it now. `Stripes` is the only mode whose band count it
+	// decides -- bandCount(Background) clamps it by the players the background was actually given.)
 	int backgroundStripes = 3;
 	// M4 Task 1: `mascots_background` / `mascots_background_opacity` (the latter clamped to [0, 1]).
 	// The background surface that consumes them is added later in this milestone; they are parsed
 	// now so the keys have exactly one reader and a settings change cannot land one layout late.
+	// (M4 Task 2: the surface is syncBackgroundSurface()'s now, `mascots_background` is one half of
+	// the invariant that decides whether it exists, and `mascots_background_opacity` is applied
+	// through MascotSurface::setSurfaceOpacity() on every apply while the surface exists. Zero is
+	// deliberately not special-cased: it is presentation, and no band decision reads it.)
 	bool backgroundEnabled = false;
 	double backgroundOpacity = 0.5;
+	// M4 Task 2: `mascots` (the two column panels). Cached here because start() has to know which
+	// layer it is enabling: the pair is seeded only when the columns are on, and a start() that
+	// brings the columns back under a running background seeds them then. Read here under the
+	// same "one reader" rule as every key above.
+	bool columnsEnabled = true;
+	// ---- M4 Task 2: the background's decoder allocation, written by applyBackgroundBudget() ----
+	// What is left of `mascots_max_decoders` after the pair's entitlement: columns first, background
+	// last. `backgroundPlayers` is the number of players the layer may spend -- two on a `Static`
+	// band (the crossfade) and one per band in `Scroll`/`Stripes` -- and `backgroundCrossfades` is
+	// the one answer videoCrossfades(Background) reports. bandCount(Background) derives the bands
+	// from `backgroundPlayers`, so a budget that shrinks retires bands through syncBands() instead
+	// of leaving one with nothing behind it.
+	int backgroundPlayers = 0;
+	bool backgroundCrossfades = false;
+	// The tuple the allocation line was last written for -- the budget, the players and the bands
+	// they bought -- so the line appears once per change (the M2 clamp-line pattern) rather than
+	// once per Apply. `loggedBackgroundPlayers` at -1 means nothing has been said yet, which is
+	// also what a disabled background resets the latches to, so re-enabling states its piece.
+	int loggedBackgroundDecoders = -1;
+	int loggedBackgroundPlayers = -1;
+	int loggedBackgroundBands = -1;
+	MascotMode loggedBackgroundMode = MascotMode::Static;
+	// Set by the first pick that found the video pool empty for the background, so the empty-pool
+	// line is one per episode rather than one per beat. Cleared by the next background load that
+	// actually starts, which is the next time the pool had something to give.
+	bool backgroundEmptyPoolLogged = false;
 	// ---- M3 Task 5: the per-band decoder allocation, written by applyBandBudget() ----
 	// How many bands of each panel may own a player in a panning mode. 0 means the panel shows
 	// images; the bands at indices below the count are the ones that keep (or get) a player, so the

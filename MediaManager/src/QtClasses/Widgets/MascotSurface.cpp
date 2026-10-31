@@ -371,6 +371,24 @@ void MascotSurface::setMirror(bool mirror)
 	this->applyAllSlots();
 }
 
+void MascotSurface::setSurfaceOpacity(double opacity)
+{
+	// The surface-wide value, as distinct from setSlotOpacity()'s per-slot one: the background
+	// layer is one number for the whole picture behind the window, so it is written once on the
+	// QML root item and inherited by the slots inside it, rather than repeated per slot or given
+	// to a QGraphicsOpacityEffect -- which would composite the widget offscreen every frame for
+	// a value the scene graph already applies for free.
+	//
+	// The clamp is setSlotOpacity()'s: a NaN fails the ordered comparison below like it fails
+	// every comparison and so never reaches QML, and a value above 1 is clamped because Qt Quick
+	// clamps opacity itself anyway -- the recorded notion and the item's value should agree.
+	// There is no mirrored Slot value: an opacity is not slot state, and a delegate recreated by
+	// a slot count change inherits the root item's value on its own.
+	if (!(opacity >= 0.0) || !this->root)
+		return;
+	this->root->setProperty("opacity", opacity > 1.0 ? 1.0 : opacity);
+}
+
 void MascotSurface::mousePressEvent(QMouseEvent* event)
 {
 	// A press over a slot is consumed here for two reasons: Qt routes the matching release to

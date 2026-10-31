@@ -732,18 +732,10 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     // (M5 review fix: the first draft wrote the keys as `mascots` and `Scroll` in backticks, which
     // a QLabel prints literally -- it is plain text, not markup. The sentence below names the
     // controls the user can see instead of the keys they cannot.)
-    QLabel* intro = new QLabel(
-        "Mascots On/Off switches the columns; the background layer is independent of them. Content "
-        "and layout apply to the columns only -- the layer always draws videos. Both moving modes "
-        "spend one player per band (cells in the marquee), so the decoder ceiling decides how much "
-        "of this can run at once.");
-    intro->setWordWrap(true);
-    // Theme-agnostic: the disabled text colour of whatever palette is current, rather than a grey
-    // that only has contrast on a dark theme.
-    QPalette introPalette = intro->palette();
-    introPalette.setColor(QPalette::WindowText, introPalette.color(QPalette::Disabled, QPalette::WindowText));
-    intro->setPalette(introPalette);
-    pageLayout->addWidget(intro);
+    // (M5 Task 9: the paragraph is gone, on the user's request. Every control's tooltip already carries
+    // its own half of it and the group box titles name the pieces, so it was a wall of text above the
+    // first control with nothing in it to click. The two comments above are kept as the record of why it
+    // was written.)
 
     // The existing group box is moved, not copied: adding it to this page's layout reparents it
     // off Appearance, so its controls and their wiring stay exactly as setupAppearancePage() left
@@ -864,11 +856,14 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "change instead of a load. Read only while the columns show videos.");
     playbackLayout->addWidget(mascotPreloadCheckBox);
 
-    mascotPauseUnfocusedCheckBox = new QCheckBox("Pause when the window is not focused");
+    // (M5 Task 9: the label follows the rule the fix gave it. It said "not focused", which is exactly what
+    // it must not do any more.)
+    mascotPauseUnfocusedCheckBox = new QCheckBox("Pause when the window cannot be seen");
     mascotPauseUnfocusedCheckBox->setChecked(config->get_bool(QStringLiteral("mascots_pause_unfocused")));
     mascotPauseUnfocusedCheckBox->setToolTip(
-        "Pause every mascot player while the main window is hidden, minimized, or in the background "
-        "(after it has been active once). Off keeps them decoding while you are elsewhere.");
+        "Pause every mascot player while the main window is hidden, minimized, or covered by another "
+        "window. Focus does not count: a window that is on screen but not in front keeps its mascots "
+        "running. Off keeps them decoding while you are elsewhere.");
     playbackLayout->addWidget(mascotPauseUnfocusedCheckBox);
 
     mascotMaxDecodersSpinBox = makeSpinBox(0, 32, 1,
@@ -1049,7 +1044,13 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "Ping-pong: reverse at the end of a layer band instead of wrapping around to its start.");
     backgroundLayout->addWidget(mascotBackgroundScrollPingpongCheckBox);
 
-    pageLayout->addWidget(backgroundGroup);
+    // (M5 Task 9: the layer group is appearance, not behaviour -- it decides how the window looks and
+    // nothing about what runs -- so it is built here and added to the Appearance page, above that page's
+    // trailing spacer. One tab for "make it look different", one for "make it behave differently": the
+    // group is built here because its controls are wired into this page's one writer and one matrix, and
+    // reparenting the built box is the smaller change than moving twelve control definitions.)
+    this->ui.appearancePageLayout->insertWidget(
+        this->ui.appearancePageLayout->count() - 1, backgroundGroup);
 
     // --- Image Cache ---
     QGroupBox* cacheGroup = new QGroupBox("Image Cache");

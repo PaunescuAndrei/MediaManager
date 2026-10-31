@@ -12,8 +12,24 @@ VideosTreeView::VideosTreeView(QWidget* parent) : QTreeView(parent) {
     setAllColumnsShowFocus(true);
 }
 
+void VideosTreeView::setTranslucentRows(bool translucent) {
+    if (this->translucentRows == translucent)
+        return;
+    this->translucentRows = translucent;
+    // The flag decides how the rows are painted, so a change has to repaint them. The palette that
+    // travels with it is set on the view by the caller; a layout-only repaint would leave the previous
+    // row colours on screen until something scrolled.
+    this->viewport()->update();
+}
+
 void VideosTreeView::drawRow(QPainter* painter, const QStyleOptionViewItem& options,
     const QModelIndex& index) const {
+    if (!this->translucentRows) {
+        // Qt's own path, unchanged -- this is the layer-off rendering, and the reason it is still
+        // pixel-identical to the build before the layer existed.
+        QTreeView::drawRow(painter, options, index);
+        return;
+    }
     // Which of the two row colours this row is. The option Qt hands to drawRow() carries no Alternate
     // flag -- the base implementation computes it per item, further down -- so it is derived here the
     // way the view alternates: on the row, from 1. Measured: with the flag read from `options` instead,
@@ -21,13 +37,6 @@ void VideosTreeView::drawRow(QPainter* painter, const QStyleOptionViewItem& opti
     const bool alternate = this->alternatingRowColors() && (index.row() % 2) == 1;
     const QColor rowColour =
         options.palette.color(alternate ? QPalette::AlternateBase : QPalette::Base);
-    if (rowColour.alpha() >= 255) {
-        // An opaque list is Qt's own business: the viewport and the style already paint these rows, and
-        // the same fill again would be a no-op at best. This is also the branch every other view takes,
-        // and the branch taken whenever the background layer is off.
-        QTreeView::drawRow(painter, options, index);
-        return;
-    }
     QStyleOptionViewItem opt(options);
     painter->fillRect(options.rect, rowColour);
     // The style fills alternate rows from the same role, and per column rather than per row. An alpha-0

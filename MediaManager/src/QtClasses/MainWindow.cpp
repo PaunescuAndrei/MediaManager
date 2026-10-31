@@ -675,6 +675,10 @@ void MainWindow::applyBackgroundVeil() {
         : appPalette;
     this->ui.videosWidget->setPalette(rowPalette);
     this->ui.videosWidget->viewport()->setPalette(viewportPalette);
+    // (M5 Task 8b: the rows paint their own fill while the layer is on, because Qt's arrangement cannot
+    // express a translucent list that also alternates -- see VideosTreeView::setTranslucentRows(). With
+    // the layer off this hands the view back to Qt, which is what keeps that rendering identical.)
+    this->ui.videosWidget->setTranslucentRows(backgroundEnabled);
     // (M5 fix: an alpha-0 palette is not enough. A polish after this call resets the viewport's
     // palette to the view's, so the viewport paints a second row scrim underneath the rows and the
     // media is held back twice -- 0.85 over 0.85 is 0.9775 opaque, which is what a flat #FF8000 layer
@@ -717,6 +721,10 @@ void MainWindow::applyBackgroundVeil() {
     // the layout. The rows and the strip stop painting fills of their own, so this is the only
     // translucent surface in the window and the two halves cannot hold the layer back by different
     // amounts.)
+    // (M5 Task 8b: the veil covers the window; it does not make the strip *match the list*, because the
+    // list's own fill is a second surface with its own key. The user wants the two to agree -- "the top
+    // widget matches the list too like before" -- so the strip's scrim is back, and it is driven by the
+    // *same* key as the rows: same colour role, same alpha, one control for the whole centre pane.)
     if (backgroundEnabled) {
         if (!this->backgroundVeil) {
             this->backgroundVeil = new QWidget(this->ui.centralwidget);
@@ -742,6 +750,47 @@ void MainWindow::applyBackgroundVeil() {
     else if (this->backgroundVeil) {
         this->backgroundVeil->hide();
     }
+    // (M5 Task 8b: the strip's half of the one control. It is the same palette call the rows get -- Base
+    // at the row alpha -- so the strip above the list reads exactly like an even row, and the layer is
+    // held back by the same amount above the list as inside it. Sized to the space the list does not
+    // occupy: a scrim that covered the list too would stack a second fill under the rows.)
+    if (backgroundEnabled) {
+        if (!this->backgroundScrim) {
+            this->backgroundScrim = new QWidget(this->ui.CenterContainer);
+            // A plain QWidget fills with its Window role by default; the strip's colour is Base.
+            this->backgroundScrim->setBackgroundRole(QPalette::Base);
+            this->backgroundScrim->setAutoFillBackground(true);
+            // It is scenery: clicks and hovers belong to the widgets above it.
+            this->backgroundScrim->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+            // The list's geometry is what the scrim's height depends on, and it moves when the layout
+            // changes -- a search bar or a date column appearing does not resize the window.
+            this->ui.videosWidget->installEventFilter(this);
+        }
+        this->backgroundScrim->setPalette(get_background_row_palette(appPalette, rowAlpha));
+        // Below every sibling: the strip's own widgets paint on top of the scrim.
+        this->backgroundScrim->lower();
+        this->backgroundScrim->show();
+        this->updateBackgroundScrim();
+    }
+    else if (this->backgroundScrim) {
+        this->ui.videosWidget->removeEventFilter(this);
+        this->backgroundScrim->hide();
+    }
+}
+
+void MainWindow::updateBackgroundScrim() {
+    if (!this->backgroundScrim)
+        return;
+    // (M5 Task 8b: no visibility gate, for the reason updateBackgroundVeil() records -- the scrim is
+    // built during construction, while the window is still hidden, and a child of a hidden parent is
+    // not "visible". Sizing a hidden widget is free.)
+    // Everything CenterContainer owns above the list. Both widgets are children of that container,
+    // so y() is already in the coordinate space the scrim is placed in.
+    const QWidget* container = this->ui.CenterContainer;
+    const int height = qBound(0, this->ui.videosWidget->y(), container->height());
+    const QRect rect(0, 0, container->width(), height);
+    if (this->backgroundScrim->geometry() != rect)
+        this->backgroundScrim->setGeometry(rect);
 }
 
 void MainWindow::updateBackgroundVeil() {
@@ -785,6 +834,12 @@ bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
     if (this->backgroundVeil && watched == this->ui.centralwidget
         && (event->type() == QEvent::Move || event->type() == QEvent::Resize)) {
         this->updateBackgroundVeil();
+    }
+    // (M5 Task 8b: the strip's height is the list's y, so the list moving inside the container is what
+    // this one follows -- the same reason the scrim existed before the veil.)
+    if (this->backgroundScrim && watched == this->ui.videosWidget
+        && (event->type() == QEvent::Move || event->type() == QEvent::Resize)) {
+        this->updateBackgroundScrim();
     }
     return QMainWindow::eventFilter(watched, event);
 }
@@ -5992,6 +6047,8 @@ bool MainWindow::event(QEvent* e)
         // (M5 Task 8: the veil is the size of the whole container, so this is the early answer and
         // the container's own Resize event -- see eventFilter() -- is the final one.)
         this->updateBackgroundVeil();
+        // (M5 Task 8b: the strip's scrim ends where the list begins, so it follows the list.)
+        this->updateBackgroundScrim();
     }
     return QMainWindow::event(e);
 }

@@ -949,17 +949,17 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     addRow(backgroundLayout, "Veil opacity:",
         "How much of the window's own background colour is painted over the layer. The layer itself "
         "always runs at full strength; this is one translucent rectangle in front of it, so 1.00 is "
-        "the plain window and 0.00 is the media at full strength. It covers the strip, the margins "
-        "and the list alike. The list's rows have their own opacity below, and it sits on top of this "
-        "one -- set this to 0.00 if you want the list's row colours to be what decides the list.",
+        "the plain window and 0.00 is the media at full strength. It covers the margins and the whole "
+        "centre pane; the centre pane then has its own opacity below, which sits on top of this one.",
         mascotBackgroundOpacitySpinBox);
 
     mascotListAlphaSpinBox = makeDoubleSpinBox(0.00, 1.00, 0.05,
         config->get_double(QStringLiteral("mascots_background_list_alpha"), 0.85));
-    addRow(backgroundLayout, "List row opacity:",
-        "Opacity of the list's rows over the veil -- the row fill that makes Base and AlternateBase "
-        "alternate. 1.00 is an opaque list, 0.00 lets whatever the veil leaves reach the text at full "
-        "strength. Different from the veil above: this one is only the list.",
+    addRow(backgroundLayout, "List & strip opacity:",
+        "Opacity of the centre pane over the veil: the list's rows and the strip above them, one alpha "
+        "for both, so the top matches the list. The rows keep their Base/AlternateBase alternation at "
+        "that alpha. 1.00 is an opaque centre pane, 0.00 lets whatever the veil leaves reach the text "
+        "at full strength. Different from the veil above: this one is only the centre pane.",
         mascotListAlphaSpinBox);
 
     mascotColumnsZCombo = makeComboBox({ QStringLiteral("Above"), QStringLiteral("Below") },

@@ -14,18 +14,23 @@ public:
     void scrollToVerticalPositionDelayed(int scroll_value);
     void scrollToDelayed(const QModelIndex& index, QAbstractItemView::ScrollHint scrollhint = QAbstractItemView::EnsureVisible);
     void configureHeader();
+    // (M5 Task 8b: whether this view paints its own row backgrounds. It is set while the background
+    // layer is on, because Qt's own arrangement cannot express a list that is translucent *and*
+    // alternating: Base rows take their colour from the viewport's autofill, which is switched off over
+    // the layer, so without this one of the two row classes is left with nothing behind it. Off is
+    // Qt's own path, byte for byte, which is what keeps the layer-off rendering identical.)
+    void setTranslucentRows(bool translucent);
 
 signals:
     void itemMiddleClicked(const QModelIndex& index);
     void itemAltClicked(const QModelIndex& index);
 
 protected:
-    // (M5 Task 8b: the row fill, once per row. Qt fills the AlternateBase rows itself and leaves the
-    // Base rows to the viewport's autofill, so a translucent list can only be one of two things without
-    // this: the viewport filling every row, which makes alternate rows composite twice and run at
-    // alpha*alpha, or alternate rows filled and Base rows not filled at all. Filling here means every
-    // row is one fill at whatever alpha the palette carries, and the alternation is the theme's own two
-    // colours. An opaque palette is left entirely to Qt.)
+    // (M5 Task 8b: the row fill, once per row, unconditionally -- the alpha-255 case included. Qt fills
+    // the AlternateBase rows itself and leaves the Base rows to the viewport's autofill, so a list that
+    // is not running Qt's own opaque path has to be filled here or one of the two row classes is left
+    // with nothing behind it. One fill at whatever alpha the palette carries, and the alternation is
+    // the theme's own two colours.)
     void drawRow(QPainter* painter, const QStyleOptionViewItem& options,
         const QModelIndex& index) const override;
     void mousePressEvent(QMouseEvent* event) override;
@@ -38,4 +43,6 @@ private:
     // intercepted below, so the matching release/move/double-click must not fall
     // through to QTreeView's selection logic either.
     bool altPreviewPressed = false;
+    // (M5 Task 8b: see setTranslucentRows().)
+    bool translucentRows = false;
 };

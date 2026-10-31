@@ -104,6 +104,10 @@ public:
     // could only fill the space the list did not occupy, which is why the list needed a scrim of its
     // own and why the two could disagree; one veil covers both, so there is nothing left to disagree.)
     QWidget* backgroundVeil = nullptr;
+    // (M5 Task 8b: the strip above the list, back under the same key as the rows -- see
+    // applyBackgroundVeil(). It is the part of the centre pane the rows do not cover, so it is the one
+    // place a second fill is correct rather than a second scrim.)
+    QWidget* backgroundScrim = nullptr;
     QHash<QString, qint64> previewPositionCache;
     QList<QString> previewHistoryOrder;
     mutable QMutex saltSeedMutex;
@@ -357,6 +361,9 @@ private:
     // scrim any more -- it is the window's. The geometry follows centralwidget, and the layout that
     // sets that is a pass of its own, hence the event filter below.)
     void updateBackgroundVeil();
+    // (M5 Task 8b: the strip's scrim, sized to the space above the list and painted with the same
+    // palette the rows get, so one control covers the whole centre pane.)
+    void updateBackgroundScrim();
     // M5 Task 8: re-raises the three panes above the veil, so the veil is behind every widget in the
     // window and in front of the layer -- and above nothing else. The columns' own z-order is not a
     // stacking question: their QQuickWidget always composites on top, so `mascots_columns_z` is the

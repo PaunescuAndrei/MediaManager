@@ -1870,8 +1870,14 @@ bool MascotController::scrollDirectionReverses(MascotPanel panel) const
 	// therefore keeps its *sense* by keeping that order: TopToBottom on a horizontal band is the
 	// forward pass, BottomToTop the backward one (Ruling M3-4, logged once by applyConfig()).
 	const ScrollDirection direction = this->layoutFor(panel).scrollDirection;
-	return direction == ScrollDirection::RightToLeft
+	bool reverses = direction == ScrollDirection::RightToLeft
 		|| direction == ScrollDirection::BottomToTop;
+	// (M5 item 1: `mascots_pair_scroll` Opposite turns the right column against the left, so a mirrored pair
+	// travels outwards or inwards together. A sense flip only: the pan axis, the speed and the bands are the
+	// pair settings.)
+	if (panel == MascotPanel::Right && this->pairScrollOpposite)
+		reverses = !reverses;
+	return reverses;
 }
 
 bool MascotController::scrollDirectionIsVertical(MascotPanel panel) const

@@ -740,7 +740,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     // The existing group box is moved, not copied: adding it to this page's layout reparents it
     // off Appearance, so its controls and their wiring stay exactly as setupAppearancePage() left
     // them. Only the title changes, because its contents are no longer just "mascot settings".
-    this->ui.mascotsGroupBox->setTitle("Sources & Animation");
+    this->ui.mascotsGroupBox->setTitle("Sources && Animation");
     pageLayout->addWidget(this->ui.mascotsGroupBox);
 
     // Rows are all the same shape -- label, stretch, control -- so the three builders below keep
@@ -783,7 +783,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     };
 
     // --- Content & Layout (the columns' content) ---
-    QGroupBox* contentGroup = new QGroupBox("Content & Layout");
+    QGroupBox* contentGroup = new QGroupBox("Content && Layout");
     QVBoxLayout* contentLayout = new QVBoxLayout(contentGroup);
     contentLayout->setSpacing(4);
     mascotContentGroup = contentGroup;
@@ -876,7 +876,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     pageLayout->addWidget(playbackGroup);
 
     // --- Scroll & Stripes (the columns' moving modes) ---
-    QGroupBox* stripesGroup = new QGroupBox("Scroll & Stripes");
+    QGroupBox* stripesGroup = new QGroupBox("Scroll && Stripes");
     QVBoxLayout* stripesLayout = new QVBoxLayout(stripesGroup);
     stripesLayout->setSpacing(4);
     mascotStripesGroup = stripesGroup;

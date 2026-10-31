@@ -546,7 +546,11 @@ private:
 	// (M3 Task 5: applyMode() also calls it on every mode change, not only into `Static`, because
 	// the phase is reset there too and a new layout must not start from an offset measured on the
 	// old one. Its phase half is then a second write of the 0 applyMode() has just written.)
-	void resetScrollOffsets();
+	// (M4 Task 4: one panel at a time, named by the caller. The reset is a statement about *that*
+	// panel's pass -- applyMode() calls it for the panel whose own mode just changed -- so a
+	// background mode change no longer clears the columns' offsets or their phase, and a columns
+	// mode change no longer snaps the layer's pass back to its near end.)
+	void resetScrollOffsets(MascotPanel panel);
 	// Writes one MASCOT-SCROLL line, debug-gated exactly like logVideo(): an ordinary run pays
 	// nothing, and the gate (which runs with -debug) reads every line. A separate tag from
 	// MASCOT-VIDEO so the two families can be counted apart.
@@ -775,6 +779,13 @@ private:
 	// backgroundPlayers/backgroundCrossfades so bandCount() can derive the background's bands from
 	// it. A background with no player left gets none of these and draws nothing (the zero-player
 	// line). One MASCOT-BG line per change of the tuple, never per Apply.
+	// (M4 Task 4: in the panning background modes this task adds, the subtraction is what the
+	// pair's own allocation actually spends. A pair that cannot show video -- `mascots` off or an
+	// images-only setting, where `videoBandsFor()` answers 0 for it -- takes none of the budget
+	// here, so the layer is offered all of `mascots_max_decoders` and the background's `Stripes`
+	// count is funded from it. A `Static` background keeps Task 2's subtraction exactly, because
+	// its acceptance is byte-identity. The pair's allocation and lines are untouched: this is only
+	// the subtraction.)
 	void applyBackgroundBudget();
 	// M4 Task 2: the background's band count, derived from the players it was given: 0 with no
 	// player, 1 for `Static`/`Scroll` with one, and the funded prefix

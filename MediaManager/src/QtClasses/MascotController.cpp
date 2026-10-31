@@ -505,7 +505,11 @@ void MascotController::applyConfig()
 	// there is no seam at all. Such a commit would then fire against a cadence that no longer
 	// asked for it, so whatever the old configuration queued is dropped here. The new
 	// configuration queues its own on the next beat.)
-	for (PanelState* state : { &this->leftState, &this->rightState }) {
+	// (M4 Task 4: the background's bands queue the same commits -- onBeat() schedules them -- and
+	// the same Apply can leave the layer in `Static`, where no seam will ever run. The layer is in
+	// this walk too, so a change parked under the previous configuration cannot fire at a later
+	// background seam.)
+	for (PanelState* state : { &this->leftState, &this->rightState, &this->backgroundState }) {
 		for (auto& owned : state->bands) {
 			if (owned)
 				owned->discardWrapCommit();
@@ -1179,15 +1183,22 @@ void MascotController::applyMode()
 		// measured on the previous one -- and a band entering a vertically panning layout cannot
 		// keep an offset that was written on the horizontal axis, which no tick would clear while
 		// the speed is 0. `Static` is the case the original sentence describes and is unchanged.)
-		this->resetScrollOffsets();
+		// (M4 Task 4: the pair's two panels, named one at a time. resetScrollOffsets() resets one
+		// panel now, so a columns mode change cannot take the layer's offsets or its phase with it
+		// -- the background resets its own pass below, when its own mode is the one that moved.)
+		this->resetScrollOffsets(MascotPanel::Left);
+		this->resetScrollOffsets(MascotPanel::Right);
 	}
 	// M4 Task 2: the background's mode is its own, so it resets its own pass when *its* mode
 	// changes -- the pair's phase above is not touched by a background relayout, and the reset
 	// below reaches the layer's bands as well because resetScrollOffsets() is a per-panel walk.
+	// (M4 Task 4: the reset below names the layer instead of walking every panel, which is what
+	// makes the sentence above true in the other direction too -- a background relayout no longer
+	// clears the columns' offsets or their phase.)
 	if (backgroundModeChanged) {
 		this->backgroundState.scrollPhase = 0.0;
 		this->backgroundState.scrollZeroTravelLogged.fill(false);
-		this->resetScrollOffsets();
+		this->resetScrollOffsets(MascotPanel::Background);
 	}
 	// M3 Task 5: an orientation change keeps the phase -- the fraction is axis-agnostic, so the
 	// bands keep their place in the pass instead of snapping to the near end (Review Focus 8's
@@ -1735,15 +1746,17 @@ bool MascotController::scrollReversed(MascotPanel panel, const MascotBand& band)
 		&& (band.slotIndex() % 2) != 0;
 }
 
-void MascotController::resetScrollOffsets()
+void MascotController::resetScrollOffsets(MascotPanel panel)
 {
 	// M4 Task 2: every panel that has a surface, the background included -- the offset it writes
 	// is a per-panel one, so a layout change on any of them takes the pan off that panel's slots.
-	for (MascotPanel panel : { MascotPanel::Left, MascotPanel::Right, MascotPanel::Background }) {
-		PanelState& state = this->stateFor(panel);
-		MascotSurface* surface = state.surface.data();
-		if (!surface)
-			continue;
+	// (M4 Task 4: "every panel" is the caller's panel now. applyMode() calls this once for each
+	// panel whose own mode changed, so the walk below is that panel's bands and the phase reset
+	// below is that panel's phase -- the rule the M3 Task 5 note gives, without reaching across to
+	// a panel whose layout did not move.)
+	PanelState& state = this->stateFor(panel);
+	MascotSurface* surface = state.surface.data();
+	if (surface) {
 		for (auto& owned : state.bands) {
 			MascotBand* band = owned.get();
 			if (!band || band->scrollOffset() == 0.0)
@@ -1760,8 +1773,7 @@ void MascotController::resetScrollOffsets()
 	// (M3 Task 5: the same reasoning covers a change *between* two panning layouts -- a `Scroll`
 	// band's horizontal position means nothing on a column of a vertical `Stripes` panel -- which
 	// is why applyMode() now calls this on every mode change and not only into `Static`.)
-	for (PanelState* state : { &this->leftState, &this->rightState, &this->backgroundState })
-		state->scrollPhase = 0.0;
+	state.scrollPhase = 0.0;
 }
 
 void MascotController::onScrollTick()
@@ -4117,6 +4129,13 @@ void MascotController::applyBackgroundBudget()
 	// M4 Task 2: columns first, background last. The pair keeps exactly the entitlement
 	// applyDecoderBudget() and applyBandBudget() above gave it -- neither is recomputed here, and
 	// neither's line changes -- so the layer is spent what is left of `mascots_max_decoders`.
+	// (M4 Task 4: in the panning background modes this task adds, the subtraction is the players
+	// the pair actually takes. With `mascots` off or an images-only setting `videoBandsFor()`
+	// answers 0 for the pair, so it builds no players at all and reserving its share spent the
+	// layer's part of the budget on nobody: with the columns off all of the decoders are the
+	// background's, which is what lets a `Stripes` layer draw its configured count of bands. A
+	// `Static` background keeps Task 2's subtraction exactly, because its acceptance is
+	// byte-identity at every budget; the pair's own allocation and lines are untouched either way.)
 	int pairPlayers = this->leftBandPlayers + this->rightBandPlayers;
 	if (this->columnsLayout.mode == MascotMode::Static) {
 		// A `Static` pair has no per-band allocation to read: each panel's one band owns two
@@ -4125,6 +4144,11 @@ void MascotController::applyBackgroundBudget()
 		const int perPanel = this->videoMode == VideoMode::Crossfade ? PLAYERS_PER_PANEL
 			: (this->videoMode == VideoMode::SinglePlayer ? 1 : 0);
 		pairPlayers = perPanel * VIDEO_PANEL_COUNT;
+	}
+	if (this->backgroundLayout.mode != MascotMode::Static
+		&& !this->mediaMayBeVideo(MascotPanel::Left)
+		&& !this->mediaMayBeVideo(MascotPanel::Right)) {
+		pairPlayers = 0;
 	}
 	if (!this->backgroundEnabled) {
 		// A layer that is off owns nothing and says nothing. The latches are reset with it, so a

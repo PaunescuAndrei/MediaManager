@@ -10,6 +10,7 @@
 #include "ini.h"
 #include "definitions.h"
 #include "utils.h"
+#include "stylesQt.h"
 #include "WatchHistory.h"
 #include <QHeaderView>
 #include "addWatchedDialog.h"
@@ -610,6 +611,29 @@ void MainWindow::initStyleSheets() {
     this->ui.currentVideoScrollArea->setStyleSheet("QScrollBar:horizontal {height:0px;} QScrollBar:vertical {height:0px;}");
     this->ui.videosWidget->setStyleSheet(get_stylesheet("videoswidget"));
     this->ui.shoko_button->setStyleSheet(QString::fromUtf8("padding: 0; border: 0; margin:0;"));
+    // M4 Task 3: changePalette() replaces the whole application palette before calling this, so
+    // the list's alpha palette is re-derived here; with `mascots_background` off this restores
+    // the inherited palette instead of leaving a stale translucent one behind after a toggle.
+    this->applyListTransparency();
+}
+
+void MainWindow::applyListTransparency() {
+    if (!this->App)
+        return;
+    const QPalette appPalette = this->App->palette();
+    // A config-less caller has no key to read, so it gets the off state: the list is left at
+    // (or returned to) the palette every widget inherits, which is byte-identical to today.
+    const bool backgroundEnabled = this->App->config
+        && this->App->config->get_bool("mascots_background");
+    const QPalette listPalette = backgroundEnabled
+        ? get_background_row_palette(appPalette)
+        : appPalette;
+    // The view and its viewport: the viewport paints the rows' backdrop and the rows paint their
+    // own fill on top, so both have to carry the alpha. Nothing else -- no stylesheet, no
+    // alternatingRowColors, no delegates -- is touched, and Base/AlternateBase are the only roles
+    // that differ.
+    this->ui.videosWidget->setPalette(listPalette);
+    this->ui.videosWidget->viewport()->setPalette(listPalette);
 }
 
 void MainWindow::initRatingIcons() {

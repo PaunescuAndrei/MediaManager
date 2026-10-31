@@ -31,6 +31,18 @@ QPalette get_palette(std::string palette) {
     return paletteQt;
 }
 
+QPalette get_background_row_palette(const QPalette& appPalette) {
+    QPalette rowPalette = appPalette;
+    // Base and AlternateBase only, and the same alpha for both: the row colours' hue and their
+    // 18/255 separation are what make the alternation readable, so neither is allowed to move.
+    for (QPalette::ColorRole role : { QPalette::Base, QPalette::AlternateBase }) {
+        QColor colour = rowPalette.color(role);
+        colour.setAlpha(BACKGROUND_ROW_ALPHA);
+        rowPalette.setColor(role, colour);
+    }
+    return rowPalette;
+}
+
 QString get_stylesheet(QString stylesheet) {
     QString ss = QString();
     if (stylesheet == "spinbox") {

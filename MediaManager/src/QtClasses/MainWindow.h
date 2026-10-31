@@ -327,6 +327,11 @@ public:
     bool event(QEvent* e) override;
     void playSpecialSoundEffect(bool force_play = false);
     ~MainWindow();
+private:
+    // M4 Task 3: gives the list's viewport and row fills the background layer's alpha, or puts
+    // them back to the inherited app palette when the layer is off. Called from
+    // initStyleSheets(), which is also what changePalette() runs after replacing the app palette.
+    void applyListTransparency();
 signals:
     void fileDropped(QStringList files, QWidget* widget = nullptr);
 public slots:

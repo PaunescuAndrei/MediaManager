@@ -2506,15 +2506,21 @@ void MascotController::showDroppedImage(MascotSide side, const QString& path)
 
 bool MascotController::eventFilter(QObject* watched, QEvent* event)
 {
-	if (event->type() == QEvent::Resize) {
+	if (event->type() == QEvent::Resize || event->type() == QEvent::Move) {
 		// The sheet is in no layout, so nothing sizes it but updateLayout(), and its geometry comes from the
-		// host's rectangle -- which is final only when the host's own resize event arrives, after
-		// MainWindow::event() has already asked for a layout. Watching the host is therefore the second pass
-		// the panels get. (M6: the columns' own surfaces used to supply this for their halves; those surfaces
-		// are slots in the sheet now, and all three panels' rectangles are derived from their hosts, so one
-		// watched widget answers for all of them.)
-		if (this->sheet && watched == this->backgroundHost.data())
+		// window-sized host -- which is final only when that host's own resize event arrives, after
+		// MainWindow::event() has already asked for a layout.
+		// (M6: all three hosts are watched, and a move counts as much as a resize. A band's rectangle is its
+		// host's *position* and size, and the layout sets both after the central widget has resized: watching
+		// that one widget re-derived every rectangle from the previous layout pass and nothing asked again --
+		// measured as mascots left at the old offsets after a maximize, then a restore. A host's own Move is
+		// the settled answer.)
+		if (!this->sheet)
+			return QObject::eventFilter(watched, event);
+		if (watched == this->leftHost.data() || watched == this->rightHost.data()
+			|| watched == this->backgroundHost.data()) {
 			this->updateLayout();
+		}
 	}
 	// M2: the pause rule (amendment §7.13). The window's own events are the only honest source
 	// for "the user cannot see the panel": a minimized window is still visible in Qt's sense,
@@ -2667,7 +2673,6 @@ void MascotController::createSheet()
 			return;
 		this->showDroppedImage(side, path);
 	});
-	host->installEventFilter(this);
 	// M6: the hosts stop being widgets and become geometry. They sit above the sheet in the widget stack --
 	// they are in the layout, it is lowered beneath them -- so a click or a drop over a column would be
 	// delivered to the host, which does nothing with it, and never reach the slot that owns those pixels.
@@ -2692,6 +2697,15 @@ void MascotController::createSheet()
 	if (this->backgroundEnabled)
 		this->attachPanel(this->backgroundState, MascotPanel::Background);
 	this->applySheetSlots();
+	// M6: all three hosts are watched, not only the window-sized one. A band's rectangle is derived from
+	// its host's position and size, and the layout that sets those runs *after* the central widget has
+	// resized -- so watching the central widget alone re-derives the rectangles from the previous pass and
+	// nothing asks again. That is what made a maximize-then-restore leave the mascots at the old offsets.
+	// The hosts' own Move/Resize events are the settled answer, which is the second pass the columns' own
+	// surfaces used to provide.
+	for (QWidget* watched : { this->leftHost.data(), this->rightHost.data(), host })
+		if (watched)
+			watched->installEventFilter(this);
 	// Geometry, stacking order and visibility, in that order. `lower()` puts the sheet beneath the
 	// layout's widgets -- it is the window's backmost child -- and a child created after its parent was
 	// shown is created hidden, so show() is what makes it appear on the very first enable.
@@ -2768,8 +2782,10 @@ void MascotController::destroySheet()
 {
 	if (!this->sheet)
 		return;
-	if (QWidget* host = this->backgroundHost.data())
-		host->removeEventFilter(this);
+	// The three hosts are what this class watched for a layout change; the filters go with the sheet.
+	for (QWidget* watched : { this->leftHost.data(), this->rightHost.data(), this->backgroundHost.data() })
+		if (watched)
+			watched->removeEventFilter(this);
 	// Every panel's half, in the panel order: a band's players draw into QVideoSinks that belong to its
 	// slot's QML delegate, so they come down while those delegates still exist, then the slots and the
 	// pins are cleared, and only then does the scene go.

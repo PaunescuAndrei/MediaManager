@@ -983,10 +983,17 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     stripesLayout->setSpacing(4);
     mascotStripesGroup = stripesGroup;
 
+    mascotScrollEnabledCheckBox = new QCheckBox("Pan the bands");
+    mascotScrollEnabledCheckBox->setChecked(config->get_bool(QStringLiteral("mascots_scroll_enabled")));
+    mascotScrollEnabledCheckBox->setToolTip(
+        "Off holds every band at its framing, whatever the speed says; the fill mode still applies as chosen. A "
+        "band only travels when its picture has room on the direction below.");
+    stripesLayout->addWidget(mascotScrollEnabledCheckBox);
+
     mascotScrollSpeedSpinBox = makeSpinBox(0, 2000, 5,
         config->get(QStringLiteral("mascots_scroll_speed")).toInt());
     addRow(stripesLayout, "Scroll speed (px/s):",
-        "Pixels per second a panning band travels, in Scroll and Stripes alike. 0 stands still.",
+        "Pixels per second a panning band travels, in Scroll and Stripes alike.",
         mascotScrollSpeedSpinBox);
 
     mascotScrollDirectionCombo = makeComboBox({ QStringLiteral("LeftToRight"), QStringLiteral("RightToLeft"),
@@ -1288,6 +1295,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     live(mascotPairScrollCombo, QStringLiteral("mascots_pair_scroll"));
     live(mascotPairFlipCheckBox, QStringLiteral("mascots_pair_flip"));
     live(mascotMaxDecodersSpinBox, QStringLiteral("mascots_max_decoders"));
+    live(mascotScrollEnabledCheckBox, QStringLiteral("mascots_scroll_enabled"));
     live(mascotScrollSpeedSpinBox, QStringLiteral("mascots_scroll_speed"));
     live(mascotScrollDirectionCombo, QStringLiteral("mascots_scroll_direction"));
     live(mascotScrollPingpongCheckBox, QStringLiteral("mascots_scroll_pingpong"));
@@ -1374,6 +1382,7 @@ void SettingsDialog::syncMascotConfig(const QString& changedKey)
     config->set("mascots_color_theme", this->ui.mascotsExtractColor->isChecked() ? "True" : "False");
     config->set("mascots_center_content", this->ui.mascotsCenterContent->isChecked() ? "True" : "False");
     config->set("mascots_max_decoders", QString::number(mascotMaxDecodersSpinBox->value()));
+    config->set("mascots_scroll_enabled", mascotScrollEnabledCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_scroll_speed", QString::number(mascotScrollSpeedSpinBox->value()));
     config->set("mascots_scroll_direction", mascotScrollDirectionCombo->currentText());
     config->set("mascots_scroll_pingpong", mascotScrollPingpongCheckBox->isChecked() ? "True" : "False");
@@ -1474,9 +1483,11 @@ void SettingsDialog::updateMascotControlStates()
     // scroll tick takes them from the panel's layout whatever the mode); only the rows that name one mode's shape --
     // marquee cells here, bands there -- belong to that mode alone.
     const bool panningColumns = scrollColumns || stripesColumns;
-    mascotScrollSpeedSpinBox->setEnabled(panningColumns);
-    mascotScrollDirectionCombo->setEnabled(panningColumns);
-    mascotScrollPingpongCheckBox->setEnabled(panningColumns);
+    const bool panEnabled = panningColumns && mascotScrollEnabledCheckBox->isChecked();
+    mascotScrollEnabledCheckBox->setEnabled(panningColumns);
+    mascotScrollSpeedSpinBox->setEnabled(panEnabled);
+    mascotScrollDirectionCombo->setEnabled(panEnabled);
+    mascotScrollPingpongCheckBox->setEnabled(panEnabled);
     mascotStripesLeftSpinBox->setEnabled(stripesColumns);
     mascotStripesRightSpinBox->setEnabled(stripesColumns);
     mascotStripesOrientationCombo->setEnabled(stripesColumns);

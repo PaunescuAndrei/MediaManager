@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "MascotMedia.h"
 #include "MascotMediaSource.h"
 #include "MascotPrefetcher.h"
@@ -65,8 +65,6 @@ public:
 	void stopScrollDriver();
 	void onScrollTick();
 	double scrollTravel(MascotPanel panel, const MascotBand& band) const;
-	// The axis a panel travels on: `CoverScroll` follows the Direction, everything else the axis its mode implies.
-	bool scrollPansVertically(MascotPanel panel) const;
 	static ScrollDirection scrollDirectionFromString(const QString& value, bool* ok);
 
 	void nextImages(bool forcedMirror);
@@ -173,7 +171,6 @@ private:
 	bool panelsVisible() const;
 	bool anySurfaceVisible() const;
 	bool panModeActive() const;
-	bool scrollPanIsVertical(MascotPanel panel) const;
 	bool scrollDirectionReverses(MascotPanel panel) const;
 	// A direction naming the other axis keeps its sense and yields the axis.
 	bool scrollDirectionIsVertical(MascotPanel panel) const;
@@ -321,7 +318,6 @@ private:
 	MascotMode loggedBandBudgetMode = MascotMode::Static;
 
 	QString scrollDirectionText = QStringLiteral("LeftToRight");
-	QString loggedScrollDirection;
 	bool warnedUnsupportedScrollDirection = false;
 	QTimer* scrollTimer = nullptr;
 	QElapsedTimer scrollClock;

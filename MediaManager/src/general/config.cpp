@@ -111,6 +111,7 @@ void Config::init_defaults() {
 		{"mascots_crossfade_ms", "600"},
 		{"mascots_max_decoders", "6"},
 		{"mascots_scroll_speed", "40"},
+		{"mascots_scroll_enabled", "True"},
 		{"mascots_scroll_direction", "LeftToRight"},
 		{"mascots_scroll_pingpong", "False"},
 		{"mascots_stripes_left", "2"},

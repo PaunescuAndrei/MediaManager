@@ -185,10 +185,6 @@ namespace {
 		return reverse ? QStringLiteral("right to left") : QStringLiteral("left to right");
 	}
 
-	QString scrollAxisLabel(bool vertical)
-	{
-		return vertical ? QStringLiteral("vertical") : QStringLiteral("horizontal");
-	}
 
 	QString modeLabel(MascotMode mode)
 	{
@@ -426,7 +422,11 @@ void MascotController::applyConfig()
 			<< "is not one of Horizontal or Vertical; using Horizontal.";
 	}
 
-	this->columnsLayout.scrollSpeed = clampedConfigInt(config, QStringLiteral("mascots_scroll_speed"), 40, 0, MAX_SCROLL_SPEED);
+	// The pan's own switch: off holds every band at its framing, whatever the speed row says. Kept as its own key so
+	// "do not pan" is a control of its own rather than the speed's zero.
+	this->columnsLayout.scrollSpeed = config->get_bool(QStringLiteral("mascots_scroll_enabled"))
+		? clampedConfigInt(config, QStringLiteral("mascots_scroll_speed"), 40, 0, MAX_SCROLL_SPEED)
+		: 0;
 	this->scrollDirectionText = config->get(QStringLiteral("mascots_scroll_direction"));
 	bool directionOk = false;
 	const ScrollDirection parsedDirection =
@@ -442,17 +442,6 @@ void MascotController::applyConfig()
 			<< "is not one of LeftToRight, RightToLeft, TopToBottom or BottomToTop; using LeftToRight.";
 	}
 
-	if (this->columnsLayout.mode != MascotMode::Static
-		&& this->scrollDirectionIsVertical(MascotPanel::Left) != this->scrollPanIsVertical(MascotPanel::Left)
-		&& this->loggedScrollDirection != this->scrollDirectionText) {
-		this->loggedScrollDirection = this->scrollDirectionText;
-		this->logScroll(QStringLiteral("mascots_scroll_direction=\"%1\" names a %2 direction but %3 pans %4; taking the mode's axis and travelling %5")
-			.arg(this->scrollDirectionText,
-				scrollAxisLabel(this->scrollDirectionIsVertical(MascotPanel::Left)),
-				modeLabel(this->columnsLayout.mode),
-				scrollAxisLabel(this->scrollPanIsVertical(MascotPanel::Left)),
-				scrollSenseLabel(this->scrollDirectionReverses(MascotPanel::Left))));
-	}
 
 	this->columnsEnabled = config->get_bool(QStringLiteral("mascots"));
 	this->backgroundEnabled = config->get_bool(QStringLiteral("mascots_background"));
@@ -524,6 +513,12 @@ void MascotController::applyConfig()
 	// After applyMode(), which settled the band counts, and before ensureVideoSlots() creates the players.
 	this->applyBandBudget();
 	this->applyBackgroundBudget();
+	// A pan switched off holds the offset it stopped at, which would leave the picture sitting off-centre for ever;
+	// clearing it makes "speed 0" mean the framing the fill mode describes, centred.
+	for (MascotPanel panel : { MascotPanel::Left, MascotPanel::Right, MascotPanel::Background }) {
+		if (this->layoutFor(panel).mode != MascotMode::Static && this->layoutFor(panel).scrollSpeed <= 0)
+			this->resetScrollOffsets(panel);
+	}
 	this->syncSheet();
 	if (this->backgroundState.surface) {
 		this->syncBands(this->backgroundState, MascotPanel::Background);
@@ -749,7 +744,7 @@ QVector<QRectF> MascotController::bandRects(MascotPanel panel) const
 	const QRectF frame(this->panelFrame(panel));
 	if (this->backgroundMarqueeActive(panel)) {
 		const int count = this->bandCount(panel);
-		const bool vertical = this->scrollPanIsVertical(panel);
+		const bool vertical = this->scrollDirectionIsVertical(panel);
 		QVector<QRectF> rects;
 		rects.reserve(count);
 		for (int i = 0; i < count; ++i)
@@ -1000,7 +995,7 @@ double MascotController::scrollTravel(MascotPanel panel, const MascotBand& band)
 	if (fill == MascotSurface::FillMode::Cover || fill == MascotSurface::FillMode::Crop
 		|| fill == MascotSurface::FillMode::Fit || fill == MascotSurface::FillMode::Stretch)
 		return 0.0;
-	const bool vertical = this->scrollPansVertically(panel);
+	const bool vertical = this->scrollDirectionIsVertical(panel);
 	const QSizeF content = surface->slotContentSize(band.slotIndex());
 	const QRectF rect = band.rect();
 	const double contentExtent = vertical ? content.height() : content.width();
@@ -1009,14 +1004,7 @@ double MascotController::scrollTravel(MascotPanel panel, const MascotBand& band)
 	return travel > 0.0 ? travel : 0.0;
 }
 
-bool MascotController::scrollPansVertically(MascotPanel panel) const
-{
-	// `CoverScroll` travels along the axis the Direction names, so a band never drifts sideways because of one clip's
-	// aspect; the normalised modes are the ones whose framing is built on a single axis, so that axis is theirs.
-	if (this->effectiveFillMode(panel) == MascotSurface::FillMode::CoverScroll)
-		return this->scrollDirectionIsVertical(panel);
-	return this->scrollPanIsVertical(panel);
-}
+
 
 void MascotController::startScrollDriver()
 {
@@ -1111,16 +1099,6 @@ bool MascotController::panModeActive() const
 	return false;
 }
 
-bool MascotController::scrollPanIsVertical(MascotPanel panel) const
-{
-	// `Scroll` pans horizontally by definition; a vertical `Stripes` pan runs down its columns.
-	const PanelLayout& layout = this->layoutFor(panel);
-	if (panel == MascotPanel::Background
-		&& (layout.mode == MascotMode::Scroll || layout.mode == MascotMode::Stripes))
-		return layout.orientation == StripesOrientation::Vertical;
-	return layout.mode == MascotMode::Stripes
-		&& layout.orientation == StripesOrientation::Vertical;
-}
 
 bool MascotController::scrollDirectionReverses(MascotPanel panel) const
 {
@@ -1201,7 +1179,7 @@ void MascotController::onScrollTick()
 		const PanelLayout& layout = this->layoutFor(panel);
 		if (layout.mode == MascotMode::Static)
 			continue;
-		const bool vertical = this->scrollPanIsVertical(panel);
+		const bool vertical = this->scrollDirectionIsVertical(panel);
 		const bool reverse = this->scrollDirectionReverses(panel);
 		const bool pingpong = layout.scrollPingpong;
 		PanelState& state = this->stateFor(panel);
@@ -1307,7 +1285,7 @@ void MascotController::onScrollTick()
 			if (offset != band->scrollOffset()) {
 				// The axis is the panel's for the same reason the travel is: `CoverScroll` follows the Direction, so
 				// no band can pick an axis of its own from its picture.
-				const bool vertical = this->scrollPansVertically(panel);
+				const bool vertical = this->scrollDirectionIsVertical(panel);
 				surface->setSlotScrollOffset(band->slotIndex(),
 					vertical ? 0.0 : offset, vertical ? offset : 0.0);
 				band->setScrollOffset(offset);
@@ -3248,7 +3226,7 @@ bool MascotController::bandReachesSeam(MascotPanel panel, const MascotBand& band
 		if (!marqueeOwner.surface)
 			return false;
 		const QRectF frame(this->panelFrame(panel));
-		const double axisLen = this->scrollPanIsVertical(panel) ? frame.height() : frame.width();
+		const double axisLen = this->scrollDirectionIsVertical(panel) ? frame.height() : frame.width();
 		return axisLen > 0.0;
 	}
 	const double travel = this->scrollTravel(panel, band);

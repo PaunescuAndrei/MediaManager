@@ -116,6 +116,7 @@ public:
     QCheckBox* mascotPreloadCheckBox = nullptr;
     QCheckBox* mascotPauseUnfocusedCheckBox = nullptr;
     QSpinBox* mascotMaxDecodersSpinBox = nullptr;
+    QCheckBox* mascotScrollEnabledCheckBox = nullptr;
     QSpinBox* mascotScrollSpeedSpinBox = nullptr;
     QComboBox* mascotScrollDirectionCombo = nullptr;
     QCheckBox* mascotScrollPingpongCheckBox = nullptr;

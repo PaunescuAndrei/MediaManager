@@ -868,11 +868,16 @@ void MainWindow::stackBackgroundVeil() {
     // The three panes are re-raised on every call, so the veil's place is decided here and nowhere
     // else. The background layer lowers itself to the bottom when it is created and never moves
     // again, so anything the veil does above that bottom is above the layer.
-    // (M5 Task 8: and that is the whole rule now. The columns cannot be put under the veil by stacking
-    // them -- their QQuickWidget is created with Qt::WA_AlwaysStackOnTop, which the widget stack does
-    // not override, and the measurement says so: two runs that differed only in the key were
-    // pixel-identical. The z key is the controller's, and it dims the columns through their own
-    // backdrop and opacity; see MascotController::applyConfig().)
+    // (M5 Task 8: and that is the whole rule for "mascots above the veil". The columns cannot be put
+    // under the veil by *stacking them* -- their QQuickWidget is created with Qt::WA_AlwaysStackOnTop,
+    // which the widget stack does not override, and the measurement says so: two runs that differed only
+    // in the key were pixel-identical.)
+    // (M5 fix attempt, measured and reverted: the attribute is only honoured by widgets that render through
+    // a graphics API, so giving the *veil* WA_AlwaysStackOnTop and raising it after the columns does not
+    // move it -- the mascot pixel read 118,85,85 in both modes, and the list centre 154,91,27 in both, i.e.
+    // nothing moved at all. True three-layer compositing therefore needs the video, the mascots and the veil
+    // in one quick scene; see the note on refreshColumnsVeil() in the controller for the approximation that
+    // ships until then.)
     this->ui.mascotLeftHost->raise();
     this->ui.mascotRightHost->raise();
     // Last, so the centre pane is above both columns whatever order the form built them in. The three

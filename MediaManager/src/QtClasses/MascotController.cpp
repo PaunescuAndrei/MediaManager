@@ -2671,31 +2671,27 @@ void MascotController::refreshColumnsVeil()
 {
 	if (!this->App || !this->App->config)
 		return;
-	// (M5 review: the fallback follows the shipped default (0). It used to be 0.85 in three places with
-	// three different spellings, which meant the "columns below" fade and the veil could disagree by a
-	// step, and an old config with no line for the key came up dimmed against the new default's look.)
+	// (M5 fix, third attempt -- and the honest state of this until a real fix: "below the veil" is an
+	// approximation, because the columns are QQuickWidgets carrying Qt::WA_AlwaysStackOnTop and no sibling
+	// widget can be painted above them. Two measurements say so: runs differing only in the key used to be
+	// pixel-identical when the mode stacked anything, and giving the veil the same attribute changed nothing
+	// either (mascot pixel 118,85,85 in both modes). Real three-layer order -- video, mascots, veil -- needs
+	// all three in one quick scene.
+	// What ships: the content fades to what the veil would have left of it and the column's own background
+	// stays transparent, so the layer shows through the column. That is right for the background and an
+	// approximation for the mascot itself: the video bleeds through it by veil^2. The alternative that was
+	// tried -- an opaque window-coloured backdrop inside the column -- got the mascot right and covered the
+	// layer, which is the patch the user rejected first.)
 	const double veilOpacity = std::clamp(
 		this->App->config->get_double(QStringLiteral("mascots_background_opacity"), 0.0), 0.0, 1.0);
-	const bool belowByKey = this->App->config->get(QStringLiteral("mascots_columns_z"))
-		.compare(QStringLiteral("Below"), Qt::CaseInsensitive) == 0
-		|| this->App->config->get(QStringLiteral("mascots_columns_z"))
-		.compare(QStringLiteral("Below the veil"), Qt::CaseInsensitive) == 0;
-	const bool above = !belowByKey;
-	// With the layer off there is no veil to be under, so the pair keeps its ordinary drawing whatever
-	// the key says.
-	const bool veiled = this->backgroundEnabled && !above;
+	const QString z = this->App->config->get(QStringLiteral("mascots_columns_z"));
+	const bool below = z.compare(QStringLiteral("Below"), Qt::CaseInsensitive) == 0
+		|| z.compare(QStringLiteral("Below the veil"), Qt::CaseInsensitive) == 0;
+	const bool veiled = this->backgroundEnabled && below;
 	const QColor colour = this->App->palette().color(QPalette::Window);
 	for (PanelState* state : { &this->leftState, &this->rightState }) {
 		if (!state->surface)
 			continue;
-		// (M5 fix, user report: "if set to below the mascots do get behind the veil but they suddenly get an
-		// opaque background that covers the background video". The backdrop was painting the window's colour
-		// *inside* the column's rectangle, and that rectangle is what covered the layer. The columns cannot
-		// be stacked under the veil at all -- their QQuickWidget carries WA_AlwaysStackOnTop -- so "below" is
-		// a simulation, and the opaque patch was the wrong half of it: the widget is already translucent, so
-		// its empty pixels composite the veiled layer through, and fading the content is all that is needed.
-		// With the backdrop off, "below" shows the layer through the column and the mascots dimmed over it --
-		// the look the option promises -- instead of a flat rectangle.)
 		state->surface->setBackdrop(colour, false);
 		state->surface->setSurfaceOpacity(veiled ? (1.0 - veilOpacity) : 1.0);
 	}

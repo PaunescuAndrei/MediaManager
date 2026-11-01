@@ -50,7 +50,9 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 	this->logger = new Logger(this,512);
 	qMainApp->logger->log("Application Starting.", "INFO");
 	this->ErrorDialog = new QErrorMessage();
-	this->config = new Config("config.ini");
+	// Next to the executable, not the working directory: launched from Explorer, a shortcut or the
+	// debugger the working directory differs, and a relative name silently picks a different file.
+	this->config = new Config(QCoreApplication::applicationDirPath() + "/config.ini");
 
 	if (this->config->get_bool("single_instance")) {
 		this->startSingleInstanceServer(QString::fromStdString(utils::getAppId(VERSION_TEXT)));

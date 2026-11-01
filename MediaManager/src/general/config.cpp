@@ -1,4 +1,4 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 #include "config.h"
 #include <QtGlobal>
 #include "utils.h"
@@ -111,7 +111,7 @@ void Config::init_defaults() {
 		{"mascots_crossfade_ms", "600"},
 		{"mascots_max_decoders", "6"},
 		{"mascots_scroll_speed", "40"},
-		{"mascots_scroll_enabled", "True"},
+		{"mascots_pan", "False"},
 		{"mascots_scroll_direction", "LeftToRight"},
 		{"mascots_scroll_pingpong", "False"},
 		{"mascots_stripes_left", "2"},
@@ -131,6 +131,7 @@ void Config::init_defaults() {
 		{"mascots_background_stripes", "3"},
 		{"mascots_background_stripes_orientation", "Horizontal"},
 		{"mascots_background_stripes_alternate", "True"},
+		{"mascots_background_pan", "False"},
 		{"mascots_background_scroll_speed", "50"},
 		{"mascots_background_scroll_direction", "LeftToRight"},
 		{"mascots_background_scroll_pingpong", "False"},

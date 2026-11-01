@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <QDialog>
 #include <QHash>
 #include "ui_SettingsDialog.h"
@@ -116,7 +116,8 @@ public:
     QCheckBox* mascotPreloadCheckBox = nullptr;
     QCheckBox* mascotPauseUnfocusedCheckBox = nullptr;
     QSpinBox* mascotMaxDecodersSpinBox = nullptr;
-    QCheckBox* mascotScrollEnabledCheckBox = nullptr;
+    QCheckBox* mascotPanCheckBox = nullptr;
+    QCheckBox* mascotBackgroundPanCheckBox = nullptr;
     QSpinBox* mascotScrollSpeedSpinBox = nullptr;
     QComboBox* mascotScrollDirectionCombo = nullptr;
     QCheckBox* mascotScrollPingpongCheckBox = nullptr;

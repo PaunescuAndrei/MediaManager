@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "MascotMedia.h"
 #include "MascotMediaSource.h"
 #include "MascotPrefetcher.h"
@@ -25,7 +25,7 @@ enum class MascotSide { Left, Right };
 // The only conversion from a side is panelOf(); there is no inverse, because the background belongs to no pair.
 enum class MascotPanel { Left, Right, Background };
 
-enum class MascotMode { Static, Scroll, Stripes };
+enum class MascotMode { Static, Stripes };
 
 enum class ScrollDirection { LeftToRight, RightToLeft, TopToBottom, BottomToTop };
 
@@ -97,6 +97,10 @@ private:
 		MascotSurface::FillMode fill = MascotSurface::FillMode::HeightFit;
 		MascotMode appliedMode = MascotMode::Static;
 		bool applied = false;
+		// Whether and where this panel's content travels. Independent of `mode`: one band can pan (the whole panel
+		// moving past) or several can, and `Scroll` is not a layout of its own.
+		bool pan = false;
+		bool appliedPan = false;
 		StripesOrientation orientation = StripesOrientation::Horizontal;
 		StripesOrientation appliedOrientation = StripesOrientation::Horizontal;
 		bool alternate = true;

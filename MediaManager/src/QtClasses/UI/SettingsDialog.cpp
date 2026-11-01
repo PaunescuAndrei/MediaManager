@@ -854,11 +854,11 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "from the decoder ceiling. The background layer is separate and always plays videos.",
         mascotMediaCombo);
 
-    mascotModeCombo = makeComboBox({ QStringLiteral("Static"), QStringLiteral("Scroll"), QStringLiteral("Stripes") },
+    mascotModeCombo = makeComboBox({ QStringLiteral("Static"), QStringLiteral("Stripes") },
         config->get(QStringLiteral("mascots_mode")));
     addRow(contentLayout, "Layout mode:",
-        "How the columns arrange their content: one still panel, one continuously scrolling band, "
-        "or several bands scrolling at once.", mascotModeCombo);
+        "How the columns arrange their content: one full-panel picture (Static) or several bands (Stripes). "
+        "Whether they travel is the pan switch below, for either shape.", mascotModeCombo);
 
     mascotFillCombo = makeComboBox({ QStringLiteral("Cover"), QStringLiteral("CoverScroll"), QStringLiteral("Crop"),
                                      QStringLiteral("Fit"), QStringLiteral("Stretch"), QStringLiteral("HeightFit"),
@@ -971,38 +971,36 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     mascotMaxDecodersSpinBox = makeSpinBox(0, 64, 1,
         config->get(QStringLiteral("mascots_max_decoders")).toInt());
     addRow(playbackLayout, "Decoder ceiling:",
-        "The hard ceiling on open video players. The moving modes spend one player per band (cells "
-        "in Scroll), Static spends two per panel for the crossfade, and whatever is left is the "
-        "background layer's. 0 means no players at all: images only.", mascotMaxDecodersSpinBox);
+        "The hard ceiling on open video players. A panning band spends one player per band, a crossfading one two, "
+        "and whatever is left is the background layer's. 0 means no players at all: images only.", mascotMaxDecodersSpinBox);
 
     pageLayout->addWidget(playbackGroup);
 
     // --- Scroll & Stripes (the columns' moving modes) ---
-    QGroupBox* stripesGroup = new QGroupBox("Scroll && Stripes");
+    QGroupBox* stripesGroup = new QGroupBox("Pan && Stripes");
     QVBoxLayout* stripesLayout = new QVBoxLayout(stripesGroup);
     stripesLayout->setSpacing(4);
     mascotStripesGroup = stripesGroup;
 
-    mascotScrollEnabledCheckBox = new QCheckBox("Pan the bands");
-    mascotScrollEnabledCheckBox->setChecked(config->get_bool(QStringLiteral("mascots_scroll_enabled")));
-    mascotScrollEnabledCheckBox->setToolTip(
+    mascotPanCheckBox = new QCheckBox("Pan the bands");
+    mascotPanCheckBox->setChecked(config->get_bool(QStringLiteral("mascots_pan")));
+    mascotPanCheckBox->setToolTip(
         "Off holds every band at its framing, whatever the speed says; the fill mode still applies as chosen. A "
         "band only travels when its picture has room on the direction below.");
-    stripesLayout->addWidget(mascotScrollEnabledCheckBox);
+    stripesLayout->addWidget(mascotPanCheckBox);
 
     mascotScrollSpeedSpinBox = makeSpinBox(0, 2000, 5,
         config->get(QStringLiteral("mascots_scroll_speed")).toInt());
     addRow(stripesLayout, "Scroll speed (px/s):",
-        "Pixels per second a panning band travels, in Scroll and Stripes alike.",
+        "Pixels per second a panning band travels, while the pan is on.",
         mascotScrollSpeedSpinBox);
 
     mascotScrollDirectionCombo = makeComboBox({ QStringLiteral("LeftToRight"), QStringLiteral("RightToLeft"),
                                                QStringLiteral("TopToBottom"), QStringLiteral("BottomToTop") },
         config->get(QStringLiteral("mascots_scroll_direction")));
     addRow(stripesLayout, "Direction:",
-        "The direction a scrolling band travels. If the axis disagrees with the mode's pan axis, "
-        "the band takes the mode's axis and keeps the sense you picked.", mascotScrollDirectionCombo);
-
+        "The axis a panning band travels on, and the sense it takes.",
+        mascotScrollDirectionCombo);
     mascotScrollPingpongCheckBox = new QCheckBox("Reverse at the end instead of wrapping");
     mascotScrollPingpongCheckBox->setChecked(config->get_bool(QStringLiteral("mascots_scroll_pingpong")));
     mascotScrollPingpongCheckBox->setToolTip(
@@ -1102,12 +1100,12 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "else behind the list.",
         mascotColumnsZCombo);
 
-    mascotBackgroundModeCombo = makeComboBox({ QStringLiteral("Static"), QStringLiteral("Scroll"),
+    mascotBackgroundModeCombo = makeComboBox({ QStringLiteral("Static"),
                                               QStringLiteral("Stripes") },
         config->get(QStringLiteral("mascots_background_mode")));
     addRow(backgroundLayout, "Layer mode:",
-        "How the layer moves: Static is one full-window picture, Scroll one marquee, Stripes "
-        "several moving bands. The same three shapes the columns have.",
+        "How the layer is laid out: Static is one full-window picture, Stripes several bands. Whether they travel "
+        "is the layer's pan switch, which every shape shares.",
         mascotBackgroundModeCombo);
 
     mascotBackgroundFillCombo = makeComboBox({ QStringLiteral("Cover"), QStringLiteral("CoverScroll"),
@@ -1127,8 +1125,8 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     mascotBackgroundStripesSpinBox = makeSpinBox(1, 8, 1,
         config->get(QStringLiteral("mascots_background_stripes")).toInt());
     addRow(backgroundLayout, "Layer stripes:",
-        "Bands in Stripes -- and the marquee's cell count in Scroll: one cell is the wrap buffer, so "
-        "Scroll shows stripes minus one cells. Keep it enabled in both moving modes.",
+        "How many bands the layer is divided into in Stripes. One cell is the wrap buffer when the layer pans, so a "
+        "travelling layer shows stripes minus one cells.",
         mascotBackgroundStripesSpinBox);
 
     mascotBackgroundOrientationCombo = makeComboBox({ QStringLiteral("Horizontal"), QStringLiteral("Vertical") },
@@ -1144,10 +1142,17 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "Reverse every other layer stripe so neighbouring bands travel in opposite directions.");
     backgroundLayout->addWidget(mascotBackgroundAlternateCheckBox);
 
+    mascotBackgroundPanCheckBox = new QCheckBox("Pan the layer");
+    mascotBackgroundPanCheckBox->setChecked(config->get_bool(QStringLiteral("mascots_background_pan")));
+    mascotBackgroundPanCheckBox->setToolTip(
+        "Off holds every layer band at its framing. On travels them: a stripe band slides as part of a strip, a "
+        "single band pans its picture.");
+    backgroundLayout->addWidget(mascotBackgroundPanCheckBox);
+
     mascotBackgroundScrollSpeedSpinBox = makeSpinBox(0, 2000, 5,
         config->get(QStringLiteral("mascots_background_scroll_speed")).toInt());
     addRow(backgroundLayout, "Layer scroll speed (px/s):",
-        "Pixels per second the layer's bands travel in Scroll. 0 stands still.",
+        "Pixels per second the layer's bands travel while the pan is on.",
         mascotBackgroundScrollSpeedSpinBox);
 
     mascotBackgroundScrollDirectionCombo = makeComboBox({ QStringLiteral("LeftToRight"),
@@ -1156,8 +1161,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
                                                          QStringLiteral("BottomToTop") },
         config->get(QStringLiteral("mascots_background_scroll_direction")));
     addRow(backgroundLayout, "Layer direction:",
-        "The direction the layer's bands travel. If the axis disagrees with the mode's pan axis, "
-        "the band takes the mode's axis and keeps the sense you picked.",
+        "The axis the layer's bands travel on, and the sense they take.",
         mascotBackgroundScrollDirectionCombo);
 
     mascotBackgroundScrollPingpongCheckBox = new QCheckBox("Reverse the layer at the end instead of wrapping");
@@ -1295,7 +1299,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     live(mascotPairScrollCombo, QStringLiteral("mascots_pair_scroll"));
     live(mascotPairFlipCheckBox, QStringLiteral("mascots_pair_flip"));
     live(mascotMaxDecodersSpinBox, QStringLiteral("mascots_max_decoders"));
-    live(mascotScrollEnabledCheckBox, QStringLiteral("mascots_scroll_enabled"));
+    live(mascotPanCheckBox, QStringLiteral("mascots_pan"));
     live(mascotScrollSpeedSpinBox, QStringLiteral("mascots_scroll_speed"));
     live(mascotScrollDirectionCombo, QStringLiteral("mascots_scroll_direction"));
     live(mascotScrollPingpongCheckBox, QStringLiteral("mascots_scroll_pingpong"));
@@ -1314,6 +1318,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     live(mascotBackgroundStripesSpinBox, QStringLiteral("mascots_background_stripes"));
     live(mascotBackgroundOrientationCombo, QStringLiteral("mascots_background_stripes_orientation"));
     live(mascotBackgroundAlternateCheckBox, QStringLiteral("mascots_background_stripes_alternate"));
+    live(mascotBackgroundPanCheckBox, QStringLiteral("mascots_background_pan"));
     live(mascotBackgroundScrollSpeedSpinBox, QStringLiteral("mascots_background_scroll_speed"));
     live(mascotBackgroundScrollDirectionCombo, QStringLiteral("mascots_background_scroll_direction"));
     live(mascotBackgroundClipSpinBox, QStringLiteral("mascots_background_clip_seconds"));
@@ -1382,7 +1387,7 @@ void SettingsDialog::syncMascotConfig(const QString& changedKey)
     config->set("mascots_color_theme", this->ui.mascotsExtractColor->isChecked() ? "True" : "False");
     config->set("mascots_center_content", this->ui.mascotsCenterContent->isChecked() ? "True" : "False");
     config->set("mascots_max_decoders", QString::number(mascotMaxDecodersSpinBox->value()));
-    config->set("mascots_scroll_enabled", mascotScrollEnabledCheckBox->isChecked() ? "True" : "False");
+    config->set("mascots_pan", mascotPanCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_scroll_speed", QString::number(mascotScrollSpeedSpinBox->value()));
     config->set("mascots_scroll_direction", mascotScrollDirectionCombo->currentText());
     config->set("mascots_scroll_pingpong", mascotScrollPingpongCheckBox->isChecked() ? "True" : "False");
@@ -1402,6 +1407,7 @@ void SettingsDialog::syncMascotConfig(const QString& changedKey)
     config->set("mascots_background_stripes_orientation", mascotBackgroundOrientationCombo->currentText());
     config->set("mascots_background_stripes_alternate",
         mascotBackgroundAlternateCheckBox->isChecked() ? "True" : "False");
+    config->set("mascots_background_pan", mascotBackgroundPanCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_background_scroll_speed", QString::number(mascotBackgroundScrollSpeedSpinBox->value()));
     config->set("mascots_background_scroll_direction", mascotBackgroundScrollDirectionCombo->currentText());
     config->set("mascots_background_clip_seconds", QString::number(mascotBackgroundClipSpinBox->value()));
@@ -1477,14 +1483,11 @@ void SettingsDialog::updateMascotControlStates()
     // Rows 3-5: Scroll and Stripes share this group, so the rows go dark individually instead of
     // the whole box: each mode owns its half and neither owns the other's.
     const QString mode = mascotModeCombo->currentText();
-    const bool scrollColumns = mode == QLatin1String("Scroll");
     const bool stripesColumns = mode == QLatin1String("Stripes");
-    // Speed, direction and ping-pong are the pan's own rows and both panning modes read them (the controller's
-    // scroll tick takes them from the panel's layout whatever the mode); only the rows that name one mode's shape --
-    // marquee cells here, bands there -- belong to that mode alone.
-    const bool panningColumns = scrollColumns || stripesColumns;
-    const bool panEnabled = panningColumns && mascotScrollEnabledCheckBox->isChecked();
-    mascotScrollEnabledCheckBox->setEnabled(panningColumns);
+    // The pan is a switch of its own: it works on one band (the whole panel travelling past) and on striped bands
+    // alike, so it is never tied to a mode. The speed, direction and ping-pong rows only describe how it travels.
+    mascotPanCheckBox->setEnabled(true);
+    const bool panEnabled = mascotPanCheckBox->isChecked();
     mascotScrollSpeedSpinBox->setEnabled(panEnabled);
     mascotScrollDirectionCombo->setEnabled(panEnabled);
     mascotScrollPingpongCheckBox->setEnabled(panEnabled);
@@ -1503,17 +1506,17 @@ void SettingsDialog::updateMascotControlStates()
     mascotBackgroundModeCombo->setEnabled(backgroundOn);
     mascotBackgroundFillCombo->setEnabled(backgroundOn);
 
-    // Rows 7-9: the layer's Static has neither a pan nor stripes, Scroll owns the scroll rows and
-    // the marquee's cell count, Stripes owns the stripes rows -- the same per-row split as above.
+    // The layer follows the columns' rule: a mode is a shape (one band or stripes), the pan is its own switch.
     const QString backgroundMode = mascotBackgroundModeCombo->currentText();
-    const bool scrollLayer = backgroundMode == QLatin1String("Scroll");
     const bool stripesLayer = backgroundMode == QLatin1String("Stripes");
-    mascotBackgroundStripesSpinBox->setEnabled(backgroundOn && (scrollLayer || stripesLayer));
+    const bool layerPan = mascotBackgroundPanCheckBox->isChecked();
+    mascotBackgroundPanCheckBox->setEnabled(backgroundOn);
+    mascotBackgroundStripesSpinBox->setEnabled(backgroundOn && stripesLayer);
     mascotBackgroundOrientationCombo->setEnabled(backgroundOn && stripesLayer);
     mascotBackgroundAlternateCheckBox->setEnabled(backgroundOn && stripesLayer);
-    mascotBackgroundScrollSpeedSpinBox->setEnabled(backgroundOn && scrollLayer);
-    mascotBackgroundScrollDirectionCombo->setEnabled(backgroundOn && scrollLayer);
-    mascotBackgroundScrollPingpongCheckBox->setEnabled(backgroundOn && scrollLayer);
+    mascotBackgroundScrollSpeedSpinBox->setEnabled(backgroundOn && layerPan);
+    mascotBackgroundScrollDirectionCombo->setEnabled(backgroundOn && layerPan);
+    mascotBackgroundScrollPingpongCheckBox->setEnabled(backgroundOn && layerPan);
     mascotBackgroundClipSpinBox->setEnabled(backgroundOn);
     mascotBackgroundSwapOnBeatCheckBox->setEnabled(backgroundOn);
     mascotBackgroundRandomChangeCheckBox->setEnabled(backgroundOn);

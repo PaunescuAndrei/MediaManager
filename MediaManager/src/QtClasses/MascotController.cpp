@@ -189,8 +189,6 @@ namespace {
 	QString modeLabel(MascotMode mode)
 	{
 		switch (mode) {
-		case MascotMode::Scroll:
-			return QStringLiteral("Scroll");
 		case MascotMode::Stripes:
 			return QStringLiteral("Stripes");
 		case MascotMode::Static:
@@ -400,10 +398,10 @@ void MascotController::applyConfig()
 
 	if (!this->warnedUnsupportedMode && !modeValue.isEmpty() && !modeOk) {
 		this->warnedUnsupportedMode = true;
-		this->logVideo(QStringLiteral("mascots_mode=\"%1\" is not one of Static, Scroll or Stripes; using Static")
+		this->logVideo(QStringLiteral("mascots_mode=\"%1\" is not one of Static or Stripes; using Static")
 			.arg(modeValue));
 		qWarning() << "mascots_mode:" << modeValue
-			<< "is not one of Static, Scroll or Stripes; using Static.";
+			<< "is not one of Static or Stripes; using Static.";
 	}
 
 	if (!this->warnedUnsupportedFill && !fillValue.isEmpty() && !fillOk) {
@@ -422,9 +420,10 @@ void MascotController::applyConfig()
 			<< "is not one of Horizontal or Vertical; using Horizontal.";
 	}
 
-	// The pan's own switch: off holds every band at its framing, whatever the speed row says. Kept as its own key so
-	// "do not pan" is a control of its own rather than the speed's zero.
-	this->columnsLayout.scrollSpeed = config->get_bool(QStringLiteral("mascots_scroll_enabled"))
+	// The pan is its own switch, not a mode and not the speed: it decides whether any band travels, and the rows
+	// below only describe how it travels.
+	this->columnsLayout.pan = config->get_bool(QStringLiteral("mascots_pan"));
+	this->columnsLayout.scrollSpeed = this->columnsLayout.pan
 		? clampedConfigInt(config, QStringLiteral("mascots_scroll_speed"), 40, 0, MAX_SCROLL_SPEED)
 		: 0;
 	this->scrollDirectionText = config->get(QStringLiteral("mascots_scroll_direction"));
@@ -462,8 +461,10 @@ void MascotController::applyConfig()
 		backgroundOrientationValue, &backgroundOrientationOk);
 	this->backgroundLayout.alternate =
 		config->get_bool(QStringLiteral("mascots_background_stripes_alternate"));
-	this->backgroundLayout.scrollSpeed = clampedConfigInt(
-		config, QStringLiteral("mascots_background_scroll_speed"), 50, 0, MAX_SCROLL_SPEED);
+	this->backgroundLayout.pan = config->get_bool(QStringLiteral("mascots_background_pan"));
+	this->backgroundLayout.scrollSpeed = this->backgroundLayout.pan
+		? clampedConfigInt(config, QStringLiteral("mascots_background_scroll_speed"), 50, 0, MAX_SCROLL_SPEED)
+		: 0;
 	bool backgroundScrollDirectionOk = false;
 	const QString backgroundScrollDirectionValue =
 		config->get(QStringLiteral("mascots_background_scroll_direction"));
@@ -473,10 +474,10 @@ void MascotController::applyConfig()
 		config->get_bool(QStringLiteral("mascots_background_scroll_pingpong"));
 	if (!this->warnedUnsupportedBackgroundMode && !backgroundModeValue.isEmpty() && !backgroundModeOk) {
 		this->warnedUnsupportedBackgroundMode = true;
-		this->logBackground(QStringLiteral("mascots_background_mode=\"%1\" is not one of Static, Scroll or Stripes; using Static")
+		this->logBackground(QStringLiteral("mascots_background_mode=\"%1\" is not one of Static or Stripes; using Static")
 			.arg(backgroundModeValue));
 		qWarning() << "mascots_background_mode:" << backgroundModeValue
-			<< "is not one of Static, Scroll or Stripes; using Static.";
+			<< "is not one of Static or Stripes; using Static.";
 	}
 	if (!this->warnedUnsupportedBackgroundFill && !backgroundFillValue.isEmpty() && !backgroundFillOk) {
 		this->warnedUnsupportedBackgroundFill = true;
@@ -516,7 +517,7 @@ void MascotController::applyConfig()
 	// A pan switched off holds the offset it stopped at, which would leave the picture sitting off-centre for ever;
 	// clearing it makes "speed 0" mean the framing the fill mode describes, centred.
 	for (MascotPanel panel : { MascotPanel::Left, MascotPanel::Right, MascotPanel::Background }) {
-		if (this->layoutFor(panel).mode != MascotMode::Static && this->layoutFor(panel).scrollSpeed <= 0)
+		if (this->layoutFor(panel).scrollSpeed <= 0)
 			this->resetScrollOffsets(panel);
 	}
 	this->syncSheet();
@@ -634,8 +635,6 @@ MascotMode MascotController::modeFromString(const QString& value, bool* ok)
 		*ok = true;
 	if (value.compare(QStringLiteral("Static"), Qt::CaseInsensitive) == 0)
 		return MascotMode::Static;
-	if (value.compare(QStringLiteral("Scroll"), Qt::CaseInsensitive) == 0)
-		return MascotMode::Scroll;
 	if (value.compare(QStringLiteral("Stripes"), Qt::CaseInsensitive) == 0)
 		return MascotMode::Stripes;
 	if (ok)
@@ -718,8 +717,7 @@ int MascotController::backgroundBandCount() const
 {
 	if (this->backgroundPlayers <= 0)
 		return 0;
-	if (this->backgroundLayout.mode == MascotMode::Stripes
-		|| this->backgroundLayout.mode == MascotMode::Scroll)
+	if (this->backgroundLayout.mode == MascotMode::Stripes)
 		return std::min(this->backgroundStripes, this->backgroundPlayers);
 	return 1;
 }
@@ -727,7 +725,7 @@ int MascotController::backgroundBandCount() const
 bool MascotController::backgroundMarqueeActive(MascotPanel panel) const
 {
 	return panel == MascotPanel::Background
-		&& this->layoutFor(panel).mode == MascotMode::Scroll
+		&& this->layoutFor(panel).pan
 		&& this->bandCount(panel) >= 2;
 }
 
@@ -772,6 +770,7 @@ void MascotController::applyMode()
 	if (!this->leftState.surface && !this->rightState.surface && !this->backgroundState.surface)
 		return;
 	const bool modeChanged = this->columnsLayout.mode != this->columnsLayout.appliedMode;
+	const bool panChanged = this->columnsLayout.applied && this->columnsLayout.pan != this->columnsLayout.appliedPan;
 	bool countChanged = false;
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
 		const PanelState& state = this->stateFor(panelOf(side));
@@ -783,14 +782,16 @@ void MascotController::applyMode()
 		&& this->columnsLayout.orientation != this->columnsLayout.appliedOrientation;
 	const bool backgroundModeChanged = this->backgroundState.surface
 		&& this->backgroundLayout.mode != this->backgroundLayout.appliedMode;
+	const bool backgroundPanChanged = this->backgroundLayout.applied
+		&& this->backgroundLayout.pan != this->backgroundLayout.appliedPan;
 	const bool backgroundCountChanged = this->backgroundState.surface
 		&& this->backgroundState.configuredBandCount != this->bandCount(MascotPanel::Background);
 	const bool backgroundOrientationChanged = this->backgroundState.surface
 		&& this->backgroundLayout.applied
 		&& this->backgroundLayout.mode == MascotMode::Stripes
 		&& this->backgroundLayout.orientation != this->backgroundLayout.appliedOrientation;
-	if (this->columnsLayout.applied && !modeChanged && !countChanged && !orientationChanged
-		&& !backgroundModeChanged && !backgroundCountChanged && !backgroundOrientationChanged)
+	if (this->columnsLayout.applied && !modeChanged && !panChanged && !countChanged && !orientationChanged
+		&& !backgroundModeChanged && !backgroundPanChanged && !backgroundCountChanged && !backgroundOrientationChanged)
 		return;
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
 		PanelState& state = this->stateFor(panelOf(side));
@@ -800,12 +801,14 @@ void MascotController::applyMode()
 	if (this->backgroundState.surface)
 		this->syncBands(this->backgroundState, MascotPanel::Background);
 	this->columnsLayout.appliedMode = this->columnsLayout.mode;
+	this->columnsLayout.appliedPan = this->columnsLayout.pan;
 	this->columnsLayout.appliedOrientation = this->columnsLayout.orientation;
 	this->columnsLayout.applied = true;
 	this->backgroundLayout.appliedMode = this->backgroundLayout.mode;
+	this->backgroundLayout.appliedPan = this->backgroundLayout.pan;
 	this->backgroundLayout.appliedOrientation = this->backgroundLayout.orientation;
 	this->backgroundLayout.applied = true;
-	if (modeChanged) {
+	if (modeChanged || panChanged) {
 		for (PanelState* state : { &this->leftState, &this->rightState }) {
 			state->scrollPhase = 0.0;
 			state->scrollZeroTravelLogged.fill(false);
@@ -813,7 +816,7 @@ void MascotController::applyMode()
 		this->resetScrollOffsets(MascotPanel::Left);
 		this->resetScrollOffsets(MascotPanel::Right);
 	}
-	if (backgroundModeChanged) {
+	if (backgroundModeChanged || backgroundPanChanged) {
 		this->backgroundState.scrollPhase = 0.0;
 		this->backgroundState.scrollZeroTravelLogged.fill(false);
 		this->resetScrollOffsets(MascotPanel::Background);
@@ -847,7 +850,7 @@ void MascotController::applyMode()
 		}
 		this->backgroundState.scrollZeroTravelLogged.fill(false);
 	}
-	if (countChanged || backgroundCountChanged)
+	if (panChanged || countChanged || backgroundCountChanged)
 		this->updateLayout();
 	QMetaObject::invokeMethod(this, [this]() { this->fillEmptyBands(); }, Qt::QueuedConnection);
 }
@@ -1056,7 +1059,7 @@ bool MascotController::scrollCanTick() const
 	for (MascotPanel panel : { MascotPanel::Left, MascotPanel::Right, MascotPanel::Background }) {
 		const PanelState& state = this->stateFor(panel);
 		MascotSurface* candidate = state.surface.data();
-		if (!candidate || this->layoutFor(panel).mode == MascotMode::Static)
+		if (!candidate || !this->layoutFor(panel).pan || this->layoutFor(panel).scrollSpeed <= 0)
 			continue;
 		if (!candidate->isVisible() || !windowOnScreen(candidate->window()))
 			continue;
@@ -1093,7 +1096,7 @@ bool MascotController::panModeActive() const
 		MascotSurface* surface = this->stateFor(panel).surface.data();
 		if (!surface || !surface->isVisible())
 			continue;
-		if (this->layoutFor(panel).mode != MascotMode::Static)
+		if (this->layoutFor(panel).pan && this->layoutFor(panel).scrollSpeed > 0)
 			return true;
 	}
 	return false;
@@ -1146,8 +1149,10 @@ void MascotController::resetScrollOffsets(MascotPanel panel)
 	if (surface) {
 		for (auto& owned : state.bands) {
 			MascotBand* band = owned.get();
-			if (!band || band->scrollOffset() == 0.0)
+			if (!band)
 				continue;
+			// Written unconditionally: the band's cached offset can be zero while the slot still holds an older one,
+			// and skipping it here is how a band stayed off-centre after the pan was turned off.
 			surface->setSlotScrollOffset(band->slotIndex(), 0.0, 0.0);
 			band->setScrollOffset(0.0);
 		}
@@ -1177,7 +1182,10 @@ void MascotController::onScrollTick()
 	std::vector<MascotBand::WrapCommit> wrapCommits;
 	for (MascotPanel panel : { MascotPanel::Left, MascotPanel::Right, MascotPanel::Background }) {
 		const PanelLayout& layout = this->layoutFor(panel);
-		if (layout.mode == MascotMode::Static)
+		// The pan is the switch, not the layout: one band and several bands both travel when it is on, and a panel
+		// with it off must not be touched here at all -- a tick would otherwise re-impose an offset from the frozen
+		// phase right after the offsets were cleared.
+		if (!layout.pan || layout.scrollSpeed <= 0)
 			continue;
 		const bool vertical = this->scrollDirectionIsVertical(panel);
 		const bool reverse = this->scrollDirectionReverses(panel);
@@ -1186,9 +1194,7 @@ void MascotController::onScrollTick()
 		MascotSurface* surface = state.surface.data();
 		if (!surface || state.bands.empty())
 			continue;
-		if (panel == MascotPanel::Background && layout.mode == MascotMode::Scroll) {
-			if (!this->backgroundMarqueeActive(panel))
-				continue;
+		if (this->backgroundMarqueeActive(panel)) {
 			const QRectF frame(this->panelFrame(panel));
 			const double axisLen = vertical ? frame.height() : frame.width();
 			const int count = static_cast<int>(state.bands.size());
@@ -1646,9 +1652,11 @@ void MascotController::createSheet()
 	this->updateSheetVisibility();
 	// The sheet must *not* be mouse-transparent: the columns receive their clicks and drops through it.
 	this->backgroundLayout.appliedMode = this->backgroundLayout.mode;
+	this->backgroundLayout.appliedPan = this->backgroundLayout.pan;
 	this->backgroundLayout.appliedOrientation = this->backgroundLayout.orientation;
 	this->backgroundLayout.applied = true;
 	this->columnsLayout.appliedMode = this->columnsLayout.mode;
+	this->columnsLayout.appliedPan = this->columnsLayout.pan;
 	this->columnsLayout.appliedOrientation = this->columnsLayout.orientation;
 	this->columnsLayout.applied = true;
 	this->pushVeilState();
@@ -3211,7 +3219,7 @@ int MascotController::clipSecondsFor(MascotPanel panel) const
 bool MascotController::bandReachesSeam(MascotPanel panel, const MascotBand& band) const
 {
 	const PanelLayout& layout = this->layoutFor(panel);
-	if (!this->running || layout.mode == MascotMode::Static)
+	if (!this->running || !layout.pan)
 		return false;
 	if (!this->scrollTimer || !this->scrollTimer->isActive())
 		return false;
@@ -3219,9 +3227,7 @@ bool MascotController::bandReachesSeam(MascotPanel panel, const MascotBand& band
 		return false;
 	if (layout.scrollSpeed <= 0)
 		return false;
-	if (panel == MascotPanel::Background && layout.mode == MascotMode::Scroll) {
-		if (!this->backgroundMarqueeActive(panel))
-			return false;
+	if (this->backgroundMarqueeActive(panel)) {
 		const PanelState& marqueeOwner = this->stateFor(panel);
 		if (!marqueeOwner.surface)
 			return false;

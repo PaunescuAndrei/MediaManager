@@ -9,9 +9,9 @@
 #include <utility>
 
 namespace {
-	// The one place the intent is written onto a player. QMediaPlayer applies playback options as
-	// a whole object, so the current ones are read back first and only the intent is replaced:
-	// asking for low latency must not reset a probe size or network timeout set elsewhere.
+	// QMediaPlayer applies playback options as a whole object, so the current ones are read back first
+	// and only the intent is replaced: asking for low latency must not reset a probe size or network
+	// timeout set elsewhere.
 	void applyPlaybackIntent(QMediaPlayer* player, QPlaybackOptions::PlaybackIntent intent)
 	{
 		if (!player)
@@ -227,8 +227,6 @@ void ThreadedMediaPlayer::setPlaybackIntent(QPlaybackOptions::PlaybackIntent int
 {
 	this->m_playbackIntent = intent;
 
-	// Before start() the init lambda reads the stored value, so the first load already has it;
-	// afterwards this runs in the worker thread, which is where the player and its options live.
 	this->post([intent](QMediaPlayer* player, QAudioOutput*) {
 		applyPlaybackIntent(player, intent);
 	});

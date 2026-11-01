@@ -51,9 +51,8 @@ public:
     ~mascotsAnimationsThread();
     void run() override;
 signals:
-    // (M3 Task 6B: emitted on every detected beat, before the two legacy branches below, so a
-    // single rate-limited cadence can be driven from the one dice result the legacy branch uses.
-    // The legacy signals still emit; this one is the pulse, not a replacement.)
+    // Emitted on every beat; the two legacy signals still emit. The argument is the same dice result
+    // that selects them, so the pulse and the legacy signal always agree.
     void beatPulse(bool swapWanted);
     void updateMascotsSignal();
     void updateMascotsAnimationSignal();

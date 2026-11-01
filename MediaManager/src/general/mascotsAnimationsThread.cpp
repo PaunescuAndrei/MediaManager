@@ -156,8 +156,8 @@ void mascotsAnimationsThread::rebuildBeatsCache() {
 
 void mascotsAnimationsThread::beat()
 {
-    // (M3 Task 6B: the dice is thrown once and the same result is used by the pulse and by the
-    // legacy branch below, so adding the pulse cannot shift the legacy signal's distribution.)
+    // One throw, shared with the pulse and the legacy branch below, so adding the pulse cannot
+    // shift the legacy signal's distribution.
     const bool swapWanted = this->random_change && utils::randfloat(0, 1) < this->random_chance;
     emit this->beatPulse(swapWanted);
     if (swapWanted) {

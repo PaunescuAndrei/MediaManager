@@ -43,11 +43,8 @@ public:
 	void setPosition(qint64 positionMs);
 	void setVolume(float volume);
 	void setMuted(bool muted);
-	// Playback intent of the player (Qt 6.12: QMediaPlayer no longer carries the enum itself, it
-	// takes it through QPlaybackOptions). It is remembered here and applied in the worker before
-	// the first setSource(), because the backend reads it when it opens the media -- setting it
-	// afterwards would leave the first load at the default intent. A call after start() posts the
-	// same write to the worker, where the player and its options live.
+	// Affects only media opened after the call: the backend reads the intent when it opens the media,
+	// so it has to be set before start() to apply to the first load.
 	void setPlaybackIntent(QPlaybackOptions::PlaybackIntent intent);
 
 	QString currentSource() const { return m_source; }

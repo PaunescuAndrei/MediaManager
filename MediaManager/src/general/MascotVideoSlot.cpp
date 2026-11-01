@@ -364,6 +364,27 @@ void MascotVideoSlot::stopAll()
 	this->m_activePath.clear();
 }
 
+void MascotVideoSlot::setLowLatency(bool lowLatency)
+{
+	if (this->lowLatency == lowLatency)
+		return;
+	this->lowLatency = lowLatency;
+	// (M5: applied live, and only when it actually changed -- the early return above is that test, so an
+	// Apply that leaves the value alone touches no player. A player with media open keeps its clip; the
+	// intent is read when the backend opens the next one.)
+	for (ThreadedMediaPlayer* player : this->m_players)
+		this->applyPlaybackIntent(player);
+}
+
+void MascotVideoSlot::applyPlaybackIntent(ThreadedMediaPlayer* player) const
+{
+	if (!player)
+		return;
+	player->setPlaybackIntent(this->lowLatency
+		? QPlaybackOptions::PlaybackIntent::LowLatencyStreaming
+		: QPlaybackOptions::PlaybackIntent::Playback);
+}
+
 void MascotVideoSlot::setPaused(bool paused)
 {
 	if (this->m_paused == paused)
@@ -605,7 +626,10 @@ bool MascotVideoSlot::ensurePlayer(int ab)
 	player->setVolume(0.0f);
 	// Low-latency intent before the first setSource(): the backend reads it when it opens the
 	// media, and the first-frame budget is measured against a low-latency open.
-	player->setPlaybackIntent(QPlaybackOptions::PlaybackIntent::LowLatencyStreaming);
+	// (M5: the intent is `mascots_low_latency` now, not always-on. Qt documents the trade -- buffering is
+	// reduced for low latency at the cost of a higher chance of dropped frames or glitches -- and a mascot
+	// clip is exactly where a user may prefer smooth playback over a quicker first frame.)
+	this->applyPlaybackIntent(player);
 	// Bound here because start() runs once and cannot rebind a sink later. The empty source keeps
 	// the player idle until a swapTo() names a file.
 	player->start(sink, QString(), true);

@@ -10,8 +10,7 @@ MascotBand::MascotBand(int slotIndex, QObject* parent)
 
 MascotBand::~MascotBand()
 {
-	// A band destroyed while it still owns players would leave them drawing into sinks that go
-	// with the QML delegate: destroyVideo() is the one path that detaches them first.
+	// destroyVideo() is the one path that detaches players from sinks that go with the QML delegate before deleting them.
 	this->destroyVideo();
 }
 
@@ -20,10 +19,8 @@ void MascotBand::setSurface(MascotSurface* surface)
 	if (this->m_surface == surface)
 		return;
 	this->m_surface = surface;
-	// The recorded slot state described the surface that is going away, not the new one. A
-	// rebuilt surface starts at MascotSurface's defaults (FillMode::Fit, video outputs hidden),
-	// and a surviving "the slot already carries HeightFit" would suppress the write in
-	// applyDisplay() forever after -- the M1 image-layout regression releaseSurface() guards.
+	// The recorded slot state described the surface that is going away: a rebuilt surface starts at MascotSurface's
+	// defaults, and a surviving "the slot already carries HeightFit" would suppress that write forever after.
 	this->m_fillMode = MascotSurface::FillMode::Fit;
 	this->m_fillModeKnown = false;
 	this->m_videoOutputVisible = false;
@@ -35,6 +32,13 @@ int MascotBand::slotIndex() const
 	return this->m_slotIndex;
 }
 
+void MascotBand::setGroup(MascotSurface::SlotGroup group)
+{
+	if (!this->m_surface)
+		return;
+	this->m_surface->setSlotGroup(this->m_slotIndex, group);
+}
+
 MascotSurface* MascotBand::surface() const
 {
 	return this->m_surface.data();
@@ -42,9 +46,7 @@ MascotSurface* MascotBand::surface() const
 
 void MascotBand::setRect(const QRectF& rect)
 {
-	// Recorded before the surface is asked to take it (M3 Task 4): the value is the band's own
-	// geometry, so it answers even while there is no surface to write into, and a surface that has
-	// gone cannot be the reason a later travel question has no answer.
+	// Recorded before the surface is asked: the band's own geometry must answer even while there is no surface to write into.
 	this->m_rect = rect;
 	if (!this->m_surface)
 		return;
@@ -67,13 +69,13 @@ bool MascotBand::ensureVideo(int ab)
 		this->m_video = new MascotVideoSlot(this);
 	if (!this->m_surface)
 		return false;
-	// The sinks belong to the QML delegate, so they do not exist until it does. Reading them here
-	// and binding them in the same call is what lets the owner start a load without ever holding
-	// a sink pointer across a slot count change.
-	if (!this->m_surface->slotSink(this->m_slotIndex, ab))
+	// The sinks belong to the QML delegate, so reading and binding them in one call is what lets the owner start a load
+	// without holding a sink pointer across a slot count change.
+	QVideoSink* sinkA = this->m_surface->slotSink(this->m_slotIndex, 0);
+	QVideoSink* sinkB = this->m_surface->slotSink(this->m_slotIndex, 1);
+	if (!sinkA || (ab != 0 && !sinkB))
 		return false;
-	this->m_video->setSinks(this->m_surface->slotSink(this->m_slotIndex, 0),
-		this->m_surface->slotSink(this->m_slotIndex, 1));
+	this->m_video->setSinks(sinkA, sinkB);
 	return true;
 }
 
@@ -81,8 +83,6 @@ void MascotBand::destroyVideo()
 {
 	if (!this->m_video)
 		return;
-	// Synchronous, like the surface: the players are detached from the sinks they draw into
-	// (which still exist at this point) and then deleted.
 	this->m_video->shutdown();
 	delete this->m_video.data();
 	this->m_video = nullptr;
@@ -157,23 +157,21 @@ bool MascotBand::videoOutputVisible() const
 
 void MascotBand::clear()
 {
-	// The order the panel emptied in before the band owned it: the outputs go first, then the
-	// slot. `clearSlot()` does not hide them (M2 Task 1's interface fact), so both are needed.
+	// The outputs go first, then the slot: clearSlot() does not hide them. Both opacities go back to zero as well,
+	// because the slot outlives the band and its next owner fades in from its own first frame.
 	if (this->m_videoOutputVisible)
 		this->setVideoOutputVisible(false);
+	this->setVideoOpacity(0, 0.0, 0);
+	this->setVideoOpacity(1, 0.0, 0);
 	if (this->m_surface)
 		this->m_surface->clearSlot(this->m_slotIndex);
 	this->m_media = MascotMedia();
 	this->m_requestPath.clear();
 	this->m_requestIsVideo = false;
 	this->m_wantedOffsetMs = -1;
-	// (M3 Task 4: a queued wrap-point commit goes with the content it was going to replace. The
-	// band has just been emptied, so a change parked against the picture that is no longer there
-	// must not fire at the first seam after the panel is enabled again.)
+	// A queued wrap-point commit goes with the content it was going to replace.
 	this->m_wrapCommit = WrapCommit();
-	// (M3 Task 6A: the band's own cadence and content pipeline go with the content they were
-	// serving. A timer left armed here would advance a band this panel no longer fills, and a
-	// candidate left held would keep a pin on pixels nothing will show.)
+	// The band's cadence and pipeline go with the content: an armed timer would advance a band nothing fills.
 	if (this->m_clipTimer)
 		this->m_clipTimer->stop();
 	this->m_playback = Playback();
@@ -227,9 +225,7 @@ QTimer* MascotBand::clipTimer() const
 QTimer* MascotBand::ensureClipTimer()
 {
 	if (!this->m_clipTimer) {
-		// Single-shot, like the panel timer it replaces: every tick is answered by a fresh commit
-		// that re-arms it. A child of the band, so the band's end stops it even if the controller
-		// never does.
+		// Single-shot, because every tick is answered by a fresh commit; a child of the band, so the band's end stops it.
 		this->m_clipTimer = new QTimer(this);
 		this->m_clipTimer->setSingleShot(true);
 	}
@@ -248,9 +244,7 @@ void MascotBand::setScrollOffset(double offset)
 
 void MascotBand::queueWrapCommit(WrapCommit commit)
 {
-	// Replaced, not appended: a band has one seam at a time and one queued change, so a second
-	// request for the same pass supersedes the first instead of the band committing two content
-	// changes at one wrap (Task 6 queues at most one per pass anyway).
+	// Replaced, not appended: a band has one seam at a time, so a second request supersedes the first.
 	this->m_wrapCommit = std::move(commit);
 }
 

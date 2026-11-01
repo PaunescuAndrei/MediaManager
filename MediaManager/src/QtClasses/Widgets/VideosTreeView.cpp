@@ -1,4 +1,4 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 #include "VideosTreeView.h"
 #include <QTimer>
 #include <QScrollBar>
@@ -10,6 +10,67 @@ VideosTreeView::VideosTreeView(QWidget* parent) : QTreeView(parent) {
     setAcceptDrops(true);
     setIconSize(QSize(72, 72));
     setAllColumnsShowFocus(true);
+}
+
+void VideosTreeView::setTranslucentRows(bool translucent) {
+    if (this->translucentRows == translucent)
+        return;
+    this->translucentRows = translucent;
+    // The flag decides how the rows are painted, so a change has to repaint them. The palette that
+    // travels with it is set on the view by the caller; a layout-only repaint would leave the previous
+    // row colours on screen until something scrolled.
+    this->viewport()->update();
+}
+
+void VideosTreeView::drawRow(QPainter* painter, const QStyleOptionViewItem& options,
+    const QModelIndex& index) const {
+    if (!this->translucentRows) {
+        // Qt's own path, unchanged -- this is the layer-off rendering, and the reason it is still
+        // pixel-identical to the build before the layer existed.
+        QTreeView::drawRow(painter, options, index);
+        return;
+    }
+    // Which of the two row colours this row is. The option Qt hands to drawRow() carries no Alternate
+    // flag -- the base implementation computes it per item, further down -- so it is derived here the
+    // way the view alternates: on the row, from 1. Measured: with the flag read from `options` instead,
+    // every row came out Base and the list lost its alternation entirely.
+    const bool alternate = this->alternatingRowColors() && (index.row() % 2) == 1;
+    const QColor rowColour =
+        options.palette.color(alternate ? QPalette::AlternateBase : QPalette::Base);
+    QStyleOptionViewItem opt(options);
+    painter->fillRect(options.rect, rowColour);
+    // The style fills alternate rows from the same role, and per column rather than per row. An alpha-0
+    // copy makes that second fill a no-op, so the rectangle above is the row's only fill.
+    opt.palette.setColor(QPalette::AlternateBase, QColor(Qt::transparent));
+    QTreeView::drawRow(painter, opt, index);
+}
+
+void VideosTreeView::paintEvent(QPaintEvent* event) {
+    QTreeView::paintEvent(event);
+    if (!this->translucentRows)
+        return;
+    // The space under a short list. Qt paints nothing there -- the viewport's autofill is
+    // off while the layer is on -- so the media showed through at full strength below the last row, which
+    // reads as a hole cut in the list rather than as the list's own colour. The fill is the Base row's
+    // colour at the list's alpha, the same surface the strip above the list gets, so a short list ends
+    // the way a full one does.
+    //
+    // The scroll range is the cheap test for "there is nothing to fill": with one, the rows reach the
+    // bottom of the viewport and the walk below would be over every row for nothing.
+    if (this->verticalScrollBar()->maximum() > 0)
+        return;
+    int used = 0;
+    if (this->model() && this->model()->rowCount() > 0) {
+        const QRect lastRow = this->visualRect(this->model()->index(this->model()->rowCount() - 1, 0));
+        if (lastRow.isValid())
+            used = lastRow.bottom() + 1;
+    }
+    const int height = this->viewport()->height();
+    if (used >= height)
+        return;
+    QPainter painter(this->viewport());
+    painter.fillRect(QRect(0, used, this->viewport()->width(), height - used),
+        this->palette().color(QPalette::Base));
 }
 
 void VideosTreeView::mousePressEvent(QMouseEvent* event) {

@@ -5,16 +5,9 @@
 #include <QUrl>
 
 namespace {
-	// A miss is logged once per id, which is only useful while the set stays small: the logging is
-	// best-effort, and an id that keeps missing (a path whose file is gone, say) would grow the set
-	// for the life of the process. Past this many distinct ids, new ones are no longer recorded --
-	// the misses themselves still return a null image, only their lines stop.
 	constexpr int MAX_LOGGED_MISS_IDS = 256;
 
-	// The cache is keyed by the raw path (MascotPrefetcher::cacheIdForPath()), but which form of
-	// the id Qt hands requestImage() is a Qt detail this class must not depend on: Qt decodes it
-	// in the normal case (QUrl::path() percent-decodes), yet nothing promises it. Each candidate
-	// form is therefore tried, so correctness holds either way (amendment M).
+	// The cache is keyed by the raw path, but which form Qt hands requestImage() is a Qt detail, not a promise.
 	QString decodedId(const QString& id)
 	{
 		return QUrl::fromPercentEncoding(id.toUtf8());
@@ -37,17 +30,12 @@ QImage MascotImageProvider::requestImage(const QString& id, QSize* size, const Q
 
 	QImage image;
 	if (this->cache) {
-		// Step 1: the id as received -- the normal case, Qt already decoded it to the raw path
-		// the cache is keyed by.
 		image = this->cache->image(id);
-		// Step 2: Qt handed the id over still percent-encoded, so the raw key is its decoding.
 		if (image.isNull()) {
 			const QString decoded = decodedId(id);
 			if (decoded != id)
 				image = this->cache->image(decoded);
 		}
-		// Step 3: the id needs re-encoding to match a key (a path holding a literal percent
-		// escape, or a build that hands over an unescaped form of an escaped id).
 		if (image.isNull()) {
 			const QString encoded = encodedId(id);
 			if (encoded != id)
@@ -68,9 +56,8 @@ QImage MascotImageProvider::requestImage(const QString& id, QSize* size, const Q
 		return QImage();
 	}
 
-	// The returned image shares the cache entry's pixel buffer through QImage's atomic
-	// refcount, so the GUI thread may evict that entry while the render thread still draws
-	// this copy: the pixels stay alive until the last reference goes away.
+	// The returned image shares the cache entry's pixel buffer through QImage's refcount, so eviction on the GUI thread
+	// cannot free pixels the render thread is still drawing.
 	if (size)
 		*size = image.size();
 	return image;

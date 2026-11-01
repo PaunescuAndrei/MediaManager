@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <QMainWindow>
 #include "ui_MainWindow.h"
 #include <QPoint>
@@ -96,8 +96,20 @@ public:
     // Decides what each mascot panel shows and owns the QML surfaces that render it. The two
     // retired image widgets are gone from the .ui: these hosts are the only mascot panels.
     MascotController* mascotController = nullptr;
-    // M4 Task 3b: the scrim behind the strip above the list. Owned by CenterContainer, so it is
+    // The scrim behind the strip above the list. Owned by CenterContainer, so it is
     // destroyed with the window; null until the background layer is first switched on.
+    // The scrim became the veil. One rectangle of `QPalette::Window` at the configured
+    // alpha, owned by centralwidget -- the same parent the layer has, so the two cover the same
+    // rectangle -- behind every pane of the layout and above the layer. The scrim it grew out of
+    // could only fill the space the list did not occupy, which is why the list needed a scrim of its
+    // own and why the two could disagree; one veil covers both, so there is nothing left to disagree.
+    // The veil left this class. It is a rectangle inside MascotController's one scene now -- the same
+    // scene the layer and both columns draw in -- because a veil owned by a widget could not be stacked
+    // above the columns: they are QQuickWidgets and Qt draws those above every sibling. The widget this
+    // member named is gone; `mascots_background_opacity` is read by the controller's pushVeilState().
+    // The strip above the list, back under the same key as the rows -- see
+    // applyBackgroundVeil(). It is the part of the centre pane the rows do not cover, so it is the one
+    // place a second fill is correct rather than a second scrim.
     QWidget* backgroundScrim = nullptr;
     QHash<QString, qint64> previewPositionCache;
     QList<QString> previewHistoryOrder;
@@ -250,8 +262,25 @@ public:
     bool backupDB(QWidget* parent = nullptr);
     void resetWatchedDB(QWidget* parent = nullptr);
     void cleanMissingFilesDialog(QWidget* parent = nullptr);
-    void handleMascotClickEvents(MascotSide mascot, Qt::MouseButton button, Qt::KeyboardModifiers modifiers);
+    void handleMascotClickEvents(MascotSide mascot, int bandIndex, Qt::MouseButton button, Qt::KeyboardModifiers modifiers);
     void applySettings(SettingsDialog* dialog);
+    // The mascot live-apply entry point. Reads the mascot keys from config (already
+    // written by the caller), runs the columns/background state machine and then everything that
+    // derives from it, so the dialog's live apply and applySettings' accept path share one body.
+    void applyMascotSettings();
+    // The rows that predate the M5 page -- master switch, Animated, the dice, frequency,
+    // width, colour theme, centre -- are written by the page's one writer now, but their *runtime* side
+    // effects (the animation thread's cadence, the host width, the palette) do not live in config. This is
+    // that half: it pushes those effects from the keys and then runs applyMascotSettings(). Called on every
+    // live change and on Cancel, so a row means the same thing whichever button the user presses.
+    void applyLiveMascotRows();
+    // The scoped apply. One key changed, so only the consumers that can see it run --
+    // see the classification in the definition. Called by SettingsDialog for a live control change; the
+    // empty-key form of the writer keeps the whole path for OK/Apply/Cancel.
+    void applyMascotKey(const QString& key);
+    // The legacy rows' runtime half on its own, without the panels' and the layer's state
+    // machine. A spin-box tick for frequency, chance or colour extraction must not re-present three panels.
+    void applyLegacyMascotEffects();
     void applyMascotWidth(int windowWidth, double percent);
     void setDebugMode(bool debug);
     void settingsDialogButton();
@@ -301,9 +330,9 @@ public:
     void setIcon(QIcon icon);
     void closeEvent(QCloseEvent* event) override;
     void initMascotAnimation();
-    void updateMascot(MascotSide mascot, bool update_highlight_color);
+    void updateMascot(MascotSide mascot, int bandIndex);
     void updateMascots(bool forced_mirror = false);
-    void updateThemeHighlightColorFromMascot(MascotSide mascot, bool weighted = true);
+    void updateThemeHighlightColorFromMascot(MascotSide mascot, int bandIndex, bool weighted = true);
     void setThemeHighlightColor(QColor color);
     void openThumbnails(QString path);
     PreviewVideoWindow* createPreviewPopup(const QString& path, QWidget* parent = nullptr, bool rememberPosition = false, bool randomHover = false);
@@ -331,17 +360,31 @@ public:
     void playSpecialSoundEffect(bool force_play = false);
     ~MainWindow();
 private:
-    // M4 Task 3: gives the list's viewport and row fills the background layer's alpha, or puts
+    // Gives the list's viewport and row fills the background layer's alpha, or puts
     // them back to the inherited app palette when the layer is off. Called from
     // initStyleSheets(), which is also what changePalette() runs after replacing the app palette.
-    void applyListTransparency();
-    // M4 Task 3b: the strip above the list -- the buttons, the title and the search row -- gets the
+    // It applied the veil, whose alpha lived here, and it was the only place that alpha was
+    // derived. M6: the veil is in the controller's sheet; what is left here are the three surfaces that
+    // paint *above* that scene -- the rows, the strip's scrim and the scrollbars -- so this is the list's
+    // half of the presentation and nothing else.
+    void applyBackgroundVeil();
+    // The strip above the list -- the buttons, the title and the search row -- gets the
     // same scrim as an even row, because in this app that area's colour *is* the list's Base colour.
     // Without it the layer shows through the top strip at full strength while the rows hold it at
     // the row alpha, so the top reads as more transparent than the list. The scrim is a plain child
     // of CenterContainer, lowered under the strip's widgets, and only as tall as the space the list
     // does not occupy.
+    // It was the whole container's rectangle then, because the veil was not the strip's scrim
+    // any more. M6: the veil went to the controller, so the scrim is the strip's own again -- and the event
+    // filter below watches the list for it.
+    // The strip's scrim, sized to the space above the list and painted with the same
+    // palette the rows get, so one control covers the whole centre pane.
     void updateBackgroundScrim();
+    // Re-raises the three panes above the veil -- and in front of the layer -- and above nothing
+    // else. The columns' own z-order is not a stacking question in this class: the controller's sheet owns
+    // that, and `mascots_columns_z` is one rectangle's z inside it.
+    // Renamed from stackBackgroundVeil(), which placed a veil widget. There is no such widget now.
+    void stackMascotPanes();
     bool eventFilter(QObject* watched, QEvent* event) override;
 signals:
     void fileDropped(QStringList files, QWidget* widget = nullptr);

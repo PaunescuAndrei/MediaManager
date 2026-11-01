@@ -8,7 +8,6 @@ void MascotImageCache::setLimits(int maxItems, qint64 maxBytes)
 	const QMutexLocker locker(&this->cacheMutex);
 	this->maxItems = maxItems;
 	this->maxBytes = maxBytes;
-	// Lowering a bound has to bite immediately, not at the next insert.
 	this->evictLocked(QString());
 }
 
@@ -23,13 +22,12 @@ void MascotImageCache::insert(const QString& id, const QImage& image, bool hasCo
 	entry.contentCenterX = contentCenterX;
 	entry.acceptedColors = std::move(accepted);
 	entry.rejectedColors = std::move(rejected);
-	// `pinned` intentionally survives a re-insert: the slot that pinned the id still refers
-	// to it, and dropping the pin would let the next insert evict an image that is on screen.
 
+	// `pinned` survives a re-insert: the slot that pinned the id still refers to it, and dropping the pin would let the
+	// next insert evict an image that is on screen.
 	this->lruOrder.removeOne(id);
 	this->lruOrder.prepend(id);
 
-	// `id` is the entry we were asked to add, so eviction must not undo the insert.
 	this->evictLocked(id);
 }
 
@@ -100,7 +98,6 @@ void MascotImageCache::evictLocked(const QString& keepId)
 		if (!overItems && !overBytes)
 			return;
 
-		// Least recently used entry that is neither pinned nor the one just inserted.
 		int victimIndex = -1;
 		for (int i = this->lruOrder.size() - 1; i >= 0; --i) {
 			const QString& candidate = this->lruOrder.at(i);
@@ -114,9 +111,8 @@ void MascotImageCache::evictLocked(const QString& keepId)
 		}
 
 		if (victimIndex < 0) {
-			// Everything left is pinned or is the entry we were told to keep, and a bound is
-			// still exceeded: a single entry is larger than the whole budget. Admit it,
-			// otherwise the panel it belongs to would have nothing to show.
+			// Everything left is pinned or is the entry to keep, so one entry is larger than the whole budget: admit it,
+			// otherwise the panel would have nothing to show.
 			this->reportOverageLocked();
 			return;
 		}
@@ -128,7 +124,6 @@ void MascotImageCache::evictLocked(const QString& keepId)
 
 void MascotImageCache::reportOverageLocked() const
 {
-	// One line per process: an oversized mascot would otherwise warn on every insert.
 	static bool overageReported = false;
 	if (overageReported)
 		return;

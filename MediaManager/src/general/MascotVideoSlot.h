@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <QMetaObject>
 #include <QMediaPlayer>
 #include <QObject>
@@ -120,6 +120,7 @@ public:
 	QString preloadedPath() const { return this->m_preload.parked ? this->m_preload.path : QString(); }
 	qint64 preloadedOffsetMs() const { return this->m_preload.offsetMs; }
 	bool hasPreload() const { return this->m_preload.parked; }
+	bool isSinglePlayer() const { return this->m_singlePlayer; }
 	// True while what is in flight is a preload rather than a swap. The owner asks this to tell
 	// "a clip is opening, do not supersede it" from "the next clip is being made ready, which a
 	// swap that is due may simply take over".
@@ -144,6 +145,12 @@ public:
 	// still loads -- it just does not play, and its deadline starts on resume instead of running
 	// down behind a player that is not painting.
 	void setPaused(bool paused);
+	// (M5: `mascots_low_latency`. The intent a player is created with, and the one the next media open
+	// uses; a swap re-applies it, so a live change lands on the next clip rather than the next restart.)
+	void setLowLatency(bool lowLatency);
+	// (M5: see setLowLatency().)
+	bool lowLatency = true;
+	void applyPlaybackIntent(ThreadedMediaPlayer* player) const;
 	bool paused() const { return m_paused; }
 
 	// Output index (0 = A, 1 = B) and path of the clip last reported through firstFrame(); -1 and

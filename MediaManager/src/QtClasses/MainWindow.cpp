@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cmath>
 #include <QDebug>
+#include <QSet>
 #include "ini.h"
 #include "definitions.h"
 #include "utils.h"
@@ -127,15 +128,15 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     // The one renderer: the controller owns the QML surfaces inside the two hosts (built on
     // enable) and is the only thing that writes what a panel displays. The cache and the
     // prefetcher are MainApp's, process-lifetime, so nothing here can outlive them.
-    // (M4 Task 2: the third host is the window's central widget -- the background layer spans the
+    // The third host is the window's central widget -- the background layer spans the
     // window behind the layout rather than a column, so it is parented there and positioned from
-    // its rectangle by the controller.)
+    // its rectangle by the controller.
     this->mascotController = new MascotController(this->App, this->App->mascotImageCache,
         this->App->mascotPrefetcher, this->ui.mascotLeftHost, this->ui.mascotRightHost,
         this->ui.centralwidget, this);
     connect(this->mascotController, &MascotController::clicked, this,
-        [this](MascotSide side, Qt::MouseButton button, Qt::KeyboardModifiers modifiers) {
-            this->handleMascotClickEvents(side, button, modifiers);
+        [this](MascotSide side, int bandIndex, Qt::MouseButton button, Qt::KeyboardModifiers modifiers) {
+            this->handleMascotClickEvents(side, bandIndex, button, modifiers);
         });
     connect(this->mascotController, &MascotController::themeColorChanged, this, [this](const color_area& color) {
         if (this->App->MascotsExtractColor and color.color.isValid())
@@ -469,7 +470,7 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         }, Qt::QueuedConnection);
     } else if (this->App->config->get_bool("mascots_background")) {
         QMetaObject::invokeMethod(this, [this] {
-            // M4 Task 2: the background runs without the columns. The two hosts stay hidden --
+            // The background runs without the columns. The two hosts stay hidden --
             // start() builds the layer itself, and the columns' width plays no part in a layer
             // that spans the window -- so this is start() rather than showMascots().
             this->ui.mascotLeftHost->hide();
@@ -605,19 +606,29 @@ void MainWindow::changePalette(QPalette palette) {
     this->initRatingIcons();
     this->initStyleSheets();
     this->highlightCurrentItem(QPersistentModelIndex(), false);
+    // The row scrim is re-applied last. `initStyleSheets()` sets it, but the highlight pass
+    // above runs a model change afterwards, and the repaint it schedules can resolve the row brush
+    // against the palette that was set before ours -- the rows then paint at the wrong alpha while
+    // the palette reads correct. Re-applying after the last thing that can touch the list costs one
+    // pass and removes the ordering question entirely.
+    // The call re-derives the veil and the rows' palette from the new app palette; the
+    // ordering reason is unchanged, and it now matters more, since the veil is coloured from it.
+    this->applyBackgroundVeil();
 }
 
 void MainWindow::initStyleSheets() {
     this->ui.currentVideoScrollArea->setStyleSheet("QScrollBar:horizontal {height:0px;} QScrollBar:vertical {height:0px;}");
     this->ui.videosWidget->setStyleSheet(get_stylesheet("videoswidget"));
     this->ui.shoko_button->setStyleSheet(QString::fromUtf8("padding: 0; border: 0; margin:0;"));
-    // M4 Task 3: changePalette() replaces the whole application palette before calling this, so
+    // ChangePalette() replaces the whole application palette before calling this, so
     // the list's alpha palette is re-derived here; with `mascots_background` off this restores
     // the inherited palette instead of leaving a stale translucent one behind after a toggle.
-    this->applyListTransparency();
+    // "the list's alpha palette" is the veil's colour and the rows' transparency now --
+    // same reason, same single call.
+    this->applyBackgroundVeil();
 }
 
-void MainWindow::applyListTransparency() {
+void MainWindow::applyBackgroundVeil() {
     if (!this->App)
         return;
     const QPalette appPalette = this->App->palette();
@@ -625,34 +636,103 @@ void MainWindow::applyListTransparency() {
     // (or returned to) the palette every widget inherits, which is byte-identical to today.
     const bool backgroundEnabled = this->App->config
         && this->App->config->get_bool("mascots_background");
-    // M4 Task 3b: the row alpha is a setting now, because it is the one number that decides how
-    // present the layer is. BACKGROUND_ROW_ALPHA is the fallback, and the same value the app shipped
-    // with before the key existed, so an existing config keeps the look it had.
+    // The row alpha is a setting: it is the one number that decides how present the layer is.
+    // BACKGROUND_ROW_ALPHA is the fallback.
+    // This is the *veil's* alpha, `mascots_background_opacity` -- how much of the window's
+    // colour is laid over the layer, across the strip and the margins as well as the list. It is not
+    // the list's own number; that is `mascots_background_list_alpha` below, and it is still the rows'.
+    int veilAlpha = BACKGROUND_ROW_ALPHA;
+    if (this->App->config) {
+        const double configured = this->App->config->get_double(
+            "mascots_background_opacity", 0.0);
+        veilAlpha = qBound(0, qRound(configured * 255.0), 255);
+    }
+    // The veil's alpha and where it came from. Four runs' pixel readings disagreed
+    // about whether this number was the key's or the fallback's, and the config file said one thing while the
+    // screen said another -- this line is the answer, and it costs one comparison in a normal run.
+    // The line moved to the controller, which is where the veil is composited now -- see
+    // MascotController::pushVeilState(). It keeps the tag and the field names the harness reads.
+    // The rows paint their own fill: Base and AlternateBase at one alpha, which is what makes the list
+    // alternate and the only control over the list's own opacity. The veil is the whole window; this is the list.
     int rowAlpha = BACKGROUND_ROW_ALPHA;
     if (this->App->config) {
         const double configured = this->App->config->get_double(
             "mascots_background_list_alpha", BACKGROUND_ROW_ALPHA / 255.0);
         rowAlpha = qBound(0, qRound(configured * 255.0), 255);
     }
-    const QPalette rowPalette = backgroundEnabled
-        ? get_background_row_palette(appPalette, rowAlpha)
+    // The alternate row has its own alpha. It is the row colour that does not match the
+    // window's background, so it is the one that decides how much of the layer shows through every
+    // other row -- which is a readability question, not a taste one. A key that is missing or empty
+    // follows the list alpha, so a config written before this existed keeps exactly its old look.
+    int alternateAlpha = rowAlpha;
+    if (this->App->config) {
+        const double configured = this->App->config->get_double(
+            "mascots_background_alternate_alpha", 0.85);
+        alternateAlpha = qBound(0, qRound(configured * 255.0), 255);
+    }
+    // At 1.00 the veil covers the layer completely, so every surface that exists only to
+    // make text readable *over* the layer has nothing left to do -- and painting them anyway changed the
+    // window's look: the strip's scrim laid the list's Base colour over an opaque window-coloured veil, so
+    // the top of the centre pane came out a different grey from the window with the layer switched off.
+    // `layerVisible` is what those surfaces ask: the layer is only worth scrimming while some of it shows.
+    const bool layerVisible = backgroundEnabled && veilAlpha < 255;
+    const QPalette rowPalette = layerVisible
+        ? get_background_row_palette(appPalette, rowAlpha, alternateAlpha)
         : appPalette;
     // The view and its viewport: the viewport paints the rows' backdrop and the rows paint their
     // own fill on top, so both have to carry the alpha. Nothing else -- no stylesheet, no
     // alternatingRowColors, no delegates -- is touched, and Base/AlternateBase are the only roles
     // that differ.
-    // (M4 Task 3 fix: "both have to carry the alpha" is true of the same *surface* and false of two
+    // "both have to carry the alpha" is true of the same *surface* and false of two
     // surfaces stacked on each other. The rows are painted by the view's palette and the backdrop by
     // the viewport's, so giving both 216/255 scrims the media twice and leaves about 2% of it under
     // a row -- measured, the layer was invisible. The viewport's Base is therefore cleared to alpha
     // 0: it stops painting a scrim between the media and the row fill, and the row fill becomes the
-    // only one. Both row colours still carry the one row alpha the requirement asks for.)
-    const QPalette viewportPalette = backgroundEnabled
-        ? get_background_row_palette(appPalette, 0)
+    // only one. Both row colours still carry the one row alpha the requirement asks for.
+    const QPalette viewportPalette = layerVisible
+        ? get_background_row_palette(appPalette, 0, 0)
         : appPalette;
     this->ui.videosWidget->setPalette(rowPalette);
     this->ui.videosWidget->viewport()->setPalette(viewportPalette);
-    // (M4 follow-up: the strip above the list had one opaque row. The current-video label sits in a
+    // The rows paint their own fill while the layer is on, because Qt's arrangement cannot
+    // express a translucent list that also alternates -- see VideosTreeView::setTranslucentRows(). With
+    // the layer off this hands the view back to Qt, which is what keeps that rendering identical.
+    this->ui.videosWidget->setTranslucentRows(layerVisible);
+    // The scrollbars' own opacity. Two mechanisms were tried and one of them works: the
+    // palette does not, because a scrollbar's groove is drawn from a style that resolves its colours
+    // through the style sheet machinery the view already has -- measured, the groove stayed at the list
+    // alpha whatever palette was set on the bar. A style sheet is what that machinery reads, so while the
+    // value is below 1.00 the bar is drawn from these two rules; at 1.00 the style sheet is cleared and
+    // the bar is the stock one again, which is what it has always been.
+    int scrollbarAlpha = 255;
+    if (layerVisible && this->App->config) {
+        const double configured = this->App->config->get_double(
+            "mascots_background_scrollbar_alpha", 1.0);
+        scrollbarAlpha = qBound(0, qRound(configured * 255.0), 255);
+    }
+    for (QScrollBar* bar : { this->ui.videosWidget->verticalScrollBar(),
+                             this->ui.videosWidget->horizontalScrollBar() }) {
+        if (scrollbarAlpha >= 255) {
+            bar->setStyleSheet(QString());
+            continue;
+        }
+        const QColor groove = appPalette.color(QPalette::Window);
+        const QColor handle = appPalette.color(QPalette::Button);
+        bar->setStyleSheet(QStringLiteral(
+            "QScrollBar { background: rgba(%1,%2,%3,%4); }"
+            "QScrollBar::handle { background: rgba(%5,%6,%7,%4); }"
+            "QScrollBar::add-page, QScrollBar::sub-page { background: none; }")
+            .arg(groove.red()).arg(groove.green()).arg(groove.blue()).arg(scrollbarAlpha)
+            .arg(handle.red()).arg(handle.green()).arg(handle.blue()));
+    }
+    // An alpha-0 palette is not enough. A polish after this call resets the viewport's
+    // palette to the view's, so the viewport paints a second row scrim underneath the rows and the
+    // media is held back twice -- 0.85 over 0.85 is 0.9775 opaque, which is what a flat #FF8000 layer
+    // measured as (55,52,49) where the single-scrim blend is (68,49,30). The viewport stops filling
+    // at all instead, so the row fill is the only scrim whatever the polish does to the palette; the
+    // off state restores the autofill it shipped with, so its rendering is unchanged.
+    this->ui.videosWidget->viewport()->setAutoFillBackground(!layerVisible);
+    // The strip above the list had one opaque row. The current-video label sits in a
     // QScrollArea, and that row is filled twice over: `qt_scrollarea_viewport` *and* the
     // `scrollAreaWidgetContents` widget both autofill, with the `Window` role -- so the row stayed at
     // the opaque strip colour while the scrim let the layer through everywhere else, and the label
@@ -661,7 +741,7 @@ void MainWindow::applyListTransparency() {
     // widget was painting over it. Both are cleared here.
     // The restore below is the measured default, not the documented one: both widgets were created
     // autofilling `Window` (the dump says `autoFill=1 role=10`), not `Base`, which is why an earlier
-    // version that restored `Base` moved the off state by 18 levels.)
+    // version that restored `Base` moved the off state by 18 levels.
     QWidget* currentVideoFills[2] = {
         this->ui.currentVideoScrollArea->viewport(),
         this->ui.currentVideoScrollArea->widget()
@@ -669,7 +749,7 @@ void MainWindow::applyListTransparency() {
     for (QWidget* fill : currentVideoFills) {
         if (!fill)
             continue;
-        if (backgroundEnabled) {
+        if (layerVisible) {
             fill->setBackgroundRole(QPalette::NoRole);
             fill->setAutoFillBackground(false);
         }
@@ -678,10 +758,27 @@ void MainWindow::applyListTransparency() {
             fill->setAutoFillBackground(true);
         }
     }
-    // M4 Task 3b: the strip above the list is the same Base colour in this app's design, so it takes
+    // The strip above the list is the same Base colour in this app's design, so it takes
     // the same scrim -- otherwise the layer is held back under the rows and runs at full strength
     // across the buttons and the title, and the two areas read as different transparencies.
-    if (backgroundEnabled) {
+    // There is one veil instead of a strip scrim beside a row alpha. It is a child of
+    // centralwidget -- the layer's own parent, so the two cover the same rectangle -- filled with the
+    // window's colour at the configured alpha, and it sits above the layer and below every pane of
+    // the layout. The rows and the strip stop painting fills of their own, so this is the only
+    // translucent surface in the window and the two halves cannot hold the layer back by different
+    // amounts.
+    // The veil covers the window; it does not make the strip *match the list*, because the
+    // list's own fill is a second surface with its own key. The user wants the two to agree -- "the top
+    // widget matches the list too like before" -- so the strip's scrim is back, and it is driven by the
+    // The veil is one rectangle in the controller's sheet -- the same window-sized scene the layer draws in -- and
+    // that is the only way the columns can be put *behind* it: a second widget cannot be stacked above a
+    // QQuickWidget carrying Qt::WA_AlwaysStackOnTop. What stays here is everything that paints *above* that scene:
+    // the rows, the strip's scrim and the bars.
+    // The strip's half of the one control: the same palette call the rows get -- Base at the row alpha -- so the
+    // strip above the list reads exactly like an even row, and the layer is held back by the same amount above the
+    // list as inside it. Sized to the space the list does not occupy: a scrim that covered the list too would stack
+    // a second fill under the rows.
+    if (layerVisible) {
         if (!this->backgroundScrim) {
             this->backgroundScrim = new QWidget(this->ui.CenterContainer);
             // A plain QWidget fills with its Window role by default; the strip's colour is Base.
@@ -689,36 +786,69 @@ void MainWindow::applyListTransparency() {
             this->backgroundScrim->setAutoFillBackground(true);
             // It is scenery: clicks and hovers belong to the widgets above it.
             this->backgroundScrim->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+            // The list's geometry is what the scrim's height depends on, and it moves when the layout
+            // changes -- a search bar or a date column appearing does not resize the window.
+            this->ui.videosWidget->installEventFilter(this);
         }
-        const QPalette scrimPalette = get_background_row_palette(appPalette, rowAlpha);
-        this->backgroundScrim->setPalette(scrimPalette);
+        // The strip is the Base colour, so it follows the list alpha and not the alternate row's -- it is the row
+        // the strip has to match.
+        this->backgroundScrim->setPalette(
+            get_background_row_palette(appPalette, rowAlpha, alternateAlpha));
         // Below every sibling: the strip's own widgets paint on top of the scrim.
         this->backgroundScrim->lower();
         this->backgroundScrim->show();
         this->updateBackgroundScrim();
-        // The list's geometry is what the scrim's height depends on, and it moves when the layout
-        // changes -- a search bar or a date column appearing does not resize the window.
-        this->ui.videosWidget->installEventFilter(this);
     }
     else if (this->backgroundScrim) {
         this->ui.videosWidget->removeEventFilter(this);
         this->backgroundScrim->hide();
     }
+    // Stacking last, as the veil's own apply did: whatever order the form built the panes in, the three of
+    // them are above the controller's sheet by the time this returns.
+    this->stackMascotPanes();
+    // The veil and the layer's backdrop are painted in the palette's Window colour, which this method is the only
+    // caller able to notice changing -- a theme switch reaches it through changePalette(). Without this push the
+    // scene would keep the previous theme's colour until the next settings apply.
+    if (this->mascotController)
+        this->mascotController->pushVeil();
 }
 
 void MainWindow::updateBackgroundScrim() {
-    if (!this->backgroundScrim || !this->backgroundScrim->isVisible())
+    if (!this->backgroundScrim)
         return;
+    // No visibility gate: the scrim is built during construction, while the window is still hidden, and a child
+    // of a hidden parent is not "visible". Sizing a hidden widget is free.
     // Everything CenterContainer owns above the list. Both widgets are children of that container,
     // so y() is already in the coordinate space the scrim is placed in.
     const QWidget* container = this->ui.CenterContainer;
     const int height = qBound(0, this->ui.videosWidget->y(), container->height());
-    this->backgroundScrim->setGeometry(0, 0, container->width(), height);
+    const QRect rect(0, 0, container->width(), height);
+    if (this->backgroundScrim->geometry() != rect)
+        this->backgroundScrim->setGeometry(rect);
+}
+
+void MainWindow::stackMascotPanes() {
+    // The three panes are re-raised on every call, so the order between them and the controller's sheet is
+    // settled here and nowhere else. The sheet lowers itself to the bottom when it is created -- it is the
+    // window's backmost child -- and everything below is about the three panes among themselves, which do not
+    // overlap, so their order is taste rather than layout.
+    // There is no veil widget to place: the veil is a rectangle in the controller's one quick scene, which is the
+    // only way the columns can sit under it -- their QQuickWidget carries Qt::WA_AlwaysStackOnTop, which the widget
+    // stack does not override, so raising and lowering hosts only orders the three panes among themselves.
+    this->ui.mascotLeftHost->raise();
+    this->ui.mascotRightHost->raise();
+    // Last, so the centre pane is above both columns whatever order the form built them in.
+    this->ui.CenterContainer->raise();
 }
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
-    // M4 Task 3b: the list moving inside its container is the only thing that changes how tall the
+    // The list moving inside its container is the only thing that changes how tall the
     // strip above it is. A resize covered by MainWindow::event() would miss a search bar opening.
+    // The veil was sized from the whole container, which is why this filter watched it as well.
+    // The veil is in the controller's sheet, whose own host the controller watches, so only the strip is
+    // left here.
+    // The strip's height is the list's y, so the list moving inside the container is what
+    // this one follows -- the same reason the scrim existed before the veil.
     if (this->backgroundScrim && watched == this->ui.videosWidget
         && (event->type() == QEvent::Move || event->type() == QEvent::Resize)) {
         this->updateBackgroundScrim();
@@ -1401,11 +1531,11 @@ void MainWindow::initMascotAnimation()
     }
 }
 
-void MainWindow::updateMascot(MascotSide mascot, bool update_highlight_color) {
+void MainWindow::updateMascot(MascotSide mascot, int bandIndex) {
     // The side-directory flip rule, the swap latency and the theme colour move with the media
     // now: the controller commits from its own prefetched candidate, implements flipForSide()
     // and emits themeColorChanged() when the media it picked has landed.
-    this->mascotController->nextImage(mascot, update_highlight_color);
+    this->mascotController->advanceBand(mascot, bandIndex);
 }
 
 void MainWindow::updateMascots(bool forced_mirror)
@@ -1419,10 +1549,10 @@ void MainWindow::updateMascots(bool forced_mirror)
     }
 }
 
-void MainWindow::updateThemeHighlightColorFromMascot(MascotSide mascot, bool weighted) {
+void MainWindow::updateThemeHighlightColorFromMascot(MascotSide mascot, int bandIndex, bool weighted) {
     // The palette comes from the MascotMedia the controller received (amendment H5): the
     // decode already extracted it, so there is nothing to re-extract and no cache accessor.
-    color_area color = this->mascotController->colorFor(mascot, weighted);
+    color_area color = this->mascotController->colorForBand(mascot, bandIndex, weighted);
     if (color.color.isValid())
         this->setThemeHighlightColor(color.color);
 }
@@ -1658,7 +1788,7 @@ void MainWindow::showMascots()
 
 void MainWindow::hideMascots()
 {
-    // M4 Task 2: with `mascots_background` on, turning the columns off must not kill the layer
+    // With `mascots_background` on, turning the columns off must not kill the layer
     // behind them: only the pair is torn down (stopPanels()), the hosts are hidden, and the
     // controller keeps running the background. With the key off this is the full stop() it always
     // was -- the background has nothing to keep and the teardown is the same as before.
@@ -2782,29 +2912,23 @@ void MainWindow::cleanMissingFilesDialog(QWidget* parent) {
     }
 }
 
-void MainWindow::handleMascotClickEvents(MascotSide mascot, Qt::MouseButton button, Qt::KeyboardModifiers modifiers) {
+void MainWindow::handleMascotClickEvents(MascotSide mascot, int bandIndex, Qt::MouseButton button, Qt::KeyboardModifiers modifiers) {
     if (modifiers.testFlag(Qt::ControlModifier)) {
         switch (button)
         {
         case Qt::LeftButton:
-            this->updateThemeHighlightColorFromMascot(mascot, true);
+            this->updateThemeHighlightColorFromMascot(mascot, bandIndex, true);
             break;
         case Qt::RightButton:
-            this->updateThemeHighlightColorFromMascot(mascot, false);
+            this->updateThemeHighlightColorFromMascot(mascot, bandIndex, false);
             break;
         case Qt::MiddleButton:
-            if (this->App->config->get_bool("mascots_mirror")) {
-                if (modifiers.testFlag(Qt::ShiftModifier))
-                    this->updateMascot(mascot, true);
-                else 
-                    this->updateMascots(false);
-            }
-            else {
-                if (modifiers.testFlag(Qt::ShiftModifier))
-                    this->updateMascots(true);
-                else
-                    this->updateMascot(mascot, true);
-            }
+            // Shift is the strip's unit, a plain ctrl-click the band under the pointer. The mirror pair is one clip
+            // per band, so both paths advance the pair's band rather than half of it.
+            if (modifiers.testFlag(Qt::ShiftModifier))
+                this->mascotController->advanceStrip(mascot);
+            else
+                this->updateMascot(mascot, bandIndex);
             break;
         default:
             break;
@@ -2815,6 +2939,152 @@ void MainWindow::handleMascotClickEvents(MascotSide mascot, Qt::MouseButton butt
         else if (button == Qt::RightButton)
             this->flipMascots();
     }
+}
+
+void MainWindow::applyLegacyMascotEffects() {
+    Config* config = this->App->config;
+    if (!config)
+        return;
+    // The legacy rows' runtime half. The config keys below are written by
+    // SettingsDialog::syncMascotConfig() on every change; this pushes the ones that are not read live
+    // by their consumer.
+    //  - the animation thread holds its cadence and its dice as members, so a key change alone reaches it
+    //    only on the next start; pushed here, which also makes Animated start and stop the engine.
+    //  - the mascot hosts' width is a layout property, not a key read.
+    //  - the palette is only rebuilt when the extraction switch actually flips: resetPalette() rebuilds the
+    //    application palette, and doing that per spin-box tick would throw away a chosen theme.
+    if (this->App->MascotsAnimation) {
+        this->App->MascotsAnimation->frequency = config->get("mascots_frequency").toInt();
+        this->App->MascotsAnimation->set_random_chance(
+            config->get("mascots_random_chance").toDouble() / 100.0);
+        this->App->MascotsAnimation->random_change = config->get_bool("mascots_random_change");
+        if (config->get_bool("mascots_animated"))
+            this->App->MascotsAnimation->start_running();
+        else
+            this->App->MascotsAnimation->stop_running();
+    }
+    this->applyMascotWidth(this->width(), config->get_double("mascots_width_percent", 15.0));
+    const bool extractColours = config->get_bool("mascots_color_theme");
+    if (extractColours != this->App->MascotsExtractColor) {
+        this->App->MascotsExtractColor = extractColours;
+        if (this->App->mascotPrefetcher)
+            this->App->mascotPrefetcher->setExtractColors(extractColours);
+        this->resetPalette();
+    }
+}
+
+void MainWindow::applyLiveMascotRows() {
+    this->applyLegacyMascotEffects();
+    this->applyMascotSettings();
+}
+
+void MainWindow::applyMascotKey(const QString& key) {
+    // One live change, one effect: a control writes its key and only the consumers that read that key run. The
+    // full path -- four palette rebuilds, two scrollbar re-polishes, a full list repaint, three panels re-presented
+    // and every band's clip timer restarted -- is what a whole-page apply costs, so this maps a key to the
+    // consumer(s) that can see it:
+    //  - the veil's own keys: the veil, and the columns-below simulation that is derived from its alpha.
+    //  - width: the layout.
+    //  - the cache bounds: the cache.
+    //  - the beat engine's own rows: the pushes applyLegacyMascotEffects() makes (no panels, no veil).
+    //  - everything else: a panel or the layer, i.e. the controller's config plus the columns' visibility.
+    static const QSet<QString> veilKeys = {
+        QStringLiteral("mascots_background_opacity"),
+        QStringLiteral("mascots_columns_z"),
+        QStringLiteral("mascots_background_list_alpha"),
+        QStringLiteral("mascots_background_alternate_alpha"),
+        QStringLiteral("mascots_background_scrollbar_alpha"),
+    };
+    static const QSet<QString> engineKeys = {
+        QStringLiteral("mascots_frequency"),
+        QStringLiteral("mascots_random_chance"),
+        QStringLiteral("mascots_random_change"),
+        QStringLiteral("mascots_animated"),
+        QStringLiteral("mascots_color_theme"),
+    };
+    if (veilKeys.contains(key)) {
+        // The veil is a rectangle in the controller's one scene now, so a veil key reaches the sheet;
+        // applyBackgroundVeil() still owns the rows', the strip's and the scrollbars' alphas, which are
+        // painted above that scene.
+        this->applyBackgroundVeil();
+        if (this->mascotController)
+            this->mascotController->pushVeil();
+        return;
+    }
+    if (key == QStringLiteral("mascots_width_percent")) {
+        this->applyMascotWidth(this->width(), this->App->config->get_double(key, 15.0));
+        return;
+    }
+    if (key == QStringLiteral("mascots_image_cache_mb")
+        || key == QStringLiteral("mascots_image_cache_max_items")) {
+        this->App->updateMascotCacheLimits();
+        return;
+    }
+    if (engineKeys.contains(key)) {
+        this->applyLegacyMascotEffects();
+        return;
+    }
+    // A panel or layer key: the columns' visibility, the controller's cached config and the layer's state
+    // machine are one body (applyMascotSettings()) and its parts are not separable -- which is why this is
+    // the largest bucket, and the three above are the ones that are.
+    this->applyMascotSettings();
+}
+
+void MainWindow::applyMascotSettings() {
+    Config* config = this->App->config;
+    const bool columnsOn = config->get_bool("mascots");
+    const bool backgroundOn = config->get_bool("mascots_background");
+    if (columnsOn) {
+        if (this->ui.mascotLeftHost->isHidden()) {
+            // showMascots() starts the controller, which seeds both panels: updateMascots()
+            // here would be a second swap.
+            this->showMascots();
+            // "starting with mascots off then turning them on appears to make them
+            // animate too even tho the animate mascots is and stays off". `mascots_animated` is the switch
+            // for the whole animation/beat engine, and this enable path was the one place that started it
+            // without asking -- initMascotAnimation() consults the key at startup and the checkbox's own
+            // handler consults it when it is ticked. Same question here: the engine only starts when the
+            // user asked for it, and ticking Animate Mascots later starts it through that handler.
+            if (config->get_bool("mascots_animated"))
+                this->App->MascotsAnimation->start_running();
+        }
+    }
+    else if (this->ui.mascotLeftHost->isVisible()) {
+        // hideMascots() keeps a background-only layer alive by itself: with `mascots_background` on
+        // it tears down the pair only, and with the key off it is the full stop() this branch has
+        // always been.
+        this->hideMascots();
+        this->App->MascotsAnimation->stop_running();
+        // The palette reset belongs to this transition, not to the off state.
+        // applyMascotSettings() runs on every live control change now, and resetPalette() rebuilds
+        // the application palette from the theme -- doing that per tick would throw away whatever
+        // palette is current (a chosen theme, a mascot-extracted highlight) while the user is only
+        // moving a spin box. The reset exists because colour extraction can change that palette,
+        // which can only have happened while the columns were visible.
+        this->resetPalette();
+    }
+    // The columns being off does not mean the layer is off. When the layer is on and no
+    // controller is running -- the columns were just hidden with the layer off, or the dialog just
+    // switched the layer on -- start it the way the startup path does: the two hosts stay hidden,
+    // and start() builds the layer itself.
+    if (!columnsOn && backgroundOn && !this->mascotController->isRunning()) {
+        this->ui.mascotLeftHost->hide();
+        this->ui.mascotRightHost->hide();
+        this->mascotController->start();
+    }
+    // Every mascot key this milestone consumes (all-files-random, mirror, centred content, seed) is
+    // read by the controller, so a changed key has to reach it unconditionally: with the panels
+    // hidden there is nothing to re-layout, but the next start() would otherwise pick with stale
+    // values.
+    this->mascotController->applyConfig();
+    // The row alpha and the strip's scrim are derived from `mascots_background` and
+    // `mascots_background_list_alpha`, so the list's half follows every live change of either.
+    // It is one veil derived from `mascots_background` and
+    // `mascots_background_opacity`, and it also carries the columns' z-order -- so a live change of
+    // any of the three is applied here, in the same pass as the controller's.
+    this->applyBackgroundVeil();
+    // The cache bounds are config too, so they are re-applied by the same entry point.
+    this->App->updateMascotCacheLimits();
 }
 
 void MainWindow::applySettings(SettingsDialog* dialog) {
@@ -2880,22 +3150,21 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
             this->init_icons();
         }
     }
+    // The Mascots page writes its own keys through one function, so the Apply button and
+    // the page's live path cannot disagree about which key a control owns. That call applies too;
+    // the state machine runs once more below, after the legacy mascot keys have been written, so
+    // the last apply sees all of them.
+    dialog->syncMascotConfig();
     if (dialog->ui.mascotsOnOff->checkState() == Qt::CheckState::Checked) {
         config->set("mascots", "True");
-        if (this->ui.mascotLeftHost->isHidden()) {
             // showMascots() starts the controller, which seeds both panels: updateMascots()
             // here would be a second swap.
-            this->showMascots();
-            this->App->MascotsAnimation->start_running();
-        }
+            // That call, and the visibility switch it belongs to, moved to
+            // applyMascotSettings(); this branch only writes the key now. The two lines above stay
+            // at their original indentation on purpose: an existing comment is not rewritten.
     }
     else if (dialog->ui.mascotsOnOff->checkState() == Qt::CheckState::Unchecked) {
         config->set("mascots", "False");
-        if (this->ui.mascotLeftHost->isVisible()) {
-            this->hideMascots();
-            this->App->MascotsAnimation->stop_running();
-        }
-        this->resetPalette();
     }
     if (dialog->ui.mascotsAllFilesRandom->checkState() == Qt::CheckState::Checked) {
         config->set("mascots_allfiles_random", "True");
@@ -2957,6 +3226,8 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     // The seed switch is written before applyConfig(), not after it: the controller re-reads
     // `mascots_use_seed` inside applySeedSource(), so a write that lands after the call is only
     // seen by the next Apply -- a runtime toggle would apply one Apply late.
+    // ApplyConfig() is reached through applyMascotSettings() below; this write still
+    // precedes that call, so the sentence above stays true.
     const bool oldMascotsUseSeed = config->get_bool("mascots_use_seed");
     const bool newMascotsUseSeed = dialog->ui.mascotsUseSeed->checkState() == Qt::CheckState::Checked;
     if (newMascotsUseSeed)
@@ -2967,16 +3238,23 @@ void MainWindow::applySettings(SettingsDialog* dialog) {
     // seed) is read by the controller, so a settings change has to reach it unconditionally:
     // with the panels hidden there is nothing to re-layout but the next start() would
     // otherwise pick with stale values.
-    this->mascotController->applyConfig();
-    // (M4 review fix: the row alpha and the strip's scrim are derived from `mascots_background`
+    // This apply and the two statements below are applyMascotSettings() now -- one
+    // entry point shared with the Mascots page's live apply, so both callers get the same body.
+    // The row alpha and the strip's scrim are derived from `mascots_background`
     // and `mascots_background_list_alpha`, and until now only `initStyleSheets()` re-derived them --
     // so a live toggle left the two halves disagreeing: off kept the rows translucent and the scrim
     // on screen, on left opaque rows under a layer running at full strength across the strip. The
     // controller reads those keys in the Apply above, so the list's half is refreshed here, beside
-    // it, instead of waiting for the next theme change.)
-    this->applyListTransparency();
+    // it, instead of waiting for the next theme change.
+    // "here, beside it" is inside applyMascotSettings() now -- it applies the
+    // controller first and the list's half immediately after.
     // Amendment H3: the cache bounds are config too, so a settings change re-applies them.
-    this->App->updateMascotCacheLimits();
+    // Re-applied by applyMascotSettings() below, which is the call this replaces.
+    this->applyMascotSettings();
+    // Everything the page owns has just been written and applied, so this Apply
+    // becomes the baseline the dialog's Cancel restores to. Without it, Apply followed by Cancel
+    // wrote the dialog-opening values straight back over what Apply had kept.
+    dialog->rebaseMascotConfigSnapshot();
     if (oldMascotsUseSeed != newMascotsUseSeed) {
         if (this->ui.mascotLeftHost->isVisible()) {
             QTimer::singleShot(50, this, [this] {
@@ -3502,6 +3780,10 @@ void MainWindow::settingsDialogButton()
         this->updateVideoListRandomProbabilitiesIfVisible();
     }
     else if (value == QDialog::Rejected) {
+        // Live apply wrote config, so Cancel has to write it back. The snapshot-and-
+        // replay runs first; the `old_*` restores below then push the same values into the runtime
+        // objects the page never wrote.
+        dialog.restoreMascotConfig();
         if (dialog.ui.volumeSpinBox->value() != dialog.oldVolume) {
             if (this->App->musicPlayer)
                 this->App->musicPlayer->setVolume(dialog.oldVolume);
@@ -5849,14 +6131,25 @@ bool MainWindow::event(QEvent* e)
             this->playSpecialSoundEffect();
         }
     }
+    if (e->type() == QEvent::Show) {
+        // The veil was created and sized while the window was still hidden -- the container has
+        // no real geometry until the first layout pass -- so it was sized once more here. M6: the veil is a
+        // rectangle in the controller's sheet, whose geometry the controller derives from its own host on
+        // every resize; what is left for this event is the pane order above it.
+        this->stackMascotPanes();
+    }
     if (e->type() == QEvent::Resize) {
         //scale mascots
         QResizeEvent* resizeEvent = static_cast<QResizeEvent*>(e);
         int windowWidth = resizeEvent->size().width();
         int windowHeight = resizeEvent->size().height();
         this->applyMascotWidth(windowWidth, this->App->config->get_double("mascots_width_percent", 15.0));
-        // M4 Task 3b: the strip above the list changed height with the window; the layer's scrim
+        // The strip above the list changed height with the window; the layer's scrim
         // covers exactly that strip.
+        // The veil was the size of the whole container, so this was the early answer and the
+        // container's own Resize event was the final one. M6: the veil is inside the controller's sheet and
+        // the controller sizes that from its host on every resize, so only the strip's scrim is left here.
+        // The strip's scrim ends where the list begins, so it follows the list.
         this->updateBackgroundScrim();
     }
     return QMainWindow::event(e);

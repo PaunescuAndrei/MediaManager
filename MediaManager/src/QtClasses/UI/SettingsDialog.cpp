@@ -932,10 +932,10 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     // flips one against the other; this decides whether they also travel against each other.
     mascotPairScrollCombo = makeComboBox({ QStringLiteral("Same"), QStringLiteral("Opposite") },
         config->get(QStringLiteral("mascots_pair_scroll")));
-    addRow(playbackLayout, "Mirror pair scroll:",
-        "In mirror mode, whether the two columns scroll the same way or against each other. Same is what "
-        "they have always done; Opposite makes the mirrored pair travel outwards or inwards together.",
-        mascotPairScrollCombo);
+    this->mascotPairScrollTip = QStringLiteral(
+        "Whether the two columns travel the same way or against each other. Same is what they have always done; "
+        "Opposite makes the pair travel outwards or inwards together.");
+    addRow(playbackLayout, "Mirror pair scroll:", this->mascotPairScrollTip, mascotPairScrollCombo);
 
     // The parity switch, and the only one. Mirror mode already puts the same image or clip in
     // both columns; this says whether the right column is that media mirrored or a plain repeat of it. The
@@ -1469,10 +1469,17 @@ void SettingsDialog::updateMascotControlStates()
     mascotMaxDecodersSpinBox->setEnabled(true);
     mascotPauseUnfocusedCheckBox->setEnabled(true);
     mascotLowLatencyCheckBox->setEnabled(true);
-    // A bound video pair draws one picture, and a single texture has no spare pixels to travel into: the mirrored
-    // column's motion is the left band's, reversed by the flip. With images each column keeps its own copy, so the
-    // choice is real there and stays live.
-    mascotPairScrollCombo->setEnabled(this->ui.mascotsMirror->isChecked() && !videoColumns);
+    // The pair's travel is a property of the two columns, not of the mirror: with each column drawing its own picture
+    // -- images, or videos with the mirror off -- reversing the right column's travel is a real choice, and the engine
+    // has always honoured it there. The one shape that cannot express it is a *bound* video pair: one decoded picture
+    // drawn twice, flipped, so the mirrored column's travel is that picture's and nothing else.
+    const bool boundPair = this->ui.mascotsMirror->isChecked() && videoColumns;
+    mascotPairScrollCombo->setEnabled(!boundPair);
+    mascotPairScrollCombo->setToolTip(boundPair
+        ? QStringLiteral("Not available while the mirror shows a video: the right column draws the left column's "
+            "picture, so its travel is that picture's. Turn the mirror off, or set Media to Images, to set the two "
+            "columns against each other.")
+        : this->mascotPairScrollTip);
     // The parity switch keeps its meaning for images and videos alike -- it is about the pair,
     // not about a player -- so it never goes dark.
     mascotPairFlipCheckBox->setEnabled(this->ui.mascotsMirror->isChecked());

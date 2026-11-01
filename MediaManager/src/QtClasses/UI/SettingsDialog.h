@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <QDialog>
 #include <QHash>
 #include "ui_SettingsDialog.h"
@@ -141,6 +141,8 @@ public:
     QCheckBox* mascotLowLatencyCheckBox = nullptr;
     // `mascots_pair_scroll` -- whether a mirrored pair scrolls the same way or against itself.
     QComboBox* mascotPairScrollCombo = nullptr;
+    // Its row's tooltip, kept so the disabled state can say why and then restore the original.
+    QString mascotPairScrollTip;
     // `mascots_pair_flip` -- whether the mirrored column is drawn flipped or identical.
     QCheckBox* mascotPairFlipCheckBox = nullptr;
     QSpinBox* mascotBackgroundClipSpinBox = nullptr;

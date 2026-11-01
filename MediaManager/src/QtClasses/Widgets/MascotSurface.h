@@ -89,7 +89,7 @@ public:
 	// delegate -- so null is the honest answer both while the delegate does not exist and for
 	// any pointer a caller kept across a setSlotCount() that shrank the panel. Query it again
 	// after such a call; never hold it past one.
-	QVideoSink* slotSink(int i, int ab) const;
+	QVideoSink* slotSink(int i, int ab);
 	// Whether the slot's video outputs draw at all. The image path and the video path are
 	// exclusive per slot, so the caller hides one when it shows the other; the slot's media
 	// properties are left alone, because switching back must not cost a reload.

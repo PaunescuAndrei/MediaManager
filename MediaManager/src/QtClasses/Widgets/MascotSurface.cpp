@@ -291,12 +291,6 @@ void MascotSurface::clearSlot(int i)
 	this->applySlot(i);
 }
 
-void MascotSurface::clearSlots()
-{
-	for (int i = 0; i < this->slotStates.size(); ++i)
-		this->clearSlot(i);
-}
-
 void MascotSurface::setMirror(bool mirror)
 {
 	this->mirror = mirror;

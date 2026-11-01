@@ -29,8 +29,6 @@ public:
 
 	bool isPending(const QString& path) const;
 
-	MascotMedia takeReady();
-
 	// Bumps a generation so a decode finishing after this call cannot resurrect a slot that was just cleared.
 	void clear();
 
@@ -55,6 +53,5 @@ private:
 	QSet<QString> pendingPaths;                  // GUI thread only
 	QSet<QString> failedPaths;                   // GUI thread only, so a failure logs once
 	QHash<QString, MascotMedia> rememberedMedia; // GUI thread only, keyed by path
-	QList<MascotMedia> readyQueue;               // GUI thread only, oldest first
 	std::atomic<quint64> generation{ 0 };        // bumped by clear(), read by workers
 };

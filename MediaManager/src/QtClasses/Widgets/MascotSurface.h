@@ -38,6 +38,7 @@ public:
 	QSizeF slotContentSize(int i) const;
 	void setSlotContentOffset(int i, const QPointF& offset);
 	void setSlotScrollOffset(int i, double dx, double dy);
+	// Deliberately kept without a caller: it is the only per-slot opacity a still image has (the video path has setSlotVideoOpacity, the layer has setSurfaceOpacity), and an image crossfade would need exactly this.
 	void setSlotOpacity(int i, double opacity);
 	void setSlotFillMode(int i, FillMode mode);
 	void setSlotMirrored(int i, bool mirrored);
@@ -48,7 +49,6 @@ public:
 	// A duration of 0 is a zero-duration animation -- the hard cut -- so there is no second code path.
 	void setSlotVideoOpacity(int i, int ab, double opacity, int crossfadeMs);
 	void clearSlot(int i);
-	void clearSlots();
 	// Bulk default for slots created later; the per-slot flag stays the value that is drawn.
 	void setMirror(bool mirror);
 	// Applied to the layer group's slots only, inside the scene graph: a QGraphicsOpacityEffect would add a second offscreen composition per frame.

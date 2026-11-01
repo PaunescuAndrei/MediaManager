@@ -17,8 +17,6 @@ namespace {
 	constexpr int PALETTE_TARGET_SIZE = 300;
 	// Decode threads, never QThreadPool::globalInstance(): a burst of prefetches must not occupy every core.
 	constexpr int DECODE_THREAD_COUNT = 2;
-	// Overflow drops the oldest media, keeping the freshest; those pixels are still in the cache, only the entry is lost.
-	constexpr int READY_QUEUE_LIMIT = 10;
 	// The driver floor is 8192 texels (FL10/integrated), and 4096 leaves headroom for both panels' textures while
 	// staying a fixed function of the file -- which is why it is not part of the cache key.
 	constexpr int MAX_DECODE_LONG_EDGE = 4096;
@@ -123,20 +121,12 @@ bool MascotPrefetcher::isPending(const QString& path) const
 	return this->pendingPaths.contains(path);
 }
 
-MascotMedia MascotPrefetcher::takeReady()
-{
-	if (this->readyQueue.isEmpty())
-		return MascotMedia();
-	return this->readyQueue.takeFirst();
-}
-
 void MascotPrefetcher::clear()
 {
 	// Work still in flight belongs to the old generation, so both completion paths drop it on arrival.
 	this->generation.fetch_add(1);
 	this->decodePool->clear();
 	this->pendingPaths.clear();
-	this->readyQueue.clear();
 }
 
 MascotPrefetcher::DecodeResult MascotPrefetcher::decode(const QString& path, const QString& providerId,
@@ -219,9 +209,6 @@ void MascotPrefetcher::handleDecoded(DecodeResult result, quint64 requestGenerat
 
 void MascotPrefetcher::publish(const MascotMedia& media)
 {
-	if (this->readyQueue.size() >= READY_QUEUE_LIMIT)
-		this->readyQueue.removeFirst();
-	this->readyQueue.append(media);
 	emit mediaReady(media);
 }
 

@@ -348,7 +348,6 @@ private:
 	int retryAttempts = 5;
 	int busyDeferMs = 250;
 	QPointer<QWidget> watchedWindow;
-	bool sawWindowActivation = false;
 	bool poolFingerprintValid = false;
 	QString poolDb;
 	int poolRowCount = -1;

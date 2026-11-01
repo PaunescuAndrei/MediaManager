@@ -296,13 +296,18 @@ void MascotSurface::setSlotMedia(int i, const MascotMedia& media)
 	this->applySlot(i);
 }
 
-QVideoSink* MascotSurface::slotSink(int i, int ab) const
+QVideoSink* MascotSurface::slotSink(int i, int ab)
 {
 	// An out-of-range index or output selector has no sink to return. The caller's own
 	// bookkeeping should never produce one, but answering null costs one comparison and keeps an
 	// out-of-range read from deciding anything.
 	if (!this->isValidSlot(i) || (ab != 0 && ab != 1))
 		return nullptr;
+	// Resolve here rather than relying on the last applySlot(): a delegate QML creates after that call left the
+	// cache empty, and this accessor then answered null for ever -- a video pick read that as "no sink for the
+	// panel", retried its budget out and fell back to images. The lookup is idempotent and only does work while
+	// the pointer is null, so a settled slot pays nothing.
+	this->resolveSlot(i);
 	const Slot& slot = this->slotStates.at(i);
 	QQuickItem* video = (ab == 0 ? slot.videoA : slot.videoB).data();
 	// A delegate that does not exist yet (or was destroyed by a slot count change) has no item,

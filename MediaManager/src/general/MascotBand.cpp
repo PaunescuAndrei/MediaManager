@@ -125,6 +125,9 @@ void MascotBand::setMirrorSource(int sourceSlot)
 	if (this->m_surface)
 		this->m_surface->setSlotMirrorSource(this->m_slotIndex, sourceSlot);
 	this->m_mirrorSourceSlot = sourceSlot;
+	// The slot's own parity belongs to whatever draws it while this band is unbound -- an image keeps writing it per
+	// pick -- so the view's flip has to be re-asserted at every bind rather than remembered across one.
+	this->m_mirrorFlipKnown = false;
 }
 
 int MascotBand::mirrorSourceSlot() const

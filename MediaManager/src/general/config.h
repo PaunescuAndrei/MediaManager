@@ -13,8 +13,10 @@ public:
 	void open_config(QString filepath);
 	void save_config();
 	QString get(QString item);
+	QString get_default(QString item);
 	void set(QString key, QString value);
 	bool get_bool(QString item);
-	double get_double(QString item, double defaultValue = 0.0);
+	double get_double(QString item);
+	double get_double(QString item, double defaultValue);
 };
 

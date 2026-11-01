@@ -1,4 +1,4 @@
-﻿#include "stdafx.h"
+#include "stdafx.h"
 #include "MascotController.h"
 #include "MainApp.h"
 #include "MainWindow.h"
@@ -84,24 +84,17 @@ namespace {
 		return std::clamp(value, 0, MAX_CLIP_SECONDS);
 	}
 
-	// A value that does not parse falls back to `fallback`, never to a floor: clamped to [low, high], a
-	// typo like "abc" would become the most aggressive setting and abandon clips that are merely opening.
-	int clampedConfigInt(Config* config, const QString& key, int fallback, int low, int high)
+	// A value that does not parse falls back to the key's own default, never to a floor: clamped to
+	// [low, high], a typo like "abc" would become the most aggressive setting and abandon clips that
+	// are merely opening.
+	int clampedConfigInt(Config* config, const QString& key, int low, int high)
 	{
 		if (!config)
-			return fallback;
+			return low;
 		bool ok = false;
 		const int value = config->get(key).toInt(&ok);
+		const int fallback = config->get_default(key).toInt();
 		return std::clamp(ok ? value : fallback, low, high);
-	}
-
-	// Config::get_bool() has no fallback and answers False for an absent key, which would switch a pre-existing config off.
-	bool configBoolWithFallback(Config* config, const QString& key, bool fallback)
-	{
-		if (!config)
-			return fallback;
-		const QString value = config->get(key);
-		return value.isEmpty() ? fallback : utils::text_to_bool(value.toStdString());
 	}
 
 	// A slice's end is the next slice's start, rounded to whole pixels, so the slices sum to the panel exactly;
@@ -325,14 +318,10 @@ void MascotController::applyConfig()
 	this->mediaSetting = config->get(QStringLiteral("mascots_media"));
 	this->clipSeconds = clampedClipSeconds(config);
 	this->swapOnBeat = config->get_bool(QStringLiteral("mascots_swap_on_beat"));
-	this->backgroundClipSeconds = clampedConfigInt(config,
-		QStringLiteral("mascots_background_clip_seconds"), 30, 0, MAX_CLIP_SECONDS);
-	this->backgroundSwapOnBeat = configBoolWithFallback(config,
-		QStringLiteral("mascots_background_swap_on_beat"), true);
-	this->backgroundRandomChange = configBoolWithFallback(config,
-		QStringLiteral("mascots_background_random_change"), true);
-	this->backgroundRandomChance = std::clamp(config->get_double(
-		QStringLiteral("mascots_background_random_chance"), 10.0) / 100.0, 0.0, 1.0);
+	this->backgroundClipSeconds = clampedConfigInt(config, QStringLiteral("mascots_background_clip_seconds"), 0, MAX_CLIP_SECONDS);
+	this->backgroundSwapOnBeat = config->get_bool(QStringLiteral("mascots_background_swap_on_beat"));
+	this->backgroundRandomChange = config->get_bool(QStringLiteral("mascots_background_random_change"));
+	this->backgroundRandomChance = std::clamp(config->get_double(QStringLiteral("mascots_background_random_chance")) / 100.0, 0.0, 1.0);
 	// A commit queued under the old configuration waits for a seam that may never come (this Apply can switch
 	// the mode or the cadence), so every panel drops them here; the new configuration queues its own.
 	for (PanelState* state : { &this->leftState, &this->rightState, &this->backgroundState }) {
@@ -344,7 +333,7 @@ void MascotController::applyConfig()
 	this->randomStart = config->get_bool(QStringLiteral("mascots_random_start"));
 	this->pairScrollOpposite = config->get(QStringLiteral("mascots_pair_scroll"))
 		.compare(QStringLiteral("Opposite"), Qt::CaseInsensitive) == 0;
-	this->flipMirroredColumn = configBoolWithFallback(config, QStringLiteral("mascots_pair_flip"), true);
+	this->flipMirroredColumn = config->get_bool(QStringLiteral("mascots_pair_flip"));
 	this->lowLatency = config->get_bool(QStringLiteral("mascots_low_latency"));
 	this->crossfadeMs = clampedCrossfadeMs(config);
 	this->maxDecoders = std::max(0, config->get(QStringLiteral("mascots_max_decoders")).toInt());
@@ -352,17 +341,17 @@ void MascotController::applyConfig()
 	this->weightedRandom = config->get_bool(QStringLiteral("mascots_weighted_random"));
 	this->preloadEnabled = config->get_bool(QStringLiteral("mascots_preload"));
 	// The swap deadline has no "off" value: this timer is the only thing that releases a load that never paints.
-	this->swapTimeoutMs = clampedConfigInt(config, QStringLiteral("mascots_swap_timeout_ms"), 5000, 500, 60000);
-	this->retryIntervalMs = clampedConfigInt(config, QStringLiteral("mascots_retry_interval_ms"), 150, 20, 2000);
-	this->retryAttempts = clampedConfigInt(config, QStringLiteral("mascots_retry_attempts"), 5, 0, 50);
-	this->busyDeferMs = clampedConfigInt(config, QStringLiteral("mascots_busy_defer_ms"), 250, 50, 5000);
+	this->swapTimeoutMs = clampedConfigInt(config, QStringLiteral("mascots_swap_timeout_ms"), 500, 60000);
+	this->retryIntervalMs = clampedConfigInt(config, QStringLiteral("mascots_retry_interval_ms"), 20, 2000);
+	this->retryAttempts = clampedConfigInt(config, QStringLiteral("mascots_retry_attempts"), 0, 50);
+	this->busyDeferMs = clampedConfigInt(config, QStringLiteral("mascots_busy_defer_ms"), 50, 5000);
 
 	bool modeOk = false;
 	const QString modeValue = config->get(QStringLiteral("mascots_mode"));
 	const MascotMode parsedMode = MascotController::modeFromString(modeValue, &modeOk);
 	this->columnsLayout.mode = modeOk ? parsedMode : MascotMode::Static;
-	this->stripesLeftBands = clampedConfigInt(config, QStringLiteral("mascots_stripes_left"), 2, 1, 8);
-	this->stripesRightBands = clampedConfigInt(config, QStringLiteral("mascots_stripes_right"), 2, 1, 8);
+	this->stripesLeftBands = clampedConfigInt(config, QStringLiteral("mascots_stripes_left"), 1, 8);
+	this->stripesRightBands = clampedConfigInt(config, QStringLiteral("mascots_stripes_right"), 1, 8);
 	bool orientationOk = false;
 	const QString orientationValue = config->get(QStringLiteral("mascots_stripes_orientation"));
 	const StripesOrientation parsedOrientation =
@@ -414,7 +403,7 @@ void MascotController::applyConfig()
 	// The pan is its own switch, not a mode and not the speed: it decides whether any band travels.
 	this->columnsLayout.pan = config->get_bool(QStringLiteral("mascots_pan"));
 	this->columnsLayout.scrollSpeed = this->columnsLayout.pan
-		? clampedConfigInt(config, QStringLiteral("mascots_scroll_speed"), 40, 0, MAX_SCROLL_SPEED)
+		? clampedConfigInt(config, QStringLiteral("mascots_scroll_speed"), 0, MAX_SCROLL_SPEED)
 		: 0;
 	this->scrollDirectionText = config->get(QStringLiteral("mascots_scroll_direction"));
 	bool directionOk = false;
@@ -441,8 +430,7 @@ void MascotController::applyConfig()
 	const QString backgroundFillValue = config->get(QStringLiteral("mascots_background_fill"));
 	this->backgroundLayout.fill =
 		MascotController::fillModeFromString(backgroundFillValue, &backgroundFillOk);
-	this->backgroundStripes = clampedConfigInt(
-		config, QStringLiteral("mascots_background_stripes"), 3, 1, 8);
+	this->backgroundStripes = clampedConfigInt(config, QStringLiteral("mascots_background_stripes"), 1, 8);
 	bool backgroundOrientationOk = false;
 	const QString backgroundOrientationValue =
 		config->get(QStringLiteral("mascots_background_stripes_orientation"));
@@ -452,7 +440,7 @@ void MascotController::applyConfig()
 		config->get_bool(QStringLiteral("mascots_background_stripes_alternate"));
 	this->backgroundLayout.pan = config->get_bool(QStringLiteral("mascots_background_pan"));
 	this->backgroundLayout.scrollSpeed = this->backgroundLayout.pan
-		? clampedConfigInt(config, QStringLiteral("mascots_background_scroll_speed"), 50, 0, MAX_SCROLL_SPEED)
+		? clampedConfigInt(config, QStringLiteral("mascots_background_scroll_speed"), 0, MAX_SCROLL_SPEED)
 		: 0;
 	bool backgroundScrollDirectionOk = false;
 	const QString backgroundScrollDirectionValue =
@@ -1886,16 +1874,16 @@ void MascotController::pushVeilState()
 	double veilOpacity = 0.0;
 	if (this->App->config) {
 		veilOpacity = std::clamp(
-			this->App->config->get_double(QStringLiteral("mascots_background_opacity"), 0.0), 0.0, 1.0);
+			this->App->config->get_double(QStringLiteral("mascots_background_opacity")), 0.0, 1.0);
 	}
 	const bool veilEnabled = this->backgroundEnabled;
-	const bool aboveColumns = !this->mascotsBelowVeil();
-	this->sheet->setVeil(windowColour, veilOpacity, veilEnabled, aboveColumns);
+	const bool columnsAbove = !this->mascotsBelowVeil();
+	this->sheet->setVeil(windowColour, veilOpacity, veilEnabled, columnsAbove);
 	if (this->App->debug_mode) {
 		qDebug() << "MASCOT-VEIL" << "alpha" << qRound(veilOpacity * 255.0)
 			<< "raw" << (this->App->config ? this->App->config->get("mascots_background_opacity") : QStringLiteral("<no config>"))
 			<< "enabled" << veilEnabled
-			<< "z" << (aboveColumns ? 1 : 3);
+			<< "z" << (columnsAbove ? 1 : 3);
 	}
 }
 

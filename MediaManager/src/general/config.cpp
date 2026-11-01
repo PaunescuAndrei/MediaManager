@@ -1,4 +1,4 @@
-﻿#include "stdafx.h"
+#include "stdafx.h"
 #include "config.h"
 #include <QtGlobal>
 #include "utils.h"
@@ -28,6 +28,8 @@ Config::Config(QString filepath) {
 }
 
 void Config::init_defaults() {
+	// The one place a default lives: get_bool(), get_double() and clampedConfigInt() answer from this
+	// table, so a key read at runtime but missing here silently reads as empty, false or zero.
 	this->ini["DEFAULT"].set({
 		{"single_instance", "False"},
 		{"threads","8"},
@@ -290,8 +292,22 @@ QString Config::get(QString item) {
 	return QString::fromStdString(this->ini["DEFAULT"][item.toStdString()]);
 }
 
+QString Config::get_default(QString item) {
+	return QString::fromStdString(this->ini["DEFAULT"][item.toStdString()]);
+}
+
 void Config::set(QString key, QString value) {
 	this->ini["Settings"][key.toStdString()] = value.toStdString();
+}
+
+double Config::get_double(QString item) {
+	bool ok = false;
+	const double value = this->get(item).toDouble(&ok);
+	if (ok)
+		return value;
+	bool fallbackOk = false;
+	const double fallback = this->get_default(item).toDouble(&fallbackOk);
+	return fallbackOk ? fallback : 0.0;
 }
 
 double Config::get_double(QString item, double defaultValue) {

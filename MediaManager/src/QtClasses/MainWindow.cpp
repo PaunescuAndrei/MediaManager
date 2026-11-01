@@ -626,22 +626,19 @@ void MainWindow::applyBackgroundVeil() {
     // The whole-window veil alpha, not the rows' own -- that is the list alpha read below.
     int veilAlpha = BACKGROUND_ROW_ALPHA;
     if (this->App->config) {
-        const double configured = this->App->config->get_double(
-            "mascots_background_opacity", 0.0);
+        const double configured = this->App->config->get_double("mascots_background_opacity");
         veilAlpha = qBound(0, qRound(configured * 255.0), 255);
     }
     int rowAlpha = BACKGROUND_ROW_ALPHA;
     if (this->App->config) {
-        const double configured = this->App->config->get_double(
-            "mascots_background_list_alpha", BACKGROUND_ROW_ALPHA / 255.0);
+        const double configured = this->App->config->get_double("mascots_background_list_alpha");
         rowAlpha = qBound(0, qRound(configured * 255.0), 255);
     }
     // The alternate row's colour differs from the window's, so it is what decides how much layer
     // shows through every other row -- a readability question, not a taste one.
     int alternateAlpha = rowAlpha;
     if (this->App->config) {
-        const double configured = this->App->config->get_double(
-            "mascots_background_alternate_alpha", 0.85);
+        const double configured = this->App->config->get_double("mascots_background_alternate_alpha");
         alternateAlpha = qBound(0, qRound(configured * 255.0), 255);
     }
     // The layer is only worth scrimming while some of it shows: at a fully opaque veil the extra
@@ -666,8 +663,7 @@ void MainWindow::applyBackgroundVeil() {
     // stylesheet; at 1.00 it is cleared and the bar is stock again.
     int scrollbarAlpha = 255;
     if (layerVisible && this->App->config) {
-        const double configured = this->App->config->get_double(
-            "mascots_background_scrollbar_alpha", 1.0);
+        const double configured = this->App->config->get_double("mascots_background_scrollbar_alpha");
         scrollbarAlpha = qBound(0, qRound(configured * 255.0), 255);
     }
     for (QScrollBar* bar : { this->ui.videosWidget->verticalScrollBar(),
@@ -1697,7 +1693,7 @@ void MainWindow::showMascots()
     this->ui.mascotRightHost->show();
     // Before start(): the hosts start at the .ui's min 0 / max 16777215, so without this the first
     // frame's width would depend on an unrelated later resize.
-    this->applyMascotWidth(this->width(), this->App->config->get_double("mascots_width_percent", 15.0));
+    this->applyMascotWidth(this->width(), this->App->config->get_double("mascots_width_percent"));
     this->mascotController->start();
     //QTimer::singleShot(20, [this] {this->resize_center(1300, this->height()); });
 }
@@ -2871,7 +2867,7 @@ void MainWindow::applyLegacyMascotEffects() {
         else
             this->App->MascotsAnimation->stop_running();
     }
-    this->applyMascotWidth(this->width(), config->get_double("mascots_width_percent", 15.0));
+    this->applyMascotWidth(this->width(), config->get_double("mascots_width_percent"));
     const bool extractColours = config->get_bool("mascots_color_theme");
     if (extractColours != this->App->MascotsExtractColor) {
         this->App->MascotsExtractColor = extractColours;
@@ -2913,7 +2909,7 @@ void MainWindow::applyMascotKey(const QString& key) {
         return;
     }
     if (key == QStringLiteral("mascots_width_percent")) {
-        this->applyMascotWidth(this->width(), this->App->config->get_double(key, 15.0));
+        this->applyMascotWidth(this->width(), this->App->config->get_double(key));
         return;
     }
     if (key == QStringLiteral("mascots_image_cache_mb")
@@ -4940,8 +4936,8 @@ void MainWindow::reconcileStreakSaves()
     const double baseSeconds = timeMode
         ? config->get("streak_daily_time_target_minutes").toInt() * 60.0
         : 0.0;
-    const double multiplier = std::max(1.0, config->get_double("streak_auto_save_target_multiplier", 2.0));
-    const double increment = std::max(0.0, config->get_double("streak_auto_save_target_multiplier_increment", 1.0));
+    const double multiplier = std::max(1.0, config->get_double("streak_auto_save_target_multiplier"));
+    const double increment = std::max(0.0, config->get_double("streak_auto_save_target_multiplier_increment"));
     const int maxConsecutive = qMax(0, config->get("streak_auto_save_max_consecutive").toInt());
     const int maxStock = qMax(0, config->get("streak_freeze_max_stock").toInt());
     const bool freezeFirst = config->get_bool("streak_freeze_consume_first");
@@ -5990,7 +5986,7 @@ bool MainWindow::event(QEvent* e)
         QResizeEvent* resizeEvent = static_cast<QResizeEvent*>(e);
         int windowWidth = resizeEvent->size().width();
         int windowHeight = resizeEvent->size().height();
-        this->applyMascotWidth(windowWidth, this->App->config->get_double("mascots_width_percent", 15.0));
+        this->applyMascotWidth(windowWidth, this->App->config->get_double("mascots_width_percent"));
         this->updateBackgroundScrim();
     }
     return QMainWindow::event(e);

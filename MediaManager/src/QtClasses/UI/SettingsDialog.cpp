@@ -388,12 +388,12 @@ void SettingsDialog::setupStreaksPage(MainWindow* mw)
     addDoubleRow("Target multiplier:",
         "Multiplier for the first auto save. Time mode multiplies minutes; completed-video mode multiplies the 1-video base.",
         1.0, 20.0, 0.5,
-        config->get_double("streak_auto_save_target_multiplier", 2.0),
+        config->get_double("streak_auto_save_target_multiplier"),
         streakAutoSaveMultiplierSpinBox);
     addDoubleRow("Multiplier increment:",
         "Added to the multiplier for each consecutive auto save.",
         0.0, 20.0, 0.5,
-        config->get_double("streak_auto_save_target_multiplier_increment", 1.0),
+        config->get_double("streak_auto_save_target_multiplier_increment"),
         streakAutoSaveMultiplierIncrementSpinBox);
     addIntRow("Max consecutive auto saves:",
         "0 = unlimited. After this many consecutive auto saves, the next miss breaks the streak.",
@@ -739,7 +739,7 @@ void SettingsDialog::setupAppearancePage(MainWindow* mw)
     });
 
     setupSpinStyle(this->ui.mascotsWidthSpinBox, "spinbox");
-    this->ui.mascotsWidthSpinBox->setValue(static_cast<int>(config->get_double("mascots_width_percent", 15.0)));
+    this->ui.mascotsWidthSpinBox->setValue(static_cast<int>(config->get_double("mascots_width_percent")));
     this->old_mascotsWidthSpinBox = this->ui.mascotsWidthSpinBox->value();
     connect(this->ui.mascotsWidthSpinBox, &QSpinBox::valueChanged, this, [mw, this] {
         mw->applyMascotWidth(mw->width(), this->ui.mascotsWidthSpinBox->value());
@@ -1011,7 +1011,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     backgroundLayout->addWidget(mascotBackgroundCheckBox);
 
     mascotBackgroundOpacitySpinBox = makeDoubleSpinBox(0.00, 1.00, 0.05,
-        config->get_double(QStringLiteral("mascots_background_opacity"), 0.0));
+        config->get_double(QStringLiteral("mascots_background_opacity")));
     addRow(backgroundLayout, "Veil opacity:",
         "How much of the window's own background colour is painted over the layer. The layer itself "
         "always runs at full strength; this is one translucent rectangle in front of it, so 1.00 is "
@@ -1020,7 +1020,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         mascotBackgroundOpacitySpinBox);
 
     mascotListAlphaSpinBox = makeDoubleSpinBox(0.00, 1.00, 0.05,
-        config->get_double(QStringLiteral("mascots_background_list_alpha"), 0.85));
+        config->get_double(QStringLiteral("mascots_background_list_alpha")));
     addRow(backgroundLayout, "List & strip opacity:",
         "Opacity of the centre pane over the veil: the list's even rows and the strip above them, one "
         "alpha for both, so the top matches the list. 1.00 is an opaque centre pane, 0.00 lets whatever "
@@ -1028,10 +1028,8 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "below; the veil above is the whole window.",
         mascotListAlphaSpinBox);
 
-    // Falls back to the list alpha for a config that predates this key.
     mascotAltAlphaSpinBox = makeDoubleSpinBox(0.00, 1.00, 0.05,
-        config->get_double(QStringLiteral("mascots_background_alternate_alpha"),
-            config->get_double(QStringLiteral("mascots_background_list_alpha"), 0.85)));
+        config->get_double(QStringLiteral("mascots_background_alternate_alpha")));
     addRow(backgroundLayout, "Alternate row opacity:",
         "Opacity of the alternate rows only -- the row colour that does not match the window's "
         "background. Lower it to see more of the layer through every other row, raise it for more "
@@ -1040,7 +1038,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
 
     // Opaque unless asked for: a scrollbar fading over a bright frame is harder to grab.
     mascotScrollbarAlphaSpinBox = makeDoubleSpinBox(0.00, 1.00, 0.05,
-        config->get_double(QStringLiteral("mascots_background_scrollbar_alpha"), 1.0));
+        config->get_double(QStringLiteral("mascots_background_scrollbar_alpha")));
     addRow(backgroundLayout, "Scrollbar opacity:",
         "Opacity of the list's scrollbars over the layer. 1.00 keeps them solid, which is what they "
         "have always been; lower it if the solid bar draws the eye. The arrows and the handle stay "
@@ -2060,7 +2058,7 @@ void SettingsDialog::setupNotificationsPage(MainWindow* mw)
         spinBox->setSingleStep(0.05);
         spinBox->setDecimals(2);
         spinBox->setToolTip(tooltip);
-        spinBox->setValue(config->get_double(configKey, 1.0));
+        spinBox->setValue(config->get_double(configKey));
         setupSpinStyle(spinBox, "doublespinbox");
         row->addWidget(spinBox);
         notifAppearanceLayout->addLayout(row);

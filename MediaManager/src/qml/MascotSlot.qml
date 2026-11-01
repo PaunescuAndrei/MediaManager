@@ -1,4 +1,4 @@
-﻿import QtQuick
+import QtQuick
 import QtMultimedia
 
 // Object names carry the slot index, so C++ finds a slot and its children by name and child order can never mismatch a sink.
@@ -119,19 +119,21 @@ Item {
 	Item {
 		id: mirrorView
 
-		width: slot.width
-		height: slot.height
-		clip: true
+		// The source's own size, centred, and clipped by the slot: stretching it to this cell's rectangle would
+		// distort the picture whenever the two columns' bands are not the same size, which they need not be.
+		anchors.centerIn: parent
+		width: slot.mirrorSource ? slot.mirrorSource.width : slot.width
+		height: slot.mirrorSource ? slot.mirrorSource.height : slot.height
 		visible: slot.mirrorSource !== null
 
 		ShaderEffectSource {
-			width: slot.width
-			height: slot.height
+			width: parent.width
+			height: parent.height
 			sourceItem: slot.mirrorSource
 			live: true
 			hideSource: false
 			transform: Scale {
-				origin.x: slot.width / 2
+				origin.x: width / 2
 				xScale: slot.mirrored ? -1 : 1
 			}
 		}

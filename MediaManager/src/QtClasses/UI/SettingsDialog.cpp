@@ -860,18 +860,19 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "How the columns arrange their content: one still panel, one continuously scrolling band, "
         "or several bands scrolling at once.", mascotModeCombo);
 
-    mascotFillCombo = makeComboBox({ QStringLiteral("Cover"), QStringLiteral("CoverPan"), QStringLiteral("Crop"),
+    mascotFillCombo = makeComboBox({ QStringLiteral("Cover"), QStringLiteral("CoverScroll"), QStringLiteral("Crop"),
                                      QStringLiteral("Fit"), QStringLiteral("Stretch"), QStringLiteral("HeightFit"),
                                      QStringLiteral("WidthFit") },
         config->get(QStringLiteral("mascots_fill")));
     addRow(contentLayout, "Fill mode:",
         "How a picture is fitted into its panel: Cover always fills the panel completely, scaling up or "
-        "down as the window changes and cutting off the overflow; CoverPan frames exactly like Cover, but "
-        "the picture travels past the band along the axis it overflows, so the whole picture comes into "
-        "view while the band stays filled; Crop fills and cuts off but lets the "
+        "down as the window changes and cutting off the overflow; CoverScroll frames exactly like Cover, and "
+        "the picture travels past the band along the Direction below, as far as it overflows that way, so "
+        "the rest of it comes into view while the band stays filled (a picture that overflows only the other "
+        "axis has nothing to travel there and stands still); Crop fills and cuts off but lets the "
         "centring slide; Fit shows all of it with bars, Stretch distorts, HeightFit and WidthFit scale on "
         "one axis only. A panning mode can only slide what is bigger than its band, so it keeps the "
-        "normalised fit unless CoverPan is picked.", mascotFillCombo);
+        "normalised fit unless CoverScroll is picked.", mascotFillCombo);
 
     mascotWeightedCheckBox = new QCheckBox("Weight picks by rating");
     mascotWeightedCheckBox->setChecked(config->get_bool(QStringLiteral("mascots_weighted_random")));
@@ -1102,15 +1103,16 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "several moving bands. The same three shapes the columns have.",
         mascotBackgroundModeCombo);
 
-    mascotBackgroundFillCombo = makeComboBox({ QStringLiteral("Cover"), QStringLiteral("CoverPan"),
+    mascotBackgroundFillCombo = makeComboBox({ QStringLiteral("Cover"), QStringLiteral("CoverScroll"),
                                                QStringLiteral("Crop"), QStringLiteral("Fit"),
                                                QStringLiteral("Stretch"), QStringLiteral("HeightFit"),
                                                QStringLiteral("WidthFit") },
         config->get(QStringLiteral("mascots_background_fill")));
     addRow(backgroundLayout, "Layer fill:",
         "How a layer video is fitted into the window: Cover always fills the window completely, scaling "
-        "a clip up or down to the window's size and cutting off the overflow; CoverPan frames exactly "
-        "like Cover but travels the picture past the band along the axis it overflows; Crop fills and "
+        "a clip up or down to the window's size and cutting off the overflow; CoverScroll frames exactly "
+        "like Cover and travels the picture past the band along the layer's own scroll direction, as far "
+        "as it overflows that way; Crop fills and "
         "cuts off but lets the centring slide; Fit shows all of it with bars, Stretch distorts, HeightFit and "
         "WidthFit scale on one axis. Layer stripes bands are normalised to their stacking axis instead.",
         mascotBackgroundFillCombo);

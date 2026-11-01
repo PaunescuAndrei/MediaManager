@@ -83,7 +83,7 @@ namespace {
 			return 0; // Image.Stretch
 		case MascotSurface::FillMode::Cover:
 			return 2; // Image.PreserveAspectCrop
-		case MascotSurface::FillMode::CoverPan:
+		case MascotSurface::FillMode::CoverScroll:
 			return 0; // Image.Stretch: the item is already the covered-plus-overscan box, so there is nothing to fit
 		}
 		return 1;
@@ -466,9 +466,9 @@ void MascotSurface::applySlot(int i)
 	item->setProperty("mirrored", mirrored);
 	item->setProperty("fillMode", qmlFillModeValue(slot.fillMode));
 	const QSizeF contentSize = this->contentSizeFor(slot);
-	// `CoverPan` sizes the item on both axes from the painted box (the pan needs it larger than the slot and the
+	// `CoverScroll` sizes the item on both axes from the painted box (the pan needs it larger than the slot and the
 	// crop is the painted box's), so it sets both flags and is stretched into that box.
-	const bool panFit = slot.fillMode == FillMode::CoverPan;
+	const bool panFit = slot.fillMode == FillMode::CoverScroll;
 	item->setProperty("heightFill", slot.fillMode == FillMode::HeightFit || panFit);
 	item->setProperty("widthFill", slot.fillMode == FillMode::WidthFit || panFit);
 	item->setProperty("paintedWidth", contentSize.width());
@@ -538,10 +538,10 @@ QSizeF MascotSurface::contentSizeFor(const Slot& slot) const
 		const double scale = std::max(slotWidth / nativeWidth, slotHeight / nativeHeight);
 		return QSizeF(nativeWidth * scale, nativeHeight * scale);
 	}
-	case FillMode::CoverPan: {
-		// Exactly `Cover`: the band is filled and the overflow is what the pan travels through, so the whole picture is
-		// seen over a lap instead of being cut off. Cover leaves the slack on one axis only (the other is exact), and
-		// the controller pans along that axis.
+	case FillMode::CoverScroll: {
+		// Exactly `Cover`: the band is filled and the overflow is what the pan travels through, so the picture passes the
+		// band instead of being cut off for good. Which axis that is belongs to the controller (it follows the scroll
+		// direction); the cover itself leaves the slack on one axis and is exact on the other.
 		const double scale = std::max(slotWidth / nativeWidth, slotHeight / nativeHeight);
 		return QSizeF(nativeWidth * scale, nativeHeight * scale);
 	}

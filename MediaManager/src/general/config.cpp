@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <initializer_list>
+#include <iterator>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -387,26 +388,80 @@ bool Config::migrate_flat_settings() {
 
 void Config::save_config() {
 	this->file.write(this->ini);
-	// mINI terminates every line but the last, so without this every save would leave config.ini
-	// without a final newline and a text editor would join the last key to whatever follows.
-	std::ifstream probe(this->path, std::ios::binary);
-	if (!probe.is_open()) {
+	this->normalize_layout();
+}
+
+void Config::normalize_layout() {
+	std::ifstream in(this->path, std::ios::binary);
+	if (!in.is_open()) {
 		return;
 	}
-	probe.seekg(0, std::ios::end);
-	auto const size = static_cast<std::streamoff>(probe.tellg());
-	if (size <= 0) {
+	std::string const content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+	if (content.empty()) {
 		return;
 	}
-	probe.seekg(size - 1);
-	char last = '\0';
-	probe.read(&last, 1);
-	probe.close();
-	if (last == '\n') {
+	std::vector<std::string> lines;
+	std::string current;
+	for (char const c : content) {
+		if (c == '\n') {
+			if (!current.empty() && current.back() == '\r') {
+				current.pop_back();
+			}
+			lines.push_back(current);
+			current.clear();
+		} else if (c != '\r') {
+			current.push_back(c);
+		}
+	}
+	if (!current.empty()) {
+		lines.push_back(current);
+	}
+	while (!lines.empty() && lines.back().empty()) {
+		lines.pop_back();
+	}
+	auto trimmed = [](std::string const& text) {
+		auto const first = text.find_first_not_of(" \t");
+		auto const last = text.find_last_not_of(" \t");
+		return first == std::string::npos ? std::string() : text.substr(first, last - first + 1);
+	};
+	auto isHeader = [&trimmed](std::string const& text) {
+		std::string const t = trimmed(text);
+		return t.size() > 1 && t.front() == '[' && t.back() == ']';
+	};
+	auto isComment = [&trimmed](std::string const& text) {
+		std::string const t = trimmed(text);
+		return !t.empty() && (t.front() == ';' || t.front() == '#');
+	};
+	std::vector<std::string> out;
+	for (auto const& line : lines) {
+		if (isHeader(line)) {
+			// One blank line before each group, unless it opens the file or a comment sits directly
+			// above it, in which case the comment belongs to the group it documents.
+			if (!out.empty() && !out.back().empty() && !isComment(out.back())) {
+				out.emplace_back();
+			}
+			out.push_back(line);
+			continue;
+		}
+		if (line.empty()) {
+			if (out.empty() || out.back().empty() || isHeader(out.back())) {
+				continue;
+			}
+			out.emplace_back();
+			continue;
+		}
+		out.push_back(line);
+	}
+	if (out.empty()) {
 		return;
 	}
-	std::ofstream terminator(this->path, std::ios::binary | std::ios::app);
-	terminator << mINI::INIStringUtil::endl;
+	std::ofstream rewritten(this->path, std::ios::binary | std::ios::trunc);
+	if (!rewritten.is_open()) {
+		return;
+	}
+	for (std::size_t i = 0; i < out.size(); ++i) {
+		rewritten << out[i] << mINI::INIStringUtil::endl;
+	}
 }
 
 QString Config::get(QString item) {

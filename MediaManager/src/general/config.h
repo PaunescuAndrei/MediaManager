@@ -25,6 +25,9 @@ private:
 	// before the sections existed keeps working without the user touching it. Returns true when
 	// something moved, so the caller can rewrite the file right away.
 	bool migrate_flat_settings();
+	// mINI separates lines but never groups them: without this, sections land back to back and the
+	// file reads as one block.
+	void normalize_layout();
 	std::string sectionFor(QString const& key) const;
 	QString defaultFor(QString const& item) const;
 

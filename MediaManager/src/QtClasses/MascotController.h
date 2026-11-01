@@ -31,9 +31,8 @@ enum class ScrollDirection { LeftToRight, RightToLeft, TopToBottom, BottomToTop 
 
 enum class StripesOrientation { Horizontal, Vertical };
 
-// The three layers share one MascotSurface scene because separate QQuickWidgets cannot be ordered:
-// one carrying Qt::WA_AlwaysStackOnTop is drawn above every sibling whatever the widget stack says.
-// GUI thread only; the prefetcher emits mediaReady/mediaFailed here on the GUI thread.
+// The three layers share one MascotSurface scene: separate QQuickWidgets cannot be ordered, because one carrying
+// Qt::WA_AlwaysStackOnTop draws above every sibling. GUI thread only, the prefetcher's signals included.
 class MascotController : public QObject {
 	Q_OBJECT
 public:
@@ -50,11 +49,9 @@ public:
 	void updateLayout();
 	void pushVeil();
 
-	// `ok` is false for an unrecognised value; the answer is then the documented default.
 	static MascotMode modeFromString(const QString& value, bool* ok);
 	static StripesOrientation stripesOrientationFromString(const QString& value, bool* ok);
 
-	// The background derives its count from the players it was funded, not from its mode.
 	int bandCount(MascotPanel panel) const;
 	QVector<QRectF> bandRects(MascotPanel panel) const;
 	int videoBandsFor(MascotPanel panel) const;
@@ -69,8 +66,7 @@ public:
 
 	void nextImages(bool forcedMirror);
 	void nextBandImages(int bandIndex, bool forcedMirror);
-	// One band of one panel, and every band of a panel: the two shapes a click acts in. A mirrored pair shows one
-	// clip per band, so either call advances the pair's band rather than half of it.
+	// A mirrored pair shows one clip per band, so either call advances the pair's band, never half of it.
 	void advanceBand(MascotSide side, int bandIndex);
 	void advanceStrip(MascotSide side);
 
@@ -97,8 +93,7 @@ private:
 		MascotSurface::FillMode fill = MascotSurface::FillMode::HeightFit;
 		MascotMode appliedMode = MascotMode::Static;
 		bool applied = false;
-		// Whether and where this panel's content travels. Independent of `mode`: one band can pan (the whole panel
-		// moving past) or several can, and `Scroll` is not a layout of its own.
+		// Independent of `mode`: one band or several can pan, and `Scroll` is not a layout of its own.
 		bool pan = false;
 		bool appliedPan = false;
 		StripesOrientation orientation = StripesOrientation::Horizontal;
@@ -176,7 +171,6 @@ private:
 	bool anySurfaceVisible() const;
 	bool panModeActive() const;
 	bool scrollDirectionReverses(MascotPanel panel) const;
-	// A direction naming the other axis keeps its sense and yields the axis.
 	bool scrollDirectionIsVertical(MascotPanel panel) const;
 	double scrollPhaseOffset(MascotPanel panel, const MascotBand& band) const;
 	bool scrollReversed(MascotPanel panel, const MascotBand& band) const;
@@ -259,8 +253,6 @@ private:
 	bool bandMirrorsLeft(int bandIndex) const;
 	// True while `panel`'s band draws the left band's stage: it then needs no player of its own.
 	bool bandUsesMirrorView(MascotPanel panel, int bandIndex) const;
-	// Binds and unbinds the right band's view to the left band's stage. Idempotent: it writes only the bands whose
-	// binding the current media disagrees with.
 	void syncMirrorBindings();
 	void queueBandRefill(MascotPanel panel, int bandIndex, bool onlyIfEmpty);
 

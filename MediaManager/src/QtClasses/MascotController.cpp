@@ -307,7 +307,6 @@ void MascotController::stopPanels()
 	this->detachPanel(this->leftState);
 	this->detachPanel(this->rightState);
 	// Not syncSheet(): `columnsEnabled` is still true here, so it would re-attach the panels just taken down.
-	// updateSheetVisibility() is the only question left.
 	this->updateSheetVisibility();
 	this->updateScrollDriver();
 }
@@ -352,8 +351,7 @@ void MascotController::applyConfig()
 	this->pauseUnfocused = config->get_bool(QStringLiteral("mascots_pause_unfocused"));
 	this->weightedRandom = config->get_bool(QStringLiteral("mascots_weighted_random"));
 	this->preloadEnabled = config->get_bool(QStringLiteral("mascots_preload"));
-	// Clamped where read so a config cannot abandon a clip that is merely opening: the swap deadline
-	// [500, 60000] has no "off" value -- this timer is the only thing that releases a load that never paints.
+	// The swap deadline has no "off" value: this timer is the only thing that releases a load that never paints.
 	this->swapTimeoutMs = clampedConfigInt(config, QStringLiteral("mascots_swap_timeout_ms"), 5000, 500, 60000);
 	this->retryIntervalMs = clampedConfigInt(config, QStringLiteral("mascots_retry_interval_ms"), 150, 20, 2000);
 	this->retryAttempts = clampedConfigInt(config, QStringLiteral("mascots_retry_attempts"), 5, 0, 50);
@@ -384,7 +382,7 @@ void MascotController::applyConfig()
 		this->warnedUnsupportedMedia = true;
 		this->logVideo(QStringLiteral("mascots_media=\"%1\" is not one of Images, Videos or Mixed; showing images.")
 			.arg(this->mediaSetting));
-		// The ungated warning is the one a release run sees; the debug line alone would be invisible there.
+		// qWarning() because the debug log line alone is invisible in a release run.
 		qWarning() << "mascots_media:" << this->mediaSetting
 			<< "is not one of Images, Videos or Mixed; showing images.";
 	}
@@ -413,8 +411,7 @@ void MascotController::applyConfig()
 			<< "is not one of Horizontal or Vertical; using Horizontal.";
 	}
 
-	// The pan is its own switch, not a mode and not the speed: it decides whether any band travels, and the rows
-	// below only describe how it travels.
+	// The pan is its own switch, not a mode and not the speed: it decides whether any band travels.
 	this->columnsLayout.pan = config->get_bool(QStringLiteral("mascots_pan"));
 	this->columnsLayout.scrollSpeed = this->columnsLayout.pan
 		? clampedConfigInt(config, QStringLiteral("mascots_scroll_speed"), 40, 0, MAX_SCROLL_SPEED)
@@ -529,8 +526,8 @@ void MascotController::applyConfig()
 			MascotBand* band = owned.get();
 			if (!band || !band->video())
 				continue;
-			// `mascots_clip_seconds` also re-arms the clip timer: a slot left with the old length would pick its start
-			// offset from a range that length no longer means (30 s down to 5 s leaves a 30 s range).
+			// Also re-arms the clip timer: a slot left with the old length would pick its start offset from a range
+			// that length no longer means (30 s down to 5 s leaves a 30 s range).
 			band->video()->setRandomStart(this->randomStart, this->clipSeconds);
 			band->video()->setTimings(this->swapTimeoutMs, this->retryIntervalMs, this->retryAttempts);
 			band->video()->setLowLatency(this->lowLatency);
@@ -557,8 +554,8 @@ void MascotController::applyConfig()
 	// Before the toggle below acts on it: the binding decides whether the right band may own a player, and the off
 	// direction picks one for it here.
 	this->syncMirrorBindings();
-	// Turning Mirror on must make both columns show one media now: the parity repaint cannot change what the
-	// right band holds, and a static configuration never advances. The first Apply records the value instead of filling.
+	// Turning Mirror on must make both columns show one media now: the parity repaint cannot change what the right
+	// band holds and a static configuration never advances.
 	const bool mirrorNow = this->mirrorEnabled();
 	if (this->mirrorAppliedKnown && mirrorNow != this->mirrorAppliedLast && this->running) {
 		if (mirrorNow) {
@@ -688,8 +685,6 @@ ScrollDirection MascotController::scrollDirectionFromString(const QString& value
 
 MascotSurface::FillMode MascotController::effectiveFillMode(MascotPanel panel) const
 {
-	// The chosen mode is the framing in every panel and every mode: the surface draws each mode as its own painted
-	// box, and what may travel on top of that framing is decided by scrollTravel() alone.
 	return this->layoutFor(panel).fill;
 }
 
@@ -730,9 +725,8 @@ bool MascotController::bandUsesMirrorView(MascotPanel panel, int bandIndex) cons
 	const MascotBand* rightBand = this->rightState.band(bandIndex);
 	if (!rightBand || !this->rightState.surface)
 		return false;
-	// What the surface draws is the truth: it outlives a band being detached and re-attached around it, so its slot is
-	// the only record that cannot go stale behind the controller's back. A held slot is drawing, but it is covering a
-	// gap rather than showing the mirror, so the band is free to own a player again.
+	// The slot outlives a band detached and re-attached around it, so it is the only record that cannot go stale.
+	// A held slot is covering a gap rather than showing the mirror, so the band is free to own a player again.
 	const int slot = rightBand->slotIndex();
 	return this->rightState.surface->slotMirrorSource(slot) >= 0 && !this->rightState.surface->slotMirrorHeld(slot);
 }
@@ -749,8 +743,7 @@ void MascotController::syncMirrorBindings()
 		if (!rightBand)
 			continue;
 		MascotBand* leftBand = i < leftCount ? this->leftState.band(i) : nullptr;
-		// Only a video is shared: an image already reaches both slots through the cache, so it keeps the pick-level
-		// pairing it has and neither column pays for a second texture.
+		// Only a video is shared: an image reaches both slots through the cache, so it keeps its pick-level pairing.
 		const bool bind = mirror && leftBand && leftBand->media().type == MascotMedia::Video;
 		const int sourceSlot = bind ? leftBand->slotIndex() : -1;
 		MascotSurface* surface = this->rightState.surface.data();
@@ -758,7 +751,7 @@ void MascotController::syncMirrorBindings()
 		const int current = surface->slotMirrorSource(slot);
 		// The view's parity is the pair's, not the file's: the folder rule has already turned the shared picture inside
 		// the stage, so flipping the copy is what makes the right column its mirror. Asserted on every pass, not only on
-		// a bind, because the parity key is a live checkbox and the slot's value is not ours to trust.
+		// a bind, because the parity is a live checkbox and the slot's value is not ours to trust.
 		if (bind) {
 			rightBand->setMirrorFlip(this->flipMirroredColumn);
 			// A binding that comes back takes the slot out of its hold, and the teardown below runs whether or not the
@@ -844,8 +837,8 @@ bool MascotController::stripesStackVertically(MascotPanel panel) const
 
 void MascotController::applyMode()
 {
-	// Never from inside a wrap-point commit: applyMode() rebuilds the band vector, and a commit must not pull it
-	// down under a tick. Re-queued instead, so the change still happens on the next turn with nothing iterating.
+	// Never from inside a wrap-point commit: applyMode() rebuilds the band vector, and a commit must not pull it down
+	// under a tick, so it re-queues instead.
 	if (this->wrapCommitDepth > 0) {
 		QMetaObject::invokeMethod(this, [this]() { this->applyMode(); }, Qt::QueuedConnection);
 		return;
@@ -965,11 +958,9 @@ void MascotController::syncBands(PanelState& state, MascotPanel panel)
 	}
 	for (auto& owned : state.bands)
 		owned->setGroup(this->slotGroupFor(panel));
-	// A slot outlives the band that filled it, and the surface keeps the slot's scroll offset and video opacities along
-	// with its other properties. A band re-created into that slot starts at zero and only writes an offset when it has
-	// travel, and only fades in once its own first frame arrives, so the previous band's translation would sit on the
-	// item and its output would be shown over the stale frame. Clearing both here makes a band-count change start from
-	// the band rather than from the slot.
+	// A slot outlives the band that filled it and keeps its scroll offset and video opacities: a band re-created into
+	// it starts at zero and only fades in on its own first frame, so the previous band's translation and output would
+	// sit on the item. Clearing both here makes a band-count change start from the band rather than from the slot.
 	for (std::size_t index = 0; index < state.bands.size(); ++index) {
 		MascotBand* band = state.bands[index].get();
 		if (!band)
@@ -996,7 +987,7 @@ void MascotController::fillEmptyBands()
 		return;
 	if (!this->columnsEnabled)
 		return;
-	// This fill refuses the background structurally: it is a fill with an image, and a portrait still across the window is the one look the layer must never draw.
+	// The background is refused here: an image fill across the window is the one look the layer must never draw.
 	const bool mirror = this->mirrorEnabled();
 	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
 		PanelState& state = this->stateFor(panelOf(side));
@@ -1009,9 +1000,8 @@ void MascotController::fillEmptyBands()
 				continue;
 			if (mirror && side == MascotSide::Right && this->bandMirrorsLeft(i)) {
 				MascotBand* leftBand = this->leftState.band(i);
-				// The pair shares one picture: while the left band draws a video, or is about to, the right band's
-				// slot shows the left band's stage, so it needs no pick of its own and must not be filled with an
-				// image the other column is not showing.
+				// The pair shares one picture: while the left band draws a video, or is about to, the right band's slot
+				// shows the left band's stage and must not be filled with an image the other column is not showing.
 				if (leftBand && (leftBand->requestIsVideo() || leftBand->media().type == MascotMedia::Video))
 					continue;
 				if (leftBand && !leftBand->media().path.isEmpty()) {
@@ -1206,7 +1196,6 @@ double MascotController::scrollPhaseOffset(MascotPanel panel, const MascotBand& 
 	// Under pingpong two staggered bands do coincide for an instant at the fold; that is inherent to a reflection,
 	// and shortening the phase to dodge it was rejected because the fold is 2-to-1 whatever the offsets are.
 	const PanelState& state = this->stateFor(panel);
-	// The band's index inside its panel, not the sheet slot it addresses (those differ by the panel's base).
 	const int localIndex = band.slotIndex() - state.slotBase;
 	const int count = this->bandCount(panel);
 	if (count <= 1 || localIndex < 0 || localIndex >= count || state.band(localIndex) != &band)
@@ -1263,9 +1252,8 @@ void MascotController::onScrollTick()
 	std::vector<MascotBand::WrapCommit> wrapCommits;
 	for (MascotPanel panel : { MascotPanel::Left, MascotPanel::Right, MascotPanel::Background }) {
 		const PanelLayout& layout = this->layoutFor(panel);
-		// The pan is the switch, not the layout: one band and several bands both travel when it is on, and a panel
-		// with it off must not be touched here at all -- a tick would otherwise re-impose an offset from the frozen
-		// phase right after the offsets were cleared.
+		// The pan is the switch, not the layout: a panel with it off must not be touched here at all, or a tick would
+		// re-impose an offset from the frozen phase right after the offsets were cleared.
 		if (!layout.pan || layout.scrollSpeed <= 0)
 			continue;
 		const bool vertical = this->scrollDirectionIsVertical(panel);
@@ -1441,8 +1429,6 @@ void MascotController::advanceBand(MascotSide side, int bandIndex)
 {
 	if (!this->running || bandIndex < 0)
 		return;
-	// A mirrored pair draws one clip per band, so a band advanced on either side is the pair's band: advancing half
-	// of it would leave the two panels on different frames at the same height.
 	if (this->mirrorEnabled()) {
 		this->nextBandImages(bandIndex, false);
 		return;
@@ -1664,11 +1650,10 @@ void MascotController::createSheet()
 	if (!host)
 		return;
 	// One surface for the three layers, window-sized and in no layout, parented to the widget that hosts the panes.
-	// `alwaysStackOnTop` is false, which is what lets the sheet sit under the UI panes; the attribute would draw it above every sibling.
-	// What that costs is an opaque blit, which is why the sheet always paints a backdrop -- the window's colour -- in every uncovered pixel.
+	// `alwaysStackOnTop` is false so the sheet can sit under the UI panes, which costs an opaque blit: hence the
+	// backdrop in the window's colour in every uncovered pixel.
 	auto* surface = new MascotSurface(this->cache, host, false);
 	this->sheet = surface;
-	// The only place the slot count is set: the sheet holds every slot it can ever address from here on.
 	surface->setSlotCount(SLOT_CAPACITY);
 	this->leftState.slotBase = LEFT_SLOT_BASE;
 	this->rightState.slotBase = RIGHT_SLOT_BASE;
@@ -1805,8 +1790,8 @@ void MascotController::detachPanel(PanelState& state)
 {
 	if (!state.surface)
 		return;
-	// The two caches the band keeps describe the scene's slot, so they die with the binding: a rebuilt scene starts
-	// at MascotSurface's defaults. A surviving "the slot already carries HeightFit" would suppress the write forever after.
+	// The two caches a band keeps describe the scene's slot, so they die with the binding; a surviving "the slot
+	// already carries HeightFit" would suppress the write for ever after.
 	for (auto& owned : state.bands)
 		owned->setSurface(nullptr);
 	this->destroyVideoSlot(state);
@@ -1889,8 +1874,8 @@ void MascotController::pushVeilState()
 	const QColor windowColour = this->App->palette().color(QPalette::Window);
 	QColor backdrop = windowColour;
 	double layerOpacity = 1.0;
-	// `MM_MASCOT_FLAT=#RRGGBB` replaces the layer with a flat colour so the veil's blend can be measured against a known value.
-	// It colours the *layer*, never the veil: a veil painted in the probe's colour would have nothing to blend.
+	// The flat-colour probe replaces the layer's colour so the veil's blend can be measured; it must never colour the
+	// veil itself, which would then have nothing to blend.
 	const QColor flat = QColor::fromString(qEnvironmentVariable("MM_MASCOT_FLAT"));
 	if (flat.isValid()) {
 		backdrop = flat;
@@ -2012,8 +1997,8 @@ void MascotController::presentMedia(PanelState& state, MascotPanel panel, const 
 		band->setVideoOutputVisible(false);
 		if (band->video())
 			band->video()->stopAll();
-		// Hiding the outputs leaves their opacity where the last clip left it, so the next clip would load at the previous
-		// clip's opacity and reveal the old frozen frame. Reset it here, where nothing of it can be seen, with duration 0: a reset, not a fade.
+		// Hiding the outputs leaves their opacity where the last clip left it, so the next clip would load at the
+		// previous clip's opacity and reveal the old frozen frame. Reset with duration 0, where it cannot be seen.
 		band->setVideoOpacity(0, 0.0, 0);
 		band->setVideoOpacity(1, 0.0, 0);
 	}
@@ -2033,9 +2018,9 @@ void MascotController::applyMirror(PanelState& state, MascotPanel panel, const Q
 	if (this->bandUsesMirrorView(panel, bandIndex))
 		return;
 	bool mirrored;
-	// Parity has two sources, composed. The folder rule flips a file authored for one side landing in the other slot.
-	// Mirror adds the pair rule: the folder rule decides which way the pair faces (through the left slot) and
-	// `mascots_pair_flip` decides the pair's parity, so the look is the same for every media type.
+	// Parity has two sources, composed. The folder rule flips a file authored for one side landing in the other slot;
+	// mirror adds the pair rule: that rule decides which way the pair faces (through the left slot) and
+	// `flipMirroredColumn` the pair's parity, so the look is the same for every media type.
 	// XOR was measured wrong: a side-tagged image came out identical while a video came out mirrored.
 	if (state.mirrorOverrideEnabled) {
 		mirrored = state.mirrorOverrideValue;
@@ -2154,7 +2139,7 @@ void MascotController::showMedia(PanelState& state, MascotPanel panel, const Mas
 	const QString previousShown = band->media().path;
 	const QString previousCandidate = band->playback().candidate.path;
 	if (fromReady)
-		band->playback().candidate = MascotMedia(); // consumed by this commit
+		band->playback().candidate = MascotMedia();
 	band->playback().committedAtMs = QDateTime::currentMSecsSinceEpoch();
 	band->recordMedia(media);
 	if (policyBand)
@@ -2263,8 +2248,7 @@ bool MascotController::bandMayOwnPlayer(MascotPanel panel, int bandIndex) const
 	return bandIndex >= 0
 		&& bandIndex < this->bandCount(panel)
 		&& bandIndex < this->videoBandsFor(panel)
-		// A mirrored band draws the left band's stage, so a decoder of its own would decode the pair twice for a
-		// picture it does not show.
+		// A mirrored band draws the left band's stage, so a decoder of its own would decode the pair twice.
 		&& !this->bandUsesMirrorView(panel, bandIndex);
 }
 
@@ -2545,9 +2529,6 @@ void MascotController::preloadNext(MascotPanel panel)
 
 void MascotController::preloadPairPanel(MascotPanel panel)
 {
-	// A bound right band never fades, so the right panel's preload would never run under the mirror: the left band that
-	// shares the picture drives it. startPreload() itself skips the bands that draw another band's stage, so what this
-	// reaches is the bands that keep their own player -- the ones with no left counterpart.
 	if (panel != MascotPanel::Left || !this->mirrorEnabled() || !this->rightState.surface)
 		return;
 	this->preloadNext(MascotPanel::Right);
@@ -2772,10 +2753,9 @@ void MascotController::destroyVideoSlot(PanelState& state)
 
 void MascotController::applyDecoderBudget()
 {
-	// The ceiling is spent in pairs: `Static` keeps two players on each panel, and a panning mode keeps two on each
-	// *band*, so the same crossfade reaches every mode and only the count of pairs differs. Crossfading every band is
-	// the mode only when the ceiling covers a pair for each of them; below that every band the budget reaches takes
-	// the hard cut, which is still better than showing images.
+	// The ceiling is spent in pairs: `Static` keeps two players on each panel, a panning mode two on each *band*, so
+	// the same crossfade reaches every mode and only the count of pairs differs. Below a pair per band, every band the
+	// budget reaches takes the hard cut, which is still better than showing images.
 	const int crossfadeWant = PLAYERS_PER_PANEL * VIDEO_PANEL_COUNT;
 	const int wantedBands = this->bandCount(MascotPanel::Left) + this->bandCount(MascotPanel::Right);
 	VideoMode mode = VideoMode::Off;
@@ -2934,7 +2914,7 @@ void MascotController::applyBandBudget()
 void MascotController::applyBackgroundBudget()
 {
 	// Columns first, background last: the pair keeps exactly its entitlement and the layer is spent what is left.
-	// A pair that builds no players is not charged: with `mascots` off the layer gets all of the budget.
+	// A pair that builds no players is not charged, so with the columns off the layer gets all of the budget.
 	int pairPlayers = this->leftBandPlayers + this->rightBandPlayers;
 	if (this->columnsLayout.mode == MascotMode::Static) {
 		const int perPanel = this->videoMode == VideoMode::Crossfade ? PLAYERS_PER_PANEL
@@ -3010,7 +2990,7 @@ void MascotController::restartClipTimer(MascotPanel panel, int bandIndex)
 		timer->stop();
 		return;
 	}
-	// Under the mirror key one timer advances the pair; two armed a few milliseconds apart would start two loads per clip.
+	// Under the mirror one timer advances the pair; two armed a few milliseconds apart would start two loads per clip.
 	if (panel == MascotPanel::Right && this->bandMirrorsLeft(bandIndex)) {
 		timer->stop();
 		return;
@@ -3174,8 +3154,8 @@ void MascotController::onBeat(bool swapWanted)
 	// A video band's cadence is its clip timer, not the beat: a beat arrives far more often than any clip length.
 	if (!this->running || !this->beatsAllowed())
 		return;
-	// The layer's cadence rides the swap beat only; it has no flip state and no pair. The block sits immediately after
-	// the visibility guard, before the pair's flip path. The layer rolls its own dice.
+	// The layer's cadence rides the swap beat only -- it has no flip state and no pair -- and its block must stay
+	// before the pair's flip path, immediately after the visibility guard.
 	if (this->backgroundSwapOnBeat && this->backgroundState.surface
 		&& this->backgroundRandomChange && utils::randfloat(0, 1) < this->backgroundRandomChance) {
 		for (int i = 0; i < static_cast<int>(this->backgroundState.bands.size()); ++i) {
@@ -3193,8 +3173,8 @@ void MascotController::onBeat(bool swapWanted)
 	if (!this->columnsEnabled)
 		return;
 	if (this->columnsLayout.mode == MascotMode::Static) {
-		// `Static` is M1's cadence, untouched: the pair advances together.
-		// Under the mirror key the pair advances only when the *oldest* of its two commits meets the floor, or the two columns show different files.
+		// Under the mirror the pair advances only when the oldest of its two commits meets the floor, or the two
+		// columns show different files.
 		MascotBand* leftBand = this->leftState.band(0);
 		MascotBand* rightBand = this->rightState.band(0);
 		const bool leftMay = leftBand != nullptr;
@@ -3323,8 +3303,8 @@ void MascotController::commitBeatAdvance(MascotPanel panel, int bandIndex)
 		return;
 	if (panel == MascotPanel::Right && this->bandMirrorsLeft(bandIndex))
 		return;
-	// The commit may run at a seam a whole clip after the beat, so the conditions are asked again -- a swap the current
-	// configuration does not permit must not run. The per-panel key, not the columns' one: the layer's `_swap_on_beat` is independent.
+	// The commit may run at a seam a whole clip after the beat, so the conditions are asked again: a swap the current
+	// configuration no longer permits must not run. The layer's swap switch is independent of the columns'.
 	const bool swapOnBeat = panel == MascotPanel::Background ? this->backgroundSwapOnBeat : this->swapOnBeat;
 	if (!swapOnBeat)
 		return;

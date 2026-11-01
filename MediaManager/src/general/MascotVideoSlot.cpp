@@ -10,8 +10,7 @@
 #include <algorithm>
 
 namespace {
-	// The output indices MascotSurface::slotSink() takes, named so the meaning cannot drift between
-	// the surface that hands out the sinks and the players that draw into them.
+	// Output indices must match MascotSurface::slotSink(); the names keep surface and players in step.
 	constexpr int OUTPUT_A = 0;
 	constexpr int OUTPUT_B = 1;
 }
@@ -67,9 +66,8 @@ void MascotVideoSlot::setSinglePlayer(bool single)
 	if (!single)
 		return;
 
-	// A load or parked clip on B can never be shown in this mode (every later swap reloads A), so
-	// both are dropped without a signal: that is not a failure of the file. The parked record goes
-	// before the player it describes is destroyed below.
+	// A B-side load or parked clip can never be shown in this mode: dropped without a signal, not a file failure.
+	// The parked record goes before the player it describes is destroyed below.
 	if (this->m_pending.serial != 0 && this->m_pending.ab == OUTPUT_B)
 		this->releasePending();
 
@@ -79,8 +77,7 @@ void MascotVideoSlot::setSinglePlayer(bool single)
 	ThreadedMediaPlayer* playerB = this->m_players[OUTPUT_B];
 	if (!playerB)
 		return;
-	// Output B is what is on screen: it stays until the next swap reloads A, because retiring it
-	// would blank the panel.
+	// An on-screen B stays until the next swap reloads A, because retiring it would blank the panel.
 	if (this->m_activeAb == OUTPUT_B)
 		return;
 
@@ -92,28 +89,20 @@ void MascotVideoSlot::setSinglePlayer(bool single)
 void MascotVideoSlot::setRandomStart(bool random, int clipSeconds)
 {
 	this->m_randomStart = random;
-	// A non-positive length is read as "no constraint" rather than as a negative range: a bad config
-	// value must not produce an offset past the end of the file.
+	// A non-positive length means no constraint, so a bad config cannot offset past the end of the file.
 	this->m_clipMs = clipSeconds > 0 ? qint64(clipSeconds) * 1000 : 0;
 }
 
 void MascotVideoSlot::setTimings(int swapTimeoutMs, int retryIntervalMs, int retryAttempts)
 {
-	// Clamped here, at the point of use, so a bad config cannot produce a deadline that abandons
-	// clips that are merely opening: 500 ms is the floor (measured warm loads are 49-300 ms) and
-	// 60 s the ceiling (a longer deadline would hold isBusy() on a dead file for a minute, freezing
-	// the panel). There is deliberately no "0 = wait forever": this timer is the only thing that
-	// releases a load that neither paints nor errors, and without it the slot stays busy and
-	// retireInactive() skips its player forever.
+	// Floor 500 ms (measured warm loads 49-300 ms), ceiling 60 s: longer would hold isBusy() on a dead file.
+	// No "0 = wait forever": this timer is the only thing that releases a load that never paints or errors.
 	this->m_swapTimeoutMs = std::clamp(swapTimeoutMs, 500, 60000);
-	// 20 ms is under a frame at any refresh rate, so a smaller value would re-ask a sink that cannot
-	// have appeared yet; 2 s is far longer than a delegate takes to be created.
+	// 20 ms is under a frame at any refresh rate; 2 s is far longer than a delegate takes to appear.
 	this->m_retryIntervalMs = std::clamp(retryIntervalMs, 20, 2000);
-	// 0 attempts is a supported setting -- "do not retry, give up at once" -- so the floor is 0, not
-	// 1; 50 bounds the churn.
+	// 0 attempts is supported (give up at once), so the floor is 0; 50 bounds the churn.
 	this->m_retryAttempts = std::clamp(retryAttempts, 0, 50);
-	// The running timer, not only the next one: a deadline already armed under the old value has to
-	// move with the setting, or a shortened deadline would not apply until the clip after the next.
+	// A deadline already armed under the old value has to move too, or a shortened one waits a clip.
 	if (this->m_timer->isActive())
 		this->m_timer->start(this->m_swapTimeoutMs);
 	else
@@ -123,8 +112,7 @@ void MascotVideoSlot::setTimings(int swapTimeoutMs, int retryIntervalMs, int ret
 void MascotVideoSlot::swapTo(const QString& path, qint64 startOffsetMs)
 {
 	if (this->m_shutdown || path.isEmpty()) {
-		// A caller waiting for a first frame with no player behind it would wait until its own
-		// deadline: say so instead, as a wiring failure because nothing was attempted.
+		// A caller with no player behind the frame would wait out its own deadline: report a wiring failure.
 		emit this->failed(path, FailKind::Wiring);
 		return;
 	}
@@ -133,9 +121,8 @@ void MascotVideoSlot::swapTo(const QString& path, qint64 startOffsetMs)
 	if (this->m_singlePlayer)
 		ab = OUTPUT_A; // one sink, one player: a swap reloads the output that is on screen
 
-	// A parked clip on the output this load takes is spent: setSource() below replaces its media, and
-	// leaving the record would let a later swapToPreloaded() claim a clip the player no longer has.
-	// Record only -- the load changes the player, so emptying it here would post a second load.
+	// A parked clip on the output this load takes is spent: setSource() replaces its media, so the record goes.
+	// Record only: emptying the player here would post a second load.
 	if (this->m_preload.parked)
 		this->m_preload = Preload{};
 
@@ -145,8 +132,7 @@ void MascotVideoSlot::swapTo(const QString& path, qint64 startOffsetMs)
 	}
 
 	if (this->m_pending.serial != 0) {
-		// A load left on the other output (single-player switched on mid-load) is stopped too, rather
-		// than left decoding a clip nobody will see.
+		// A load left on the other output (single-player mid-load) is stopped, not left decoding an unseen clip.
 		if (this->m_pending.ab != ab) {
 			if (ThreadedMediaPlayer* stale = this->m_players[this->m_pending.ab]) {
 				stale->stop();
@@ -163,15 +149,13 @@ void MascotVideoSlot::swapTo(const QString& path, qint64 startOffsetMs)
 	this->m_pending.requestedOffsetMs = startOffsetMs;
 
 	ThreadedMediaPlayer* player = this->m_players[ab];
-	// An equal URL is a no-op inside QMediaPlayer (no loading status), so the gate would wait for a
-	// frame a stopped player never paints and time out on a good file: empty it first.
+	// An equal URL is a no-op in QMediaPlayer, so empty the source first or the gate times out on a good file.
 	if (player->currentSource() == path)
 		player->setSource(QString());
 	player->setSource(path);
 
 	if (!this->m_paused) {
-		// Armed before LoadedMedia on purpose: a source that neither loads nor errors would otherwise
-		// wait forever. handleMediaStatus() re-arms it once the load half of the wait is spent.
+		// Armed before LoadedMedia on purpose; handleMediaStatus() re-arms it once the load half is spent.
 		this->m_timer->start();
 	}
 }
@@ -179,34 +163,27 @@ void MascotVideoSlot::swapTo(const QString& path, qint64 startOffsetMs)
 void MascotVideoSlot::preload(const QString& path, qint64 startOffsetMs)
 {
 	if (this->m_shutdown || path.isEmpty()) {
-		// A wiring report, not a verdict on the file: nothing was attempted, so the owner must not
-		// forget the path.
+		// A wiring report, not a verdict on the file: nothing was attempted, so keep the path.
 		emit this->failed(path, FailKind::Wiring);
 		return;
 	}
 
-	// Chosen by the same rule swapTo() uses, so a preload and its swap cannot disagree about which
-	// player is idle.
+	// Same rule as swapTo(), so a preload and its swap cannot disagree about which player is idle.
 	int ab = this->m_activeAb == OUTPUT_A ? OUTPUT_B : OUTPUT_A;
 	if (this->m_singlePlayer)
 		ab = OUTPUT_A;
 
-	// Park only on an output nothing is visible on: reloading the player on screen would end the clip
-	// the user is watching. In single-player mode that is every case after the first clip, so no
-	// preload is available there and the swap keeps its load.
+	// Never reload the on-screen player (that ends the visible clip); single-player has no free output after clip 1.
 	if (ab == this->m_activeAb)
 		return;
 
-	// One load at a time through the same pending record as a swap, so a preload shares its gate,
-	// deadline and supersede rules; a swap in flight wins.
+	// One load at a time through the pending record; a swap in flight wins.
 	if (this->m_pending.serial != 0)
 		return;
 
 	if (this->m_preload.parked) {
-		// Never open the parked clip twice: that would throw away a ready clip and pay for it again.
-		// A different file, or the same file at a different offset, replaces it -- a parked clip is a
-		// moment, and a caller that asked for `startOffsetMs` must not be served another one. A
-		// negative offset is "whatever swapTo() would have chosen", so it cannot be compared.
+		// Never open the parked clip twice: a different file, or the same one at a different offset, replaces it.
+		// A parked clip is a moment (the mirror pair's invariant); a negative offset cannot be compared, so it stands.
 		const bool sameMoment = startOffsetMs < 0 || this->m_preload.offsetMs == startOffsetMs;
 		if (this->m_preload.path == path && sameMoment)
 			return;
@@ -225,14 +202,13 @@ void MascotVideoSlot::preload(const QString& path, qint64 startOffsetMs)
 	this->m_pending.preload = true;
 
 	ThreadedMediaPlayer* player = this->m_players[ab];
-	// The same equal-URL trap as swapTo(): empty it first to force a real open.
+	// Same equal-URL trap as swapTo(): empty it first.
 	if (player->currentSource() == path)
 		player->setSource(QString());
 	player->setSource(path);
 
 	if (!this->m_paused) {
-		// Same deadline as a swap: a preload that neither paints nor errors would hold this record
-		// and its output forever.
+		// Same deadline as a swap: an unbounded preload would hold this record and its output forever.
 		this->m_timer->start();
 	}
 }
@@ -243,8 +219,7 @@ bool MascotVideoSlot::swapToPreloaded()
 		return false;
 
 	const Preload parked = this->m_preload;
-	// Bounds checked before the index: `parked.ab` is -1 in the empty state, and any other value
-	// would index outside `m_players`.
+	// Checked before the index: `parked.ab` is -1 when empty and anything else would run off `m_players`.
 	if (parked.ab < OUTPUT_A || parked.ab > OUTPUT_B) {
 		this->discardPreload();
 		return false;
@@ -261,8 +236,7 @@ bool MascotVideoSlot::swapToPreloaded()
 	this->m_activeAb = parked.ab;
 	this->m_activePath = parked.path;
 
-	// The clip was parked paused, so the swap is this play() plus the owner's opacity writes. While
-	// paused it stays parked in place; setPaused(false) starts it.
+	// Parked paused, so the swap is this play() plus the owner's opacity writes; while paused it stays parked.
 	if (!this->m_paused)
 		player->play();
 
@@ -272,8 +246,7 @@ bool MascotVideoSlot::swapToPreloaded()
 
 void MascotVideoSlot::discardPreload()
 {
-	// A preload still opening goes by the same call: leaving it in flight would keep the slot busy,
-	// with its deadline armed, for a panel that cannot use it.
+	// A preload still opening goes by the same call, or it keeps the slot busy with its deadline armed.
 	if (this->m_pending.serial != 0 && this->m_pending.preload)
 		this->releasePending();
 
@@ -283,9 +256,7 @@ void MascotVideoSlot::discardPreload()
 	const int ab = this->m_preload.ab;
 	this->m_preload = Preload{};
 
-	// A parked clip is never the active one, so its player has nothing on screen to lose: emptying
-	// it frees the decoder. The bounds check is because this runs on records other code decided to
-	// drop, so it cannot be the place that trusts `ab`.
+	// A parked clip is never active, so nothing on screen is lost; the bounds check is for records other code dropped.
 	if (ab < OUTPUT_A || ab > OUTPUT_B || ab == this->m_activeAb)
 		return;
 	if (ThreadedMediaPlayer* player = this->m_players[ab]) {
@@ -296,8 +267,7 @@ void MascotVideoSlot::discardPreload()
 
 void MascotVideoSlot::stopAll()
 {
-	// A parked record goes too: a stopped slot claims nothing is loaded, and a surviving one would
-	// let a later swapToPreloaded() activate a player this call emptied.
+	// A parked record goes too: a surviving one would let swapToPreloaded() activate a player this call emptied.
 	this->m_preload = Preload{};
 	this->m_pending = Load{};
 	this->m_timer->stop();
@@ -339,8 +309,7 @@ void MascotVideoSlot::setPaused(bool paused)
 	this->m_paused = paused;
 
 	if (paused) {
-		// A paused player paints no frame, so the deadline would fire on a clip that is only
-		// waiting: it stops with the playback and is re-armed on resume.
+		// A paused player paints no frame, so the deadline would fire on a clip that is only waiting: stop it.
 		this->m_timer->stop();
 		for (ThreadedMediaPlayer* player : this->m_players) {
 			if (player)
@@ -349,16 +318,14 @@ void MascotVideoSlot::setPaused(bool paused)
 		return;
 	}
 
-	// Resume a load that finished while paused, then whatever is on screen; in single-player mode
-	// those are the same player, where a second play() is a no-op.
+	// Resume a load that finished while paused, then the active output; in single-player both are the same.
 	if (this->m_pending.serial != 0) {
 		if (this->m_pending.loaded && !this->m_pending.playing) {
 			if (ThreadedMediaPlayer* pendingPlayer = this->m_players[this->m_pending.ab])
 				pendingPlayer->play();
 			this->m_pending.playing = true;
 		}
-		// Armed whether or not the load has finished: a load that was still running when the pause
-		// arrived had had its deadline stopped, and from here the wait is a wait again.
+		// Armed whether or not the load finished: a load running when the pause arrived had its deadline stopped.
 		this->m_timer->start();
 	}
 	if (this->m_activeAb >= 0) {
@@ -373,12 +340,10 @@ void MascotVideoSlot::retireInactive()
 		ThreadedMediaPlayer* player = this->m_players[ab];
 		if (!player || ab == this->m_activeAb)
 			continue;
-		// A load in flight is the next clip, not an outgoing one: retiring it would turn a swap that
-		// is merely slow into a missing clip.
+		// A load in flight is the next clip: retiring it turns a slow swap into a missing clip.
 		if (this->m_pending.serial != 0 && this->m_pending.ab == ab)
 			continue;
-		// A parked preload is the next clip too, and inactive by construction: retiring it would
-		// throw away exactly the work the preload exists to have already done.
+		// A parked preload is the next clip too: retiring it throws away the work the preload exists to have done.
 		if (this->m_preload.parked && this->m_preload.ab == ab)
 			continue;
 		// setSource() stops the player first, so this both ends the clip and frees its decoder.
@@ -399,9 +364,8 @@ void MascotVideoSlot::shutdown()
 	this->m_activePath.clear();
 
 	for (ThreadedMediaPlayer* player : this->m_players) {
-		// The synchronous detach from the sink has to happen now: the QML item that owns the sink
-		// is destroyed before this object is, and the wrapper's own destructor only gets its turn
-		// at the end of ours. A second call is a no-op inside the wrapper as well.
+		// The synchronous detach has to happen now: the QML item owning the sink dies before this object does.
+		// The wrapper's destructor only gets its turn at the end of ours; a second shutdown is a no-op inside it.
 		if (player)
 			player->shutdown();
 	}
@@ -409,14 +373,10 @@ void MascotVideoSlot::shutdown()
 
 void MascotVideoSlot::handleFrame(int ab, const QVideoFrame& frame)
 {
-	// Only the pending output's frames count. An outgoing or retired player keeps painting onto its
-	// own sink, and taking its last frame for the new clip's start is the failure this gate exists
-	// to prevent -- most of all in single-player mode, where both clips share a sink.
+	// Only the pending output's frames count; the outgoing tail must not become the new clip's start.
 	if (this->m_pending.serial == 0 || this->m_pending.ab != ab)
 		return;
-	// Before this load reports Loading, any frame on this player still belongs to the outgoing clip.
-	// Requiring LoadedMedia also means the offset below is applied, so the reported frame is the one
-	// the caller asked to start at.
+	// Requiring Loading+LoadedMedia also means the offset is applied, so the frame is the one asked for.
 	if (!this->m_pending.sawLoading || !this->m_pending.loaded)
 		return;
 	if (!frame.isValid())
@@ -428,8 +388,7 @@ void MascotVideoSlot::handleFrame(int ab, const QVideoFrame& frame)
 	const qint64 offsetMs = this->m_pending.offsetMs;
 	const QSize frameSize = frame.size();
 
-	// A preload's first frame is where the parking happens; m_activeAb/m_activePath are left alone
-	// because nothing has been swapped and a swap that never happens must leave the panel as it was.
+	// A preload's first frame is where parking happens; m_activeAb/m_activePath stay alone, nothing swapped.
 	if (this->m_pending.preload) {
 		const int parkedAb = this->m_pending.ab;
 		this->m_pending = Load{};
@@ -438,17 +397,14 @@ void MascotVideoSlot::handleFrame(int ab, const QVideoFrame& frame)
 		this->m_preload.path = path;
 		this->m_preload.offsetMs = offsetMs;
 		this->m_preload.frameSize = frameSize;
-		// Paused rather than stopped: no CPU and no active decode, and keeping the source is what
-		// makes the next swap a play() on a player that already has the media open. The frame it is
-		// paused on stays in the sink, which is what turns the swap into an opacity change.
+		// Paused, not stopped: the source is kept so the swap is a play(), and the frame in the sink makes it a fade.
 		if (ThreadedMediaPlayer* parked = this->m_players[parkedAb])
 			parked->pause();
 		emit this->preloaded(path, offsetMs, frameSize);
 		return;
 	}
 
-	// State first, emission last: a handler that swaps again from firstFrame() must not have its
-	// new load overwritten by the bookkeeping of the load that just finished.
+	// State first, emission last: a handler that swaps again from firstFrame() must not be overwritten.
 	this->m_pending = Load{};
 	this->m_activeAb = ab;
 	this->m_activePath = path;
@@ -463,12 +419,10 @@ void MascotVideoSlot::handleMediaStatus(int ab, QMediaPlayer::MediaStatus status
 		return;
 
 	if (status == QMediaPlayer::InvalidMedia) {
-		// A file that cannot be opened fails whoever holds it: the load in flight, or the clip
-		// already on screen. In single-player mode one player is reloaded in place, so a late
-		// InvalidMedia from the previous source arrives with currentSource() already naming this
-		// load's path; a load that has not reported Loading has produced no status of its own yet,
-		// and its own failure still arrives after its Loading. A backend that reports an unopenable
-		// file without ever emitting LoadingMedia ends as the timeout instead of a failure.
+		// A file that cannot be opened fails whoever holds it: the load in flight, or the clip already on screen.
+		// In single-player the player is reloaded in place, so currentSource() names the new path for the old status.
+		// A load that has not reported Loading has produced no status of its own; its own failure still arrives after it.
+		// A backend that reports an unopenable file without LoadingMedia ends as the timeout, not a failure.
 		if (this->m_pending.serial != 0 && this->m_pending.ab == ab
 			&& player->currentSource() == this->m_pending.path && !this->m_pending.sawLoading) {
 			return;
@@ -477,12 +431,10 @@ void MascotVideoSlot::handleMediaStatus(int ab, QMediaPlayer::MediaStatus status
 		return;
 	}
 
-	// Any other status from a player not carrying the pending load is an outgoing clip's last words
-	// or a retired player's silence; it may neither start nor fail anything.
+	// Any other status from a player not carrying the pending load may neither start nor fail anything.
 	if (this->m_pending.serial == 0 || this->m_pending.ab != ab)
 		return;
-	// currentSource() follows setSource() on this thread, so it rules out a status about the file
-	// this player carried before.
+	// currentSource() follows setSource() on this thread, so it rules out a status about the file carried before.
 	if (player->currentSource() != this->m_pending.path)
 		return;
 
@@ -495,8 +447,7 @@ void MascotVideoSlot::handleMediaStatus(int ab, QMediaPlayer::MediaStatus status
 		return;
 
 	this->m_pending.loaded = true;
-	// duration() is 0 until the backend knows it, and durationChanged may arrive on either side of
-	// LoadedMedia: chooseOffset() reads both that and "clip longer than file" as offset 0.
+	// duration() is 0 until known and durationChanged can arrive either side; both that and clip>file read as 0.
 	const qint64 offsetMs = this->m_pending.requestedOffsetMs >= 0
 		? this->m_pending.requestedOffsetMs
 		: this->chooseOffset(player->duration());
@@ -504,8 +455,7 @@ void MascotVideoSlot::handleMediaStatus(int ab, QMediaPlayer::MediaStatus status
 	player->setPosition(offsetMs);
 
 	if (this->m_paused) {
-		// The offset is applied; setPaused(false) starts this clip. Arming the deadline here would
-		// let a paused player run out the clock on a load that is only waiting.
+		// The offset is applied; setPaused(false) starts this clip, so arming the deadline here would run it out.
 		return;
 	}
 	player->play();
@@ -516,8 +466,7 @@ void MascotVideoSlot::handleMediaStatus(int ab, QMediaPlayer::MediaStatus status
 
 void MascotVideoSlot::handleError(int ab, QMediaPlayer::Error error)
 {
-	// NoError is QMediaPlayer clearing the previous error when a new source is set, not a failure:
-	// treating it as one would fail the swap that follows a bad file.
+	// NoError is QMediaPlayer clearing the previous error on a new source; failing on it kills the next swap.
 	if (error == QMediaPlayer::NoError)
 		return;
 
@@ -525,10 +474,9 @@ void MascotVideoSlot::handleError(int ab, QMediaPlayer::Error error)
 	if (!player)
 		return;
 
-	// An error names no source, so it gets the same load-generation evidence as the status path:
-	// currentSource() already names the new path when a late error of the old clip arrives, and a
-	// load that has not reported Loading has produced no error of its own -- its own failure still
-	// arrives, as InvalidMedia or as an error after its Loading.
+	// An error names no source, so it needs the same load-generation evidence as the status path.
+	// A pre-Loading load has produced no error of its own; failing it here would drop a file that is still opening.
+	// Its own failure still arrives, as InvalidMedia or as an error after its Loading.
 	if (this->m_pending.serial != 0 && this->m_pending.ab == ab
 		&& player->currentSource() == this->m_pending.path && !this->m_pending.sawLoading) {
 		return;
@@ -557,17 +505,13 @@ bool MascotVideoSlot::ensurePlayer(int ab)
 	// Silence is structural, not a setting: mascots never make noise.
 	player->setMuted(true);
 	player->setVolume(0.0f);
-	// The intent has to be set before the first setSource(): the backend reads it when it opens the
-	// media, and the first-frame budget is measured against a low-latency open. Low latency buys a
-	// quicker first frame at a higher chance of dropped frames or glitches, so it follows the
-	// `mascots_low_latency` config rather than being always on.
+	// Set before the first setSource(): the backend reads it at open, and the first-frame budget assumes low latency.
+	// Low latency trades buffering for a higher chance of dropped frames, so it follows `mascots_low_latency`.
 	this->applyPlaybackIntent(player);
-	// start() runs once and cannot rebind a sink later; the empty source keeps the player idle until
-	// a swapTo() names a file.
+	// start() runs once and cannot rebind a sink later; the empty source keeps the player idle.
 	player->start(sink, QString(), true);
 
-	// Lambdas, not member slots: the signal carries no output index, and that index is why these
-	// handlers exist per player.
+	// Lambdas, not member slots: the signal carries no output index, and that index is why these are per player.
 	QObject::connect(player, &ThreadedMediaPlayer::mediaStatusChanged, this,
 		[this, ab](QMediaPlayer::MediaStatus status) { this->handleMediaStatus(ab, status); });
 	QObject::connect(player, &ThreadedMediaPlayer::errorOccurred, this,
@@ -587,8 +531,7 @@ QString MascotVideoSlot::releasePending()
 	this->m_pending = Load{};
 	this->m_timer->stop();
 
-	// In single-player mode the pending load is the player on screen, so a failed start has taken
-	// the visible clip with it: forget it rather than reporting a clip nothing holds.
+	// In single-player the pending load is the player on screen, so a failed start took the visible clip.
 	if (this->m_activeAb == ab) {
 		this->m_activeAb = -1;
 		this->m_activePath.clear();
@@ -603,8 +546,7 @@ QString MascotVideoSlot::releasePending()
 
 void MascotVideoSlot::abortPending(bool timedOut)
 {
-	// Released before the emission, so a handler that swaps again from failed()/timedOut() cannot
-	// be undone by the release that follows its own call.
+	// Released before the emission, so a handler that swaps again from failed()/timedOut() is not undone.
 	const QString path = this->releasePending();
 	if (path.isEmpty())
 		return;
@@ -627,9 +569,8 @@ void MascotVideoSlot::failPlayer(int ab)
 		return;
 	}
 
-	// A parked preload that dies while it waits is released before the emission, so a handler that
-	// asks for another clip finds clean state. The file is reported as a decode failure -- the
-	// backend refused it and will refuse it again. Nothing was on screen, so no panel state changes.
+	// A dying parked preload is a decode failure (the backend will refuse it again) and is released before the emit.
+	// Nothing was on screen, so no panel state changes.
 	if (this->m_preload.parked && this->m_preload.ab == ab) {
 		const QString parkedPath = this->m_preload.path;
 		this->m_preload = Preload{};
@@ -645,8 +586,7 @@ void MascotVideoSlot::failPlayer(int ab)
 	const QString path = this->m_activePath;
 	this->m_activeAb = -1;
 	this->m_activePath.clear();
-	// Only when nothing is waiting: a pending load on the other output owns this deadline, and
-	// stopping it would cancel the only thing that can report that load.
+	// The deadline is not stopped while a pending load on the other output owns it.
 	if (this->m_pending.serial == 0)
 		this->m_timer->stop();
 	player->stop();

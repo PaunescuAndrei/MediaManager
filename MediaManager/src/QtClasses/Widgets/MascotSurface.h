@@ -19,10 +19,10 @@ class QVideoSink;
 class MascotSurface : public QWidget {
 	Q_OBJECT
 public:
-	// `Cover` is the only mode that guarantees the slot is covered: the content shift is clamped so it can never slide an edge into view.
-	// `CoverScroll` frames exactly like `Cover` -- no extra zoom, no different cut -- and the controller travels it along
-	// the axis the Direction names, as far as the picture overflows that way, so the picture passes the band.
-	enum class FillMode { Crop, Fit, Stretch, HeightFit, WidthFit, Cover, CoverScroll };
+	// `Crop` and `Cover` both guarantee the slot is covered: the content shift is clamped so it can never slide an edge
+	// into view. `Crop` holds that framing still; `Cover` travels it along the axis the Direction names, as far as the
+	// picture overflows that way, so the whole picture passes the band and none of it is cut off for good.
+	enum class FillMode { Crop, Fit, Stretch, HeightFit, WidthFit, Cover };
 
 	// One scene for all three layers: a QQuickWidget carrying Qt::WA_AlwaysStackOnTop is drawn above every
 	// sibling whatever the stack says, and one without it blits opaquely.

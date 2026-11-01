@@ -1,4 +1,4 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 #include "MainWindow.h"
 #include "TooltipEventFilter.h"
 #include "MainApp.h"
@@ -773,21 +773,14 @@ void MainWindow::applyBackgroundVeil() {
     // (M5 Task 8b: the veil covers the window; it does not make the strip *match the list*, because the
     // list's own fill is a second surface with its own key. The user wants the two to agree -- "the top
     // widget matches the list too like before" -- so the strip's scrim is back, and it is driven by the
-    // *same* key as the rows: same colour role, same alpha, one control for the whole centre pane.)
-    // (M5 Task 8e: the veil itself was built and sized from here. M6 removed it: the veil is one rectangle
-    // in the controller's sheet now, which is the same window-sized scene the layer draws in, so it is the
-    // only way the columns can be put *behind* it -- a second widget could not be stacked above a
-    // QQuickWidget carrying Qt::WA_AlwaysStackOnTop, which is what the two failed attempts measured. What
-    // stays here is everything that paints *above* that scene: the rows, the strip's scrim and the bars.)
-    if (backgroundEnabled) {
-        // Nothing to build: the sheet is the controller's, and its veil is pushed by applyMascotKey() and by
-        // the controller's own applyConfig(). The event filter the veil installed on the central widget went
-        // with it -- the sheet follows its host itself.
-    }
-    // (M5 Task 8b: the strip's half of the one control. It is the same palette call the rows get -- Base
-    // at the row alpha -- so the strip above the list reads exactly like an even row, and the layer is
-    // held back by the same amount above the list as inside it. Sized to the space the list does not
-    // occupy: a scrim that covered the list too would stack a second fill under the rows.)
+    // The veil is one rectangle in the controller's sheet -- the same window-sized scene the layer draws in -- and
+    // that is the only way the columns can be put *behind* it: a second widget cannot be stacked above a
+    // QQuickWidget carrying Qt::WA_AlwaysStackOnTop. What stays here is everything that paints *above* that scene:
+    // the rows, the strip's scrim and the bars.
+    // The strip's half of the one control: the same palette call the rows get -- Base at the row alpha -- so the
+    // strip above the list reads exactly like an even row, and the layer is held back by the same amount above the
+    // list as inside it. Sized to the space the list does not occupy: a scrim that covered the list too would stack
+    // a second fill under the rows.
     if (layerVisible) {
         if (!this->backgroundScrim) {
             this->backgroundScrim = new QWidget(this->ui.CenterContainer);
@@ -800,8 +793,8 @@ void MainWindow::applyBackgroundVeil() {
             // changes -- a search bar or a date column appearing does not resize the window.
             this->ui.videosWidget->installEventFilter(this);
         }
-        // (M5 Task 8d: the strip is the Base colour, so it follows the list alpha and not the alternate
-        // row's -- it is the row the strip has to match.)
+        // The strip is the Base colour, so it follows the list alpha and not the alternate row's -- it is the row
+        // the strip has to match.
         this->backgroundScrim->setPalette(
             get_background_row_palette(appPalette, rowAlpha, alternateAlpha));
         // Below every sibling: the strip's own widgets paint on top of the scrim.
@@ -816,9 +809,9 @@ void MainWindow::applyBackgroundVeil() {
     // Stacking last, as the veil's own apply did: whatever order the form built the panes in, the three of
     // them are above the controller's sheet by the time this returns.
     this->stackMascotPanes();
-    // (M6: the veil and the layer's backdrop are painted in the palette's Window colour, which this method is
-    // the only caller able to notice changing -- a theme switch reaches it through changePalette(). Without
-    // this push the scene would keep the previous theme's colour until the next settings apply.)
+    // The veil and the layer's backdrop are painted in the palette's Window colour, which this method is the only
+    // caller able to notice changing -- a theme switch reaches it through changePalette(). Without this push the
+    // scene would keep the previous theme's colour until the next settings apply.
     if (this->mascotController)
         this->mascotController->pushVeil();
 }
@@ -826,9 +819,8 @@ void MainWindow::applyBackgroundVeil() {
 void MainWindow::updateBackgroundScrim() {
     if (!this->backgroundScrim)
         return;
-    // (M5 Task 8b: no visibility gate, for the reason updateBackgroundVeil() records -- the scrim is
-    // built during construction, while the window is still hidden, and a child of a hidden parent is
-    // not "visible". Sizing a hidden widget is free.)
+    // No visibility gate: the scrim is built during construction, while the window is still hidden, and a child
+    // of a hidden parent is not "visible". Sizing a hidden widget is free.
     // Everything CenterContainer owns above the list. Both widgets are children of that container,
     // so y() is already in the coordinate space the scrim is placed in.
     const QWidget* container = this->ui.CenterContainer;

@@ -1,4 +1,4 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 #include "MascotController.h"
 #include "MainApp.h"
 #include "MainWindow.h"
@@ -180,10 +180,6 @@ namespace {
 		return (0.5 - travelled) * travel;
 	}
 
-	QString scrollSenseLabel(bool reverse)
-	{
-		return reverse ? QStringLiteral("right to left") : QStringLiteral("left to right");
-	}
 
 
 	QString modeLabel(MascotMode mode)
@@ -553,7 +549,7 @@ void MascotController::applyConfig()
 			MascotBand* band = owned.get();
 			if (!band || !band->video())
 				continue;
-			band->video()->setRandomStart(this->randomStart, this->clipSeconds);
+			band->video()->setRandomStart(this->randomStart, this->clipSecondsFor(MascotPanel::Background));
 			band->video()->setTimings(this->swapTimeoutMs, this->retryIntervalMs, this->retryAttempts);
 			band->video()->setLowLatency(this->lowLatency);
 			if (!this->preloadEnabled)
@@ -671,8 +667,6 @@ MascotSurface::FillMode MascotController::fillModeFromString(const QString& valu
 		return MascotSurface::FillMode::WidthFit;
 	if (value.compare(QStringLiteral("Cover"), Qt::CaseInsensitive) == 0)
 		return MascotSurface::FillMode::Cover;
-	if (value.compare(QStringLiteral("CoverScroll"), Qt::CaseInsensitive) == 0)
-		return MascotSurface::FillMode::CoverScroll;
 	if (ok)
 		*ok = false;
 	return MascotSurface::FillMode::HeightFit;
@@ -881,15 +875,18 @@ void MascotController::syncBands(PanelState& state, MascotPanel panel)
 	}
 	for (auto& owned : state.bands)
 		owned->setGroup(this->slotGroupFor(panel));
-	// A slot outlives the band that filled it, and the surface keeps the slot's scroll offset along with its other
-	// properties. A band re-created into that slot starts at zero and only writes an offset when it has travel, so
-	// the previous band's translation would sit on the item for ever and slide the new content out of its band.
-	// Clearing it here is what makes a band-count change start the pan from the band rather than from the slot.
+	// A slot outlives the band that filled it, and the surface keeps the slot's scroll offset and video opacities along
+	// with its other properties. A band re-created into that slot starts at zero and only writes an offset when it has
+	// travel, and only fades in once its own first frame arrives, so the previous band's translation would sit on the
+	// item and its output would be shown over the stale frame. Clearing both here makes a band-count change start from
+	// the band rather than from the slot.
 	for (auto& owned : state.bands) {
 		MascotBand* band = owned.get();
 		if (!band)
 			continue;
 		surface->setSlotScrollOffset(band->slotIndex(), 0.0, 0.0);
+		surface->setSlotVideoOpacity(band->slotIndex(), 0, 0.0, 0);
+		surface->setSlotVideoOpacity(band->slotIndex(), 1, 0.0, 0);
 		band->setScrollOffset(0.0);
 	}
 	state.configuredBandCount = wanted;
@@ -992,10 +989,10 @@ double MascotController::scrollTravel(MascotPanel panel, const MascotBand& band)
 	MascotSurface* surface = band.surface();
 	if (!surface)
 		return 0.0;
-	// `Cover`/`Crop` are the static framings: they fill the band and stay put, which is what separates them from
-	// `CoverScroll`. `Fit`/`Stretch` fit the band and have no overflow to travel anyway.
+	// `Crop` is the static cover: it fills the band and stays put, which is what separates it from `Cover`'s travel.
+	// `Fit`/`Stretch` fit the band and have no overflow to travel anyway.
 	const MascotSurface::FillMode fill = this->effectiveFillMode(panel);
-	if (fill == MascotSurface::FillMode::Cover || fill == MascotSurface::FillMode::Crop
+	if (fill == MascotSurface::FillMode::Crop
 		|| fill == MascotSurface::FillMode::Fit || fill == MascotSurface::FillMode::Stretch)
 		return 0.0;
 	const bool vertical = this->scrollDirectionIsVertical(panel);
@@ -1628,6 +1625,7 @@ void MascotController::createSheet()
 		MascotSide side = MascotSide::Left;
 		if (!this->pairSideOf(this->stateFor(panel), &side))
 			return;
+		// Drops land in the policy band: the slot the gesture started on is only used to find the side.
 		this->showDroppedImage(side, path);
 	});
 	// The hosts sit above the sheet in the widget stack, so making them mouse-transparent is what routes clicks and drops to the sheet.
@@ -1948,14 +1946,6 @@ void MascotController::presentMedia(PanelState& state, MascotPanel panel, const 
 		band->setContentOffset(QPointF(0.0, 0.0));
 }
 
-bool MascotController::mirrorParityFor(MascotPanel panel, const QString& path) const
-{
-	if (panel == MascotPanel::Left)
-		return this->flipForSide(path, MascotSide::Left);
-	if (panel == MascotPanel::Right)
-		return this->flipForSide(path, MascotSide::Right);
-	return false;
-}
 
 void MascotController::applyMirror(PanelState& state, MascotPanel panel, const QString& path,
 	int bandIndex)
@@ -2490,37 +2480,35 @@ void MascotController::preloadNext(MascotPanel panel)
 
 void MascotController::startPreload(MascotPanel panel)
 {
-	if (panel == MascotPanel::Background)
-		return;
 	if (!this->running || !this->preloadEnabled || !this->mediaMayBeVideo(panel))
-		return;
-	// A preload needs a second player to park on, and only `Static`'s crossfade has one; asking in a panning mode would draw a file nothing could use.
-	if (this->layoutFor(panel).mode != MascotMode::Static)
 		return;
 	PanelState& state = this->stateFor(panel);
 	MascotSurface* surface = state.surface.data();
-	MascotBand* band = state.band(0);
-	MascotVideoSlot* slot = band ? band->video() : nullptr;
-	if (!surface || !band || !slot)
+	if (!surface || this->videoPaused || !surface->isVisible())
 		return;
-	if (this->videoPaused || !surface->isVisible())
-		return;
-	if (band->media().type != MascotMedia::Video || band->media().path.isEmpty())
-		return;
-	if (slot->isBusy() || slot->hasPreload())
-		return;
+	// A mirrored pair shows the same pick on both sides, so the left column's preload serves both.
 	if (panel == MascotPanel::Right && this->mirrorEnabled())
-		return;
-	if (!band->ensureVideo(0))
 		return;
 	if (this->pickType(state, panel) != MascotMedia::Video)
 		return;
 	this->applySeedSource();
 	this->source.setWeightedChoice(this->weightedRandom);
-	const QString path = this->source.nextVideoPath();
-	if (path.isEmpty())
-		return;
-	slot->preload(path, -1);
+	for (int index = 0; index < this->bandCount(panel); ++index) {
+		MascotBand* band = state.band(index);
+		MascotVideoSlot* slot = band ? band->video() : nullptr;
+		// A preload parks the next file on the band's second player, so a band running a single player has nowhere to
+		// put it and the visible clip would be replaced instead of preloaded.
+		if (!band || !slot || slot->isSinglePlayer() || slot->isBusy() || slot->hasPreload())
+			continue;
+		if (band->media().type != MascotMedia::Video || band->media().path.isEmpty())
+			continue;
+		if (!band->ensureVideo(0))
+			continue;
+		const QString path = this->source.nextVideoPath();
+		if (path.isEmpty())
+			continue;
+		slot->preload(path, -1);
+	}
 }
 
 void MascotController::onVideoPreloaded(MascotPanel panel, int bandIndex, const QString& path,

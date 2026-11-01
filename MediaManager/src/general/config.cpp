@@ -109,7 +109,7 @@ void Config::init_defaults() {
 		{"mascots_swap_on_beat", "True"},
 		{"mascots_random_start", "True"},
 		{"mascots_crossfade_ms", "600"},
-		{"mascots_max_decoders", "6"},
+		{"mascots_max_decoders", "24"},
 		{"mascots_scroll_speed", "40"},
 		{"mascots_pan", "False"},
 		{"mascots_scroll_direction", "LeftToRight"},

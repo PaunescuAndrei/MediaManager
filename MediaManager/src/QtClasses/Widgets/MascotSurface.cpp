@@ -1,4 +1,4 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 #include "MascotSurface.h"
 #include "MascotImageProvider.h"
 #include "OverlayGraphicsVideoWidget.h"
@@ -226,9 +226,8 @@ QVideoSink* MascotSurface::slotSink(int i, int ab)
 {
 	if (!this->isValidSlot(i) || (ab != 0 && ab != 1))
 		return nullptr;
-	// Resolve first: a delegate QML created after the last applySlot() left this slot's cache empty, and the
-	// accessor then answered null for ever -- which a video pick saw as "no video sink for the panel" and made
-	// the panel fall back to images. The lookup is idempotent and runs only while the pointer is null.
+	// Resolve here: applySlot() is the only other filler of these pointers, and a delegate QML creates after it leaves
+	// them null. resolveSlot() is idempotent, so a settled slot costs four null checks.
 	this->resolveSlot(i);
 	const Slot& slot = this->slotStates.at(i);
 	QQuickItem* video = (ab == 0 ? slot.videoA : slot.videoB).data();
@@ -446,8 +445,6 @@ void MascotSurface::applySlot(int i)
 	// Every mode is drawn as its painted box, stretched onto it: that box already carries the picture's aspect (or is
 	// the slot itself for Stretch), so stretching never distorts it, and an item larger than the slot -- which is what
 	// Cover and the panning modes produce -- is clipped by the slot while still being something the pan can slide.
-	item->setProperty("heightFill", true);
-	item->setProperty("widthFill", true);
 	item->setProperty("paintedWidth", contentSize.width());
 	item->setProperty("paintedHeight", contentSize.height());
 	const QSize nativeSize = slot.nativeSize;
@@ -508,10 +505,9 @@ QSizeF MascotSurface::contentSizeFor(const Slot& slot) const
 		return QSizeF(nativeWidth * scale, nativeHeight * scale);
 	}
 	case FillMode::Crop:
-	case FillMode::Cover:
-	case FillMode::CoverScroll: {
-		// Both covers are the same box: the picture scaled until it covers the slot, which is exact on one axis and
-		// larger on the other. `CoverScroll` only differs in what the controller does with that overflow.
+	case FillMode::Cover: {
+		// Both are the same box: the picture scaled until it covers the slot, exact on one axis and larger on the
+		// other. What separates them is what the controller does with that overflow -- nothing, or the pan.
 		const double scale = std::max(slotWidth / nativeWidth, slotHeight / nativeHeight);
 		return QSizeF(nativeWidth * scale, nativeHeight * scale);
 	}

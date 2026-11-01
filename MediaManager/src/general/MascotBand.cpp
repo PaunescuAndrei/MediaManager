@@ -71,10 +71,11 @@ bool MascotBand::ensureVideo(int ab)
 		return false;
 	// The sinks belong to the QML delegate, so reading and binding them in one call is what lets the owner start a load
 	// without holding a sink pointer across a slot count change.
-	if (!this->m_surface->slotSink(this->m_slotIndex, ab))
+	QVideoSink* sinkA = this->m_surface->slotSink(this->m_slotIndex, 0);
+	QVideoSink* sinkB = this->m_surface->slotSink(this->m_slotIndex, 1);
+	if (!sinkA || (ab != 0 && !sinkB))
 		return false;
-	this->m_video->setSinks(this->m_surface->slotSink(this->m_slotIndex, 0),
-		this->m_surface->slotSink(this->m_slotIndex, 1));
+	this->m_video->setSinks(sinkA, sinkB);
 	return true;
 }
 
@@ -156,9 +157,12 @@ bool MascotBand::videoOutputVisible() const
 
 void MascotBand::clear()
 {
-	// The outputs go first, then the slot: clearSlot() does not hide them.
+	// The outputs go first, then the slot: clearSlot() does not hide them. Both opacities go back to zero as well,
+	// because the slot outlives the band and its next owner fades in from its own first frame.
 	if (this->m_videoOutputVisible)
 		this->setVideoOutputVisible(false);
+	this->setVideoOpacity(0, 0.0, 0);
+	this->setVideoOpacity(1, 0.0, 0);
 	if (this->m_surface)
 		this->m_surface->clearSlot(this->m_slotIndex);
 	this->m_media = MascotMedia();

@@ -1,4 +1,4 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 #include "SettingsDialog.h"
 #include "MainWindow.h"
 #include "MainApp.h"
@@ -54,6 +54,7 @@ const QStringList& mascotConfigKeys()
         QStringLiteral("mascots_pair_flip"),
         QStringLiteral("mascots_mirror"),
         QStringLiteral("mascots_max_decoders"),
+        QStringLiteral("mascots_pan"),
         QStringLiteral("mascots_scroll_speed"),
         QStringLiteral("mascots_scroll_direction"),
         QStringLiteral("mascots_scroll_pingpong"),
@@ -68,6 +69,7 @@ const QStringList& mascotConfigKeys()
         QStringLiteral("mascots_background_alternate_alpha"),
         QStringLiteral("mascots_background_scrollbar_alpha"),
         QStringLiteral("mascots_background_mode"),
+        QStringLiteral("mascots_background_pan"),
         QStringLiteral("mascots_background_fill"),
         QStringLiteral("mascots_background_stripes"),
         QStringLiteral("mascots_background_stripes_orientation"),
@@ -860,19 +862,19 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "How the columns arrange their content: one full-panel picture (Static) or several bands (Stripes). "
         "Whether they travel is the pan switch below, for either shape.", mascotModeCombo);
 
-    mascotFillCombo = makeComboBox({ QStringLiteral("Cover"), QStringLiteral("CoverScroll"), QStringLiteral("Crop"),
+    mascotFillCombo = makeComboBox({ QStringLiteral("Crop"), QStringLiteral("Cover"),
                                      QStringLiteral("Fit"), QStringLiteral("Stretch"), QStringLiteral("HeightFit"),
                                      QStringLiteral("WidthFit") },
         config->get(QStringLiteral("mascots_fill")));
+    // The engine falls back to HeightFit for an unknown value, so the combo shows that rather than its first item.
+    if (mascotFillCombo->findText(config->get(QStringLiteral("mascots_fill")), Qt::MatchFixedString) < 0)
+        mascotFillCombo->setCurrentText(QStringLiteral("HeightFit"));
     addRow(contentLayout, "Fill mode:",
-        "How a picture is fitted into its panel: Cover always fills the panel completely, scaling up or "
-        "down as the window changes and cutting off the overflow; CoverScroll frames exactly like Cover, and "
-        "the picture travels past the band along the Direction below, as far as it overflows that way, so "
-        "the rest of it comes into view while the band stays filled (a picture that overflows only the other "
-        "axis has nothing to travel there and stands still); Crop fills and cuts off but lets the "
-        "centring slide; Fit shows all of it with bars, Stretch distorts, HeightFit and WidthFit scale on "
-        "one axis only. A panning mode can only slide what is bigger than its band, so it keeps the "
-        "normalised fit unless CoverScroll is picked.", mascotFillCombo);
+        "How a picture is fitted into its panel: Crop fills it and cuts off the overflow, letting the centring "
+        "slide; Cover fills it the same way and travels the picture along the Direction below, as far as it "
+        "overflows that way, so the rest of it comes into view (it stands still when the picture has no room on "
+        "that axis); Fit shows all of it with bars, Stretch distorts, and HeightFit and WidthFit scale on one "
+        "axis and travel along the Direction where that leaves overflow.", mascotFillCombo);
 
     mascotWeightedCheckBox = new QCheckBox("Weight picks by rating");
     mascotWeightedCheckBox->setChecked(config->get_bool(QStringLiteral("mascots_weighted_random")));
@@ -1108,18 +1110,17 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "is the layer's pan switch, which every shape shares.",
         mascotBackgroundModeCombo);
 
-    mascotBackgroundFillCombo = makeComboBox({ QStringLiteral("Cover"), QStringLiteral("CoverScroll"),
-                                               QStringLiteral("Crop"), QStringLiteral("Fit"),
-                                               QStringLiteral("Stretch"), QStringLiteral("HeightFit"),
-                                               QStringLiteral("WidthFit") },
+    mascotBackgroundFillCombo = makeComboBox({ QStringLiteral("Crop"), QStringLiteral("Cover"),
+                                               QStringLiteral("Fit"), QStringLiteral("Stretch"),
+                                               QStringLiteral("HeightFit"), QStringLiteral("WidthFit") },
         config->get(QStringLiteral("mascots_background_fill")));
+    if (mascotBackgroundFillCombo->findText(config->get(QStringLiteral("mascots_background_fill")), Qt::MatchFixedString) < 0)
+        mascotBackgroundFillCombo->setCurrentText(QStringLiteral("HeightFit"));
     addRow(backgroundLayout, "Layer fill:",
-        "How a layer video is fitted into the window: Cover always fills the window completely, scaling "
-        "a clip up or down to the window's size and cutting off the overflow; CoverScroll frames exactly "
-        "like Cover and travels the picture past the band along the layer's own scroll direction, as far "
-        "as it overflows that way; Crop fills and "
-        "cuts off but lets the centring slide; Fit shows all of it with bars, Stretch distorts, HeightFit and "
-        "WidthFit scale on one axis. Layer stripes bands are normalised to their stacking axis instead.",
+        "How a layer video is fitted into the window: Crop fills it and cuts off the overflow, letting the "
+        "centring slide; Cover fills it the same way and travels the picture along the layer's direction, as "
+        "far as it overflows that way; Fit shows all of it with bars, Stretch distorts, and HeightFit and "
+        "WidthFit scale on one axis and travel along the direction where that leaves overflow.",
         mascotBackgroundFillCombo);
 
     mascotBackgroundStripesSpinBox = makeSpinBox(1, 8, 1,
@@ -1474,10 +1475,10 @@ void SettingsDialog::updateMascotControlStates()
     mascotMaxDecodersSpinBox->setEnabled(true);
     mascotPauseUnfocusedCheckBox->setEnabled(true);
     mascotLowLatencyCheckBox->setEnabled(true);
-    mascotPairScrollCombo->setEnabled(true);
+    mascotPairScrollCombo->setEnabled(this->ui.mascotsMirror->isChecked());
     // (M5 item 2: the parity switch keeps its meaning for images and videos alike -- it is about the pair,
     // not about a player -- so it never goes dark.)
-    mascotPairFlipCheckBox->setEnabled(true);
+    mascotPairFlipCheckBox->setEnabled(this->ui.mascotsMirror->isChecked());
 
 
     // Rows 3-5: Scroll and Stripes share this group, so the rows go dark individually instead of
@@ -1520,7 +1521,7 @@ void SettingsDialog::updateMascotControlStates()
     mascotBackgroundClipSpinBox->setEnabled(backgroundOn);
     mascotBackgroundSwapOnBeatCheckBox->setEnabled(backgroundOn);
     mascotBackgroundRandomChangeCheckBox->setEnabled(backgroundOn);
-    mascotBackgroundChanceSpinBox->setEnabled(backgroundOn);
+    mascotBackgroundChanceSpinBox->setEnabled(backgroundOn && mascotBackgroundRandomChangeCheckBox->isChecked());
 }
 
 void SettingsDialog::setupAudioPage(MainWindow* mw)

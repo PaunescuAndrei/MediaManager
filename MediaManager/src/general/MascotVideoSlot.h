@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <QMetaObject>
 #include <QMediaPlayer>
 #include <QObject>
@@ -120,6 +120,7 @@ public:
 	QString preloadedPath() const { return this->m_preload.parked ? this->m_preload.path : QString(); }
 	qint64 preloadedOffsetMs() const { return this->m_preload.offsetMs; }
 	bool hasPreload() const { return this->m_preload.parked; }
+	bool isSinglePlayer() const { return this->m_singlePlayer; }
 	// True while what is in flight is a preload rather than a swap. The owner asks this to tell
 	// "a clip is opening, do not supersede it" from "the next clip is being made ready, which a
 	// swap that is due may simply take over".

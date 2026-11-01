@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "MascotMedia.h"
 #include "MascotMediaSource.h"
 #include "MascotPrefetcher.h"
@@ -119,7 +119,7 @@ private:
 		MascotBand* band(int i) const;
 		int configuredBandCount = -1;
 		double scrollPhase = 0.0;
-		// A marquee of cells translated by a pixel offset, not content panned inside one cell (the pair's `Scroll` is the opposite).
+		// A marquee of cells translated by a pixel offset, not content panned inside a fixed cell.
 		double marqueeOffset = 0.0;
 		double marqueePingpongSign = 1.0;
 		double marqueeLegDistance = 0.0;
@@ -188,11 +188,10 @@ private:
 	bool pinReferenced(const QString& path) const;
 	void syncPin(const QString& path);
 	static MascotSurface::FillMode fillModeFromString(const QString& value, bool* ok);
-	// `Cover` reaches only the modes that honour a fill mode: a panning band's travel would be the aspect ratio's leftover.
+	// The mode the user picked is the framing in every panel; what may travel is decided separately.
 	MascotSurface::FillMode effectiveFillMode(MascotPanel panel) const;
 	void applyDisplay(PanelState& state, MascotPanel panel);
 	void presentMedia(PanelState& state, MascotPanel panel, const MascotMedia& media, int bandIndex);
-	bool mirrorParityFor(MascotPanel panel, const QString& path) const;
 	void applyMirror(PanelState& state, MascotPanel panel, const QString& path, int bandIndex);
 	void requestPath(PanelState& state, const QString& path, int bandIndex);
 	void showMedia(PanelState& state, MascotPanel panel, const MascotMedia& media, bool fromReady,

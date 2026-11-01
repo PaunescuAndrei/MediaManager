@@ -103,7 +103,10 @@ public:
     // rectangle -- behind every pane of the layout and above the layer. The scrim it grew out of
     // could only fill the space the list did not occupy, which is why the list needed a scrim of its
     // own and why the two could disagree; one veil covers both, so there is nothing left to disagree.)
-    QWidget* backgroundVeil = nullptr;
+    // (M6: the veil left this class. It is a rectangle inside MascotController's one scene now -- the same
+    // scene the layer and both columns draw in -- because a veil owned by a widget could not be stacked
+    // above the columns: they are QQuickWidgets and Qt draws those above every sibling. The widget this
+    // member named is gone; `mascots_background_opacity` is read by the controller's pushVeilState().)
     // (M5 Task 8b: the strip above the list, back under the same key as the rows -- see
     // applyBackgroundVeil(). It is the part of the centre pane the rows do not cover, so it is the one
     // place a second fill is correct rather than a second scrim.)
@@ -360,9 +363,10 @@ private:
     // M4 Task 3: gives the list's viewport and row fills the background layer's alpha, or puts
     // them back to the inherited app palette when the layer is off. Called from
     // initStyleSheets(), which is also what changePalette() runs after replacing the app palette.
-    // (M5 Task 8: it applies the veil now -- the row fills it used to tint are transparent and the
-    // one alpha lives on the veil -- and it is the only place that alpha is derived, so the strip,
-    // the list and the margins cannot be given different ones.)
+    // (M5 Task 8: it applied the veil, whose alpha lived here, and it was the only place that alpha was
+    // derived. M6: the veil is in the controller's sheet; what is left here are the three surfaces that
+    // paint *above* that scene -- the rows, the strip's scrim and the scrollbars -- so this is the list's
+    // half of the presentation and nothing else.)
     void applyBackgroundVeil();
     // M4 Task 3b: the strip above the list -- the buttons, the title and the search row -- gets the
     // same scrim as an even row, because in this app that area's colour *is* the list's Base colour.
@@ -370,18 +374,17 @@ private:
     // the row alpha, so the top reads as more transparent than the list. The scrim is a plain child
     // of CenterContainer, lowered under the strip's widgets, and only as tall as the space the list
     // does not occupy.
-    // (M5 Task 8: it is the whole container's rectangle now, because the veil is not the strip's
-    // scrim any more -- it is the window's. The geometry follows centralwidget, and the layout that
-    // sets that is a pass of its own, hence the event filter below.)
-    void updateBackgroundVeil();
+    // (M5 Task 8: it was the whole container's rectangle then, because the veil was not the strip's scrim
+    // any more. M6: the veil went to the controller, so the scrim is the strip's own again -- and the event
+    // filter below watches the list for it.)
     // (M5 Task 8b: the strip's scrim, sized to the space above the list and painted with the same
     // palette the rows get, so one control covers the whole centre pane.)
     void updateBackgroundScrim();
-    // M5 Task 8: re-raises the three panes above the veil, so the veil is behind every widget in the
-    // window and in front of the layer -- and above nothing else. The columns' own z-order is not a
-    // stacking question: their QQuickWidget always composites on top, so `mascots_columns_z` is the
-    // controller's, applied through the pair's backdrop and opacity.
-    void stackBackgroundVeil();
+    // M5 Task 8: re-raises the three panes above the veil -- and in front of the layer -- and above nothing
+    // else. The columns' own z-order is not a stacking question in this class: the controller's sheet owns
+    // that, and `mascots_columns_z` is one rectangle's z inside it.
+    // (M6: renamed from stackBackgroundVeil(), which placed a veil widget. There is no such widget now.)
+    void stackMascotPanes();
     bool eventFilter(QObject* watched, QEvent* event) override;
 signals:
     void fileDropped(QStringList files, QWidget* widget = nullptr);

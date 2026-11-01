@@ -186,6 +186,17 @@ int MascotSurface::slotCount() const
 	return this->slotStates.size();
 }
 
+void MascotSurface::setSlotGroup(int i, SlotGroup group)
+{
+	// M6: the plane the slot is drawn on, and the group the surface-wide fade applies to. Written
+	// through applySlot() like every other per-slot value, so a delegate QML recreated by a later
+	// slot count change comes back on the plane its slot was given.
+	if (!this->isValidSlot(i))
+		return;
+	this->slotStates[i].group = group;
+	this->applySlot(i);
+}
+
 void MascotSurface::setSlotRect(int i, const QRectF& r)
 {
 	if (!this->isValidSlot(i) || !isSaneRect(r))
@@ -394,14 +405,37 @@ void MascotSurface::setSurfaceOpacity(double opacity)
 	// clamps opacity itself anyway -- the recorded notion and the item's value should agree.
 	// There is no mirrored Slot value: an opacity is not slot state, and a delegate recreated by
 	// a slot count change inherits the root item's value on its own.
-	if (!(opacity >= 0.0) || !this->root)
+	// (M6: that last sentence stopped being true. The fade is a member here now and applySlot()
+	// writes it into each slot it draws, so a delegate recreated later is re-applied from it -- and
+	// it is applied to the layer group's slots only, because the root's opacity would take the veil
+	// and the columns with it.)
+	if (!(opacity >= 0.0))
 		return;
-	// (M5 fix: the content, not the root item. Fading the root faded the backdrop rectangle with
-	// it, so `mascots_background_opacity = 0` made the layer paint nothing at all and the window
-	// showed black wherever the quick widget would have been -- the whole point of the backdrop is
-	// that those pixels read as the app's own colour. The slots fade; the backdrop does not.)
-	this->root->setProperty("contentOpacity", opacity > 1.0 ? 1.0 : opacity);
+	this->contentFade = opacity > 1.0 ? 1.0 : opacity;
+	for (int i = 0; i < this->slotStates.size(); ++i) {
+		if (this->slotStates.at(i).group == SlotGroup::Layer)
+			this->applySlot(i);
+	}
 }
+
+void MascotSurface::setVeil(const QColor& colour, double opacity, bool enabled, bool aboveColumns)
+{
+	// M6: the veil rectangle inside the scene. Four root properties and nothing else -- the rectangle
+	// is a sibling of the slots, so its z places it between the layer group (z 0) and the columns'
+	// group (z 2), or above both. A NaN opacity fails the ordered comparison here, like every other
+	// opacity in this class, and a value above 1 is clamped because Qt Quick clamps it anyway: what is
+	// recorded and what is drawn should agree.
+	if (!this->root || !(opacity >= 0.0))
+		return;
+	this->root->setProperty("veilColor", colour);
+	this->root->setProperty("veilOpacity", opacity > 1.0 ? 1.0 : opacity);
+	this->root->setProperty("veilVisible", enabled);
+	// 3 is above the columns, 1 is below them. The numbers are MascotSurface.qml's -- the one place
+	// this scene's stacking order is spelled out -- and they are repeated here because which of the
+	// two applies is this side's decision: it is `mascots_columns_z`.
+	this->root->setProperty("veilZ", aboveColumns ? 1 : 3);
+}
+
 
 void MascotSurface::setBackdrop(const QColor& colour, bool enabled)
 {
@@ -557,7 +591,12 @@ void MascotSurface::applySlot(int i)
 	item->setY(slot.rect.y());
 	item->setWidth(slot.rect.width());
 	item->setHeight(slot.rect.height());
-	item->setOpacity(slot.opacity);
+	// (M6: two values, not one. The slot's own opacity is the band's; the surface-wide fade is the
+	// layer group's, and a column must not dim because the layer was faded. z is the group's plane --
+	// 0 under the veil, 2 over it -- which is the whole of what "mascots above/below the veil" means
+	// once the three layers share one scene.)
+	item->setOpacity(slot.group == SlotGroup::Layer ? slot.opacity * this->contentFade : slot.opacity);
+	item->setZ(slot.group == SlotGroup::Layer ? 0.0 : 2.0);
 
 	// One authoritative value: the slot's own flag, which setMirror() and setSlotMirrored() both
 	// write. It flips the image (MascotSlot.qml reads it as Image.mirror) and it is the value

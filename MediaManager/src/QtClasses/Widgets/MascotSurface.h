@@ -43,6 +43,20 @@ public:
 	// one place all five sizes are derived.)
 	enum class FillMode { Crop, Fit, Stretch, HeightFit, WidthFit };
 
+	// M6: which plane of the one scene a slot belongs to.
+	//
+	// The milestone before this one drew the background layer and the two mascot columns on three
+	// separate surfaces, and could not order them: a QQuickWidget carrying Qt::WA_AlwaysStackOnTop
+	// is drawn above every sibling widget whatever the widget stack says (measured twice, in M5 and
+	// again in 46c70fd), and one without it blits opaquely. A window-sized sheet holding all three
+	// makes "below the veil" a z value instead of a compositing trick.
+	//
+	// `Layer` slots are drawn beneath the veil; `Columns` slots above it, or beneath it when the veil
+	// is told to sit above them (setVeil's `aboveColumns`). The group also decides which slots the
+	// surface-wide content fade applies to: the layer's, never the columns' -- a column is not a
+	// layer and must not dim because the layer was asked to.
+	enum class SlotGroup { Layer, Columns };
+
 	// `cache` is used to construct the image provider and is not stored; it must outlive the
 	// shared QML engine, which owns the provider.
 	// (M4: `alwaysStackOnTop` is the panel's compositing rule and the background layer's undoing. A
@@ -61,6 +75,10 @@ public:
 	int slotCount() const;
 
 	void setSlotRect(int i, const QRectF& r);
+	// M6: the plane a slot is drawn on (see SlotGroup). Written once per band, when the controller
+	// hands the slot to its panel; a slot created later by setSlotCount() starts at `Columns` and is
+	// corrected by the same call, so the default is never what draws.
+	void setSlotGroup(int i, SlotGroup group);
 	// The size the media is drawn at in slot `i`, both axes, for the fill mode that slot
 	// carries. This is the single place a pan's travel is derived from -- `max(0, contentWidth -
 	// slotWidth)` for a horizontal pan and the same on the height for a vertical one -- so a
@@ -124,6 +142,21 @@ public:
 	// as it did, which is what makes the pair's and the columns' surfaces backdrop-free.
 	void setBackdrop(const QColor& colour, bool enabled);
 
+	// M6: the veil -- `mascots_background_opacity` -- as one rectangle inside the scene, and the
+	// whole of what `mascots_columns_z` means.
+	//
+	// The rectangle covers the surface (the window-sized sheet, so the whole central widget), painted
+	// in `colour` at `opacity`, and its z is what decides whether the columns are in front of it or
+	// behind it: `aboveColumns` true -- the default -- keeps the veil at z 1, under the columns at 2,
+	// so a mascot is drawn at full strength over its veil; false moves it to z 3, over the columns, so
+	// a mascot is veiled once, exactly as the layer is. `enabled` false hides the rectangle
+	// altogether, which is the layer-off look and, at 100 %, the same one.
+	//
+	// One rectangle rather than a mask or a per-column fill is the point: the arithmetic is exact in
+	// both modes (the M5 approximation faded the columns and let the layer through them by veil^2),
+	// and nothing here knows what a column is, so a UI change cannot invalidate it.
+	void setVeil(const QColor& colour, double opacity, bool enabled, bool aboveColumns);
+
 signals:
 	// Emitted for a release over a slot; `slot` is always a valid index, so a release outside
 	// every slot rectangle is not reported.
@@ -160,6 +193,10 @@ private:
 
 		QRectF rect;
 		double opacity = 1.0;
+		// M6: the plane this slot is drawn on. Mirrored here for the same reason as every other value
+		// -- a delegate QML recreates after a slot count change comes back with its z, and with the
+		// surface-wide fade applied to it or not, whichever its group says.
+		SlotGroup group = SlotGroup::Columns;
 		FillMode fillMode = FillMode::Fit;
 		bool mirrored = false;
 		// The video path's own state. It is mirrored here for the same reason as everything
@@ -228,6 +265,11 @@ private:
 	// QML object that could be destroyed under it.
 	QPointer<QQuickItem> root;
 	QVector<Slot> slotStates;
+	// (M6: the surface-wide fade setSurfaceOpacity() writes. It is not "the surface's opacity": the
+	// columns keep their own, so it is applied to the slots of the layer group and to nothing else.
+	// Kept as one number rather than folded into each Slot, because it is one value for the whole
+	// group and a slot created later has to start from it.)
+	double contentFade = 1.0;
 	// The value last handed to setMirror(): the initial mirror state of a slot created later.
 	// What a slot draws is always its own Slot::mirrored, never this combined with it, so there
 	// is exactly one place the effective mirror comes from.

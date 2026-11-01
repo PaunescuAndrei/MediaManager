@@ -71,6 +71,20 @@ namespace {
 	// rate would bury the swap and first-frame lines the gate reads.
 	constexpr qint64 VIDEO_LOG_INTERVAL_MS = 5000;
 
+	// M6: where each panel's slots start inside the one sheet, and how many slots each panel may own.
+	//
+	// The sheet holds the background layer, the veil and both columns, and a band addresses its slot by
+	// the panel's base plus the band index. The bases are fixed and the stride is the clamp
+	// `mascots_stripes_*` already enforces (1..8), so a band's slot index never changes while it lives --
+	// which matters because a band's players are bound to one slot's QVideoSinks: re-addressing a band
+	// would leave a player drawing into a slot that now belongs to another band. The price is the unused
+	// delegates below the highest index: at most a handful of empty QML slots, which draw nothing and take
+	// no part in the scene beyond existing.
+	constexpr int PANEL_SLOT_STRIDE = 8;
+	constexpr int LEFT_SLOT_BASE = 0;
+	constexpr int RIGHT_SLOT_BASE = LEFT_SLOT_BASE + PANEL_SLOT_STRIDE;
+	constexpr int BACKGROUND_SLOT_BASE = RIGHT_SLOT_BASE + PANEL_SLOT_STRIDE;
+
 	// `left` / `right` as the log spells them, so a line can be read without knowing the enum.
 	QString sideLabel(MascotSide side)
 	{
@@ -349,54 +363,27 @@ MascotController::~MascotController()
 	this->stop();
 }
 
-void MascotController::setSurfaces(MascotSurface* left, MascotSurface* right)
-{
-	if (this->leftState.surface == left && this->rightState.surface == right) {
-		this->updateLayout();
-		return;
-	}
-	// Whatever the old surfaces were showing is released first: their slots, their pins and
-	// their pending requests must not survive into the new ones.
-	const MascotSurface* previousLeft = this->leftState.surface.data();
-	const MascotSurface* previousRight = this->rightState.surface.data();
-	this->clearSide(this->leftState);
-	this->clearSide(this->rightState);
-	// A surface this call replaces is released exactly the way stop()/disable releases it: it is
-	// deleted, so a controller handed a fresh pair does not leave the previous panels alive --
-	// and still drawing -- inside their hosts. A surface that is passed again is kept.
-	if (previousLeft && previousLeft != left)
-		this->releaseSurface(this->leftState);
-	if (previousRight && previousRight != right)
-		this->releaseSurface(this->rightState);
-	this->leftState.surface = left;
-	this->rightState.surface = right;
-	this->configureSurface(this->leftState, MascotPanel::Left);
-	this->configureSurface(this->rightState, MascotPanel::Right);
-	// M5 Task 8: a pair built by an apply that ran before it existed would otherwise keep the QML
-	// defaults -- no backdrop and full opacity -- however `mascots_columns_z` is set.
-	this->refreshColumnsVeil();
-	this->updateLayout();
-}
-
 void MascotController::start()
 {
 	// M4 Task 2: `running` alone is no longer "nothing to do". A controller the background keeps
 	// alive can be missing its pair -- stopPanels() took the columns down while the layer went on
 	// drawing -- and showMascots() reaches this same entry point to bring them back. So the old
 	// idempotence is kept by "the pair is here", and a start() that finds it missing rebuilds it.
+	// (M6: "the pair is here" is still two panel halves of the one sheet: createSheet() attaches the
+	// columns to a sheet that the layer may already be holding up.)
 	const bool pairPresent = this->leftState.surface && this->rightState.surface;
 	if (this->running && pairPresent)
 		return;
 	const bool alreadyRunning = this->running;
-	// Config first: createSurfaces() applies it to the slots it builds.
+	// Config first: createSheet() applies it to the slots it builds.
 	this->applyConfig();
-	this->createSurfaces();
+	this->createSheet();
 	if (!alreadyRunning) {
 		this->running = true;
-		// M4 Task 2: after `running`, because the background surface exists if and only if this
-		// controller is running and `mascots_background` is on -- and applyConfig() above ran
-		// while `running` was still false.
-		this->syncBackgroundSurface();
+		// M4 Task 2: after `running`, because the sheet exists if and only if this controller is
+		// running and one of the two switches is on -- and applyConfig() above ran while `running`
+		// was still false.
+		this->syncSheet();
 		this->connectBeats();
 	}
 	// M2: the pause state is derived from the window the surfaces have just landed in, so a panel
@@ -466,7 +453,10 @@ void MascotController::stop()
 	// any band once Task 5 gives it a budget; leaving bands 1..n out of this loop would let them
 	// keep drawing into delegates the release below destroys -- the carried-forward Task 1 finding
 	// this loop exists to close for good. In `Static` the loop runs once per panel.)
-	for (PanelState* state : { &this->leftState, &this->rightState }) {
+	// (M6: the layer's bands are shut down here too, in the same pass and for the same reason. The
+	// separate loop destroyBackgroundSurface() ran is gone with the separate surface: one sheet owns
+	// one set of delegates.)
+	for (PanelState* state : { &this->leftState, &this->rightState, &this->backgroundState }) {
 		for (auto& owned : state->bands) {
 			if (owned->video())
 				owned->video()->shutdown();
@@ -480,13 +470,13 @@ void MascotController::stop()
 		source->clear();
 	this->clearSide(this->leftState);
 	this->clearSide(this->rightState);
-	this->releaseSurface(this->leftState);
-	this->releaseSurface(this->rightState);
-	// M4 Task 2: the background goes through its own invariant, which is the only place it is
-	// built or dropped. `running` is false by now, so this is precisely "tear the layer down":
-	// its bands' players are shut down, the slots and pins are cleared, and the surface is
-	// released -- the pair's order above, for the pair's reason.
-	this->syncBackgroundSurface();
+	this->clearSide(this->backgroundState);
+	// The bands are detached from the sheet before it goes, and the sheet is deleted by its own
+	// invariant: `running` is false by now, so this is precisely "tear the one scene down".
+	this->detachPanel(this->leftState);
+	this->detachPanel(this->rightState);
+	this->detachPanel(this->backgroundState);
+	this->syncSheet();
 }
 
 void MascotController::stopPanels()
@@ -495,6 +485,9 @@ void MascotController::stopPanels()
 	// MainWindow::hideMascots() reaches for while `mascots_background` is on, because turning the
 	// columns off must not kill the layer behind them; with the background off the window calls
 	// stop() and gets the full teardown it always got.
+	// (M6: the columns are slots in the sheet now, so this detaches the two panels and leaves the
+	// layer's slots where they are -- and lets syncSheet() decide whether the sheet itself survives,
+	// which it does exactly while `mascots_background` is on.)
 	for (PanelState* state : { &this->leftState, &this->rightState }) {
 		for (auto& owned : state->bands) {
 			if (owned->video())
@@ -510,8 +503,9 @@ void MascotController::stopPanels()
 		source->clear();
 	this->clearSide(this->leftState);
 	this->clearSide(this->rightState);
-	this->releaseSurface(this->leftState);
-	this->releaseSurface(this->rightState);
+	this->detachPanel(this->leftState);
+	this->detachPanel(this->rightState);
+	this->syncSheet();
 	// The pair may have been the only reason the driver was running; the background may be the
 	// only reason it still is. Reconciled here rather than left to the next window event, so a
 	// stopped column cannot leave a timer ticking for it.
@@ -896,7 +890,10 @@ void MascotController::applyConfig()
 	// The layer follows the two switches from here: a settings Apply turns it on or off live,
 	// without a restart. The budget above has settled how many players it may spend, so the bands
 	// the surface is given are the funded prefix bandCount() derives from them.
-	this->syncBackgroundSurface();
+	// (M6: the sheet follows both switches in one place now -- it exists while either one is on, and
+	// the layer is a set of slots in it. This is therefore the call that attaches or detaches the
+	// layer's half of the scene, and the columns' half is settled by start()/stopPanels().)
+	this->syncSheet();
 	if (this->backgroundState.surface) {
 		// The bands follow the allocation: a shrink retires them from the tail through syncBands(),
 		// which is the background's answer to losing players (it never takes an image in their
@@ -905,20 +902,26 @@ void MascotController::applyConfig()
 		// (M4 review fix: the funded prefix is what decides whether the layer has anything to draw,
 		// so this is where the surface becomes visible or goes quiet again -- an empty layer is
 		// hidden rather than left as a black sheet behind the rows.)
-		this->updateBackgroundVisibility();
+		// (M6: the sheet paints the window's own colour behind it on every path, so an empty layer is
+		// no longer a black sheet and there is nothing to hide. updateSheetVisibility() is the
+		// switches' question now.)
+		this->updateSheetVisibility();
 		// `mascots_background_opacity` is presentation, not a gate: zero is applied like any other
 		// value, because the band logic -- picks, cadence, the player budget -- must not depend on
 		// how visible the layer currently is.
-		// (M5 Task 8: it is the veil's alpha now and MainWindow applies it, so zero is still not a
-		// gate -- it is simply not this class's value to apply.)
+		// (M5 Task 8: it is the veil's alpha now. M6: the veil is a rectangle in the sheet, so this
+		// class applies it -- and zero is still not a gate.)
 		// M4 Task 6: the palette may have been replaced since the layer was built (a theme Apply
 		// reaches this same method), so the backdrop follows it here as well as at creation.
-		this->refreshBackgroundBackdrop();
+		// (M6: that is pushVeilState() below, which writes the backdrop and the veil together and is
+		// called whether or not the layer is on: the columns are drawn over the same sheet.)
 	}
 
-	// M5 Task 8: the veil's two keys, from the pair's side. Called here and at creation, because the
-	// pair can be built after this apply and would otherwise keep the QML defaults.
-	this->refreshColumnsVeil();
+	// M6: the veil's two keys and the backdrop, for the reason the layer's are pushed above -- and
+	// also for the case the layer is off, where the columns are still drawn over the sheet and the
+	// veil still has an alpha to be. (M5's version of this line was refreshColumnsVeil(), which
+	// faded the columns because a widget could not put them behind the rectangle.)
+	this->pushVeilState();
 
 	const bool mirror = this->mirrorEnabled();
 	// M3 Task 2: the player half below stays on `band(0)` for now. The extra bands a `Stripes`
@@ -1297,7 +1300,10 @@ QVector<QRectF> MascotController::bandRects(MascotPanel panel) const
 	// marquee rects, translated by the panel's own pixel offset. The pair's `Scroll` still slices
 	// its one full-panel band and pans the content inside it; `Stripes` on either kind of panel
 	// still slices exactly as before.)
-	const QRectF frame(state.surface->rect());
+	// (M6: the frame is the panel's *host* rectangle, in the sheet's coordinates, not a surface's own
+	// rectangle. The three panels share one scene now, so a band's rectangle has to say which part of
+	// that scene the panel occupies -- and the host is the thing the layout sizes.)
+	const QRectF frame(this->panelFrame(panel));
 	if (this->backgroundMarqueeActive(panel)) {
 		const int count = this->bandCount(panel);
 		const bool vertical = this->scrollPanIsVertical(panel);
@@ -1382,6 +1388,9 @@ void MascotController::applyMode()
 	// so its count is brought in line with bandCount(Background) on the same turn the pair's is.
 	if (this->backgroundState.surface)
 		this->syncBands(this->backgroundState, MascotPanel::Background);
+	// M6: and the sheet's slot count follows the three band vectors, before any rectangle is written
+	// into a slot: a delegate that does not exist yet has nowhere to take the geometry below.
+	this->applySheetSlots();
 	this->columnsLayout.appliedMode = this->columnsLayout.mode;
 	this->columnsLayout.appliedOrientation = this->columnsLayout.orientation;
 	this->columnsLayout.applied = true;
@@ -1519,7 +1528,9 @@ void MascotController::syncBands(PanelState& state, MascotPanel panel)
 	// The count is what makes QML create the delegates the rectangles below are written into, so
 	// it goes before the geometry. Shrinking here is safe: the bands past the new count are
 	// already gone, and setSlotCount() preserves the slot state of the indices that survive.
-	surface->setSlotCount(wanted);
+	// (M6: the sheet's slot count is not a panel's band count. Slots are addressed by a panel's fixed
+	// base plus the band index, so the count this class writes is the sheet's -- applySheetSlots(),
+	// which every attach and every count change ends with. Nothing here sizes anything.)
 	// A surviving band keeps its media, its request and its players (Review Focus 1: a mode change
 	// must not re-decode what stays on screen). setSurface() is a no-op for the surface a band
 	// already draws into, and the one thing a *rebuilt* surface needs -- it retires the slot state
@@ -1527,13 +1538,21 @@ void MascotController::syncBands(PanelState& state, MascotPanel panel)
 	for (auto& owned : state.bands)
 		owned->setSurface(surface);
 	// New indices last: a new band is created for the slot the count above has just made, and the
-	// first thing it is told is which surface hosts it.
+	// first thing it is told is which surface hosts it -- and which slot of it, which is the panel's
+	// base plus the band index and never moves for the band's life.
 	while (static_cast<int>(state.bands.size()) < wanted) {
 		const int index = static_cast<int>(state.bands.size());
-		auto created = std::make_unique<MascotBand>(index);
+		auto created = std::make_unique<MascotBand>(state.slotBase + index);
 		created->setSurface(surface);
 		state.bands.push_back(std::move(created));
 	}
+	// M6: the slots have to exist before a band can be told which plane it draws on -- a surface with no
+	// slot state yet answers an out-of-range index by dropping the write, so a group written before this
+	// is silently lost and the band draws on the columns' plane (measured: it read `Above` and `Below`
+	// identically, with the layer over the veil in both). The count first, then the planes.
+	this->applySheetSlots();
+	for (auto& owned : state.bands)
+		owned->setGroup(this->slotGroupFor(panel));
 	state.configuredBandCount = wanted;
 	// M3 Task 4: the per-band zero-travel latch travels with the bands. A surviving band keeps
 	// whether its line was already written -- nothing about its content changed -- and an index
@@ -1694,37 +1713,35 @@ void MascotController::fillEmptyBands()
 
 void MascotController::updateLayout()
 {
-	for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
-		PanelState& state = this->stateFor(panelOf(side));
+	// M6: the sheet is the window's rectangle, because it holds the layer and the veil, which are
+	// both window-sized. It is in no layout -- the host's own resize is what sizes it -- which is
+	// exactly why nothing else can. This is reached from every window resize
+	// (MainWindow::event() -> applyMascotWidth() -> updateLayout()), so there is deliberately no
+	// second resize hook. A host that has not been laid out yet (a zero rectangle) is skipped:
+	// positioning the sheet at a degenerate size would only be corrected by the next event, and the
+	// bands below would be sliced from geometry nobody asked for.
+	if (this->sheet) {
+		QWidget* host = this->backgroundHost.data();
+		if (host && host->width() > 0 && host->height() > 0)
+			this->sheet->setGeometry(host->rect());
+	}
+	// Every live panel's bands, from its host rectangle. One loop for the three of them now: the
+	// three panels are planes of one scene, and a band's rectangle says which part of the scene its
+	// panel occupies.
+	for (MascotPanel panel : { MascotPanel::Left, MascotPanel::Right, MascotPanel::Background }) {
+		PanelState& state = this->stateFor(panel);
 		if (!state.surface)
 			continue;
-		// The slot fills the surface that hosts it, and the surface derives the content shift
-		// from this rectangle itself (amendment R: no centring arithmetic here).
+		// The slot fills the panel and the surface derives the content shift from this rectangle
+		// itself (amendment R: no centring arithmetic here).
 		// M3 Task 1: the rectangle goes through the band, which is the only thing that writes
 		// into a slot now.
 		// M3 Task 2: one rectangle per band, from the mode's slices of this surface. A single-band
 		// panel gets the panel's own rectangle back unchanged (slicedBandRects() returns the panel
 		// itself for a count of one), so `Static` writes exactly the rectangle it always wrote.
-		const QVector<QRectF> rects = this->bandRects(panelOf(side));
+		const QVector<QRectF> rects = this->bandRects(panel);
 		for (int i = 0; i < static_cast<int>(state.bands.size()) && i < rects.size(); ++i)
 			state.bands[static_cast<std::size_t>(i)]->setRect(rects.at(i));
-	}
-	// M4 Task 2: the background layer is the window's rectangle, not a slice of a column, so its
-	// geometry is written here from its host -- it is in no layout, which is exactly why nothing
-	// else can size it. This is reached from every window resize (MainWindow::event() ->
-	// applyMascotWidth() -> updateLayout()), so there is deliberately no second resize hook. A
-	// host that has not been laid out yet (a zero rectangle) is skipped: positioning the layer at
-	// a degenerate size would only be corrected by the next event, and the bands below would be
-	// sliced from geometry nobody asked for.
-	if (this->backgroundState.surface) {
-		QWidget* host = this->backgroundHost.data();
-		if (host && host->width() > 0 && host->height() > 0)
-			this->backgroundState.surface->setGeometry(host->rect());
-		// One band in this task's `Static` shape, N in a later mode's -- the same slices the pair
-		// above receives, from the background's own layout and the surface's own rectangle.
-		const QVector<QRectF> rects = this->bandRects(MascotPanel::Background);
-		for (int i = 0; i < static_cast<int>(this->backgroundState.bands.size()) && i < rects.size(); ++i)
-			this->backgroundState.bands[static_cast<std::size_t>(i)]->setRect(rects.at(i));
 	}
 	// M2: the panel's window is what the pause rule watches, and this is the place a surface
 	// learns which window it ended up in (it is parented to a host inside the main window). Only
@@ -2095,7 +2112,10 @@ void MascotController::onScrollTick()
 		if (panel == MascotPanel::Background && layout.mode == MascotMode::Scroll) {
 			if (!this->backgroundMarqueeActive(panel))
 				continue;
-			const QRectF frame(surface->rect());
+			// (M6: the frame is the layer's rectangle in the sheet, which is the window's, not a
+			// surface's own rectangle -- the three panels share one scene and only this panel is
+			// window-sized.)
+			const QRectF frame(this->panelFrame(panel));
 			const double axisLen = vertical ? frame.height() : frame.width();
 			const int count = static_cast<int>(state.bands.size());
 			if (axisLen <= 0.0 || count < 2)
@@ -2487,18 +2507,13 @@ void MascotController::showDroppedImage(MascotSide side, const QString& path)
 bool MascotController::eventFilter(QObject* watched, QEvent* event)
 {
 	if (event->type() == QEvent::Resize) {
-		// The host gets its width from the layout after applyMascotWidth() returns, so the
-		// surface is the only object that knows when its own rectangle is final.
-		if ((this->leftState.surface && watched == this->leftState.surface.data())
-			|| (this->rightState.surface && watched == this->rightState.surface.data())) {
-			this->updateLayout();
-		}
-		// M4 Task 2: the background surface is in no layout, so nothing sizes it but updateLayout(),
-		// and its geometry is derived from the host's rectangle -- which is final only when the
-		// host's own resize event arrives, after MainWindow::event() has already asked for a
-		// layout. Watching the host is therefore the background's equivalent of the second pass
-		// the columns get from their surfaces' own resize events.
-		if (this->backgroundState.surface && watched == this->backgroundHost.data())
+		// The sheet is in no layout, so nothing sizes it but updateLayout(), and its geometry comes from the
+		// host's rectangle -- which is final only when the host's own resize event arrives, after
+		// MainWindow::event() has already asked for a layout. Watching the host is therefore the second pass
+		// the panels get. (M6: the columns' own surfaces used to supply this for their halves; those surfaces
+		// are slots in the sheet now, and all three panels' rectangles are derived from their hosts, so one
+		// watched widget answers for all of them.)
+		if (this->sheet && watched == this->backgroundHost.data())
 			this->updateLayout();
 	}
 	// M2: the pause rule (amendment §7.13). The window's own events are the only honest source
@@ -2604,297 +2619,389 @@ bool MascotController::centerContentEnabled() const
 	return this->App->config->get_bool("mascots_center_content");
 }
 
-void MascotController::createSurfaces()
+void MascotController::createSheet()
 {
-	if (!this->cache)
+	if (!this->cache || this->sheet)
 		return;
-	// One surface per host, built on demand: nothing here runs for a user who never enables
-	// the renderer. The zero-margin layout is what makes the surface the size of the host, so
-	// the slot rectangle the surface receives is the host's rectangle.
-	auto build = [this](QWidget* host) -> MascotSurface* {
-		if (!host)
-			return nullptr;
-		if (!host->layout()) {
-			auto* layout = new QVBoxLayout(host);
-			layout->setContentsMargins(0, 0, 0, 0);
-			layout->setSpacing(0);
-		}
-		auto* surface = new MascotSurface(this->cache, host);
-		host->layout()->addWidget(surface);
-		// A child created after its parent was shown is created hidden, and a hidden child is
-		// skipped by the parent's own show; showing it here is what makes the panel appear on
-		// the very first enable. While the host is hidden this only sets the intent, and
-		// beatsAllowed() still keys off the surface actually being visible.
-		surface->show();
-		return surface;
-	};
-	MascotSurface* left = this->leftState.surface.data();
-	MascotSurface* right = this->rightState.surface.data();
-	// M4 Task 2: with the columns off the pair is not built at all. The background keeps the
-	// controller running in that state, so a pair of hidden, never-seeded surfaces behind it would
-	// be idle Qt Quick cost and an empty pair that a later start() (the columns coming back) would
-	// mistake for one already being on. With the columns on this is the two builds it always was.
-	if (this->columnsEnabled) {
-		if (!left)
-			left = build(this->leftHost.data());
-		if (!right)
-			right = build(this->rightHost.data());
-	}
-	this->setSurfaces(left, right);
-}
-
-void MascotController::refreshBackgroundBackdrop()
-{
-	// M4 Task 6: the layer's holes -- the letterbox bars of a `Fit` cell and the empty surface of a
-	// layer with no band -- would otherwise be the quick widget's opaque black. Painting the
-	// application's own window colour behind every slot makes those pixels indistinguishable from
-	// the window, which is the point: the layer becomes scenery, not a black sheet. Only the
-	// background surface is ever handed this; the pair and the columns keep the QML defaults.
-	MascotSurface* surface = this->backgroundState.surface.data();
-	if (!surface || !this->App)
-		return;
-	surface->setBackdrop(this->App->palette().color(QPalette::Window), true);
-	// M5 Task 8: `MM_MASCOT_FLAT=#RRGGBB` replaces the layer with one flat colour -- the backdrop
-	// painted, the slots faded out -- so the veil's blend can be measured against a known value instead
-	// of against a clip that is picked at random per run. Kept in the build rather than re-added for one
-	// run: it is the only way the harness can assert the veil's arithmetic (see `m5-veil`), and the
-	// milestone paid for that lesson once already, when the equivalent M4 hook was deleted and the
-	// measurement had to be rebuilt from nothing. It is inert unless the variable is set.
-	const QColor flat = QColor::fromString(qEnvironmentVariable("MM_MASCOT_FLAT"));
-	if (flat.isValid()) {
-		surface->setBackdrop(flat, true);
-		surface->setSurfaceOpacity(0.0);
-	}
-}
-
-void MascotController::refreshColumnsVeil()
-{
-	if (!this->App || !this->App->config)
-		return;
-	// (M5 fix, third attempt -- and the honest state of this until a real fix: "below the veil" is an
-	// approximation, because the columns are QQuickWidgets carrying Qt::WA_AlwaysStackOnTop and no sibling
-	// widget can be painted above them. Two measurements say so: runs differing only in the key used to be
-	// pixel-identical when the mode stacked anything, and giving the veil the same attribute changed nothing
-	// either (mascot pixel 118,85,85 in both modes). Real three-layer order -- video, mascots, veil -- needs
-	// all three in one quick scene.
-	// What ships: the content fades to what the veil would have left of it and the column's own background
-	// stays transparent, so the layer shows through the column. That is right for the background and an
-	// approximation for the mascot itself: the video bleeds through it by veil^2. The alternative that was
-	// tried -- an opaque window-coloured backdrop inside the column -- got the mascot right and covered the
-	// layer, which is the patch the user rejected first.)
-	const double veilOpacity = std::clamp(
-		this->App->config->get_double(QStringLiteral("mascots_background_opacity"), 0.0), 0.0, 1.0);
-	const QString z = this->App->config->get(QStringLiteral("mascots_columns_z"));
-	const bool below = z.compare(QStringLiteral("Below"), Qt::CaseInsensitive) == 0
-		|| z.compare(QStringLiteral("Below the veil"), Qt::CaseInsensitive) == 0;
-	const bool veiled = this->backgroundEnabled && below;
-	const QColor colour = this->App->palette().color(QPalette::Window);
-	for (PanelState* state : { &this->leftState, &this->rightState }) {
-		if (!state->surface)
-			continue;
-		state->surface->setBackdrop(colour, false);
-		state->surface->setSurfaceOpacity(veiled ? (1.0 - veilOpacity) : 1.0);
-	}
-}
-
-void MascotController::updateBackgroundVisibility()
-{
-	MascotSurface* surface = this->backgroundState.surface.data();
-	if (!surface)
-		return;
-	// A layer with no funded band has nothing to draw, and "nothing" from this widget is opaque
-	// black rather than the window behind it: without `WA_AlwaysStackOnTop` the quick widget blits
-	// its offscreen buffer as an opaque rectangle (MascotSurface's constructor records the
-	// measurement). Edge-to-edge video hides that entirely, which is why the layer can take the
-	// trade at all -- but an empty layer would put a black sheet behind the rows at (1 - alpha),
-	// and the list would read as darker than the app's own background for no reason the user asked
-	// for. So existence stays syncBackgroundSurface()'s question and this is the visibility one.
-	const bool drawable = this->backgroundBandCount() > 0;
-	if (surface->isVisible() != drawable)
-		surface->setVisible(drawable);
-}
-
-void MascotController::syncBackgroundSurface()
-{
-	// The layer's whole invariant, in one place: the surface exists if and only if this controller
-	// is running and `mascots_background` is on. Everything that builds or drops one goes through
-	// here -- the enable and disable paths, the settings Apply -- so no other path has to know it,
-	// and a background that is off costs neither a surface nor a decode.
-	const bool wanted = this->running && this->backgroundEnabled;
-	if (!wanted) {
-		if (this->backgroundState.surface)
-			this->destroyBackgroundSurface();
-		return;
-	}
-	if (this->backgroundState.surface)
-		return;
-	this->createBackgroundSurface();
-}
-
-void MascotController::createBackgroundSurface()
-{
 	QWidget* host = this->backgroundHost.data();
-	if (!host || !this->cache)
+	if (!host)
 		return;
-	// No layout on the host: the panel path gives its surface a zero-margin layout because the
-	// host is a fixed column the layout sizes, while the background is positioned by hand from the
-	// host's rectangle in updateLayout(). A layout here would fight that write for the geometry.
-	// The third argument is the layer's whole reason for existing: `false` keeps the quick widget in
-	// ordinary stacking order so `lower()` below really puts it beneath the UI. With the panel's
-	// default (`true`) the QQuickWidget is drawn above every other widget in the window regardless of
-	// stacking order and the wallpaper covers the list -- measured, 50/255 of luminance of
-	// difference across the list region while the log said the layer was drawing.
+	// M6: one surface for the three layers. It is window-sized and in no layout -- updateLayout() sizes
+	// it from the host -- and it is parented to the widget that used to hold the layer alone, because
+	// that is the one the layout already spans with the whole window's worth of empty space.
+	//
+	// `alwaysStackOnTop` is false, and that is what lets the sheet sit *under* the UI panes: with the
+	// attribute the quick widget is drawn above every sibling whatever the widget stack says (the M4
+	// measurement), and the sheet has to be beneath the list, not over it. What the attribute being off
+	// costs is an opaque blit, which is why the sheet always paints a backdrop -- the window's own colour
+	// -- in every pixel no slot covers.
 	auto* surface = new MascotSurface(this->cache, host, false);
-	this->backgroundState.surface = surface;
-	// The bands are the funded prefix bandCount() derives from backgroundPlayers, and
-	// configureSurface() builds the slots, the players and the (pair-only) connections.
-	this->configureSurface(this->backgroundState, MascotPanel::Background);
-	// Geometry, stacking order and visibility, in that order. `lower()` puts the layer beneath the
-	// layout's widgets -- it is the window's backmost child -- and a child created after its parent
-	// was shown is created hidden, so show() is what makes the layer appear on the very first
-	// enable (the same reason the panel path shows its surface).
+	this->sheet = surface;
+	// The planes and the addresses, before anything is attached: the two columns own the first two
+	// blocks of slots (a band's index never moves, see PANEL_SLOT_STRIDE) and the layer the third.
+	this->leftState.slotBase = LEFT_SLOT_BASE;
+	this->rightState.slotBase = RIGHT_SLOT_BASE;
+	this->backgroundState.slotBase = BACKGROUND_SLOT_BASE;
+	// One connection each, installed once for the sheet's whole life: a click or a drop names a *sheet
+	// slot*, and bandForSlot() turns that back into a panel and a band. Doing it here rather than in
+	// attachPanel() is what keeps a panel switched off and on again from connecting the same signal
+	// twice -- which would emit two clicks for one release.
+	connect(surface, &MascotSurface::clicked, this,
+		[this](int slot, Qt::MouseButton button, Qt::KeyboardModifiers modifiers) {
+			MascotPanel panel = MascotPanel::Left;
+			int band = -1;
+			if (!this->bandForSlot(slot, &panel, &band))
+				return;
+			MascotSide side = MascotSide::Left;
+			if (!this->pairSideOf(this->stateFor(panel), &side))
+				return;
+			emit this->clicked(side, button, modifiers);
+		});
+	connect(surface, &MascotSurface::imageDropped, this, [this](int slot, QString path) {
+		MascotPanel panel = MascotPanel::Left;
+		int band = -1;
+		if (!this->bandForSlot(slot, &panel, &band))
+			return;
+		MascotSide side = MascotSide::Left;
+		if (!this->pairSideOf(this->stateFor(panel), &side))
+			return;
+		this->showDroppedImage(side, path);
+	});
+	host->installEventFilter(this);
+	// M6: the hosts stop being widgets and become geometry. They sit above the sheet in the widget stack --
+	// they are in the layout, it is lowered beneath them -- so a click or a drop over a column would be
+	// delivered to the host, which does nothing with it, and never reach the slot that owns those pixels.
+	// Making them mouse-transparent is what routes those events to the sheet behind them, where
+	// MascotSurface's own slotAt() decides whether a slot wants them.
+	for (QWidget* columnHost : { this->leftHost.data(), this->rightHost.data() }) {
+		if (columnHost)
+			columnHost->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+	}
+	// The surface-wide mirror is the bulk default a slot created by setSlotCount() starts from. It is
+	// false for the sheet -- mirroring is per slot, at the band -- and it is written once here, before
+	// any panel is attached, because it is a bulk write over every slot and doing it per panel would
+	// clear the panel that was attached before it.
+	surface->setMirror(false);
+	// The two panel halves the switches enable. The columns first, in their pair order, then the layer:
+	// order here is only about which half is attached first, since the plane each draws on comes from
+	// its group.
+	if (this->columnsEnabled) {
+		this->attachPanel(this->leftState, MascotPanel::Left);
+		this->attachPanel(this->rightState, MascotPanel::Right);
+	}
+	if (this->backgroundEnabled)
+		this->attachPanel(this->backgroundState, MascotPanel::Background);
+	this->applySheetSlots();
+	// Geometry, stacking order and visibility, in that order. `lower()` puts the sheet beneath the
+	// layout's widgets -- it is the window's backmost child -- and a child created after its parent was
+	// shown is created hidden, so show() is what makes it appear on the very first enable.
 	surface->setGeometry(host->rect());
 	surface->lower();
-	surface->show();
-	// (M4 review fix: the layer must not eat clicks. Its quick child already passes the mouse
-	// through, but that attribute does not stop the wrapper itself from being the widget under the
-	// cursor in the parts of the central widget no sibling covers -- which, for a window-sized
-	// child, is most of the empty area. A background is scenery: nothing it covers loses its events.)
-	surface->setAttribute(Qt::WA_TransparentForMouseEvents, true);
-	// M4 Task 2: the host's resize is what makes the layer's final rectangle, since the surface is
-	// in no layout (see the resize branch of eventFilter()). Installed here and removed with the
-	// surface, so a controller that never runs the layer watches nothing.
-	host->installEventFilter(this);
-	// The latches describe the layout this surface was built from, so the next applyMode() compares
-	// against what is actually drawn rather than against a default.
+	this->updateSheetVisibility();
+	// (M4 review fix, and it does not apply to the sheet: an empty layer was a black sheet and had to be
+	// hidden, which is what made it mouse-transparent too. The sheet paints the window's colour, so there
+	// is nothing to hide and nothing to shield -- and it must *not* be mouse-transparent, because the
+	// columns receive their clicks and drops through it. A click outside every slot is ignored by
+	// MascotSurface itself and propagates to this window like any other ignored click.)
+	// The latches describe the layout this sheet was built from, so the next applyMode() compares against
+	// what is actually drawn rather than against a default.
 	this->backgroundLayout.appliedMode = this->backgroundLayout.mode;
 	this->backgroundLayout.appliedOrientation = this->backgroundLayout.orientation;
 	this->backgroundLayout.applied = true;
-	// The opacity the last Apply asked for, so a layer built by that Apply comes back at the
-	// configured presentation instead of at the QML default. Zero is applied like any other value:
-	// it is presentation, and no band decision reads it.
-	// (M5 Task 8: the layer is built at full strength and stays there -- the veil over it carries the
-	// configured alpha, and a fade here would be a second one.)
-	// M4 Task 6: the app's own window colour behind the layer, enabled from the moment the surface
-	// exists -- including the zero-player case, where the whole layer is one backdrop-coloured
-	// sheet that updateBackgroundVisibility() then hides for the reason that predates this task.
-	this->refreshBackgroundBackdrop();
-	// The slot rectangles are written from the surface's geometry, so the layout is settled here:
-	// the enable path reaches this before any window resize (applyConfig() also calls updateLayout()
-	// later in the same turn, which is idempotent). Without it a surface created after
-	// createSurfaces() would draw its first frames at a rect nobody had written.
+	this->columnsLayout.appliedMode = this->columnsLayout.mode;
+	this->columnsLayout.appliedOrientation = this->columnsLayout.orientation;
+	this->columnsLayout.applied = true;
+	// The backdrop, the veil's colour and alpha, and the layer's own fade. Written from the palette and
+	// the config rather than left at the QML defaults: the sheet is always opaque, so a surface that
+	// never received this would be a black rectangle behind the window.
+	this->pushVeilState();
+	// The slot rectangles are written from the host rectangles, so the layout is settled here: the enable
+	// path reaches this before any window resize (applyConfig() also calls updateLayout() later in the
+	// same turn, which is idempotent). Without it a surface created after createSurfaces() would draw its
+	// first frames at a rect nobody had written.
 	this->updateLayout();
-	// (M4 review fix: `show()` above is the creation-time visibility the comment there describes;
-	// whether the layer should be showing *now* is the funded-prefix question, and a surface built
-	// by an Apply that left the layer no player must come up hidden rather than as a black sheet.)
-	this->updateBackgroundVisibility();
 }
 
-void MascotController::destroyBackgroundSurface()
+void MascotController::syncSheet()
 {
-	if (!this->backgroundState.surface)
+	// The sheet's whole invariant, in one place: it exists if and only if this controller is running and
+	// at least one of its two switches is on. Everything that builds or drops one goes through here -- the
+	// enable and disable paths, the settings Apply -- so no other path has to know the rule, and a user
+	// who enables neither pays no Qt Quick cost at all.
+	const bool wanted = this->running && (this->columnsEnabled || this->backgroundEnabled);
+	if (!wanted) {
+		if (this->sheet)
+			this->destroySheet();
 		return;
-	// The host filter installed by createBackgroundSurface() goes with the layer it was watching.
+	}
+	if (!this->sheet) {
+		this->createSheet();
+		return;
+	}
+	// The sheet survives an Apply; the panels in it may not. A switch that went off drops its panel's
+	// players, slots and pins and unbinds it, and one that came on attaches it -- keeping its band
+	// objects, so nothing that is already decoded has to be picked again.
+	if (this->columnsEnabled) {
+		if (!this->leftState.surface)
+			this->attachPanel(this->leftState, MascotPanel::Left);
+		if (!this->rightState.surface)
+			this->attachPanel(this->rightState, MascotPanel::Right);
+	}
+	else {
+		if (this->leftState.surface)
+			this->dropPanel(this->leftState);
+		if (this->rightState.surface)
+			this->dropPanel(this->rightState);
+	}
+	if (this->backgroundEnabled) {
+		if (!this->backgroundState.surface)
+			this->attachPanel(this->backgroundState, MascotPanel::Background);
+	}
+	else if (this->backgroundState.surface) {
+		this->dropPanel(this->backgroundState);
+	}
+	this->applySheetSlots();
+	this->updateSheetVisibility();
+}
+
+void MascotController::destroySheet()
+{
+	if (!this->sheet)
+		return;
 	if (QWidget* host = this->backgroundHost.data())
 		host->removeEventFilter(this);
-	// The pair's order, for the pair's reason: the players draw into QVideoSinks that belong to
-	// the surface's QML delegates, so they are shut down while those delegates still exist.
-	// clearSide() then drops the slots, the requests and the pins, and releaseSurface() destroys
-	// the players that remain and deletes the surface.
-	for (auto& owned : this->backgroundState.bands) {
-		if (owned->video())
-			owned->video()->shutdown();
+	// Every panel's half, in the panel order: a band's players draw into QVideoSinks that belong to its
+	// slot's QML delegate, so they come down while those delegates still exist, then the slots and the
+	// pins are cleared, and only then does the scene go.
+	for (MascotPanel panel : { MascotPanel::Left, MascotPanel::Right, MascotPanel::Background }) {
+		PanelState& state = this->stateFor(panel);
+		if (state.surface)
+			this->dropPanel(state);
 	}
-	this->clearSide(this->backgroundState);
-	this->releaseSurface(this->backgroundState);
+	// Synchronous, not deleteLater(): a later start() must be able to build a sheet into the same host,
+	// and a deferred delete would leave the old one there until the event loop ran. Nothing calls stop()
+	// from the sheet's own handler, so no frame is executing inside the object being destroyed.
+	delete this->sheet.data();
+	this->sheet = nullptr;
 }
 
-void MascotController::configureSurface(PanelState& state, MascotPanel panel)
+void MascotController::attachPanel(PanelState& state, MascotPanel panel)
 {
-	if (!state.surface)
+	if (!this->sheet)
 		return;
-	MascotSurface* surface = state.surface.data();
-	// M3 Task 1: exactly one band for the one slot this panel has, created before the slot count
-	// is written so every write below has its band. Task 2 creates one per slot instead.
-	// (M3 Task 2: syncBands() is that "instead". It brings this panel's bands to the mode's count,
-	// writes the slot count, and hands every band its surface -- surviving bands keep their media
-	// and players, new indices get a band of their own, and a rebuilt surface retires the slot
-	// state that described the panel that has just gone.)
+	state.surface = this->sheet;
+	// M3 Task 1/2: the band vector to the mode's count, and every band told which scene it draws into and
+	// which plane of it. A surviving band keeps its media, its request and its players: setSurface() is a
+	// no-op for the scene it already draws into, and the one thing a *rebuilt* one needs -- it retires the
+	// slot state that described the scene that has just gone.
 	this->syncBands(state, panel);
-	// The image path's mode (M1): the media is scaled to the panel's height with its aspect
-	// ratio kept, which is what the old renderer's scaled(width, height, KeepAspectRatio)
-	// produced -- a tall panel keeps a narrow image's side margins and crops a wide one
-	// horizontally. The surface owns that geometry (amendment R); the controller only picks the
-	// mode. A later milestone that shows video picks its own mode here.
-	// M2: that milestone is this one, so the write moved to applyDisplay(), which picks the mode
-	// per media type -- and both types pick HeightFit (§8 M2 ruling), so what is drawn is the
-	// mode this comment describes. The comment stays as the record of why.
-	// M4 Task 2: the surface-wide mirror default is the pair's rule. A background surface never
-	// mirrors (mirrorParityFor() is false for it), so it starts from false and keeps it -- a slot
-	// created by a later setSlotCount() would otherwise inherit the columns' default and draw the
-	// layer flipped until its next commit. The pair's answer is unchanged.
-	MascotSide pairSide = MascotSide::Left;
-	const bool hasPairSide = this->pairSideOf(state, &pairSide);
-	// (M5 item 1: the surface-wide mirror is gone. It flipped the whole surface -- in a panning mode that is
-	// the marquee itself, which is why Scroll "flipped the video but it stayed in place": the contents were
-	// mirrored while the pan kept running one way. Mirroring is per slot now, at the band, above.)
-	surface->setMirror(false);
-	// M3 Task 2: one mirror per band, from the media that band already carries. setMirror() above
-	// is only the bulk default a slot created by setSlotCount() starts from; these calls are what
-	// re-apply the per-band flip parity a surviving band had before the surface was rebuilt (a
-	// single-band panel still makes exactly the one call it made before bands were counted).
+	// The slots the bands have just been given have to exist before anything can be written into them, and
+	// before a player can be bound to their sinks.
+	this->applySheetSlots();
+	// M3 Task 2: one mirror per band, from the media that band already carries. The surface-wide default
+	// is only what a slot created by setSlotCount() starts from; these calls are what re-apply the per-band
+	// flip parity a surviving band had before the scene was rebuilt (a single-band panel still makes
+	// exactly the one call it made before bands were counted).
 	for (int i = 0; i < static_cast<int>(state.bands.size()); ++i)
 		this->applyMirror(state, panel, state.bands[static_cast<std::size_t>(i)]->media().path, i);
-	surface->installEventFilter(this);
-	// M4 Task 1: a click and a drop are pair-only policy, so these connections exist only for the
-	// two states that have a pair side. Which side that is comes from the state itself rather than
-	// from a panel -> side conversion; a background surface (Task 2) owns neither state and wires
-	// neither signal.
-	if (hasPairSide) {
-		connect(surface, &MascotSurface::clicked, this,
-			[this, pairSide](int, Qt::MouseButton button, Qt::KeyboardModifiers modifiers) {
-				emit this->clicked(pairSide, button, modifiers);
-			});
-		connect(surface, &MascotSurface::imageDropped, this, [this, pairSide](int, QString path) {
-			this->showDroppedImage(pairSide, path);
-		});
-	}
-	// M2: the player half of this panel, when the media setting and the decoder budget allow one.
-	// The sinks stay unbound until the first swap (see createVideoSlot).
-	// (M3 Task 1: createVideoSlot() calls the band's ensureVideo(), which binds them when the
-	// delegate already exists; the sentence above is why it does not wait for them.)
+	// M2: the player half of this panel, when the media setting and the decoder budget allow one. The
+	// sinks stay unbound until the first swap (see createVideoSlot).
+	// (M3 Task 1: createVideoSlot() calls the band's ensureVideo(), which binds them when the delegate
+	// already exists; the sentence above is why it does not wait for them.)
 	this->ensureVideoSlots();
 }
 
-void MascotController::releaseSurface(PanelState& state)
+void MascotController::dropPanel(PanelState& state)
+{
+	// The panel's switch went off. Its players come down first -- they draw into sinks the sheet's
+	// delegates own -- then its slots, its requests and its pins are dropped, and only then is it unbound.
+	// The band objects stay: a panel switched back on keeps nothing to re-decode, and a band whose scene is
+	// gone cannot draw into it in the meantime.
+	for (auto& owned : state.bands) {
+		if (owned->video())
+			owned->video()->shutdown();
+	}
+	this->clearSide(state);
+	this->detachPanel(state);
+}
+
+void MascotController::detachPanel(PanelState& state)
 {
 	if (!state.surface)
 		return;
-	state.surface->removeEventFilter(this);
-	// M2: the two caches below describe the *surface's own slot*, so they die with it. A rebuilt
-	// surface starts at MascotSurface's defaults (FillMode::Fit, video outputs hidden), and a
-	// surviving "the slot already carries HeightFit" would suppress the write in applyDisplay()
-	// forever after -- which is exactly the M1 image-layout regression this task may not cause
-	// (HeightFit is what makes an image scale to the panel's height instead of fitting inside it).
-	// M3 Task 1: "the two caches below" are the band's now, and `setSurface(nullptr)` is what
-	// retires them -- the band outlives the surface (a mode change in Task 2 reuses it), and a
-	// band whose surface is gone must not claim its slot already carries a fill mode.
-	// (M3 Task 2: every band, not just the panel's policy band. A `Stripes` panel's extra bands
-	// draw into the same surface, so each of them has slot state that dies with it.)
+	// M2: the two caches the band keeps describe the *scene's* slot, so they die with the binding. A
+	// rebuilt scene starts at MascotSurface's defaults (FillMode::Fit, video outputs hidden), and a
+	// surviving "the slot already carries HeightFit" would suppress the write in applyDisplay() forever
+	// after -- which is exactly the M1 image-layout regression this may not cause (HeightFit is what makes
+	// an image scale to the panel's height instead of fitting inside it).
+	// (M3 Task 1/2: every band, not just the panel's policy band -- a `Stripes` panel's extra bands draw
+	// into the same scene, so each of them has slot state that dies with it.)
 	for (auto& owned : state.bands)
 		owned->setSurface(nullptr);
-	// M2: the players go before the surface. They draw into QVideoSinks that belong to the
-	// surface's QML delegate, so destroying the surface first would leave them holding pointers
-	// into objects that no longer exist. shutdown() is the synchronous detach Task 2 asks for.
-	// (M3 Task 2: destroyVideoSlot() takes down every band's players, which is what keeps a band
-	// past the first from outliving the sinks its surface owns.)
+	// M2: the players go before the scene does, for the reason dropPanel() gives. destroyVideoSlot() takes
+	// down every band's players, which is what keeps a band past the first from outliving the sinks its
+	// slot owns.
 	this->destroyVideoSlot(state);
-	// Synchronous, not deleteLater(): a later start() must be able to build a surface into
-	// the same host, and a deferred delete would leave the old one there until the event loop
-	// ran. Nothing calls stop() from a surface's own handler, so no frame is executing inside
-	// the object being destroyed.
-	delete state.surface.data();
 	state.surface = nullptr;
+	// The sheet's count shrinks to what the panels still in it need; the delegates this panel owned go with
+	// it. Written here rather than left to the next Apply so a switch-off does not leave the scene drawing
+	// slots nobody is attached to.
+	this->applySheetSlots();
+}
+
+void MascotController::applySheetSlots()
+{
+	if (!this->sheet)
+		return;
+	// The highest slot any panel still in the sheet owns, plus one. A panel's bands are created and
+	// destroyed at its tail, so this is the only count the scene needs, and it never moves a band's own
+	// index -- that is the panel's fixed base plus the band index (PANEL_SLOT_STRIDE says why it is fixed).
+	int count = 0;
+	for (MascotPanel panel : { MascotPanel::Left, MascotPanel::Right, MascotPanel::Background }) {
+		const PanelState& state = this->stateFor(panel);
+		if (!state.surface)
+			continue;
+		count = std::max(count, state.slotBase + static_cast<int>(state.bands.size()));
+	}
+	this->sheet->setSlotCount(count);
+}
+
+bool MascotController::bandForSlot(int slot, MascotPanel* panel, int* bandIndex) const
+{
+	for (MascotPanel candidate : { MascotPanel::Left, MascotPanel::Right, MascotPanel::Background }) {
+		const PanelState& state = this->stateFor(candidate);
+		if (!state.surface)
+			continue;
+		const int band = slot - state.slotBase;
+		if (band < 0 || band >= static_cast<int>(state.bands.size()))
+			continue;
+		if (panel)
+			*panel = candidate;
+		if (bandIndex)
+			*bandIndex = band;
+		return true;
+	}
+	return false;
+}
+
+QRectF MascotController::panelFrame(MascotPanel panel) const
+{
+	// M6: the sheet's coordinate space is its parent's -- the widget backgroundHost names -- and the three
+	// hosts are children of that same widget, so a host's own position and size *are* the panel's rectangle
+	// inside the sheet. This is why the hosts stay after the milestone that stopped them hosting anything:
+	// they are the geometry, and the layout is what gives it to them.
+	QWidget* host = nullptr;
+	switch (panel) {
+	case MascotPanel::Left:
+		host = this->leftHost.data();
+		break;
+	case MascotPanel::Right:
+		host = this->rightHost.data();
+		break;
+	case MascotPanel::Background:
+		host = this->backgroundHost.data();
+		break;
+	}
+	if (!host)
+		return QRectF();
+	return QRectF(QPointF(host->pos()), QSizeF(host->size()));
+}
+
+MascotSurface::SlotGroup MascotController::slotGroupFor(MascotPanel panel) const
+{
+	// The layer is the plane beneath the veil and both columns are the plane above it -- the veil's own z
+	// is what decides whether "above" means "not veiled" or "veiled" for the columns, and that is
+	// pushVeilState()'s business, not this one's.
+	return panel == MascotPanel::Background ? MascotSurface::SlotGroup::Layer
+		: MascotSurface::SlotGroup::Columns;
+}
+
+bool MascotController::mascotsBelowVeil() const
+{
+	// `mascots_columns_z`. "Above the veil" is the shipped default and the value every config written
+	// before the key keeps; anything else that names the other side is read as "below", which is what the
+	// settings combo writes.
+	// (M5 read the same two spellings, but could only *approximate* the answer by fading the columns.
+	// M6 makes it one rectangle's z, so this is now a real statement about the scene.)
+	if (!this->App || !this->App->config)
+		return false;
+	const QString value = this->App->config->get(QStringLiteral("mascots_columns_z"));
+	return value.compare(QStringLiteral("Below"), Qt::CaseInsensitive) == 0
+		|| value.compare(QStringLiteral("Below the veil"), Qt::CaseInsensitive) == 0;
+}
+
+void MascotController::updateSheetVisibility()
+{
+	if (!this->sheet)
+		return;
+	// The sheet exists while either switch is on (syncSheet()), and while it exists it is up: its backdrop
+	// is the window's own colour, so there is nothing about an empty layer left to hide -- the M4 rule that
+	// hid a black sheet has no subject here.
+	const bool wanted = this->leftState.surface || this->rightState.surface
+		|| this->backgroundState.surface;
+	if (this->sheet->isVisible() != wanted)
+		this->sheet->setVisible(wanted);
+}
+
+void MascotController::pushVeil()
+{
+	// The public half of the veil's apply: the settings page owns `mascots_background_opacity` and
+	// `mascots_columns_z`, and a live change to either has to reach the scene without a full
+	// applyMascotSettings() -- which would re-present every panel and restart every clip timer for a
+	// rectangle's alpha. The work is pushVeilState(), which applyConfig() also calls.
+	this->pushVeilState();
+}
+
+void MascotController::pushVeilState()
+{
+	if (!this->sheet || !this->App)
+		return;
+	// The backdrop first: the sheet blits opaquely, so every pixel neither the layer nor a column paints has
+	// to be the colour the window would have painted there. The window's own `Window` role is that colour
+	// on every path this app has (no stylesheet touches the central widget), and M5 measured the two
+	// agreeing: a veil at 100 % over the layer and the layer switched off read the same pixel for pixel.
+	const QColor windowColour = this->App->palette().color(QPalette::Window);
+	QColor backdrop = windowColour;
+	// The layer's own presentation is full strength; the veil above it carries the configured alpha, and a
+	// fade here would be a second one.
+	double layerOpacity = 1.0;
+	// M5 Task 8: `MM_MASCOT_FLAT=#RRGGBB` replaces the layer with one flat colour -- the backdrop painted,
+	// the layer's slots faded out -- so the veil's blend can be measured against a known value instead of
+	// against a clip that is picked at random per run. Kept in the build rather than re-added for one run:
+	// it is the only way the harness can assert the veil's arithmetic (see `m5-veil`), and the milestone
+	// paid for that lesson once already, when the equivalent M4 hook was deleted and the measurement had to
+	// be rebuilt from nothing. It is inert unless the variable is set, and it colours the *layer*, never
+	// the veil: a veil painted in the probe's own colour would have nothing to blend.
+	const QColor flat = QColor::fromString(qEnvironmentVariable("MM_MASCOT_FLAT"));
+	if (flat.isValid()) {
+		backdrop = flat;
+		layerOpacity = 0.0;
+	}
+	this->sheet->setBackdrop(backdrop, true);
+	this->sheet->setSurfaceOpacity(layerOpacity);
+	// The veil itself: `mascots_background_opacity` of the window's colour over the whole sheet. It is only
+	// there while the layer is -- with no layer beneath it there is nothing to veil, and a veil alone would
+	// tint the window for no reason the user asked for. That is also how the M5 widget behaved: it existed
+	// only while `mascots_background` was on.
+	double veilOpacity = 0.0;
+	if (this->App->config) {
+		veilOpacity = std::clamp(
+			this->App->config->get_double(QStringLiteral("mascots_background_opacity"), 0.0), 0.0, 1.0);
+	}
+	const bool veilEnabled = this->backgroundEnabled;
+	const bool aboveColumns = !this->mascotsBelowVeil();
+	this->sheet->setVeil(windowColour, veilOpacity, veilEnabled, aboveColumns);
+	// (M5 probe, debug-gated: the veil's alpha and where it came from. Four runs' pixel readings disagreed
+	// about whether this number was the key's or the fallback's, and the config file said one thing while
+	// the screen said another -- this line is the answer, and it costs one comparison in a normal run.
+	// M6 keeps the line and its spelling exactly: the harness reads it, and the value it reports is still
+	// the one the composite uses, now written into the scene instead of into a widget's palette.)
+	if (this->App->debug_mode) {
+		qDebug() << "MASCOT-VEIL" << "alpha" << qRound(veilOpacity * 255.0)
+			<< "raw" << (this->App->config ? this->App->config->get("mascots_background_opacity") : QStringLiteral("<no config>"))
+			<< "enabled" << veilEnabled
+			<< "z" << (aboveColumns ? 1 : 3);
+	}
 }
 
 void MascotController::clearSide(PanelState& state)
@@ -3662,7 +3769,9 @@ MascotController::VideoPick MascotController::pickVideo(PanelState& state, Masco
 	// (M3 Task 6A: the sink asked about is this band's own slot -- the hardcoded slot 0 was the
 	// policy band's, and a stripe whose own delegate existed would never get its pick started.)
 	MascotSurface* surface = state.surface.data();
-	if (!surface || !surface->slotSink(bandIndex, 0)) {
+	// (M6: the slot is the band's own address inside the sheet -- its panel's base plus its index -- not the
+	// band index. Those two were the same number while each panel had a surface of its own.)
+	if (!surface || !band || !surface->slotSink(band->slotIndex(), 0)) {
 		if (band->playback().videoSinkRetries++ < this->retryAttempts) {
 			if (!this->warnedVideoSink) {
 				this->warnedVideoSink = true;
@@ -5100,7 +5209,8 @@ bool MascotController::bandReachesSeam(MascotPanel panel, const MascotBand& band
 		const PanelState& marqueeOwner = this->stateFor(panel);
 		if (!marqueeOwner.surface)
 			return false;
-		const QRectF frame(marqueeOwner.surface->rect());
+		// (M6: the layer's rectangle in the sheet, which is the window's -- see the same call in the tick.)
+		const QRectF frame(this->panelFrame(panel));
 		const double axisLen = this->scrollPanIsVertical(panel) ? frame.height() : frame.width();
 		return axisLen > 0.0;
 	}

@@ -35,6 +35,17 @@ int MascotBand::slotIndex() const
 	return this->m_slotIndex;
 }
 
+void MascotBand::setGroup(MascotSurface::SlotGroup group)
+{
+	// M6: the plane, written through to the scene -- and recorded nowhere else, because the surface's slot
+	// keeps it (a delegate QML recreates comes back on the plane its slot was given) and the band has no use
+	// for the value itself. A band with no surface has no slot to put on a plane; the owner writes this again
+	// after setSurface(), which is the one order that always works.
+	if (!this->m_surface)
+		return;
+	this->m_surface->setSlotGroup(this->m_slotIndex, group);
+}
+
 MascotSurface* MascotBand::surface() const
 {
 	return this->m_surface.data();

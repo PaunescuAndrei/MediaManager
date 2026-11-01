@@ -35,6 +35,11 @@ public:
 	// that has just gone.
 	void setSurface(MascotSurface* surface);
 	int slotIndex() const;
+	// M6: which plane of the one scene this band's slot is drawn on -- the layer's group under the veil, a
+	// column's group over it. Written by the owner, because it is the panel the band belongs to that decides
+	// it; nothing about the band's own content does. A band whose group has never been written draws on the
+	// columns' plane, which is where MascotSurface's own default puts an unconfigured slot.
+	void setGroup(MascotSurface::SlotGroup group);
 	// The surface this band draws into; null on teardown. Read-only and non-owning, like video():
 	// a caller that needs the surface's own geometry (M3 Task 4's scroll travel asks it for the
 	// size the media is painted at) must not hold it across a call, and one that has gone is a

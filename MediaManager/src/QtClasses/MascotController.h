@@ -130,11 +130,6 @@ public:
 		QWidget* leftHost, QWidget* rightHost, QWidget* backgroundHost, QObject* parent = nullptr);
 	~MascotController() override;
 
-	// Binds the surfaces this controller drives. Called with the surfaces start() built;
-	// public because it is the one place the controller takes its surface references, and
-	// because a caller that builds its surfaces itself has to be able to say so.
-	void setSurfaces(MascotSurface* left, MascotSurface* right);
-
 	// Enables the panels: builds the surfaces (a user who never enables the renderer pays no
 	// Qt Quick cost), applies config, takes the beat connections and seeds both panels.
 	// (M4 Task 2: the background layer is built here too, and only while its own switch is on --
@@ -175,7 +170,11 @@ public:
 	// composites on top -- so "below the veil" is drawn on the panel instead: the window's colour as the
 	// pair's backdrop, with the content faded to what the veil would have left of it. Above (the default)
 	// is no backdrop and full opacity, which is how the pair has always been drawn.
-	void refreshColumnsVeil();
+	// (M6: retired. Both settings are one rectangle's z inside the sheet now, so the approximation this
+	// describes -- and the fade that came with it -- has no place left to be. pushVeil() is what the two
+	// keys reach; MainWindow no longer owns a veil at all, which is why this comment is the record of
+	// the attempt rather than a description of the code.)
+	void pushVeil();
 
 	// ---- M3 Task 2: the layout mode ----
 	// The mode value as this class reads it, case-insensitively. `ok` is false for anything that
@@ -354,7 +353,17 @@ private:
 		// QPointer, not raw: a surface can also be destroyed by its host going away (Task 5
 		// deletes the old panels next), and a null pointer is answerable while a dangling one
 		// is not.
+		// (M6: the sheet is shared. This is non-null exactly while this panel is part of it -- the
+		// columns while `mascots` is on, the layer while `mascots_background` is on -- so every
+		// `if (!state.surface)` guard in this class keeps the meaning it always had: "this panel has
+		// slots to draw into". It is never deleted through this pointer; releaseSheet() owns that.)
 		QPointer<MascotSurface> surface;
+		// M6: the first slot this panel owns inside the sheet. Fixed for the panel's life (0 for the
+		// left column, 8 for the right, 16 for the layer) so a band's slot index never moves when
+		// another panel's band count changes, and no band ever has to be re-addressed -- a band's
+		// players are bound to one slot's QVideoSinks, and moving it under them is exactly the
+		// mistake this constant exists to make impossible.
+		int slotBase = 0;
 		// M3 Task 1: the bands of this panel, one per slot. `shown`, `requestedPath`,
 		// `requestedIsVideo`, `video`, `wantedOffsetMs`, `slotFillMode`, `slotFillModeKnown` and
 		// `videoOutputVisible` are the band's now; `band(0)` is the one band a single-band panel
@@ -468,13 +477,73 @@ private:
 	// always as fresh as the config.
 	QString nextSourcePath();
 
-	void createSurfaces();
-	void configureSurface(PanelState& state, MascotPanel panel);
-	void releaseSurface(PanelState& state);
+	// ---- M6: one scene for the three layers ----
+	//
+	// The sheet is the one MascotSurface this controller draws into: the background layer's slots, the
+	// veil rectangle and both columns' slots, in one QML scene, in that z order. Two measurements forced
+	// the change -- three separate surfaces cannot be ordered, because a QQuickWidget carrying
+	// Qt::WA_AlwaysStackOnTop is drawn above every sibling whatever the widget stack says -- and with one
+	// scene "mascots above/below the veil" is a rectangle's z rather than a compositing trick.
+	//
+	// The hosts do not host anything any more: they stay as the geometry the layout gives them (the two
+	// column rectangles and the window-sized one) and their bands are placed by translating those
+	// rectangles into the sheet's coordinates.
+	//
+	// The sheet exists if and only if this controller is running and at least one of the two switches is
+	// on. A panel's `surface` (above) is non-null exactly while that panel is part of it.
+	QPointer<MascotSurface> sheet;
+	// Builds it, and the two panel halves, in the one order that works: the sheet first (its slots have to
+	// exist before a band writes into one), then the panels the switches enable, then the geometry, the
+	// veil and the stacking.
+	void createSheet();
+	// Deletes it: every band's players are shut down while the delegates they draw into still exist, every
+	// panel's slots and pins are cleared, then the surface goes. Called by syncSheet() only.
+	void destroySheet();
+	// The sheet's invariant, in one place: it exists if and only if `running && (mascots || mascots_background)`.
+	// Called from applyConfig() -- so a settings Apply turns either switch on and off live -- and from
+	// start()/stop(), exactly as syncBackgroundSurface() did for the layer alone.
+	void syncSheet();
+	// Binds one panel into the sheet: its band vector to the mode's count, its per-band mirror, its
+	// players. The pair-only wiring (clicks, drops) lives on the sheet and is installed once by
+	// createSheet(), so attaching a panel a second time cannot connect the same signal twice.
+	void attachPanel(PanelState& state, MascotPanel panel);
+	// Unbinds it: the bands lose their surface (which retires the slot state that described it), the
+	// players are destroyed while their sinks still exist, and `surface` goes null. The band objects
+	// stay, so a re-enable keeps nothing to re-decode.
+	void detachPanel(PanelState& state);
+	// The switch went off: shutdown, clearSide and detachPanel, in that order -- the order a released
+	// surface kept, because the players draw into sinks the scene's delegates own. detachPanel() alone is
+	// what stop() and stopPanels() reach for, after they have cleared the panel themselves.
+	void dropPanel(PanelState& state);
+	// The plane a panel's slots are drawn on, from the panel: the layer is the group under the veil and
+	// the two columns are the group over it.
+	MascotSurface::SlotGroup slotGroupFor(MascotPanel panel) const;
+	// `mascots_columns_z` as this class reads it: true for "Below the veil", which puts the veil rectangle
+	// above the columns instead of between them and the layer. False -- the shipped default -- for anything
+	// else, including a config written before the key existed.
+	bool mascotsBelowVeil() const;
+	// Writes every live band's slot index and the sheet's total slot count. One place, called after
+	// anything that changes a band vector.
+	void applySheetSlots();
+	// The panel's rectangle in the sheet's coordinates: the host's position and size, because the hosts
+	// are children of the sheet's own parent and the layout is what gives them their geometry.
+	QRectF panelFrame(MascotPanel panel) const;
+	// Whether the sheet should be showing. Nothing about the columns is a reason to hide it -- the
+	// columns may be the only thing on it -- and with neither switch on it does not exist at all.
+	void updateSheetVisibility();
+	// The veil's colour, alpha and z, and the layer's backdrop, from the config and the palette. Called
+	// once per Apply and once per surface build; the two keys that own these values reach it through
+	// MainWindow::applyMascotKey().
+	void pushVeilState();
+	// The (panel, band) a sheet slot belongs to, for a click or a drop. False for a slot no band owns
+	// -- a slot past a panel's band count, or one whose panel is not in the sheet.
+	bool bandForSlot(int slot, MascotPanel* panel, int* bandIndex) const;
+
 	// M3 Task 2: brings one panel's band vector to the mode's band count. Bands are destroyed from
 	// the tail (their players come down while the QML sinks they draw into still exist) and
 	// created for the new indices; a band whose index survives keeps its media, its request and
-	// its players. Writes the surface's slot count as well, so the two can never disagree.
+	// its players. (M6: the slot count is the sheet's, written by applySheetSlots(); a band's slot
+	// index is its panel's base plus its own index, so this no longer sizes anything.)
 	void syncBands(PanelState& state, MascotPanel panel);
 	// M3 Task 2: gives every band of both panels that has no content some, one pick per band,
 	// after a layout change. Band 0 takes the panel's existing pick path; the extra bands of a
@@ -487,21 +556,10 @@ private:
 	// panel's count is filled on its own.)
 	void fillEmptyBands();
 
-	// ---- M4 Task 2: the background surface's own lifecycle ----
-	// Keeps the invariant the layer is defined by: the background surface exists if and only if
-	// this controller is running *and* `mascots_background` is on. Called from applyConfig() (so a
-	// settings Apply turns the layer on and off live) and from start()/stop(); everything that
-	// builds or drops one goes through here, so no other path has to know the rule.
-	void syncBackgroundSurface();
-	// Builds the window-sized surface: parented to backgroundHost, with no layout (updateLayout()
-	// positions it from the host's rectangle), lowered beneath the layout's widgets and shown. The
-	// bands are the funded prefix bandCount() derives from backgroundPlayers, so a surface with no
-	// player behind it is simply an empty one.
-	void createBackgroundSurface();
-	// Drops it in the pair's order and for the pair's reason: the bands' players are shut down
-	// first (they draw into QVideoSinks the surface's QML delegates own), then clearSide() drops
-	// the slots and the pins, then releaseSurface() deletes it.
-	void destroyBackgroundSurface();
+	// ---- M4 Task 2: the background's own half, after M6 ----
+	// The lifecycle it used to own is the sheet's now (syncSheet()/createSheet()/destroySheet()),
+	// because the layer and the columns are one scene: there is no separate window-sized surface to
+	// build or drop, and no separate existence rule to keep. What survives is the presentation half --
 	// (M4 review fix: existence is not the same question as visibility. A surface with no funded band
 	// draws nothing, and nothing -- for this widget -- is an opaque black rectangle: the layer takes
 	// the quick widget's opaque blit (see MascotSurface's constructor), which edge-to-edge video
@@ -509,7 +567,10 @@ private:
 	// and a layer that loses its last player goes back to being invisible instead of black. Called
 	// wherever the funded prefix can change: the end of createBackgroundSurface() and the Apply that
 	// re-spends the budget.)
-	void updateBackgroundVisibility();
+	// (M6: the sheet's backdrop is the window's own colour on every path now, so an empty layer is no
+	// longer a black sheet and this has nothing left to hide: the sheet is up while it exists, which
+	// is the switches' question. Kept as the record of what the opaque blit cost and why the sheet
+	// paints a backdrop at all.)
 
 	// ---- M3 Task 4: the scroll driver's own half ----
 	// Starts or stops the driver to match the current state. The one place the "should it be

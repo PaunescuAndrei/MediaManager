@@ -651,11 +651,8 @@ void MainWindow::applyBackgroundVeil() {
     // (M5 probe, debug-gated: the veil's alpha and where it came from. Four runs' pixel readings disagreed
     // about whether this number was the key's or the fallback's, and the config file said one thing while the
     // screen said another -- this line is the answer, and it costs one comparison in a normal run.)
-    if (this->App->debug_mode) {
-        qDebug() << "MASCOT-VEIL" << "alpha" << veilAlpha
-                 << "raw" << (this->App->config ? this->App->config->get("mascots_background_opacity") : QStringLiteral("<no config>"))
-                 << "enabled" << backgroundEnabled;
-    }
+    // (M6: the line moved to the controller, which is where the veil is composited now -- see
+    // MascotController::pushVeilState(). It keeps the tag and the field names the harness reads.)
     // (M5 Task 8: the rows paint their fill again -- Base and AlternateBase at one alpha, which is what
     // makes the list alternate, and the only control over the list's own opacity. One commit handed them
     // alpha 0 on the theory that the veil had replaced them; it had not, and the alternation went with
@@ -777,30 +774,15 @@ void MainWindow::applyBackgroundVeil() {
     // list's own fill is a second surface with its own key. The user wants the two to agree -- "the top
     // widget matches the list too like before" -- so the strip's scrim is back, and it is driven by the
     // *same* key as the rows: same colour role, same alpha, one control for the whole centre pane.)
+    // (M5 Task 8e: the veil itself was built and sized from here. M6 removed it: the veil is one rectangle
+    // in the controller's sheet now, which is the same window-sized scene the layer draws in, so it is the
+    // only way the columns can be put *behind* it -- a second widget could not be stacked above a
+    // QQuickWidget carrying Qt::WA_AlwaysStackOnTop, which is what the two failed attempts measured. What
+    // stays here is everything that paints *above* that scene: the rows, the strip's scrim and the bars.)
     if (backgroundEnabled) {
-        if (!this->backgroundVeil) {
-            this->backgroundVeil = new QWidget(this->ui.centralwidget);
-            // A plain QWidget fills with its Window role by default, and that is exactly the colour
-            // this has to be: the window with the layer switched off.
-            this->backgroundVeil->setBackgroundRole(QPalette::Window);
-            this->backgroundVeil->setAutoFillBackground(true);
-            // It is scenery: clicks, hovers and drags belong to the widgets above it.
-            this->backgroundVeil->setAttribute(Qt::WA_TransparentForMouseEvents, true);
-            // The veil fills a container whose geometry the layout settles in a pass of its own, so
-            // the container is watched rather than the window: a resize reaches MainWindow::event()
-            // before the central widget has its new size.
-            this->ui.centralwidget->installEventFilter(this);
-        }
-        this->backgroundVeil->setPalette(get_background_veil_palette(appPalette, veilAlpha));
-        this->backgroundVeil->show();
-        this->updateBackgroundVeil();
-        // Stacking last, so that whatever order the form built the panes in, the veil is under all of
-        // them and above the layer by the time this returns.
-        // (M5 Task 8: no setting owns a place in this order -- see stackBackgroundVeil().)
-        this->stackBackgroundVeil();
-    }
-    else if (this->backgroundVeil) {
-        this->backgroundVeil->hide();
+        // Nothing to build: the sheet is the controller's, and its veil is pushed by applyMascotKey() and by
+        // the controller's own applyConfig(). The event filter the veil installed on the central widget went
+        // with it -- the sheet follows its host itself.
     }
     // (M5 Task 8b: the strip's half of the one control. It is the same palette call the rows get -- Base
     // at the row alpha -- so the strip above the list reads exactly like an even row, and the layer is
@@ -831,6 +813,9 @@ void MainWindow::applyBackgroundVeil() {
         this->ui.videosWidget->removeEventFilter(this);
         this->backgroundScrim->hide();
     }
+    // Stacking last, as the veil's own apply did: whatever order the form built the panes in, the three of
+    // them are above the controller's sheet by the time this returns.
+    this->stackMascotPanes();
 }
 
 void MainWindow::updateBackgroundScrim() {
@@ -848,53 +833,31 @@ void MainWindow::updateBackgroundScrim() {
         this->backgroundScrim->setGeometry(rect);
 }
 
-void MainWindow::updateBackgroundVeil() {
-    if (!this->backgroundVeil)
-        return;
-    // (M5 Task 8: no visibility test here. The veil is created during construction, while the window is
-    // still hidden, and a child of a hidden parent is not "visible" -- so the first sizing pass returned
-    // without doing anything and nothing ever sized the veil again in a run that never re-applied
-    // settings: measured as a veil with geometry 100x30 (an unparented QWidget's default) and therefore
-    // not painted at all. Setting the geometry on a hidden widget is free: it is already the right size
-    // by the time the window is shown.)
-    const QRect rect = this->ui.centralwidget->rect();
-    if (this->backgroundVeil->geometry() != rect)
-        this->backgroundVeil->setGeometry(rect);
-}
-
-void MainWindow::stackBackgroundVeil() {
-    if (!this->backgroundVeil)
-        return;
-    // The three panes are re-raised on every call, so the veil's place is decided here and nowhere
-    // else. The background layer lowers itself to the bottom when it is created and never moves
-    // again, so anything the veil does above that bottom is above the layer.
-    // (M5 Task 8: and that is the whole rule for "mascots above the veil". The columns cannot be put
-    // under the veil by *stacking them* -- their QQuickWidget is created with Qt::WA_AlwaysStackOnTop,
-    // which the widget stack does not override, and the measurement says so: two runs that differed only
-    // in the key were pixel-identical.)
-    // (M5 fix attempt, measured and reverted: the attribute is only honoured by widgets that render through
-    // a graphics API, so giving the *veil* WA_AlwaysStackOnTop and raising it after the columns does not
-    // move it -- the mascot pixel read 118,85,85 in both modes, and the list centre 154,91,27 in both, i.e.
-    // nothing moved at all. True three-layer compositing therefore needs the video, the mascots and the veil
-    // in one quick scene; see the note on refreshColumnsVeil() in the controller for the approximation that
-    // ships until then.)
+void MainWindow::stackMascotPanes() {
+    // The three panes are re-raised on every call, so the order between them and the controller's sheet is
+    // settled here and nowhere else. The sheet lowers itself to the bottom when it is created -- it is the
+    // window's backmost child -- and everything below is about the three panes among themselves, which do not
+    // overlap, so their order is taste rather than layout.
+    // (M5 Task 8: this used to be stackBackgroundVeil(), and its job was to decide where the veil sat. The
+    // rule it recorded is the reason M6 exists: the columns cannot be put under the veil by *stacking them*
+    // -- their QQuickWidget is created with Qt::WA_AlwaysStackOnTop, which the widget stack does not
+    // override, and two runs that differed only in the key were pixel-identical. The attempt that gave the
+    // *veil* the same attribute was measured and reverted too: the mascot pixel read 118,85,85 in both modes
+    // and the list centre 154,91,27 in both, i.e. nothing moved at all. True three-layer compositing needed
+    // the video, the mascots and the veil in one quick scene, which is what the controller's sheet is now --
+    // so there is no veil widget left for this function to place.)
     this->ui.mascotLeftHost->raise();
     this->ui.mascotRightHost->raise();
-    // Last, so the centre pane is above both columns whatever order the form built them in. The three
-    // do not overlap, so their order among themselves is taste, not layout.
+    // Last, so the centre pane is above both columns whatever order the form built them in.
     this->ui.CenterContainer->raise();
 }
 
 bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
     // M4 Task 3b: the list moving inside its container is the only thing that changes how tall the
     // strip above it is. A resize covered by MainWindow::event() would miss a search bar opening.
-    // (M5 Task 8: the veil is sized from the whole container now, so the container's own geometry is
-    // what it follows -- and the layout pass that sets that geometry runs after the window's resize
-    // event, which is why this is an event filter rather than a line in MainWindow::event().)
-    if (this->backgroundVeil && watched == this->ui.centralwidget
-        && (event->type() == QEvent::Move || event->type() == QEvent::Resize)) {
-        this->updateBackgroundVeil();
-    }
+    // (M5 Task 8: the veil was sized from the whole container, which is why this filter watched it as well.
+    // M6: the veil is in the controller's sheet, whose own host the controller watches, so only the strip is
+    // left here.)
     // (M5 Task 8b: the strip's height is the list's y, so the list moving inside the container is what
     // this one follows -- the same reason the scrim existed before the veil.)
     if (this->backgroundScrim && watched == this->ui.videosWidget
@@ -3058,8 +3021,12 @@ void MainWindow::applyMascotKey(const QString& key) {
         QStringLiteral("mascots_color_theme"),
     };
     if (veilKeys.contains(key)) {
+        // (M6: the veil is a rectangle in the controller's one scene now, so a veil key reaches the sheet;
+        // applyBackgroundVeil() still owns the rows', the strip's and the scrollbars' alphas, which are
+        // painted above that scene.)
         this->applyBackgroundVeil();
-        this->mascotController->refreshColumnsVeil();
+        if (this->mascotController)
+            this->mascotController->pushVeil();
         return;
     }
     if (key == QStringLiteral("mascots_width_percent")) {
@@ -6183,11 +6150,11 @@ bool MainWindow::event(QEvent* e)
         }
     }
     if (e->type() == QEvent::Show) {
-        // (M5 Task 8: the veil is created and sized while the window is still hidden -- the container
-        // has no real geometry until the first layout pass. Sizing it once more when the window is up
-        // costs a rect write and removes the whole question of whether some later apply happens to
-        // rescue it.)
-        this->updateBackgroundVeil();
+        // (M5 Task 8: the veil was created and sized while the window was still hidden -- the container has
+        // no real geometry until the first layout pass -- so it was sized once more here. M6: the veil is a
+        // rectangle in the controller's sheet, whose geometry the controller derives from its own host on
+        // every resize; what is left for this event is the pane order above it.)
+        this->stackMascotPanes();
     }
     if (e->type() == QEvent::Resize) {
         //scale mascots
@@ -6197,9 +6164,9 @@ bool MainWindow::event(QEvent* e)
         this->applyMascotWidth(windowWidth, this->App->config->get_double("mascots_width_percent", 15.0));
         // M4 Task 3b: the strip above the list changed height with the window; the layer's scrim
         // covers exactly that strip.
-        // (M5 Task 8: the veil is the size of the whole container, so this is the early answer and
-        // the container's own Resize event -- see eventFilter() -- is the final one.)
-        this->updateBackgroundVeil();
+        // (M5 Task 8: the veil was the size of the whole container, so this was the early answer and the
+        // container's own Resize event was the final one. M6: the veil is inside the controller's sheet and
+        // the controller sizes that from its host on every resize, so only the strip's scrim is left here.)
         // (M5 Task 8b: the strip's scrim ends where the list begins, so it follows the list.)
         this->updateBackgroundScrim();
     }

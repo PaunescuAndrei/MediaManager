@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "MascotMedia.h"
 #include "MascotMediaSource.h"
 #include "MascotPrefetcher.h"

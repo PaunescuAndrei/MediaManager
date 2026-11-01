@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <QDialog>
 #include <QHash>
 #include "ui_SettingsDialog.h"

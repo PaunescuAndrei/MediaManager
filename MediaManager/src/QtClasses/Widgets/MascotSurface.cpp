@@ -1,4 +1,4 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 #include "MascotSurface.h"
 #include "MascotImageProvider.h"
 #include "OverlayGraphicsVideoWidget.h"

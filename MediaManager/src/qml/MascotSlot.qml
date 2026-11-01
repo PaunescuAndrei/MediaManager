@@ -1,4 +1,4 @@
-import QtQuick
+﻿import QtQuick
 import QtMultimedia
 
 // Object names carry the slot index, so C++ finds a slot and its children by name and child order can never mismatch a sink.

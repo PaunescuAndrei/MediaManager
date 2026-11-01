@@ -21,6 +21,13 @@ public:
 	double get_double(QString item, double defaultValue);
 
 private:
-	std::unordered_map<std::string, std::string> defaults;
+	// A flat [settings] block is still read on load and folded into its sections, so a file written
+	// before the sections existed keeps working without the user touching it.
+	void migrate_flat_settings();
+	std::string sectionFor(QString const& key) const;
 	QString defaultFor(QString const& item) const;
+
+	std::filesystem::path path;
+	std::unordered_map<std::string, std::string> defaults;    // key -> default value
+	std::unordered_map<std::string, std::string> keySection;  // key -> section in config.ini
 };

@@ -43,7 +43,6 @@ public:
 	void applyMirror(bool mirrored);
 	// The slot draws `sourceSlot`'s video stage instead of this band's players; -1 restores its own picture.
 	void setMirrorSource(int sourceSlot);
-	int mirrorSourceSlot() const;
 	// Whether the mirror view is drawn flipped. Written only when it differs, so a left commit does not rewrite it.
 	void setMirrorFlip(bool flipped);
 	// Writes only when the mode differs, so an image commit writes no fill mode at all.
@@ -104,7 +103,6 @@ private:
 	MascotSurface::FillMode m_fillMode = MascotSurface::FillMode::HeightFit;
 	bool m_fillModeKnown = false;
 	bool m_videoOutputVisible = false;
-	int m_mirrorSourceSlot = -1;
 	bool m_mirrorFlip = false;
 	bool m_mirrorFlipKnown = false;
 	double m_scrollOffset = 0.0;

@@ -47,6 +47,9 @@ public:
 	// The slot draws `sourceSlot`'s video stage instead of its own players; -1 restores its own. Slot indices, not
 	// item pointers, so the caller never holds a QML object across a delegate rebuild.
 	void setSlotMirrorSource(int i, int sourceSlot);
+	// What the slot is drawing right now -- the only record that matters, since a surface outlives a band being
+	// detached and re-attached around it.
+	int slotMirrorSource(int i) const;
 	void setSlotMedia(int i, const MascotMedia& media);
 	// Null while the delegate does not exist and after any setSlotCount() that shrank the panel; query again, never hold it.
 	QVideoSink* slotSink(int i, int ab);

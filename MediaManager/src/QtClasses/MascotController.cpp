@@ -1,4 +1,4 @@
-﻿#include "stdafx.h"
+#include "stdafx.h"
 #include "MascotController.h"
 #include "MainApp.h"
 #include "MainWindow.h"
@@ -728,7 +728,11 @@ bool MascotController::bandUsesMirrorView(MascotPanel panel, int bandIndex) cons
 	if (panel != MascotPanel::Right || !this->bandMirrorsLeft(bandIndex))
 		return false;
 	const MascotBand* rightBand = this->rightState.band(bandIndex);
-	return rightBand && rightBand->mirrorSourceSlot() >= 0;
+	if (!rightBand || !this->rightState.surface)
+		return false;
+	// What the surface draws is the truth: it outlives a band being detached and re-attached around it, so its slot is
+	// the only record that cannot go stale behind the controller's back.
+	return this->rightState.surface->slotMirrorSource(rightBand->slotIndex()) >= 0;
 }
 
 void MascotController::syncMirrorBindings()
@@ -747,7 +751,12 @@ void MascotController::syncMirrorBindings()
 		// pairing it has and neither column pays for a second texture.
 		const bool bind = mirror && leftBand && leftBand->media().type == MascotMedia::Video;
 		const int sourceSlot = bind ? leftBand->slotIndex() : -1;
-		if (rightBand->mirrorSourceSlot() == sourceSlot)
+		// The view's parity is the pair's, not the file's: the folder rule has already turned the shared picture inside
+		// the stage, so flipping the copy is what makes the right column its mirror. Asserted on every pass, not only on
+		// a bind, because the parity key is a live checkbox and the slot's value is not ours to trust.
+		if (bind)
+			rightBand->setMirrorFlip(this->flipMirroredColumn);
+		if (this->rightState.surface->slotMirrorSource(rightBand->slotIndex()) == sourceSlot)
 			continue;
 		rightBand->setMirrorSource(sourceSlot);
 		this->logVideo(QStringLiteral("MASCOT-STAGE %1 band=%2 source=%3 pairFlip=%4")
@@ -756,9 +765,6 @@ void MascotController::syncMirrorBindings()
 			.arg(sourceSlot)
 			.arg(this->flipMirroredColumn ? QStringLiteral("on") : QStringLiteral("off")));
 		if (bind) {
-			// The view's parity is the pair's, not the file's: the folder rule has already turned the shared picture
-			// inside the stage, so flipping the copy here is what makes the right column its mirror and nothing else.
-			rightBand->setMirrorFlip(this->flipMirroredColumn);
 			// Its player has nothing to draw into: the picture is the left band's. Destroying it is what makes the
 			// pair cost one decoder.
 			if (rightBand->video())
@@ -770,6 +776,13 @@ void MascotController::syncMirrorBindings()
 				rightBand->forgetMedia();
 				this->syncPin(shown);
 			}
+			// Nothing may arrive for a band with no player: a request left over from before the bind would land as a
+			// commit and write the file's parity over the view's.
+			rightBand->setRequestPath(QString());
+			rightBand->setRequestIsVideo(false);
+			rightBand->setWantedOffsetMs(-1);
+			rightBand->playback().candidate = MascotMedia();
+			rightBand->playback().prefetchPath.clear();
 			if (rightBand->videoOutputVisible())
 				rightBand->setVideoOutputVisible(false);
 			continue;
@@ -1984,6 +1997,9 @@ void MascotController::applyMirror(PanelState& state, MascotPanel panel, const Q
 {
 	MascotBand* band = state.band(bandIndex);
 	if (!state.surface || !band)
+		return;
+	// A band drawing another band's stage takes its parity from the view, which is the only thing on screen.
+	if (this->bandUsesMirrorView(panel, bandIndex))
 		return;
 	bool mirrored;
 	// Parity has two sources, composed. The folder rule flips a file authored for one side landing in the other slot.

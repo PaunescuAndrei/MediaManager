@@ -1,4 +1,4 @@
-﻿#include "stdafx.h"
+#include "stdafx.h"
 #include "MascotSurface.h"
 #include "MascotImageProvider.h"
 #include "OverlayGraphicsVideoWidget.h"
@@ -213,6 +213,13 @@ void MascotSurface::setSlotMirrorSource(int i, int sourceSlot)
 		return;
 	this->slotStates[i].mirrorSourceSlot = sourceSlot;
 	this->applySlot(i);
+}
+
+int MascotSurface::slotMirrorSource(int i) const
+{
+	if (!this->isValidSlot(i))
+		return -1;
+	return this->slotStates.at(i).mirrorSourceSlot;
 }
 
 void MascotSurface::setSlotMedia(int i, const MascotMedia& media)

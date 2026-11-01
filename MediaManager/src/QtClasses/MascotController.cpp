@@ -1173,6 +1173,10 @@ MascotSurface::FillMode MascotController::fillModeFromString(const QString& valu
 		return MascotSurface::FillMode::HeightFit;
 	if (value.compare(QStringLiteral("WidthFit"), Qt::CaseInsensitive) == 0)
 		return MascotSurface::FillMode::WidthFit;
+	// M6: the covering mode, and the one spelling the settings page offers for it. "Cover" as well as the
+	// key's own name, so a config edited by hand with either word lands on the same mode.
+	if (value.compare(QStringLiteral("Cover"), Qt::CaseInsensitive) == 0)
+		return MascotSurface::FillMode::Cover;
 	if (ok)
 		*ok = false;
 	// The mode M1 shipped, and what applyConfig() falls back to: a caller that ignores `ok` still
@@ -1227,6 +1231,10 @@ MascotSurface::FillMode MascotController::effectiveFillMode(MascotPanel panel) c
 	// wider than the panel and its content is what travels.)
 	if (panel == MascotPanel::Background && layout.mode == MascotMode::Scroll)
 		return layout.fill;
+	// (M6: `Cover` reaches the two modes that honour a configured fill mode and no others, for the reason
+	// the paragraph above gives -- it scales on both axes, so a panning band's travel would be whatever
+	// the aspect ratio happens to leave, which can be nothing at all. A panel that must pan keeps its
+	// normalised axis and a panel that must cover is `Static`; the settings page says so beside the combo.)
 	if (layout.mode == MascotMode::Static)
 		return layout.fill;
 	if (layout.mode == MascotMode::Stripes

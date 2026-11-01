@@ -95,6 +95,12 @@ namespace {
 			// The same argument on the other axis (M3 Task 3): the slot's QML sizes the item from
 			// the painted height, so again there is nothing left for Qt Quick to fit or crop.
 			return 0; // Image.Stretch
+		case MascotSurface::FillMode::Cover:
+			// M6: PreserveAspectCrop, the same value Crop uses -- the item stays the slot's rectangle and
+			// Qt Quick scales the media to cover it. What distinguishes Cover from Crop is not what is
+			// drawn but what applySlot() is allowed to do with it: the content shift is clamped to the
+			// overflow, so the picture cannot be slid far enough to expose an edge.
+			return 2; // Image.PreserveAspectCrop
 		}
 		return 1;
 	}
@@ -615,6 +621,15 @@ void MascotSurface::applySlot(int i)
 	item->setProperty("widthFill", slot.fillMode == FillMode::WidthFit);
 	item->setProperty("paintedWidth", contentSize.width());
 	item->setProperty("paintedHeight", contentSize.height());
+	// M6: the sampling hint. A picture painted smaller than its own resolution is the one case where Qt
+	// Quick's linear sampling aliases, and mipmapping is the filtering that fixes it; anything scaled up
+	// reads the top mip level anyway, so turning the maps on there would only spend a third more texture
+	// memory. Written from the same geometry the slot is drawn with, so it cannot disagree with the picture.
+	const QSize nativeSize = slot.nativeSize;
+	const bool minifying = nativeSize.width() > 0 && nativeSize.height() > 0
+		&& (contentSize.width() < static_cast<double>(nativeSize.width()) - 0.5
+			|| contentSize.height() < static_cast<double>(nativeSize.height()) - 0.5);
+	item->setProperty("minifying", minifying);
 	item->setProperty("mediaIsImage", slot.mediaIsImage);
 	item->setProperty("contentOffsetX", slot.hasExplicitContentOffset
 		? slot.explicitContentOffsetX
@@ -695,6 +710,12 @@ QSizeF MascotSurface::contentSizeFor(const Slot& slot) const
 		const double scale = std::max(slotWidth / nativeWidth, slotHeight / nativeHeight);
 		return QSizeF(nativeWidth * scale, nativeHeight * scale);
 	}
+	case FillMode::Cover: {
+		// M6: the same arithmetic as Crop, because covering is what the larger of the two scales does. The
+		// difference is the guarantee around it -- see contentShiftFor() and FillMode's note in the header.
+		const double scale = std::max(slotWidth / nativeWidth, slotHeight / nativeHeight);
+		return QSizeF(nativeWidth * scale, nativeHeight * scale);
+	}
 	}
 	return QSizeF(slotWidth, slotHeight);
 }
@@ -723,7 +744,17 @@ double MascotSurface::contentShiftFor(const Slot& slot, bool mirrored) const
 	if (paintedWidth <= 0.0)
 		return 0.0;
 	const double shift = paintedWidth / 2.0 - slot.contentCenterX * (paintedWidth / nativeWidth);
-	return mirrored ? -shift : shift;
+	// (M6: clamped to the crop's own slack, in every mode. The shift exists to centre the mascot's
+	// silhouette, and a silhouette far enough from the image's middle asks for a shift larger than the
+	// width the picture overflows its slot by -- which slides an edge into view, and the panel then shows
+	// the layer behind it. That is the "does not perfectly cover" the Cover mode is for, and there was no
+	// reason to leave the same gap in the modes that came before it: a shift that fits inside the slack
+	// still centres the content, and one that would not only ever costs coverage. `paintedWidth <=
+	// slotWidth` has no slack at all, so a letterboxed mode keeps shift 0 and its own centring.)
+	const double slack = (paintedWidth - slotWidth) / 2.0;
+	const double clamped = slack > 0.0 ? std::min(shift, slack) : 0.0;
+	const double bounded = clamped < 0.0 ? std::max(clamped, -slack) : clamped;
+	return mirrored ? -bounded : bounded;
 }
 
 int MascotSurface::slotAt(const QPointF& position) const

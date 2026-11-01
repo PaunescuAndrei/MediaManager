@@ -41,7 +41,13 @@ public:
 	// whose painted size differs from the slot's rectangle; Crop, Fit and Stretch keep that
 	// rectangle and let Qt Quick fit or crop the media inside it. ContentSizeFor() below is the
 	// one place all five sizes are derived.)
-	enum class FillMode { Crop, Fit, Stretch, HeightFit, WidthFit };
+	// (M6: Cover is the sixth, and the only mode that promises something: the media covers the slot on
+	// both axes whatever its own resolution is -- a 640x360 clip in a 1932x1090 panel is scaled up by
+	// 3x, which costs sharpness and never coverage -- and the content-centre shift is clamped so it can
+	// never slide an edge into view. It is Crop's arithmetic with that guarantee attached, which is why
+	// the painted size is `contentSizeFor()`'s Crop case. The player and the column keep Crop/fit
+	// semantics for everything else; Cover is what "fill the panel, whatever the window is" means.)
+	enum class FillMode { Crop, Fit, Stretch, HeightFit, WidthFit, Cover };
 
 	// M6: which plane of the one scene a slot belongs to.
 	//

@@ -48,6 +48,12 @@ Item {
 	property real scrollOffsetX: 0.0
 	property real scrollOffsetY: 0.0
 	property bool mediaIsImage: false
+	// M6: quality hint written by MascotSurface. True while the media is being painted *smaller* than its
+	// own resolution -- the case where plain linear sampling underwater a texture and shimmers as the pan
+	// moves -- and it turns the Image's mipmapping on for exactly those slots. An image that is scaled up
+	// (the common case: a 1080-tall panel showing a smaller picture, or a 640x360 clip in a 1932x1090
+	// window) reads level 0, where mipmaps would only cost 33% more texture memory for nothing.
+	property bool minifying: false
 
 	// Video path state, all of it written by MascotSurface. The image above and the two video
 	// outputs below are exclusive per slot: videoVisible is what makes the swap, and the outputs
@@ -105,6 +111,15 @@ Item {
 		fillMode: slot.heightFill || slot.widthFill ? Image.Stretch : slot.fillMode
 		mirror: slot.mirrored
 		visible: slot.mediaIsImage
+		// (M6: the sampling quality, stated rather than inherited. `smooth` is Qt Quick's default and is
+		// what makes a scaled image use linear sampling instead of the nearest texel -- it is written out
+		// so the intent is on the record for both directions. `mipmap` is the one real choice: it is
+		// trilinear minification, which is what stops a downscaled picture from aliasing, and it is the
+		// best filtering Qt Quick offers an Image. The video outputs below have no equivalent knob --
+		// VideoOutput samples linearly and Qt exposes no filtering property for it -- so a video is
+		// always linear, up or down.)
+		smooth: true
+		mipmap: slot.minifying
 		// Pinned, not left to Image's default: the pixels are already decoded and sitting in
 		// MascotImageCache, and the provider serves them from memory (no disk, no decoder), so an
 		// asynchronous load would only defer the texture by a frame and show the previous image

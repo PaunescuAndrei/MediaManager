@@ -860,12 +860,15 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "How the columns arrange their content: one still panel, one continuously scrolling band, "
         "or several bands scrolling at once.", mascotModeCombo);
 
-    mascotFillCombo = makeComboBox({ QStringLiteral("Crop"), QStringLiteral("Fit"), QStringLiteral("Stretch"),
-                                     QStringLiteral("HeightFit"), QStringLiteral("WidthFit") },
+    mascotFillCombo = makeComboBox({ QStringLiteral("Cover"), QStringLiteral("Crop"), QStringLiteral("Fit"),
+                                     QStringLiteral("Stretch"), QStringLiteral("HeightFit"), QStringLiteral("WidthFit") },
         config->get(QStringLiteral("mascots_fill")));
     addRow(contentLayout, "Fill mode:",
-        "How a picture is fitted into its panel: Crop fills and cuts off, Fit shows all of it with "
-        "bars, Stretch distorts, HeightFit and WidthFit scale on one axis only.", mascotFillCombo);
+        "How a picture is fitted into its panel: Cover always fills the panel completely, scaling up or "
+        "down as the window changes and cutting off the overflow; Crop fills and cuts off but lets the "
+        "centring slide; Fit shows all of it with bars, Stretch distorts, HeightFit and WidthFit scale on "
+        "one axis only. Cover is honoured by the one-still-panel mode; a panning mode needs one axis "
+        "normalised, so it uses its own fit.", mascotFillCombo);
 
     mascotWeightedCheckBox = new QCheckBox("Weight picks by rating");
     mascotWeightedCheckBox->setChecked(config->get_bool(QStringLiteral("mascots_weighted_random")));
@@ -1096,13 +1099,15 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "several moving bands. The same three shapes the columns have.",
         mascotBackgroundModeCombo);
 
-    mascotBackgroundFillCombo = makeComboBox({ QStringLiteral("Crop"), QStringLiteral("Fit"), QStringLiteral("Stretch"),
-                                              QStringLiteral("HeightFit"), QStringLiteral("WidthFit") },
+    mascotBackgroundFillCombo = makeComboBox({ QStringLiteral("Cover"), QStringLiteral("Crop"), QStringLiteral("Fit"),
+                                              QStringLiteral("Stretch"), QStringLiteral("HeightFit"), QStringLiteral("WidthFit") },
         config->get(QStringLiteral("mascots_background_fill")));
     addRow(backgroundLayout, "Layer fill:",
-        "How a layer video is fitted into the window: Crop fills and cuts off, Fit shows all of it "
-        "with bars, Stretch distorts, HeightFit and WidthFit scale on one axis. Stripes bands are "
-        "normalised to their stacking axis instead.", mascotBackgroundFillCombo);
+        "How a layer video is fitted into the window: Cover always fills the window completely, scaling "
+        "a clip up or down to the window's size and cutting off the overflow; Crop fills and cuts off "
+        "but lets the centring slide; Fit shows all of it with bars, Stretch distorts, HeightFit and "
+        "WidthFit scale on one axis. Stripes bands are normalised to their stacking axis instead.",
+        mascotBackgroundFillCombo);
 
     mascotBackgroundStripesSpinBox = makeSpinBox(1, 8, 1,
         config->get(QStringLiteral("mascots_background_stripes")).toInt());

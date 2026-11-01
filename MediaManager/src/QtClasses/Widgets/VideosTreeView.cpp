@@ -1,4 +1,4 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 #include "VideosTreeView.h"
 #include <QTimer>
 #include <QScrollBar>
@@ -49,7 +49,7 @@ void VideosTreeView::paintEvent(QPaintEvent* event) {
     QTreeView::paintEvent(event);
     if (!this->translucentRows)
         return;
-    // (M5 Task 8e: the space under a short list. Qt paints nothing there -- the viewport's autofill is
+    // The space under a short list. Qt paints nothing there -- the viewport's autofill is
     // off while the layer is on -- so the media showed through at full strength below the last row, which
     // reads as a hole cut in the list rather than as the list's own colour. The fill is the Base row's
     // colour at the list's alpha, the same surface the strip above the list gets, so a short list ends

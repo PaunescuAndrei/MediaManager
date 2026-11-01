@@ -1,4 +1,4 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 #include "stylesQt.h"
 #include <QColor>
 
@@ -35,11 +35,11 @@ QPalette get_background_row_palette(const QPalette& appPalette, int alpha, int a
     QPalette rowPalette = appPalette;
     // Base and AlternateBase only, and the same alpha for both: the row colours' hue and their
     // 18/255 separation are what make the alternation readable, so neither is allowed to move.
-    // (M4 Task 3 fix: the alpha is the caller's now, see the header. The rows pass
+    // The alpha is the caller's now, see the header. The rows pass
     // BACKGROUND_ROW_ALPHA; the viewport passes 0 and stops being a second scrim between the media
-    // and the row fill.)
-    // (M5 Task 8d: and the alternate row's alpha is the caller's too -- it is the row colour that does
-    // not match the window's background, so it gets its own control. The hues still do not move.)
+    // and the row fill.
+    // And the alternate row's alpha is the caller's too -- it is the row colour that does
+    // not match the window's background, so it gets its own control. The hues still do not move.
     for (QPalette::ColorRole role : { QPalette::Base, QPalette::AlternateBase }) {
         QColor colour = rowPalette.color(role);
         colour.setAlpha(role == QPalette::Base ? alpha : alternateAlpha);
@@ -48,10 +48,10 @@ QPalette get_background_row_palette(const QPalette& appPalette, int alpha, int a
     return rowPalette;
 }
 
-// (M6: get_background_veil_palette() lived here and has no caller left -- the veil is a rectangle in the
+// Get_background_veil_palette() lived here and has no caller left -- the veil is a rectangle in the
 // controller's scene, painted from `QPalette::Window` directly, so no palette object is built for it. The
 // function is deleted rather than kept "for later": a second way to derive the same colour is exactly what
-// the M5 milestone spent a day proving must not exist. `git log -S get_background_veil_palette` has it.)
+// the M5 milestone spent a day proving must not exist. `git log -S get_background_veil_palette` has it.
 
 QString get_stylesheet(QString stylesheet) {
     QString ss = QString();

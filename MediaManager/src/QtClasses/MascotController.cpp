@@ -691,10 +691,8 @@ ScrollDirection MascotController::scrollDirectionFromString(const QString& value
 
 MascotSurface::FillMode MascotController::effectiveFillMode(MascotPanel panel) const
 {
-	// The chosen mode is the framing, in every mode of every panel. It used to be normalised for a panning band
-	// (HeightFit horizontally, WidthFit vertically) because the QML used to apply those modes itself and only a
-	// painted-box item can be slid; the surface now draws every mode as its painted box, so honouring the choice costs
-	// nothing and the modes no longer collapse into one another.
+	// The chosen mode is the framing in every panel and every mode: the surface draws each mode as its own painted
+	// box, and what may travel on top of that framing is decided by scrollTravel() alone.
 	return this->layoutFor(panel).fill;
 }
 
@@ -1595,7 +1593,7 @@ void MascotController::createSheet()
 	QWidget* host = this->backgroundHost.data();
 	if (!host)
 		return;
-	// One surface for the three layers, window-sized and in no layout; it is parented to the widget that used to hold the layer alone.
+	// One surface for the three layers, window-sized and in no layout, parented to the widget that hosts the panes.
 	// `alwaysStackOnTop` is false, which is what lets the sheet sit under the UI panes; the attribute would draw it above every sibling.
 	// What that costs is an opaque blit, which is why the sheet always paints a backdrop -- the window's colour -- in every uncovered pixel.
 	auto* surface = new MascotSurface(this->cache, host, false);

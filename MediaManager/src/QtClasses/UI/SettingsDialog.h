@@ -127,21 +127,21 @@ public:
     QCheckBox* mascotStripesAlternateCheckBox = nullptr;
     QCheckBox* mascotBackgroundCheckBox = nullptr;
     QDoubleSpinBox* mascotBackgroundOpacitySpinBox = nullptr;
-    // (M5 Task 8: the list's own opacity, back after a commit that removed it. The veil above is the
-    // window; this is the list's row fill, which is what makes the rows alternate.)
+    // The list's own opacity, back after a commit that removed it. The veil above is the
+    // window; this is the list's row fill, which is what makes the rows alternate.
     QDoubleSpinBox* mascotListAlphaSpinBox = nullptr;
-    // (M5 Task 8d: the alternate rows' own alpha -- the row colour that does not match the window's
-    // background, so it is the one that decides readability over the layer.)
+    // The alternate rows' own alpha -- the row colour that does not match the window's
+    // background, so it is the one that decides readability over the layer.
     QDoubleSpinBox* mascotAltAlphaSpinBox = nullptr;
-    // (M5 Task 8e: the list's scrollbars, which are opaque today because a scrollbar's groove paints
-    // with the Window role and the row palette only gestures at Base and AlternateBase.)
+    // The list's scrollbars, which are opaque today because a scrollbar's groove paints
+    // with the Window role and the row palette only gestures at Base and AlternateBase.
     QDoubleSpinBox* mascotScrollbarAlphaSpinBox = nullptr;
-    // (M5 Task 10: the layer's own cadence -- clip length, beat swap, random change and its chance.)
-    // (M5: Qt's low-latency playback intent, which trades buffering for a higher chance of dropped frames.)
+    // The layer's own cadence -- clip length, beat swap, random change and its chance.
+    // Qt's low-latency playback intent, which trades buffering for a higher chance of dropped frames.
     QCheckBox* mascotLowLatencyCheckBox = nullptr;
-    // (M5 item 1: `mascots_pair_scroll` -- whether a mirrored pair scrolls the same way or against itself.)
+    // `mascots_pair_scroll` -- whether a mirrored pair scrolls the same way or against itself.
     QComboBox* mascotPairScrollCombo = nullptr;
-    // (M5 item 2: `mascots_pair_flip` -- whether the mirrored column is drawn flipped or identical.)
+    // `mascots_pair_flip` -- whether the mirrored column is drawn flipped or identical.
     QCheckBox* mascotPairFlipCheckBox = nullptr;
     QSpinBox* mascotBackgroundClipSpinBox = nullptr;
     QCheckBox* mascotBackgroundSwapOnBeatCheckBox = nullptr;
@@ -159,7 +159,7 @@ public:
     QSpinBox* mascotCacheMbSpinBox = nullptr;
     QSpinBox* mascotCacheItemsSpinBox = nullptr;
 
-    // M5 Task 3: every mascot key's value when the page was built (the legacy keys included),
+    // Every mascot key's value when the page was built (the legacy keys included),
     // captured here so Cancel can write the same values back. Live apply writes config, so the
     // revert has to be a config write too -- a snapshot cannot drift the way one `old_*` field per
     // control could.
@@ -170,8 +170,8 @@ public:
     void syncMascotConfig(const QString& changedKey = QString());
     // Puts the snapshot back and re-applies it; called from MainWindow's reject branch.
     void restoreMascotConfig();
-    // (M5 review fix: re-reads the snapshot from config after an Apply, so Cancel stops being able
-    // to undo settings Apply has already kept.)
+    // Re-reads the snapshot from config after an Apply, so Cancel stops being able
+    // to undo settings Apply has already kept.
     void rebaseMascotConfigSnapshot();
 
 private:

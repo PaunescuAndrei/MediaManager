@@ -1087,8 +1087,9 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         storedBelow ? QStringLiteral("Below the veil") : QStringLiteral("Above the veil"));
     addRow(backgroundLayout, "Mascots layer:",
         "Whether the two mascot columns are drawn above the veil -- full brightness, the default -- or "
-        "behind it, so the veil dims them along with the media behind them. Behind, the column's own "
-        "background stays see-through: the layer shows through and only the mascots are faded.",
+        "behind it, so the veil covers them exactly as it covers the layer: at the layer opacity they "
+        "are dimmed to the window colour by that amount, and at 1.00 they are hidden with everything "
+        "else behind the list.",
         mascotColumnsZCombo);
 
     mascotBackgroundModeCombo = makeComboBox({ QStringLiteral("Static"), QStringLiteral("Scroll"),

@@ -43,4 +43,7 @@ QPalette get_background_row_palette(const QPalette& appPalette, int alpha, int a
 // shaped this way: the veil is `QPalette::Window` at the configured alpha, behind every pane of the window,
 // in the window's own colour rather than the list's Base, so at alpha 255 it is indistinguishable from the
 // window with the layer switched off -- the test that says the colour is right.)
-QPalette get_background_veil_palette(const QPalette& appPalette, int alpha);
+// (M6: the declaration that stood here -- get_background_veil_palette(appPalette, alpha) -- went with the
+// veil widget. The veil is a rectangle inside the controller's one scene, painted from QPalette::Window by
+// MascotController::pushVeilState(), so there is no palette to build for it. The paragraph above is the
+// record of the colour rule, and that rule still holds.)

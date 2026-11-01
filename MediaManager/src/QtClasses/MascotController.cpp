@@ -505,7 +505,11 @@ void MascotController::stopPanels()
 	this->clearSide(this->rightState);
 	this->detachPanel(this->leftState);
 	this->detachPanel(this->rightState);
-	this->syncSheet();
+	// (M6 fix: not syncSheet(). That function's job is to make the sheet match the *cached* switches, and
+	// `columnsEnabled` is still true here -- so it would immediately re-attach the two panels this method
+	// has just taken down. The sheet survives because its other half may be the layer, and if it does not,
+	// the caller uses stop(). updateSheetVisibility() is the whole question left to answer.)
+	this->updateSheetVisibility();
 	// The pair may have been the only reason the driver was running; the background may be the
 	// only reason it still is. Reconciled here rather than left to the next window event, so a
 	// stopped column cannot leave a timer ticking for it.
@@ -708,13 +712,13 @@ void MascotController::applyConfig()
 	// written, which `Config` answers with the default.
 	if (!this->warnedUnsupportedFill && !fillValue.isEmpty() && !fillOk) {
 		this->warnedUnsupportedFill = true;
-		this->logVideo(QStringLiteral("mascots_fill=\"%1\" is not one of Crop, Fit, Stretch, HeightFit or WidthFit; using HeightFit")
+		this->logVideo(QStringLiteral("mascots_fill=\"%1\" is not one of Cover, Crop, Fit, Stretch, HeightFit or WidthFit; using HeightFit")
 			.arg(fillValue));
 		// The ungated warning beside the debug line, exactly as the two blocks above have it: a
 		// typo here reshapes every panel, and a debug-gated line is invisible in the run where the
 		// user needs to see why their picture changed.
 		qWarning() << "mascots_fill:" << fillValue
-			<< "is not one of Crop, Fit, Stretch, HeightFit or WidthFit; using HeightFit.";
+			<< "is not one of Cover, Crop, Fit, Stretch, HeightFit or WidthFit; using HeightFit.";
 	}
 
 	// M3 Task 5: the same one-warning latch as the three blocks above, for the same reason -- an
@@ -832,10 +836,10 @@ void MascotController::applyConfig()
 	}
 	if (!this->warnedUnsupportedBackgroundFill && !backgroundFillValue.isEmpty() && !backgroundFillOk) {
 		this->warnedUnsupportedBackgroundFill = true;
-		this->logBackground(QStringLiteral("mascots_background_fill=\"%1\" is not one of Crop, Fit, Stretch, HeightFit or WidthFit; using HeightFit")
+		this->logBackground(QStringLiteral("mascots_background_fill=\"%1\" is not one of Cover, Crop, Fit, Stretch, HeightFit or WidthFit; using HeightFit")
 			.arg(backgroundFillValue));
 		qWarning() << "mascots_background_fill:" << backgroundFillValue
-			<< "is not one of Crop, Fit, Stretch, HeightFit or WidthFit; using HeightFit.";
+			<< "is not one of Cover, Crop, Fit, Stretch, HeightFit or WidthFit; using HeightFit.";
 	}
 	if (!this->warnedUnsupportedBackgroundStripesOrientation
 		&& !backgroundOrientationValue.isEmpty() && !backgroundOrientationOk) {
@@ -1531,6 +1535,15 @@ void MascotController::syncBands(PanelState& state, MascotPanel panel)
 		// destroyed band that held one would otherwise leave its path pinned for the session --
 		// the shrink path's own version of the owner-field invariant below.)
 		removedShown.push_back(state.bands.back()->playback().candidate.path);
+		// (M6 fix: the slot this band drew into outlives the band. A band's slot index is its panel's base
+		// plus its index, and the sheet only ever shrinks to the highest index still in use -- so a retired
+		// band that is not at the top of the sheet keeps its delegate, with its last picture, its rectangle
+		// and possibly a visible video output, and because a higher slot index is declared later it paints
+		// over the bands that survive. Emptying the slot and taking its rectangle is what actually retires
+		// it. The paths above are collected first: clear() forgets the media, and the pins are re-evaluated
+		// from what was collected.)
+		state.bands.back()->clear();
+		state.bands.back()->setRect(QRectF());
 		state.bands.pop_back();
 	}
 	// The count is what makes QML create the delegates the rectangles below are written into, so
@@ -1989,12 +2002,16 @@ double MascotController::scrollPhaseOffset(MascotPanel panel, const MascotBand& 
 	// Shortening the phase to dodge the fold was rejected: it would halve the stagger and still
 	// leave a collision for some count, because the fold is 2-to-1 whatever the offsets are.)
 	const PanelState& state = this->stateFor(panel);
-	if (state.band(band.slotIndex()) != &band)
-		return 0.0;
+	// (M6 fix: the band's index *inside its panel*, not the sheet slot it addresses. Those were the same
+	// number while each panel had a surface of its own; M6 made them the panel's base plus the index (0, 8,
+	// 16), so this guard failed for every right-column and layer band and the stagger silently collapsed to
+	// 0 -- which the mirror pair felt most, because band i of the right column stopped matching band i of
+	// the left.)
+	const int localIndex = band.slotIndex() - state.slotBase;
 	const int count = this->bandCount(panel);
-	if (count <= 1)
+	if (count <= 1 || localIndex < 0 || localIndex >= count || state.band(localIndex) != &band)
 		return 0.0;
-	return static_cast<double>(band.slotIndex()) / static_cast<double>(count);
+	return static_cast<double>(localIndex) / static_cast<double>(count);
 }
 
 bool MascotController::scrollReversed(MascotPanel panel, const MascotBand& band) const
@@ -2005,10 +2022,14 @@ bool MascotController::scrollReversed(MascotPanel panel, const MascotBand& band)
 	// reverses a band.
 	// (M3 Task 5: odd `Stripes` bands when the key is on; `Static` and `Scroll` have one band and
 	// no odd index, so they answer false whatever the key says.)
+	// (M6 fix: odd by the band's index inside its panel, like scrollPhaseOffset(). The global slot index
+	// would give the same answer only because every base is even, which is a property of PANEL_SLOT_STRIDE
+	// and not of this rule.)
 	const PanelLayout& layout = this->layoutFor(panel);
+	const int localIndex = band.slotIndex() - this->stateFor(panel).slotBase;
 	return layout.mode == MascotMode::Stripes
 		&& layout.alternate
-		&& (band.slotIndex() % 2) != 0;
+		&& (localIndex % 2) != 0;
 }
 
 void MascotController::resetScrollOffsets(MascotPanel panel)
@@ -2928,6 +2949,13 @@ QRectF MascotController::panelFrame(MascotPanel panel) const
 	}
 	if (!host)
 		return QRectF();
+	// M6: the sheet's coordinate space is its parent's, and the two kinds of host sit in it differently. The
+	// two columns are children of that parent, so their own pos() and size *are* their rectangle inside the
+	// sheet. The window-sized host is the sheet's parent itself, so its rectangle inside the sheet is the
+	// origin and its size -- not its pos(), which is where the central widget sits inside the main window and
+	// would carry a menu bar's height into the layer's slot the day one exists.
+	if (panel == MascotPanel::Background)
+		return QRectF(QPointF(0.0, 0.0), QSizeF(host->size()));
 	return QRectF(QPointF(host->pos()), QSizeF(host->size()));
 }
 
@@ -5244,7 +5272,12 @@ bool MascotController::bandReachesSeam(MascotPanel panel, const MascotBand& band
 	// The tick measures its phase advance against the panel's widest band. A band whose own share
 	// of that advance is a whole travel or more is the sub-tick still branch, and it has no seam.
 	const PanelState& owner = this->stateFor(panel);
-	if (owner.band(band.slotIndex()) != &band)
+	// (M6 fix: the band's index inside its panel, not the slot it addresses -- see scrollPhaseOffset(). With
+	// the global index this guard failed for every right-column and layer band, so a beat's change committed
+	// mid-pass instead of at the wrap seam.)
+	const int localIndex = band.slotIndex() - owner.slotBase;
+	if (localIndex < 0 || localIndex >= static_cast<int>(owner.bands.size())
+		|| owner.band(localIndex) != &band)
 		return false;
 	double referenceTravel = 0.0;
 	for (const auto& owned : owner.bands)

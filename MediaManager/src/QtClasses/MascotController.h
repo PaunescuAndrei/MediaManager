@@ -164,7 +164,9 @@ public:
 	// once when the surface is built -- because MainWindow::changePalette() is not this class's to
 	// edit. The pair's and the columns' surfaces are never touched: the backdrop exists only on the
 	// layer, and a surface that never receives a setBackdrop() keeps the QML defaults.
-	void refreshBackgroundBackdrop();
+	// (M6: this is pushVeilState() -- the backdrop, the veil's colour and alpha and the layer's fade are
+	// one set, written together, because they are one scene and one palette. The declaration that stood
+	// here was left behind by the refactor with no definition; this note is the record of where it went.)
 	// M5 Task 8: applies `mascots_columns_z` and the veil's alpha to the pair. The layer gets the veil
 	// from MainWindow, but the columns cannot be put behind a widget -- their QQuickWidget always
 	// composites on top -- so "below the veil" is drawn on the panel instead: the window's colour as the

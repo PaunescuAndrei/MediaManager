@@ -816,6 +816,11 @@ void MainWindow::applyBackgroundVeil() {
     // Stacking last, as the veil's own apply did: whatever order the form built the panes in, the three of
     // them are above the controller's sheet by the time this returns.
     this->stackMascotPanes();
+    // (M6: the veil and the layer's backdrop are painted in the palette's Window colour, which this method is
+    // the only caller able to notice changing -- a theme switch reaches it through changePalette(). Without
+    // this push the scene would keep the previous theme's colour until the next settings apply.)
+    if (this->mascotController)
+        this->mascotController->pushVeil();
 }
 
 void MainWindow::updateBackgroundScrim() {

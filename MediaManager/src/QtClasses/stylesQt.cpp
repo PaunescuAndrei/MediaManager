@@ -48,16 +48,10 @@ QPalette get_background_row_palette(const QPalette& appPalette, int alpha, int a
     return rowPalette;
 }
 
-QPalette get_background_veil_palette(const QPalette& appPalette, int alpha) {
-    QPalette veilPalette = appPalette;
-    // Window only. Every other role stays opaque and inherited, so the widgets above the veil -- the
-    // buttons, the labels, the selected row, the scrollbars -- keep painting exactly as they did, and
-    // the veil is the only translucent surface in the window.
-    QColor colour = veilPalette.color(QPalette::Window);
-    colour.setAlpha(alpha);
-    veilPalette.setColor(QPalette::Window, colour);
-    return veilPalette;
-}
+// (M6: get_background_veil_palette() lived here and has no caller left -- the veil is a rectangle in the
+// controller's scene, painted from `QPalette::Window` directly, so no palette object is built for it. The
+// function is deleted rather than kept "for later": a second way to derive the same colour is exactly what
+// the M5 milestone spent a day proving must not exist. `git log -S get_background_veil_palette` has it.)
 
 QString get_stylesheet(QString stylesheet) {
     QString ss = QString();

@@ -1548,6 +1548,13 @@ bool sqliteDB::consumeStreakFreeze(QDate savedDate)
     if (!pick.exec() || !pick.first()) return false;
     const int id = pick.value(0).toInt();
 
+    // idx_streak_saves_unique_day allows one save row per day, so a day that already
+    // carries a debt record must give it up before the freeze can take the day over.
+    QSqlQuery replace = QSqlQuery(this->db);
+    replace.prepare(QStringLiteral("DELETE FROM streak_saves WHERE saved_date = ?"));
+    replace.addBindValue(savedDate.toString(QStringLiteral("yyyy-MM-dd")));
+    if (!replace.exec()) return false;
+
     QSqlQuery update = QSqlQuery(this->db);
     update.prepare(QStringLiteral(
         "UPDATE streak_saves SET saved_date = ?, status = 'applied', "
@@ -1595,17 +1602,6 @@ bool sqliteDB::hasStreakSave(QDate savedDate)
     query.addBindValue(savedDate.toString(QStringLiteral("yyyy-MM-dd")));
     if (!query.exec()) return false;
     return query.first();
-}
-
-int sqliteDB::failPendingAutoSavesBefore(QDate date)
-{
-    QSqlQuery query = QSqlQuery(this->db);
-    query.prepare(QStringLiteral(
-        "UPDATE streak_saves SET status = 'failed', resolved_at = datetime('now','localtime') "
-        "WHERE kind = 'auto' AND status = 'pending' AND saved_date < ?"));
-    query.addBindValue(date.toString(QStringLiteral("yyyy-MM-dd")));
-    if (!query.exec()) return 0;
-    return query.numRowsAffected();
 }
 
 double sqliteDB::getWatchedSecondsOn(QDate date)

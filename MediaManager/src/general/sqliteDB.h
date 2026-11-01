@@ -90,7 +90,6 @@ public:
     bool insertStreakAutoSave(QDate savedDate, const QString& unit, double baseAmount, double debtAmount);
     bool resolveStreakAutoSave(QDate savedDate, bool paid);
     bool hasStreakSave(QDate savedDate);
-    int failPendingAutoSavesBefore(QDate date);
     double getWatchedSecondsOn(QDate date);
     int getCompletedVideosOn(QDate date);
     QVector<QPair<QString, int>> getTopAuthors(int limit, const QString& category);

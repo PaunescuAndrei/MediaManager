@@ -2655,17 +2655,10 @@ bool MainWindow::loadDB(QString path, QWidget* parent) {
             return_code = this->App->db->loadOrSaveDb(this->App->db->db, path.toStdString().c_str(), false);
             if (return_code == 0) {
                 // Backups written before streak saves existed lack the table/keys.
+                // A restore repairs no streak state here: loadDailyProgressState and
+                // reconcileStreakSaves below are the launch sequence, so any load-only
+                // fix-up would make a restore disagree with a plain startup.
                 this->App->db->createTables();
-                // Never backfill a gap that predates the restore: clamp the watermark and
-                // fail any pending auto save older than yesterday.
-                const QDate yesterday = QDate::currentDate().addDays(-1);
-                const QDate watermark = QDate::fromString(
-                    this->App->db->getMainInfoValue("streak_last_processed_date", "ALL"), "yyyy-MM-dd");
-                if (!watermark.isValid() || watermark < yesterday) {
-                    this->App->db->failPendingAutoSavesBefore(yesterday);
-                    this->App->db->setMainInfoValue("streak_last_processed_date", "ALL", yesterday.toString("yyyy-MM-dd"));
-                    this->App->db->setMainInfoValue("streak_auto_save_consecutive", "ALL", "0");
-                }
                 // restored DB has a different session_history — invalidate stale session ID.
                 // A failed load leaves the current DB in use, so its session stays valid.
                 this->App->VW->resetSession();
@@ -4907,6 +4900,10 @@ bool MainWindow::buyStreakFreeze(QString* errorMessage)
         this->App->db->db.rollback();
         return fail(QStringLiteral("Could not store the freeze."));
     }
+    // A debt is only looked at once the day after it ends, which is already past its
+    // deadline, so a freeze bought while the debt is open pays it here and now.
+    const StreakPendingDebt openDebt = this->App->db->getPendingStreakDebt(today);
+    const bool paidDebt = openDebt.valid && this->App->db->consumeStreakFreeze(openDebt.savedDate);
     this->incrementCounterVar(-price);
     this->App->db->setMainInfoValue("streak_freeze_consecutive", "ALL", QString::number(consecutive + 1));
     this->App->db->setMainInfoValue("streak_freeze_last_purchase_date", "ALL", today.toString("yyyy-MM-dd"));
@@ -4914,7 +4911,10 @@ bool MainWindow::buyStreakFreeze(QString* errorMessage)
 
     if (qMainApp && qMainApp->logger) {
         qMainApp->logger->log(
-            QStringLiteral("Bought streak freeze for %1 points (stock %2/%3)").arg(price).arg(stock + 1).arg(maxStock),
+            paidDebt
+                ? QStringLiteral("Bought streak freeze for %1 points; it covers the debt for %2")
+                    .arg(price).arg(openDebt.savedDate.toString(QStringLiteral("yyyy-MM-dd")))
+                : QStringLiteral("Bought streak freeze for %1 points (stock %2/%3)").arg(price).arg(stock + 1).arg(maxStock),
             "Stats");
     }
     return true;
@@ -4963,6 +4963,15 @@ void MainWindow::reconcileStreakSaves()
     bool failure = false;
     bool streakBroken = false;
 
+    // Every missed day needs one save, and the newest one may still be carried as a debt
+    // payable today. A gap wider than that ends the streak regardless, so its freezes are
+    // kept rather than spent on the oldest missed days.
+    const bool openDebt = db->getPendingStreakDebt(watermark.addDays(1)).valid;
+    const int daysToCover = watermark.daysTo(yesterday) + (openDebt ? 1 : 0);
+    const int daysCoverable = ((freezeEnabled && maxStock > 0) ? db->getStreakFreezeStock() : 0)
+        + ((autoEnabled && (maxConsecutive <= 0 || autoConsecutive < maxConsecutive)) ? 1 : 0);
+    const bool gapCoverable = daysToCover <= daysCoverable;
+
     for (QDate day = watermark.addDays(1); day <= yesterday; day = day.addDays(1)) {
         const double watched = db->getWatchedSecondsOn(day);
         const int completed = db->getCompletedVideosOn(day);
@@ -4970,6 +4979,7 @@ void MainWindow::reconcileStreakSaves()
         // 1) Resolve a pending auto save whose requirement was due on this day.
         const StreakPendingDebt pending = db->getPendingStreakDebt(day);
         const bool debtDue = pending.valid;
+        bool debtCovered = false;
         if (pending.valid) {
             const double storedRequired = pending.baseAmount + pending.debtAmount;
             const bool meetsStored = (pending.unit == QStringLiteral("videos"))
@@ -4978,6 +4988,13 @@ void MainWindow::reconcileStreakSaves()
             const bool meetsBase = timeMode ? (watched >= baseSeconds) : (completed >= 1);
             if (meetsStored && meetsBase) {
                 db->resolveStreakAutoSave(pending.savedDate, true);
+            } else if (gapCoverable && freezeEnabled && maxStock > 0
+                && db->consumeStreakFreeze(pending.savedDate)) {
+                // The freeze takes the borrowed day over, debt record included; the day
+                // being processed is a different day and still needs its own save below.
+                freezesUsed++;
+                autoConsecutive = 0;
+                debtCovered = true;
             } else {
                 db->resolveStreakAutoSave(pending.savedDate, false);
                 autoConsecutive = 0;
@@ -4989,8 +5006,9 @@ void MainWindow::reconcileStreakSaves()
         // 2) Does the completed day qualify at the base requirement?
         const bool qualifies = timeMode ? (watched >= baseSeconds) : (completed >= 1);
         if (qualifies) {
-            // A debt-payment day is not a clean day; don't reset the auto-save chain.
-            if (!debtDue) {
+            // A day that only pays a debt does not reset the chains; a day a freeze
+            // took the debt over for does.
+            if (!debtDue || debtCovered) {
                 autoConsecutive = 0;
                 freezeConsecutive = 0;
             }
@@ -5005,7 +5023,7 @@ void MainWindow::reconcileStreakSaves()
         }
 
         // 3) A freeze is the cleanest save; consume it first by default.
-        if (freezeEnabled && maxStock > 0 && freezeFirst && db->getStreakFreezeStock() > 0) {
+        if (gapCoverable && freezeEnabled && maxStock > 0 && freezeFirst && db->getStreakFreezeStock() > 0) {
             if (db->consumeStreakFreeze(day)) {
                 freezesUsed++;
                 autoConsecutive = 0; // a freeze-covered day breaks the auto-save chain
@@ -5014,7 +5032,7 @@ void MainWindow::reconcileStreakSaves()
         }
 
         // 4) Auto save: apply the multiplier to the current base unit.
-        if (autoEnabled && (maxConsecutive <= 0 || autoConsecutive < maxConsecutive)) {
+        if (gapCoverable && autoEnabled && (maxConsecutive <= 0 || autoConsecutive < maxConsecutive)) {
             const double effectiveMultiplier = std::max(1.0, multiplier + increment * autoConsecutive);
             bool applied = false;
             if (timeMode) {
@@ -5033,7 +5051,7 @@ void MainWindow::reconcileStreakSaves()
         }
 
         // 5) Priority disabled, or auto debt unavailable: use a freeze if one is left.
-        if (freezeEnabled && maxStock > 0 && db->getStreakFreezeStock() > 0) {
+        if (gapCoverable && freezeEnabled && maxStock > 0 && db->getStreakFreezeStock() > 0) {
             if (db->consumeStreakFreeze(day)) {
                 freezesUsed++;
                 autoConsecutive = 0;

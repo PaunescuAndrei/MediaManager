@@ -3,7 +3,6 @@
 #include <QtGlobal>
 #include <filesystem>
 #include "utils.h"
-#include <QFileInfo>
 
 namespace {
 	// mINI opens std::filesystem::path natively; on Windows the narrow form is the ANSI code page,
@@ -20,29 +19,14 @@ namespace {
 Config::Config(QString filepath) : file(configPath(filepath)) {
 	this->open_config(filepath);
 	this->init_defaults();
-	//if (!std::filesystem::exists(filepath))
-	if (!QFileInfo::exists(filepath))
-		this->save_config();
-	//this->ini["tmp"]["tmp"] = "test";
-
-	//for (auto const& it : this->ini)
-	//{
-	//	auto const& section = it.first;
-	//	auto const& collection = it.second;
-	//	print_debug(section + "\n");
-	//	for (auto const& it2 : collection)
-	//	{
-	//		auto const& key = it2.first;
-	//		auto const& value = it2.second;
-	//		print_debug(key + " " + value + "\n");
-	//	}
-	//}
 }
 
 void Config::init_defaults() {
-	// The one place a default lives: get_bool(), get_double() and clampedConfigInt() answer from this
-	// table, so a key read at runtime but missing here silently reads as empty, false or zero.
-	this->ini["DEFAULT"].set({
+	// The one place a default lives: get(), get_bool() and get_double() answer from this table when
+	// [settings] has no key, so a key read at runtime but missing here silently reads as empty,
+	// false or zero. It is memory-only: save_config() writes ini alone, so no default is ever
+	// persisted into config.ini.
+	this->defaults = {
 		{"single_instance", "False"},
 		{"threads","8"},
 		{"player_path", ""},
@@ -274,13 +258,16 @@ void Config::init_defaults() {
         {"pb_time_min_threshold_minutes", "5"},
         {"stats_heatmap_months", "6"},
         {"daily_progress_check_interval_seconds", "10"},
-	});
+	};
 }
 
 void Config::open_config(QString filepath) {
 	this->file = mINI::INIFile(configPath(filepath));
 	this->ini.clear();
 	this->file.read(this->ini);
+	// Drop any [default] block read from an older file: defaults are code-owned, and a stale copy
+	// left in ini would be rewritten by every save as if this build still read it.
+	this->ini.remove("default");
 	// No migration from `mascots_background_list_alpha` to `mascots_background_opacity`: they are
 	// two surfaces (the rows and the whole-window veil), and moving the old value would rewrite one
 	// the user still owns on every load.
@@ -301,11 +288,11 @@ QString Config::get(QString item) {
 			return QString::fromStdString(collection[item.toStdString()]);
 		}
 	}
-	return QString::fromStdString(this->ini["DEFAULT"][item.toStdString()]);
+	return this->defaultFor(item);
 }
 
 QString Config::get_default(QString item) {
-	return QString::fromStdString(this->ini["DEFAULT"][item.toStdString()]);
+	return this->defaultFor(item);
 }
 
 void Config::set(QString key, QString value) {
@@ -341,5 +328,10 @@ bool Config::get_bool(QString item) {
 			return utils::text_to_bool(collection[item.toStdString()]);
 		}
 	}
-	return utils::text_to_bool(this->ini["DEFAULT"][item.toStdString()]);
+	return utils::text_to_bool(this->defaultFor(item).toStdString());
+}
+
+QString Config::defaultFor(QString const& item) const {
+	auto const it = this->defaults.find(item.trimmed().toLower().toStdString());
+	return it != this->defaults.end() ? QString::fromStdString(it->second) : QString();
 }

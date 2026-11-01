@@ -103,8 +103,7 @@ public:
     QCheckBox* goalReachedCounterEnabled = nullptr;
     QSpinBox* goalReachedCounterAmountSpinBox = nullptr;
 
-    // Mascots page — built programmatically. The legacy mascots group box itself is not repeated
-    // here: `ui.mascotsGroupBox` is reparented onto the page when it is built.
+    // The legacy .ui group box is reparented onto this page rather than rebuilt here.
     QComboBox* mascotMediaCombo = nullptr;
     QComboBox* mascotModeCombo = nullptr;
     QComboBox* mascotFillCombo = nullptr;
@@ -127,23 +126,18 @@ public:
     QCheckBox* mascotStripesAlternateCheckBox = nullptr;
     QCheckBox* mascotBackgroundCheckBox = nullptr;
     QDoubleSpinBox* mascotBackgroundOpacitySpinBox = nullptr;
-    // The list's own opacity, back after a commit that removed it. The veil above is the
-    // window; this is the list's row fill, which is what makes the rows alternate.
+    // The list's row fill, distinct from the window-wide veil above it.
     QDoubleSpinBox* mascotListAlphaSpinBox = nullptr;
-    // The alternate rows' own alpha -- the row colour that does not match the window's
-    // background, so it is the one that decides readability over the layer.
+    // Alternate rows' alpha: a colour that differs from the window background, so it is the
+    // one that decides readability over the layer.
     QDoubleSpinBox* mascotAltAlphaSpinBox = nullptr;
-    // The list's scrollbars, which are opaque today because a scrollbar's groove paints
-    // with the Window role and the row palette only gestures at Base and AlternateBase.
+    // Scrollbar alpha: the groove paints with the Window role, which the row palette never sets.
     QDoubleSpinBox* mascotScrollbarAlphaSpinBox = nullptr;
-    // The layer's own cadence -- clip length, beat swap, random change and its chance.
-    // Qt's low-latency playback intent, which trades buffering for a higher chance of dropped frames.
+    // Qt's low-latency intent, which trades buffering for a higher chance of dropped frames.
     QCheckBox* mascotLowLatencyCheckBox = nullptr;
-    // `mascots_pair_scroll` -- whether a mirrored pair scrolls the same way or against itself.
     QComboBox* mascotPairScrollCombo = nullptr;
-    // Its row's tooltip, kept so the disabled state can say why and then restore the original.
+    // Saved so the disabled state can explain itself, then restore the original tooltip.
     QString mascotPairScrollTip;
-    // `mascots_pair_flip` -- whether the mirrored column is drawn flipped or identical.
     QCheckBox* mascotPairFlipCheckBox = nullptr;
     QSpinBox* mascotBackgroundClipSpinBox = nullptr;
     QCheckBox* mascotBackgroundSwapOnBeatCheckBox = nullptr;
@@ -161,19 +155,14 @@ public:
     QSpinBox* mascotCacheMbSpinBox = nullptr;
     QSpinBox* mascotCacheItemsSpinBox = nullptr;
 
-    // Every mascot key's value when the page was built (the legacy keys included),
-    // captured here so Cancel can write the same values back. Live apply writes config, so the
-    // revert has to be a config write too -- a snapshot cannot drift the way one `old_*` field per
-    // control could.
+    // Every mascot key's value at build time. Live apply writes config, so Cancel has to write
+    // config back too, and one `old_*` field per control would drift.
     QHash<QString, QString> mascotConfigSnapshot;
-    // Writes every control on the Mascots page to config and applies; shared by the page's change
-    // signals and by MainWindow::applySettings(), so a key has one writer. A non-empty `changedKey`
-    // scopes the apply to that key (M5 review fix I7); empty is the Apply/OK/Cancel baseline.
+    // The one writer for every mascot key; a non-empty `changedKey` scopes the apply to that key,
+    // and empty (the Apply/OK/Cancel baseline) writes all of them.
     void syncMascotConfig(const QString& changedKey = QString());
-    // Puts the snapshot back and re-applies it; called from MainWindow's reject branch.
     void restoreMascotConfig();
-    // Re-reads the snapshot from config after an Apply, so Cancel stops being able
-    // to undo settings Apply has already kept.
+    // Re-read after an Apply, so Cancel cannot undo what Apply has already kept.
     void rebaseMascotConfigSnapshot();
 
 private:
@@ -192,13 +181,11 @@ private:
     // Helper methods
     void setupCheckBox(QCheckBox* cb, const QString& configKey, class MainWindow* mw);
     void bindSliderToSpinBox(QSlider* slider, QDoubleSpinBox* spinbox);
-    // The Mascots page's enable/disable matrix: which rows are live in the current media/mode.
     void updateMascotControlStates();
     void wireApplyEnable();
     void installWheelFilters(WheelStrongFocusEventFilter* filter);
 
-    // The columns' three groups: `mascots` disables them as a unit, while the rows inside them
-    // follow the media and the layout mode individually.
+    // `mascots` disables these as a unit; the rows inside follow the media and the mode individually.
     QGroupBox* mascotContentGroup = nullptr;
     QGroupBox* mascotPlaybackGroup = nullptr;
     QGroupBox* mascotStripesGroup = nullptr;

@@ -677,6 +677,8 @@ MascotSurface::FillMode MascotController::fillModeFromString(const QString& valu
 		return MascotSurface::FillMode::WidthFit;
 	if (value.compare(QStringLiteral("Cover"), Qt::CaseInsensitive) == 0)
 		return MascotSurface::FillMode::Cover;
+	if (value.compare(QStringLiteral("CoverPan"), Qt::CaseInsensitive) == 0)
+		return MascotSurface::FillMode::CoverPan;
 	if (ok)
 		*ok = false;
 	return MascotSurface::FillMode::HeightFit;
@@ -701,14 +703,18 @@ ScrollDirection MascotController::scrollDirectionFromString(const QString& value
 
 MascotSurface::FillMode MascotController::effectiveFillMode(MascotPanel panel) const
 {
-	// A panning band cannot use an arbitrary fill mode: the pan slides the *item* inside its clipped slot, so the item
-	// has to be larger than the band along the pan axis. Exactly that is what the normalised modes give -- HeightFit
-	// keeps the band's height and lets the width follow the clip, WidthFit the other way round -- while Cover/Crop/Fit
-	// size the item to the band itself, so the band either cannot move or slides its own crop out of the slot. The
-	// user's choice therefore decides Static's framing (and the layer's own), not the panning framing.
+	// A band that pans by translating its item needs the item larger than the band along the pan axis, and a slot that
+	// does not pan only ever wants the user's framing. `CoverPan` is the one mode that satisfies both, so it is
+	// honoured wherever the item may travel and reduced to plain `Cover` where there is nothing to travel through.
+	// The other modes cannot pan -- Cover/Crop/Fit size the item to the slot -- so a panning band keeps the
+	// orientation's normalised scaling instead of letting them slide their own crop out of the slot.
 	const PanelLayout& layout = this->layoutFor(panel);
-	if (layout.mode == MascotMode::Static)
-		return layout.fill;
+	const bool pansByOffset = layout.mode != MascotMode::Static
+		&& !(panel == MascotPanel::Background && layout.mode == MascotMode::Scroll);
+	if (!pansByOffset)
+		return layout.fill == MascotSurface::FillMode::CoverPan ? MascotSurface::FillMode::Cover : layout.fill;
+	if (layout.fill == MascotSurface::FillMode::CoverPan)
+		return MascotSurface::FillMode::CoverPan;
 	const bool vertical = layout.mode == MascotMode::Stripes
 		? layout.orientation == StripesOrientation::Vertical
 		: this->scrollPanIsVertical(panel);
@@ -999,13 +1005,30 @@ double MascotController::scrollTravel(MascotPanel panel, const MascotBand& band)
 	MascotSurface* surface = band.surface();
 	if (!surface)
 		return 0.0;
-	const bool vertical = this->scrollPanIsVertical(panel);
+	const bool vertical = this->bandPansVertically(panel, band);
 	const QSizeF content = surface->slotContentSize(band.slotIndex());
 	const QRectF rect = band.rect();
 	const double contentExtent = vertical ? content.height() : content.width();
 	const double bandExtent = vertical ? rect.height() : rect.width();
 	const double travel = contentExtent - bandExtent;
 	return travel > 0.0 ? travel : 0.0;
+}
+
+bool MascotController::bandPansVertically(MascotPanel panel, const MascotBand& band) const
+{
+	// `CoverPan` frames the band exactly like `Cover`, which leaves the picture's overflow on one axis only: the other
+	// is exact. Travelling along that overflow is what brings the whole picture past the band; travelling along the
+	// exact axis would move nothing. The sign of the two differences names it, so it follows each picture's aspect
+	// rather than the mode's axis.
+	if (this->effectiveFillMode(panel) == MascotSurface::FillMode::CoverPan) {
+		MascotSurface* surface = band.surface();
+		if (surface) {
+			const QSizeF content = surface->slotContentSize(band.slotIndex());
+			const QRectF rect = band.rect();
+			return (content.height() - rect.height()) > (content.width() - rect.width());
+		}
+	}
+	return this->scrollPanIsVertical(panel);
 }
 
 void MascotController::startScrollDriver()
@@ -1295,8 +1318,11 @@ void MascotController::onScrollTick()
 			const double fraction = scrollFractionFor(state.scrollPhase, offsetPhase, pingpong);
 			const double offset = scrollOffsetFor(fraction, travel, reverse != this->scrollReversed(panel, *band));
 			if (offset != band->scrollOffset()) {
+				// The axis comes from the band: `CoverPan` travels through the axis its own picture overflows, which
+				// can differ band by band when the pictures' aspects do.
+				const bool bandVertical = this->bandPansVertically(panel, *band);
 				surface->setSlotScrollOffset(band->slotIndex(),
-					vertical ? 0.0 : offset, vertical ? offset : 0.0);
+					bandVertical ? 0.0 : offset, bandVertical ? offset : 0.0);
 				band->setScrollOffset(offset);
 			}
 			if (band->hasWrapCommit()) {

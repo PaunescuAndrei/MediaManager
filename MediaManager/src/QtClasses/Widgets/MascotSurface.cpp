@@ -83,6 +83,8 @@ namespace {
 			return 0; // Image.Stretch
 		case MascotSurface::FillMode::Cover:
 			return 2; // Image.PreserveAspectCrop
+		case MascotSurface::FillMode::CoverPan:
+			return 0; // Image.Stretch: the item is already the covered-plus-overscan box, so there is nothing to fit
 		}
 		return 1;
 	}
@@ -464,8 +466,11 @@ void MascotSurface::applySlot(int i)
 	item->setProperty("mirrored", mirrored);
 	item->setProperty("fillMode", qmlFillModeValue(slot.fillMode));
 	const QSizeF contentSize = this->contentSizeFor(slot);
-	item->setProperty("heightFill", slot.fillMode == FillMode::HeightFit);
-	item->setProperty("widthFill", slot.fillMode == FillMode::WidthFit);
+	// `CoverPan` sizes the item on both axes from the painted box (the pan needs it larger than the slot and the
+	// crop is the painted box's), so it sets both flags and is stretched into that box.
+	const bool panFit = slot.fillMode == FillMode::CoverPan;
+	item->setProperty("heightFill", slot.fillMode == FillMode::HeightFit || panFit);
+	item->setProperty("widthFill", slot.fillMode == FillMode::WidthFit || panFit);
 	item->setProperty("paintedWidth", contentSize.width());
 	item->setProperty("paintedHeight", contentSize.height());
 	const QSize nativeSize = slot.nativeSize;
@@ -530,6 +535,13 @@ QSizeF MascotSurface::contentSizeFor(const Slot& slot) const
 		return QSizeF(nativeWidth * scale, nativeHeight * scale);
 	}
 	case FillMode::Cover: {
+		const double scale = std::max(slotWidth / nativeWidth, slotHeight / nativeHeight);
+		return QSizeF(nativeWidth * scale, nativeHeight * scale);
+	}
+	case FillMode::CoverPan: {
+		// Exactly `Cover`: the band is filled and the overflow is what the pan travels through, so the whole picture is
+		// seen over a lap instead of being cut off. Cover leaves the slack on one axis only (the other is exact), and
+		// the controller pans along that axis.
 		const double scale = std::max(slotWidth / nativeWidth, slotHeight / nativeHeight);
 		return QSizeF(nativeWidth * scale, nativeHeight * scale);
 	}

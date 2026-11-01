@@ -20,7 +20,9 @@ class MascotSurface : public QWidget {
 	Q_OBJECT
 public:
 	// `Cover` is the only mode that guarantees the slot is covered: the content shift is clamped so it can never slide an edge into view.
-	enum class FillMode { Crop, Fit, Stretch, HeightFit, WidthFit, Cover };
+	// `CoverPan` frames exactly like `Cover` -- the picture is not zoomed or cut differently -- and the controller pans
+	// it along the one axis `Cover` left overflow on, so the whole picture passes the band over a lap.
+	enum class FillMode { Crop, Fit, Stretch, HeightFit, WidthFit, Cover, CoverPan };
 
 	// One scene for all three layers: a QQuickWidget carrying Qt::WA_AlwaysStackOnTop is drawn above every
 	// sibling whatever the stack says, and one without it blits opaquely.

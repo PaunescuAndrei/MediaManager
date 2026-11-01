@@ -65,6 +65,8 @@ public:
 	void stopScrollDriver();
 	void onScrollTick();
 	double scrollTravel(MascotPanel panel, const MascotBand& band) const;
+	// The axis a band travels on: `CoverPan` takes the axis its picture overflows, everything else the mode's.
+	bool bandPansVertically(MascotPanel panel, const MascotBand& band) const;
 	static ScrollDirection scrollDirectionFromString(const QString& value, bool* ok);
 
 	void nextImages(bool forcedMirror);

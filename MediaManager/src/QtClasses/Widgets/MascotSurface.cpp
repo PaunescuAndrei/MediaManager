@@ -325,14 +325,14 @@ void MascotSurface::setSurfaceOpacity(double opacity)
 	}
 }
 
-void MascotSurface::setVeil(const QColor& colour, double opacity, bool enabled, bool aboveColumns)
+void MascotSurface::setVeil(const QColor& colour, double opacity, bool enabled, bool columnsAbove)
 {
 	if (!this->root || !(opacity >= 0.0))
 		return;
 	this->root->setProperty("veilColor", colour);
 	this->root->setProperty("veilOpacity", opacity > 1.0 ? 1.0 : opacity);
 	this->root->setProperty("veilVisible", enabled);
-	this->root->setProperty("veilZ", aboveColumns ? 1 : 3);
+	this->root->setProperty("veilZ", columnsAbove ? 1 : 3);
 }
 
 

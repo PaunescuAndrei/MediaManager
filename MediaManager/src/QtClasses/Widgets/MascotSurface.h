@@ -63,7 +63,7 @@ public:
 	void setBackdrop(const QColor& colour, bool enabled);
 
 	// One rectangle at z 1 (columns drawn over it) or 3 (columns veiled once); a per-column fade let the layer through by veil^2.
-	void setVeil(const QColor& colour, double opacity, bool enabled, bool aboveColumns);
+	void setVeil(const QColor& colour, double opacity, bool enabled, bool columnsAbove);
 
 signals:
 	void clicked(int slot, Qt::MouseButton button, Qt::KeyboardModifiers modifiers);

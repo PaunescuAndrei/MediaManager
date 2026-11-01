@@ -11,10 +11,9 @@ namespace {
 	QString drawVideoPath(const QList<VideoWeightedData>& pool, bool weighted,
 		const WeightedBiasSettings& weightedSettings, QRandomGenerator& generator)
 	{
-		// bounded(0) never returns, so an empty pool is answered here rather than by the caller's good intentions.
+		// bounded(0) never returns, so an empty pool is answered here.
 		if (pool.isEmpty())
 			return "";
-		// A uniform pick when the key is off: no bias is read, so a weight cannot be inherited by accident.
 		if (!weighted)
 			return pool[generator.bounded(pool.size())].path;
 		return utils::weightedRandomChoice(pool, generator,
@@ -24,7 +23,6 @@ namespace {
 			weightedSettings.no_rating_weight, weightedSettings.no_tags_weight);
 	}
 
-	// A bounded re-draw, because the pool is the app's own candidate set; all attempts failed answers "", which is the fallback to images.
 	constexpr int VIDEO_DRAW_ATTEMPTS = 8;
 }
 
@@ -57,8 +55,8 @@ void MascotMediaSource::initPaths()
 
 void MascotMediaSource::refreshRng()
 {
-	// A seed that hashes to 0 is bumped to 1 so it cannot mean "default-constructed std::mt19937". The video generator
-	// is seeded once per seed value and then only advanced: seeding per pick would return the identical file every time.
+	// Seed 0 is bumped to 1: 0 would mean std::mt19937's default-constructed seed. The video generator is seeded once
+	// per seed value and only advanced afterwards -- re-seeding per pick would return the same file every time.
 	if (!this->App || !this->App->config) {
 		if (!this->rngInitialized) {
 			std::random_device rd;
@@ -139,8 +137,8 @@ QString MascotMediaSource::nextVideoPath()
 			weightedSettings.bias_general = 0;
 	}
 
-	// One draw, no exclusion: a pick may land on the file the main player has, which is the user's explicit call.
-	// A file that already failed is skipped by the bounded re-draw, because the degrade for it is an empty answer.
+	// No exclusion: a pick may land on the file the main player has, which is the user's explicit call.
+	// A known-failed path is re-drawn, and an exhausted draw answers "" -- the fallback to images.
 	for (int attempt = 0; attempt < VIDEO_DRAW_ATTEMPTS; ++attempt) {
 		const QString path = drawVideoPath(this->videoPool, this->weightedChoice, weightedSettings,
 			*this->videoGenerator);
@@ -154,14 +152,13 @@ void MascotMediaSource::noteVideoFailure(const QString& path)
 {
 	if (path.isEmpty())
 		return;
-	// Session-scoped, not time-based: a file the backend cannot decode does not become decodable later, and
-	// invalidateVideoPool() must not clear it -- the file is the same after a model reset or a database switch.
+	// Session-scoped: a file the backend cannot decode does not become decodable later, so
+	// invalidateVideoPool() must not clear it -- the same file comes back after a reset or a db switch.
 	this->failedVideoPaths.insert(path);
 }
 
 void MascotMediaSource::invalidateVideoPool()
 {
-	// The one thing that drops a cached scan: a model reset, a filter apply or a database switch.
 	this->videoPoolInitialized = false;
 	this->videoPool.clear();
 }
@@ -179,8 +176,8 @@ void MascotMediaSource::ensureVideoPool() const
 	if (!this->App || !this->App->db || !this->App->mainWindow)
 		return;
 
-	// getRandomSettings with ignore_defaults forced on: the user's filters apply and the default "watched only" does not.
-	// getVideos() never reads the key itself -- the `watched` array in this json is what filters.
+	// getRandomSettings with ignore_defaults forced on: the user's filters apply and the default
+	// "watched only" does not. getVideos() never reads that key itself -- the `watched` array filters.
 	QJsonObject settings = this->App->mainWindow->filterSettings.json;
 	settings.insert("ignore_defaults", "True");
 	// A failed getVideos() comes back empty too, so videoPoolSize() == 0 means "no row passed" *or* "the query failed".

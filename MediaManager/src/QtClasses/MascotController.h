@@ -149,7 +149,6 @@ private:
 	MascotSurface::SlotGroup slotGroupFor(MascotPanel panel) const;
 	// Columns at z 2, layer at z 0: the veil is z 1 (above the columns) or z 3 (below them).
 	bool mascotsBelowVeil() const;
-	void applySheetSlots();
 	// The window-sized host is the sheet's parent, so its frame is the origin and its size, not its pos().
 	QRectF panelFrame(MascotPanel panel) const;
 	void updateSheetVisibility();

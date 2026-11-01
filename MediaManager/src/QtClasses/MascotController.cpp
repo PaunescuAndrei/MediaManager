@@ -38,6 +38,11 @@ namespace {
 	constexpr int LEFT_SLOT_BASE = 0;
 	constexpr int RIGHT_SLOT_BASE = LEFT_SLOT_BASE + PANEL_SLOT_STRIDE;
 	constexpr int BACKGROUND_SLOT_BASE = RIGHT_SLOT_BASE + PANEL_SLOT_STRIDE;
+	// Every slot the three bases can address, created once when the sheet is built and never changed afterwards.
+	// A QQuickRepeater rebuilds all of its delegates when its model changes, and each rebuild destroys the
+	// QVideoSink of every slot that already existed. A player that has started keeps the sink it was handed, so a
+	// rebuild orphans it: it goes on buffering and never presents a frame again.
+	constexpr int SLOT_CAPACITY = BACKGROUND_SLOT_BASE + PANEL_SLOT_STRIDE;
 
 	QString sideLabel(MascotSide side)
 	{
@@ -802,8 +807,6 @@ void MascotController::applyMode()
 	}
 	if (this->backgroundState.surface)
 		this->syncBands(this->backgroundState, MascotPanel::Background);
-	// The slot count follows the three band vectors before any rectangle is written: a delegate that does not exist has nowhere to take it.
-	this->applySheetSlots();
 	this->columnsLayout.appliedMode = this->columnsLayout.mode;
 	this->columnsLayout.appliedOrientation = this->columnsLayout.orientation;
 	this->columnsLayout.applied = true;
@@ -881,9 +884,6 @@ void MascotController::syncBands(PanelState& state, MascotPanel panel)
 		created->setSurface(surface);
 		state.bands.push_back(std::move(created));
 	}
-	// The slots have to exist before a band is told which plane it draws on: a group written before that is
-	// dropped, and the band draws on the columns' plane (measured: `Above` and `Below` read identically).
-	this->applySheetSlots();
 	for (auto& owned : state.bands)
 		owned->setGroup(this->slotGroupFor(panel));
 	state.configuredBandCount = wanted;
@@ -1571,6 +1571,8 @@ void MascotController::createSheet()
 	// What that costs is an opaque blit, which is why the sheet always paints a backdrop -- the window's colour -- in every uncovered pixel.
 	auto* surface = new MascotSurface(this->cache, host, false);
 	this->sheet = surface;
+	// The only place the slot count is set: the sheet holds every slot it can ever address from here on.
+	surface->setSlotCount(SLOT_CAPACITY);
 	this->leftState.slotBase = LEFT_SLOT_BASE;
 	this->rightState.slotBase = RIGHT_SLOT_BASE;
 	this->backgroundState.slotBase = BACKGROUND_SLOT_BASE;
@@ -1608,7 +1610,6 @@ void MascotController::createSheet()
 	}
 	if (this->backgroundEnabled)
 		this->attachPanel(this->backgroundState, MascotPanel::Background);
-	this->applySheetSlots();
 	for (QWidget* watched : { this->leftHost.data(), this->rightHost.data(), host })
 		if (watched)
 			watched->installEventFilter(this);
@@ -1659,7 +1660,6 @@ void MascotController::syncSheet()
 	else if (this->backgroundState.surface) {
 		this->dropPanel(this->backgroundState);
 	}
-	this->applySheetSlots();
 	this->updateSheetVisibility();
 }
 
@@ -1686,7 +1686,6 @@ void MascotController::attachPanel(PanelState& state, MascotPanel panel)
 		return;
 	state.surface = this->sheet;
 	this->syncBands(state, panel);
-	this->applySheetSlots();
 	for (int i = 0; i < static_cast<int>(state.bands.size()); ++i)
 		this->applyMirror(state, panel, state.bands[static_cast<std::size_t>(i)]->media().path, i);
 	this->ensureVideoSlots();
@@ -1712,21 +1711,6 @@ void MascotController::detachPanel(PanelState& state)
 		owned->setSurface(nullptr);
 	this->destroyVideoSlot(state);
 	state.surface = nullptr;
-	this->applySheetSlots();
-}
-
-void MascotController::applySheetSlots()
-{
-	if (!this->sheet)
-		return;
-	int count = 0;
-	for (MascotPanel panel : { MascotPanel::Left, MascotPanel::Right, MascotPanel::Background }) {
-		const PanelState& state = this->stateFor(panel);
-		if (!state.surface)
-			continue;
-		count = std::max(count, state.slotBase + static_cast<int>(state.bands.size()));
-	}
-	this->sheet->setSlotCount(count);
 }
 
 bool MascotController::bandForSlot(int slot, MascotPanel* panel, int* bandIndex) const

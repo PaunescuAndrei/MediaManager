@@ -96,15 +96,11 @@ void Config::init_defaults() {
 		{"mascots_image_cache_mb", "128"},
 		{"mascots_image_cache_max_items", "12"},
 		{"mascots_clip_seconds", "30"},
-		// Qt's low-latency playback intent. True is what the mascots have always used; False asks for the
-		// backend's normal buffering instead -- smoother playback, a slower first frame.
+		// Qt's low-latency playback intent. False asks for the backend's normal buffering instead --
+		// smoother playback, a slower first frame.
 		{"mascots_low_latency", "True"},
-		// Whether the two columns scroll against each other in mirror mode. Same is the behaviour
-		// they have always had; Opposite makes a mirrored pair travel outwards or inwards together.
+		// Opposite makes a mirrored pair travel outwards or inwards together.
 		{"mascots_pair_scroll", "Same"},
-		// Whether the mirrored column is drawn flipped against the other one (the look mirror mode
-		// was asked for) or repeats it. True is what the columns were already showing, so an older config that
-		// never gained the line keeps its look.
 		{"mascots_pair_flip", "True"},
 		{"mascots_swap_on_beat", "True"},
 		{"mascots_random_start", "True"},
@@ -135,50 +131,24 @@ void Config::init_defaults() {
 		{"mascots_background_scroll_speed", "50"},
 		{"mascots_background_scroll_direction", "LeftToRight"},
 		{"mascots_background_scroll_pingpong", "False"},
-		// The layer's own cadence, as ordinary settings. These four were deliberately absent so
-		// that "no line" meant "follow the columns", which needed a bespoke empty-aware reader and let the
-		// page's writer pin them by writing the columns' values on the first OK. On the user's call they are
-		// normal keys now: a documented default (the columns' own default, so the out-of-box look is
-		// unchanged), written like every other key, and read with the same get()/get_bool() idioms.
 		{"mascots_background_clip_seconds", "30"},
 		{"mascots_background_swap_on_beat", "True"},
 		{"mascots_background_random_change", "True"},
 		{"mascots_background_random_chance", "10"},
-		// The two alphas the layer group writes. They had no defaults either, so a file that had
-		// never been through the page lacked them and their readers carried private fallbacks.
 		{"mascots_background_alternate_alpha", "0.85"},
 		{"mascots_background_scrollbar_alpha", "1.00"},
-		// Full strength, not half. The layer's only visible surface is through the list's rows,
-		// and a row fill is already an 85% scrim, so half opacity left the video at ~7% of a row --
-		// measurable, and invisible in a screenshot. At 1.0 the same rows carry it at ~15%: the media
-		// reads as a picture behind the text (verified on a bright frame), and white body text keeps
-		// 9.8:1 on the Base row and 7.5:1 on the AlternateBase row, so nothing has to be traded away.
-		// The key stays the dimmer for a user who wants a quieter backdrop.
-		// The meaning inverted with the veil. This is the alpha of the veil laid *over*
-		// the layer now, so 1.0 hides the layer and 0.0 shows it at full strength -- the layer itself
-		// is drawn at 100% and nothing fades it any more. 0.85 is the default because it is the bleed
-		// the row scrim was tuned to: 15% of the frame still reads as a picture behind the text, and
-		// white body text keeps 9.8:1 over a white frame at that ratio.
-		// The default is 0 now, on the user's call. "The video in the background pretty much
-		// always at 100% opacity, then a rectangle over it in the app background colour that we can adjust
-		// its opacity" is the shape of the feature, and the veil's default should be the state that shows
-		// the layer as the user set it up: with the rows at their own 0.85 the centre pane is readable and
-		// the margins show the video. 0.85 here composed with the row fill (0.85 x 0.85) and left ~2% of
-		// the frame under the list, which is not what "visible at 100%" means.
+		// The veil's alpha over the background layer: 1.0 hides the layer and 0.0 shows it at full
+		// strength. The default is 0 because 0.85 composed with the rows' own 0.85 fill left only
+		// ~2% of the frame visible under the list.
 		{"mascots_background_opacity", "0"},
-		// How opaque the list's rows (and the strip above them) are over the layer.
-		// 1.0 would hide the layer behind the list entirely, 0.0 would put body text straight on the
-		// video. 0.85 is what the app shipped with as a constant: white text keeps 9.8:1 on the Base
-		// row and 7.5:1 on the alternate row even over a white frame, and the layer still reads as a
-		// picture rather than a wash.
-		// The list's own opacity, and the only control over it: the row fill is what makes the list alternate. The
-		// veil is a separate surface -- the whole window -- rather than a replacement for these rows.
+		// The list's rows (and the strip above them) over the layer: 1.0 hides the layer behind
+		// the list, 0.0 puts body text straight on the video. 0.85 keeps white text at 9.8:1 on
+		// the Base row and 7.5:1 on the alternate row even over a white frame, and the layer still
+		// reads as a picture rather than a wash. The veil is a separate whole-window surface, so
+		// this row fill is the only control over the list's own opacity.
 		{"mascots_background_list_alpha", "0.85"},
-		// Where the two mascot columns sit relative to that veil. Above draws them after it,
-		// at full brightness, which is where they have always been; Below puts the veil between them
-		// and the rest of the UI, so they are dimmed with the layer behind them.
-		// The values name the mascots' relation to the veil, and the two old spellings still read as
-		// "not below", so a config written before the rename keeps its setting.
+		// Where the two columns sit relative to the veil: Above draws them after it at full
+		// brightness, Below puts the veil between them and the rest of the UI so they dim with it.
 		{"mascots_columns_z", "Above the veil"},
 		{"sound_effects_on","False"},
 		{"sound_effects_volume","3"},
@@ -297,10 +267,9 @@ void Config::open_config(QString filepath) {
 	this->file->open(filepath.toStdString());
 	this->ini.clear();
 	this->file->read(this->ini);
-	// There is no migration here, deliberately. One was written -- move
-	// `mascots_background_list_alpha` into `mascots_background_opacity` and delete the old key -- on the
-	// theory that the veil had replaced the row fill. It had not, and the migration would have rewritten
-	// a value the user still owns (the list's own opacity) on every load. Two surfaces, two keys.
+	// No migration from `mascots_background_list_alpha` to `mascots_background_opacity`: they are
+	// two surfaces (the rows and the whole-window veil), and moving the old value would rewrite one
+	// the user still owns on every load.
 }
 
 void Config::save_config() {

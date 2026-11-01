@@ -21,15 +21,15 @@
 #include "MascotPrefetcher.h"
 
 namespace {
-	// Amendment H3. MascotImageCache treats a non-positive bound as "no bound on that axis",
-	// so a config value of 0 or less is clamped to a minimum rather than passed through: an
-	// unbounded cache is a leak, not a policy.
+	// MascotImageCache treats a non-positive bound as "no bound on that axis", so a config
+	// value of 0 or less is clamped to a minimum rather than passed through: an unbounded
+	// cache is a leak, not a policy.
 	constexpr int MASCOT_CACHE_MIN_ITEMS = 2;
 	constexpr qint64 MASCOT_CACHE_MIN_MB = 16;
 	constexpr qint64 BYTES_PER_MB = 1024 * 1024;
-	// I4's throttle. A MASCOT-CACHE line is written only when the residency has moved by at
-	// least this many bytes *and* at least this long has passed since the previous line, so an
-	// idle cache says nothing and a busy one speaks at a readable rate.
+	// A line is written only when the residency moved by this many bytes *and* this much time
+	// passed since the previous line, so an idle cache says nothing and a busy one speaks at a
+	// readable rate.
 	constexpr qint64 MASCOT_CACHE_LOG_DELTA_BYTES = 2 * BYTES_PER_MB;
 	constexpr qint64 MASCOT_CACHE_LOG_INTERVAL_MS = 2000;
 }
@@ -93,18 +93,17 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 
 	this->MascotsExtractColor = this->config->get_bool("mascots_color_theme");
 
-	// Mascot media pipeline, created before the window that drives it and kept for the life of
-	// the process (amendment U). The prefetcher is constructed on the GUI thread, which is the
-	// thread every one of its methods is called from (amendment H4).
+	// Created before the window that drives it and kept for the life of the process. The
+	// prefetcher is constructed on the GUI thread, which is the thread every one of its methods
+	// is called from.
 	this->mascotImageCache = new MascotImageCache();
 	this->mascotPrefetcher = new MascotPrefetcher(this->mascotImageCache);
 	this->updateMascotCacheLimits();
-	// I2: palette extraction is master's `mascots_color_theme` switch, and the prefetcher reads
-	// no config, so the value is pushed in here (and again wherever the setting is refreshed).
+	// The prefetcher reads no config, so the palette switch has to be pushed in here.
 	this->mascotPrefetcher->setExtractColors(this->MascotsExtractColor);
-	// I4: mediaReady is emitted on the GUI thread directly after every cache insert, which is the
-	// only moment the residency moves, so this one connection covers the whole accounting surface
-	// -- miss-path decodes and speculative prefetches alike, since both go through that insert.
+	// mediaReady is emitted on the GUI thread directly after every cache insert, the only
+	// moment the residency moves, so this one connection covers miss-path decodes and
+	// speculative prefetches alike -- both go through that insert.
 	connect(this->mascotPrefetcher, &MascotPrefetcher::mediaReady, this,
 		[this](const MascotMedia&) { this->logMascotCacheOccupancy(); });
 
@@ -131,10 +130,6 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 
 	this->MascotsAnimation = new mascotsAnimationsThread(this,this->config->get_bool("mascots_random_change"),this->config->get("mascots_random_chance").toInt()/100.0);
 	this->MascotsAnimation->start();
-
-	// The beat signals are wired by MascotController itself (amendment W): its handlers used to
-	// live here and were gated on the old image widget's isVisible(), a widget the mascot
-	// cutover had already hidden, so no branch taken here could ever have run.
 
 	QTimer::singleShot(0, [this] {this->initTaskbar(); });
 
@@ -337,15 +332,12 @@ void MainApp::updateMascotCacheLimits()
 
 void MainApp::logMascotCacheOccupancy()
 {
-	// I4: the one piece of evidence the memory gate has. Called from the prefetcher's mediaReady,
-	// i.e. on the GUI thread right after an insert, and only while debug mode is on, so an
-	// ordinary run pays nothing.
 	if (!this->debug_mode || !this->logger || !this->mascotImageCache)
 		return;
 	const qint64 bytes = this->mascotImageCache->byteCount();
 	const qint64 now = QDateTime::currentMSecsSinceEpoch();
-	// A same-value line is not repeated: both the residency and the clock have to have moved,
-	// and the very first line is always written.
+	// A same-value line is not repeated: both the residency and the clock must have moved. The
+	// first line is always written.
 	const bool moved = qAbs(bytes - this->lastMascotCacheLogBytes) >= MASCOT_CACHE_LOG_DELTA_BYTES;
 	const bool cooled = (now - this->lastMascotCacheLogMs) >= MASCOT_CACHE_LOG_INTERVAL_MS;
 	if (this->lastMascotCacheLogMs != 0 && !(moved && cooled))
@@ -362,10 +354,10 @@ void MainApp::logMascotCacheOccupancy()
 void MainApp::stop_handle()
 {
 	// The mascot panels come down first, before anything below waits on a thread: stopping the
-	// controller unpins everything it holds (amendment H2), deletes the QML surfaces and drops
-	// the decodes still in flight, so no queued media can be applied to a window that is on its
-	// way out. The cache itself is not destroyed here -- the shared QML engine owns the image
-	// provider that reads it, and that engine outlives the window (amendment U).
+	// controller unpins everything it holds, deletes the QML surfaces and drops the decodes still
+	// in flight, so no queued media can be applied to a window that is on its way out. The cache
+	// itself is not destroyed here -- the shared QML engine owns the image provider that reads it,
+	// and that engine outlives the window.
 	if (this->mainWindow) {
 		this->mainWindow->shutdownMascots();
 	}
@@ -380,8 +372,8 @@ void MainApp::stop_handle()
 	}
 	
 	// Each stop() also releases whatever can park its thread - the icon and animation event
-	// locks - because a parked thread never re-reads its running flag, which is what used to
-	// deadlock the joins at the end of this function.
+	// locks - because a parked thread never re-reads its running flag and would deadlock the
+	// joins at the end of this function.
 	this->VW->running = false;
 	this->mainWindow->animatedIcon->stop();
 	this->MascotsAnimation->stop();
@@ -434,9 +426,9 @@ void MainApp::stop_handle()
 	armShutdownWatchdog();
 
 	this->stopSingleInstanceServer();
-	// Bounded joins. A thread that will not stop used to hang the app for good, because
-	// the Quit event was already eaten and both exit-sound fallbacks need the event loop
-	// that these waits were blocking.
+	// Bounded joins: a thread that will not stop would hang the app for good, because the Quit
+	// event was already eaten and both exit-sound fallbacks need the event loop that an
+	// unbounded wait would block.
 	const bool vwStopped = this->VW->wait(QDeadlineTimer(SHUTDOWN_THREAD_WAIT_MS));
 	const bool iconStopped = this->mainWindow->animatedIcon->wait(QDeadlineTimer(SHUTDOWN_THREAD_WAIT_MS));
 	// Wait for the mascots animation thread to exit before deleteLater() destroys it -
@@ -498,7 +490,7 @@ MainApp::~MainApp()
 	// Stops the decode pool deterministically. The cache is deliberately left alive: the image
 	// provider on the shared (process-lifetime) QML engine holds a borrowed pointer to it, and
 	// destroying it here would leave requestImage() reading freed memory for the rest of
-	// teardown (amendment U).
+	// teardown.
 	delete this->mascotPrefetcher;
 	this->mascotPrefetcher = nullptr;
 	if (this->BpmManager)

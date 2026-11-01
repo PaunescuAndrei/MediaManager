@@ -463,10 +463,10 @@ void NotificationWidget::showNotification()
 	double counterOpacity = 1.0;
 	if (this->MW && this->MW->App && this->MW->App->config) {
 		Config* cfg = this->MW->App->config;
-		bgOpacity = qBound(0.0, cfg->get_double("notification_bg_opacity", 1.0), 1.0);
-		contentOpacity = qBound(0.0, cfg->get_double("notification_content_opacity", 1.0), 1.0);
-		timerBarOpacity = qBound(0.0, cfg->get_double("notification_timerbar_opacity", 1.0), 1.0);
-		counterOpacity = qBound(0.0, cfg->get_double("notification_counter_opacity", 1.0), 1.0);
+		bgOpacity = qBound(0.0, cfg->get_double("notification_bg_opacity"), 1.0);
+		contentOpacity = qBound(0.0, cfg->get_double("notification_content_opacity"), 1.0);
+		timerBarOpacity = qBound(0.0, cfg->get_double("notification_timerbar_opacity"), 1.0);
+		counterOpacity = qBound(0.0, cfg->get_double("notification_counter_opacity"), 1.0);
 	}
 
 	// Paint background manually (WA_TranslucentBackground skips system fill)

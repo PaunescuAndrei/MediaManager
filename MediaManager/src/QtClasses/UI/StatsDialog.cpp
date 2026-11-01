@@ -590,8 +590,8 @@ void StatsDialog::refreshStreakProtection()
         if (!info.autoSaveEnabled) {
             m_autoSaveStatusLabel->setText(QStringLiteral("Off"));
         } else {
-            const double baseMult = m_app->config->get_double("streak_auto_save_target_multiplier", 2.0);
-            const double inc = m_app->config->get_double("streak_auto_save_target_multiplier_increment", 1.0);
+            const double baseMult = m_app->config->get_double("streak_auto_save_target_multiplier");
+            const double inc = m_app->config->get_double("streak_auto_save_target_multiplier_increment");
             const double nextMult = std::max(1.0, baseMult + inc * info.autoSaveConsecutive);
             m_autoSaveStatusLabel->setText(QString("On — next miss needs %1x target").arg(nextMult, 0, 'f', 1));
         }

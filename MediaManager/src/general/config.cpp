@@ -337,16 +337,22 @@ void Config::open_config(QString filepath) {
 	this->file.read(this->ini);
 	// Drop any [default] block read from an older file: defaults are code-owned, and a stale copy
 	// left in ini would be rewritten by every save as if this build still read it.
-	this->ini.remove("default");
-	this->migrate_flat_settings();
+	bool const droppedDefaults = this->ini.remove("default");
+	bool const migrated = this->migrate_flat_settings();
+	if (droppedDefaults || migrated) {
+		// Rewritten here rather than waiting for the next settings change: save_config() is only
+		// called by user actions, so a launch that changes nothing would otherwise leave the old
+		// flat file on disk and the migration would look like it never ran.
+		this->save_config();
+	}
 	// No migration from `mascots_background_list_alpha` to `mascots_background_opacity`: they are
 	// two surfaces (the rows and the whole-window veil), and moving the old value would rewrite one
 	// the user still owns on every load.
 }
 
-void Config::migrate_flat_settings() {
+bool Config::migrate_flat_settings() {
 	if (!this->ini.has(kLegacySection)) {
-		return;
+		return false;
 	}
 	struct Move {
 		std::string section;
@@ -364,6 +370,9 @@ void Config::migrate_flat_settings() {
 			moves.push_back(Move{ mapped->second, entry.first, entry.second });
 		}
 	}
+	if (moves.empty()) {
+		return false;
+	}
 	// Applied after collecting because inserting a section can reallocate the outer container and
 	// invalidate the reference the loop above holds.
 	for (auto const& move : moves) {
@@ -373,6 +382,7 @@ void Config::migrate_flat_settings() {
 	if (this->ini[kLegacySection].size() == 0) {
 		this->ini.remove(kLegacySection);
 	}
+	return true;
 }
 
 void Config::save_config() {

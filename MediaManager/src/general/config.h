@@ -22,8 +22,9 @@ public:
 
 private:
 	// A flat [settings] block is still read on load and folded into its sections, so a file written
-	// before the sections existed keeps working without the user touching it.
-	void migrate_flat_settings();
+	// before the sections existed keeps working without the user touching it. Returns true when
+	// something moved, so the caller can rewrite the file right away.
+	bool migrate_flat_settings();
 	std::string sectionFor(QString const& key) const;
 	QString defaultFor(QString const& item) const;
 

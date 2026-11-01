@@ -44,7 +44,7 @@ public:
 	void setSlotMirrored(int i, bool mirrored);
 	void setSlotMedia(int i, const MascotMedia& media);
 	// Null while the delegate does not exist and after any setSlotCount() that shrank the panel; query again, never hold it.
-	QVideoSink* slotSink(int i, int ab) const;
+	QVideoSink* slotSink(int i, int ab);
 	void setSlotVideoVisible(int i, bool visible);
 	// A duration of 0 is a zero-duration animation -- the hard cut -- so there is no second code path.
 	void setSlotVideoOpacity(int i, int ab, double opacity, int crossfadeMs);

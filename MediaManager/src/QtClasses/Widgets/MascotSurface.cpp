@@ -242,10 +242,14 @@ void MascotSurface::setSlotMedia(int i, const MascotMedia& media)
 	this->applySlot(i);
 }
 
-QVideoSink* MascotSurface::slotSink(int i, int ab) const
+QVideoSink* MascotSurface::slotSink(int i, int ab)
 {
 	if (!this->isValidSlot(i) || (ab != 0 && ab != 1))
 		return nullptr;
+	// Resolve first: a delegate QML created after the last applySlot() left this slot's cache empty, and the
+	// accessor then answered null for ever -- which a video pick saw as "no video sink for the panel" and made
+	// the panel fall back to images. The lookup is idempotent and runs only while the pointer is null.
+	this->resolveSlot(i);
 	const Slot& slot = this->slotStates.at(i);
 	QQuickItem* video = (ab == 0 ? slot.videoA : slot.videoB).data();
 	// A delegate that does not exist yet has no item and no sink; the caller is told to ask again after it exists.

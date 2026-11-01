@@ -2269,7 +2269,7 @@ MascotController::VideoPick MascotController::pickVideo(PanelState& state, Masco
 	// fail against a live panel that is a moment behind, so the pick is retried rather than reported.
 	MascotSurface* surface = state.surface.data();
 	if (!surface || !band || !surface->slotSink(band->slotIndex(), 0)) {
-		if (band->playback().videoSinkRetries++ < this->retryAttempts) {
+		if (this->App && this->App->debug_mode) {
 			if (!this->warnedVideoSink) {
 				this->warnedVideoSink = true;
 				this->logVideo(QStringLiteral("no video sink for the panel yet; retrying the pick"));

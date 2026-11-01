@@ -19,9 +19,8 @@ class QVideoSink;
 class MascotSurface : public QWidget {
 	Q_OBJECT
 public:
-	// `Crop` and `Cover` both guarantee the slot is covered: the content shift is clamped so it can never slide an edge
-	// into view. `Crop` holds that framing still; `Cover` travels it along the axis the Direction names, as far as the
-	// picture overflows that way, so the whole picture passes the band and none of it is cut off for good.
+	// `Crop` holds the framing still; `Cover` travels it along the scroll axis as far as the picture overflows, so the
+	// whole picture passes the band and none of it is cut off for good.
 	enum class FillMode { Crop, Fit, Stretch, HeightFit, WidthFit, Cover };
 
 	// One scene for all three layers: a QQuickWidget carrying Qt::WA_AlwaysStackOnTop is drawn above every
@@ -40,18 +39,14 @@ public:
 	QSizeF slotContentSize(int i) const;
 	void setSlotContentOffset(int i, const QPointF& offset);
 	void setSlotScrollOffset(int i, double dx, double dy);
-	// Deliberately kept without a caller: it is the only per-slot opacity a still image has (the video path has setSlotVideoOpacity, the layer has setSurfaceOpacity), and an image crossfade would need exactly this.
+	// The only per-slot opacity a still image has; an image crossfade needs exactly this.
 	void setSlotOpacity(int i, double opacity);
 	void setSlotFillMode(int i, FillMode mode);
 	void setSlotMirrored(int i, bool mirrored);
-	// The slot draws `sourceSlot`'s video stage instead of its own players; -1 restores its own. Slot indices, not
-	// item pointers, so the caller never holds a QML object across a delegate rebuild.
+	// -1 restores the slot's own players; indices, not item pointers, since the delegate can be recreated.
 	void setSlotMirrorSource(int i, int sourceSlot);
-	// What the slot is drawing right now -- the only record that matters, since a surface outlives a band being
-	// detached and re-attached around it.
 	int slotMirrorSource(int i) const;
-	// A held slot keeps drawing the other band's stage but is no longer the mirror's business: it is covering the
-	// gap while the band that owns the slot loads a picture of its own.
+	// A held slot keeps drawing the other band's stage while the band that owns the slot loads a picture of its own.
 	void setSlotMirrorHold(int i, bool held);
 	bool slotMirrorHeld(int i) const;
 	void setSlotMedia(int i, const MascotMedia& media);
@@ -67,7 +62,7 @@ public:
 	void setSurfaceOpacity(double opacity);
 	void setBackdrop(const QColor& colour, bool enabled);
 
-	// One rectangle at z 1 (columns drawn over it) or 3 (columns veiled once); the M5 per-column fade let the layer through by veil^2.
+	// One rectangle at z 1 (columns drawn over it) or 3 (columns veiled once); a per-column fade let the layer through by veil^2.
 	void setVeil(const QColor& colour, double opacity, bool enabled, bool aboveColumns);
 
 signals:

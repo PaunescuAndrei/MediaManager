@@ -15,7 +15,7 @@ class QTimer;
 class MascotBand : public QObject {
 	Q_OBJECT
 public:
-	// `slotIndex` is fixed for the band's life; it is the slot the surface's QML delegate is found by.
+	// The index is fixed for the band's life: it is the slot the surface's QML delegate is found by.
 	explicit MascotBand(int slotIndex, QObject* parent = nullptr);
 	~MascotBand() override;
 
@@ -41,11 +41,9 @@ public:
 	void forgetMedia();
 
 	void applyMirror(bool mirrored);
-	// The slot draws `sourceSlot`'s video stage instead of this band's players; -1 restores its own picture.
+	// -1 restores the band's own picture.
 	void setMirrorSource(int sourceSlot);
-	// Whether the mirror view is drawn flipped. Written only when it differs, so a left commit does not rewrite it.
 	void setMirrorFlip(bool flipped);
-	// Writes only when the mode differs, so an image commit writes no fill mode at all.
 	void applyFill(MascotSurface::FillMode mode);
 	void setContentOffset(const QPointF& offset);
 	void setVideoOpacity(int ab, double opacity, int crossfadeMs);

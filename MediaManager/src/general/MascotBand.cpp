@@ -19,8 +19,8 @@ void MascotBand::setSurface(MascotSurface* surface)
 	if (this->m_surface == surface)
 		return;
 	this->m_surface = surface;
-	// The recorded slot state described the surface that is going away: a rebuilt surface starts at MascotSurface's
-	// defaults, and a surviving "the slot already carries HeightFit" would suppress that write forever after.
+	// The recorded slot state described the surface that is going away: a rebuilt surface starts at its defaults, and a
+	// surviving "the slot already carries HeightFit" would suppress that write forever.
 	this->m_fillMode = MascotSurface::FillMode::Fit;
 	this->m_fillModeKnown = false;
 	this->m_videoOutputVisible = false;
@@ -70,8 +70,8 @@ bool MascotBand::ensureVideo(int ab)
 		this->m_video = new MascotVideoSlot(this);
 	if (!this->m_surface)
 		return false;
-	// The sinks belong to the QML delegate, so reading and binding them in one call is what lets the owner start a load
-	// without holding a sink pointer across a slot count change.
+	// The sinks belong to the QML delegate, so reading and binding them in one call lets the owner start a load without
+	// holding a sink pointer across a slot count change.
 	QVideoSink* sinkA = this->m_surface->slotSink(this->m_slotIndex, 0);
 	QVideoSink* sinkB = this->m_surface->slotSink(this->m_slotIndex, 1);
 	if (!sinkA || (ab != 0 && !sinkB))
@@ -123,8 +123,8 @@ void MascotBand::setMirrorSource(int sourceSlot)
 {
 	if (this->m_surface)
 		this->m_surface->setSlotMirrorSource(this->m_slotIndex, sourceSlot);
-	// The slot's own parity belongs to whatever draws it while this band is unbound -- an image keeps writing it per
-	// pick -- so the view's flip has to be re-asserted at every bind rather than remembered across one.
+	// The slot's parity belongs to whatever draws it while this band is unbound (an image writes it per pick), so the
+	// view's flip is re-asserted at every bind rather than remembered.
 	this->m_mirrorFlipKnown = false;
 }
 
@@ -177,8 +177,8 @@ bool MascotBand::videoOutputVisible() const
 
 void MascotBand::clear()
 {
-	// The outputs go first, then the slot: clearSlot() does not hide them. Both opacities go back to zero as well,
-	// because the slot outlives the band and its next owner fades in from its own first frame.
+	// The outputs go first, then the slot: clearSlot() does not hide them. Both opacities go to zero too, because the
+	// slot outlives the band and its next owner fades in from its own first frame.
 	if (this->m_videoOutputVisible)
 		this->setVideoOutputVisible(false);
 	this->setVideoOpacity(0, 0.0, 0);
@@ -245,7 +245,7 @@ QTimer* MascotBand::clipTimer() const
 QTimer* MascotBand::ensureClipTimer()
 {
 	if (!this->m_clipTimer) {
-		// Single-shot, because every tick is answered by a fresh commit; a child of the band, so the band's end stops it.
+		// Single-shot: every tick is answered by a fresh commit.
 		this->m_clipTimer = new QTimer(this);
 		this->m_clipTimer->setSingleShot(true);
 	}

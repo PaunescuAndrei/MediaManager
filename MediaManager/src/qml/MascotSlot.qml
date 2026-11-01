@@ -5,7 +5,7 @@ import QtMultimedia
 Item {
 	id: slot
 
-	// Not a required property: a delegate whose required properties were not populated would leave every slot silently blank.
+	// `index` is not a required property: an unpopulated delegate would leave every slot silently blank.
 	objectName: "mascotSlot" + index
 	clip: true
 
@@ -21,8 +21,7 @@ Item {
 	// True only while the picture is painted smaller than its resolution -- the case mipmapping helps.
 	// Video has no filtering knob in Qt, so it is always linear.
 	property bool minifying: false
-	// The other column's stage item while this band is the mirror view of it, null otherwise. Set by the surface,
-	// which resolves the slot index the controller names.
+	// The other column's stage item while this band is the mirror view, null otherwise; written by the surface.
 	property Item mirrorSource: null
 
 
@@ -67,8 +66,7 @@ Item {
 		}
 	}
 
-	// The slot's own picture, one item so a mirrored band can sample it as a texture. Both outputs in one place is
-	// also what keeps the crossfade inside the picture the other column draws.
+	// One item so a mirrored band can sample it as a texture; both outputs here keep the crossfade inside the other column's picture.
 	Item {
 		id: stage
 
@@ -113,14 +111,12 @@ Item {
 	}
 
 	// A mirrored band draws the other column's stage instead of running its own player, so the pair shows one decoded
-	// frame rather than two decoders racing. The flip is a negative scale, not a shader: Qt 6's ShaderEffect takes
-	// .qsb files only. `hideSource` stays false because the source item is the other column's own picture, and hiding
-	// it would blank that column.
+	// frame, not two decoders racing. The flip is a negative scale, not a shader -- Qt 6's ShaderEffect takes .qsb
+	// only -- and `hideSource` stays false, or hiding the other column's picture would blank that column.
 	Item {
 		id: mirrorView
 
-		// The source's own size, centred, and clipped by the slot: stretching it to this cell's rectangle would
-		// distort the picture whenever the two columns' bands are not the same size, which they need not be.
+		// The source's own size, centred; stretching it into this cell would distort whenever the two bands differ in size.
 		anchors.centerIn: parent
 		width: slot.mirrorSource ? slot.mirrorSource.width : slot.width
 		height: slot.mirrorSource ? slot.mirrorSource.height : slot.height

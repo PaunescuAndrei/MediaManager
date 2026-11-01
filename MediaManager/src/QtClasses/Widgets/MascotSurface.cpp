@@ -85,12 +85,11 @@ MascotSurface::MascotSurface(MascotImageCache* cache, QWidget* parent, bool alwa
 
 	this->quick = new QQuickWidget(engine, this);
 	this->quick->setClearColor(Qt::transparent);
-	// Without this the quick widget blits its offscreen buffer opaquely, turning every transparent pixel of a
-	// mascot PNG black instead of showing the window behind it.
+	// Without this the quick widget blits its offscreen buffer opaquely, so every transparent mascot pixel turns black.
 	this->setAttribute(Qt::WA_TranslucentBackground, true);
 	this->quick->setAttribute(Qt::WA_TranslucentBackground, true);
 	if (alwaysStackOnTop) {
-		// Draw last so this widget's alpha composites over the window; verified at runtime, without it the panel reads #000000.
+		// Draw last so this widget's alpha composites over the window; measured, without it the panel reads #000000.
 		this->quick->setAttribute(Qt::WA_AlwaysStackOnTop, true);
 	}
 	this->quick->setAttribute(Qt::WA_TransparentForMouseEvents, true);
@@ -172,8 +171,8 @@ void MascotSurface::setSlotScrollOffset(int i, double dx, double dy)
 	const bool yMoved = slot.scrollOffsetY != dy;
 	slot.scrollOffsetX = dx;
 	slot.scrollOffsetY = dy;
-	// Two property writes, not an applySlot(): a tick moves the content and changes nothing else, and the per-tick
-	// budget is a few writes, not a whole slot re-apply.
+	// Two property writes, not an applySlot(): a tick moves the content and nothing else, and the per-tick budget is a
+	// few writes.
 	QQuickItem* item = slot.item.data();
 	if (!item)
 		return;
@@ -256,12 +255,11 @@ QVideoSink* MascotSurface::slotSink(int i, int ab)
 {
 	if (!this->isValidSlot(i) || (ab != 0 && ab != 1))
 		return nullptr;
-	// Resolve here: applySlot() is the only other filler of these pointers, and a delegate QML creates after it leaves
-	// them null. resolveSlot() is idempotent, so a settled slot costs four null checks.
+	// Resolve here: a delegate QML created after applySlot() leaves these pointers null, and re-resolving a settled
+	// slot costs four null checks.
 	this->resolveSlot(i);
 	const Slot& slot = this->slotStates.at(i);
 	QQuickItem* video = (ab == 0 ? slot.videoA : slot.videoB).data();
-	// A delegate that does not exist yet has no item and no sink; the caller is told to ask again after it exists.
 	if (!video)
 		return nullptr;
 	return video->property("videoSink").value<QVideoSink*>();
@@ -301,8 +299,8 @@ void MascotSurface::clearSlot(int i)
 	slot.contentCenterX = 0.0;
 	slot.hasExplicitContentOffset = false;
 	slot.explicitContentOffsetX = 0.0;
-	// An emptied slot is nobody's mirror: leaving the source behind keeps drawing another band's stage into a slot
-	// whose band is gone, and a band later created here would inherit it.
+	// An emptied slot is nobody's mirror: a source left behind keeps drawing another band's stage, and a band later
+	// created here would inherit it.
 	slot.mirrorSourceSlot = -1;
 	slot.mirrorHeld = false;
 	this->applySlot(i);
@@ -310,8 +308,8 @@ void MascotSurface::clearSlot(int i)
 
 void MascotSurface::setMirror(bool mirror)
 {
-	// Only the default for slots created later. Writing it over the live slots would undo the per-slot parity the
-	// controller has already decided, and a slot that shows another band's stage has no media commit to restore it.
+	// Only the default for slots created later: writing it over the live slots would undo the parity the controller has
+	// already decided, and a slot showing another band's stage has no media commit to restore it.
 	this->mirror = mirror;
 }
 
@@ -480,9 +478,8 @@ void MascotSurface::applySlot(int i)
 	const bool mirrored = slot.mirrored;
 	item->setProperty("mirrored", mirrored);
 	const QSizeF contentSize = this->contentSizeFor(slot);
-	// Every mode is drawn as its painted box, stretched onto it: that box already carries the picture's aspect (or is
-	// the slot itself for Stretch), so stretching never distorts it, and an item larger than the slot -- which is what
-	// Cover and the panning modes produce -- is clipped by the slot while still being something the pan can slide.
+	// Every mode is drawn as its painted box, stretched onto it: the box already carries the aspect (or is the slot for
+	// Stretch), so stretching cannot distort, and the overflow Cover and the pans produce is clipped but still slideable.
 	item->setProperty("paintedWidth", contentSize.width());
 	item->setProperty("paintedHeight", contentSize.height());
 	const QSize nativeSize = slot.nativeSize;
@@ -497,15 +494,15 @@ void MascotSurface::applySlot(int i)
 	item->setProperty("scrollOffsetX", slot.scrollOffsetX);
 	item->setProperty("scrollOffsetY", slot.scrollOffsetY);
 
-	// The duration goes first on purpose: the Behavior reads crossfadeMs when the opacity write arrives, and writing
-	// the opacity first would animate it with the previous duration, i.e. not at all.
+	// The duration goes first: the Behavior reads crossfadeMs when the opacity write arrives, so writing opacity first
+	// would animate with the previous duration.
 	item->setProperty("crossfadeMs", slot.crossfadeMs);
 	item->setProperty("videoVisible", slot.videoVisible);
 	item->setProperty("videoOpacityA", slot.videoOpacityA);
 	item->setProperty("videoOpacityB", slot.videoOpacityB);
 
-	// The mirror view samples the other slot's stage, so the QML item is resolved here rather than held: the delegate
-	// that owns the stage can be recreated, and a stale pointer would draw nothing.
+	// Resolve the stage rather than holding it: the delegate that owns it can be recreated, and a stale pointer would
+	// draw nothing.
 	QQuickItem* mirrorSource = nullptr;
 	if (slot.mirrorSourceSlot >= 0 && this->isValidSlot(slot.mirrorSourceSlot)) {
 		this->resolveSlot(slot.mirrorSourceSlot);
@@ -543,7 +540,7 @@ QSizeF MascotSurface::contentSizeFor(const Slot& slot) const
 
 	switch (slot.fillMode) {
 	case FillMode::Stretch:
-		return QSizeF(slotWidth, slotHeight); // no aspect ratio to preserve
+		return QSizeF(slotWidth, slotHeight);
 	case FillMode::HeightFit:
 		return QSizeF(nativeWidth * (slotHeight / nativeHeight), slotHeight);
 	case FillMode::WidthFit:
@@ -554,8 +551,8 @@ QSizeF MascotSurface::contentSizeFor(const Slot& slot) const
 	}
 	case FillMode::Crop:
 	case FillMode::Cover: {
-		// Both are the same box: the picture scaled until it covers the slot, exact on one axis and larger on the
-		// other. What separates them is what the controller does with that overflow -- nothing, or the pan.
+		// One box for both: the picture scaled to cover the slot. What separates them is what the controller does with
+		// the overflow -- nothing, or the pan.
 		const double scale = std::max(slotWidth / nativeWidth, slotHeight / nativeHeight);
 		return QSizeF(nativeWidth * scale, nativeHeight * scale);
 	}
@@ -580,8 +577,8 @@ double MascotSurface::contentShiftFor(const Slot& slot, bool mirrored) const
 	if (paintedWidth <= 0.0)
 		return 0.0;
 	const double shift = paintedWidth / 2.0 - slot.contentCenterX * (paintedWidth / nativeWidth);
-	// The shift is clamped to the crop's slack: a larger one slides an edge into view, which is the "does not cover"
-	// report, and a shift that fits still centres the content.
+	// Clamped to the crop's slack: a larger shift slides an edge into view, which is the "does not cover" report, and
+	// a shift that fits still centres the content.
 	const double slack = (paintedWidth - slotWidth) / 2.0;
 	const double clamped = slack > 0.0 ? std::min(shift, slack) : 0.0;
 	const double bounded = clamped < 0.0 ? std::max(clamped, -slack) : clamped;

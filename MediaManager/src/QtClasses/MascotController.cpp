@@ -2241,8 +2241,8 @@ MascotController::VideoPick MascotController::pickVideo(PanelState& state, Masco
 		return VideoPick::Fallback;
 	if (slot->isBusy() && !slot->preloading())
 		return VideoPick::Skip;
-	// §7.13's preview rule is a deferral, not a skip: the clip timer that asked has already fired, so returning
-	// would leave the panel on its old clip until the beat. The pick is re-asked until the tooltip stops.
+	// A deferral, not a skip: the clip timer that asked has already fired, so returning would leave the panel
+	// on its old clip until the beat. The pick is re-asked until the tooltip stops.
 	if (this->previewTooltipBusy()) {
 		const qint64 now = QDateTime::currentMSecsSinceEpoch();
 		if (state.lastPreviewDeferLogMs == 0
@@ -2553,7 +2553,7 @@ void MascotController::onVideoFailed(MascotPanel panel, int bandIndex, const QSt
 	MascotBand* band = state.band(bandIndex);
 	if (!state.surface || !band || !band->video())
 		return;
-	// §7.8: failed files are dropped for the session. Only a *decode* failure may make that statement -- a timeout is
+	// A failed file is dropped for the session, and only a *decode* failure may make that statement: a timeout is
 	// the user's judgement of their machine, and a wiring report means nothing was attempted. Dropping either would
 	// turn one slow open or one missing delegate into a file the user never sees again.
 	if (!timedOut && kind == MascotVideoSlot::FailKind::Decode)

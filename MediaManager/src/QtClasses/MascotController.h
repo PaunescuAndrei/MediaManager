@@ -89,7 +89,6 @@ protected:
 private:
 	struct PanelLayout {
 		MascotMode mode = MascotMode::Static;
-		// The shipped default, and the value every existing panel already draws -- not the spec table's `Crop`.
 		MascotSurface::FillMode fill = MascotSurface::FillMode::HeightFit;
 		MascotMode appliedMode = MascotMode::Static;
 		bool applied = false;

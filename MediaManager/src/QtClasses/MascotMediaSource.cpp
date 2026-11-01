@@ -140,7 +140,7 @@ QString MascotMediaSource::nextVideoPath()
 	}
 
 	// One draw, no exclusion: a pick may land on the file the main player has, which is the user's explicit call.
-	// A file that already failed is skipped by the bounded re-draw, because §7.8's degrade is an empty answer.
+	// A file that already failed is skipped by the bounded re-draw, because the degrade for it is an empty answer.
 	for (int attempt = 0; attempt < VIDEO_DRAW_ATTEMPTS; ++attempt) {
 		const QString path = drawVideoPath(this->videoPool, this->weightedChoice, weightedSettings,
 			*this->videoGenerator);
@@ -161,7 +161,7 @@ void MascotMediaSource::noteVideoFailure(const QString& path)
 
 void MascotMediaSource::invalidateVideoPool()
 {
-	// The one thing that drops a cached scan (§7.8: model reset, filter apply, database switch).
+	// The one thing that drops a cached scan: a model reset, a filter apply or a database switch.
 	this->videoPoolInitialized = false;
 	this->videoPool.clear();
 }

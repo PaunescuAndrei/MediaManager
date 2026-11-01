@@ -1,11 +1,23 @@
 #include "stdafx.h"
 #include "config.h"
 #include <QtGlobal>
+#include <filesystem>
 #include "utils.h"
 #include <QFileInfo>
 
-Config::Config(QString filepath) {
-	this->file = new mINI::INIFile();
+namespace {
+	// mINI opens std::filesystem::path natively; on Windows the narrow form is the ANSI code page,
+	// which drops non-ASCII characters from a user profile path.
+	std::filesystem::path configPath(QString const& filepath) {
+#ifdef Q_OS_WIN
+		return std::filesystem::path(filepath.toStdWString());
+#else
+		return std::filesystem::path(filepath.toStdString());
+#endif
+	}
+}
+
+Config::Config(QString filepath) : file(configPath(filepath)) {
 	this->open_config(filepath);
 	this->init_defaults();
 	//if (!std::filesystem::exists(filepath))
@@ -266,16 +278,16 @@ void Config::init_defaults() {
 }
 
 void Config::open_config(QString filepath) {
-	this->file->open(filepath.toStdString());
+	this->file = mINI::INIFile(configPath(filepath));
 	this->ini.clear();
-	this->file->read(this->ini);
+	this->file.read(this->ini);
 	// No migration from `mascots_background_list_alpha` to `mascots_background_opacity`: they are
 	// two surfaces (the rows and the whole-window veil), and moving the old value would rewrite one
 	// the user still owns on every load.
 }
 
 void Config::save_config() {
-	this->file->write(this->ini);
+	this->file.write(this->ini);
 }
 
 QString Config::get(QString item) {
@@ -330,8 +342,4 @@ bool Config::get_bool(QString item) {
 		}
 	}
 	return utils::text_to_bool(this->ini["DEFAULT"][item.toStdString()]);
-}
-
-Config::~Config() {
-	delete this->file;
 }

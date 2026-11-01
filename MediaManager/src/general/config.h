@@ -5,10 +5,9 @@
 class Config
 {
 public:
-	mINI::INIFile *file;
+	mINI::INIFile file;
 	mINI::INIStructure ini;
 	Config(QString filepath);
-	~Config();
 	void init_defaults();
 	void open_config(QString filepath);
 	void save_config();

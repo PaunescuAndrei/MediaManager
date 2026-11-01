@@ -301,6 +301,10 @@ void MascotSurface::clearSlot(int i)
 	slot.contentCenterX = 0.0;
 	slot.hasExplicitContentOffset = false;
 	slot.explicitContentOffsetX = 0.0;
+	// An emptied slot is nobody's mirror: leaving the source behind keeps drawing another band's stage into a slot
+	// whose band is gone, and a band later created here would inherit it.
+	slot.mirrorSourceSlot = -1;
+	slot.mirrorHeld = false;
 	this->applySlot(i);
 }
 

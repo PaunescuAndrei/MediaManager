@@ -761,27 +761,16 @@ void MascotController::syncMirrorBindings()
 		// a bind, because the parity key is a live checkbox and the slot's value is not ours to trust.
 		if (bind) {
 			rightBand->setMirrorFlip(this->flipMirroredColumn);
-			// A binding that comes back takes the slot out of its hold; nothing else would clear it.
+			// A binding that comes back takes the slot out of its hold, and the teardown below runs whether or not the
+			// source slot changed: a hold may have given this band a player of its own in the meantime.
 			surface->setSlotMirrorHold(slot, false);
-		}
-		// Mirror off while this band has no picture of its own yet: it keeps the last shared frame on screen while it
-		// loads one, which is what stops the column blanking for the length of that load. The release is the commit.
-		if (!bind && current >= 0 && rightBand->media().path.isEmpty() && !rightBand->videoOutputVisible()) {
-			surface->setSlotMirrorHold(slot, true);
-			this->logVideo(QStringLiteral("MASCOT-STAGE hold band=%1 source=%2").arg(i).arg(current));
-			if (!rightBand->video() && this->bandMayOwnPlayer(MascotPanel::Right, i))
-				this->createVideoSlot(this->rightState, MascotPanel::Right, i);
-			continue;
-		}
-		if (current == sourceSlot)
-			continue;
-		rightBand->setMirrorSource(sourceSlot);
-		this->logVideo(QStringLiteral("MASCOT-STAGE %1 band=%2 source=%3 pairFlip=%4")
-			.arg(bind ? QStringLiteral("bind") : QStringLiteral("unbind"))
-			.arg(i)
-			.arg(sourceSlot)
-			.arg(this->flipMirroredColumn ? QStringLiteral("on") : QStringLiteral("off")));
-		if (bind) {
+			if (current != sourceSlot) {
+				rightBand->setMirrorSource(sourceSlot);
+				this->logVideo(QStringLiteral("MASCOT-STAGE bind band=%1 source=%2 pairFlip=%3")
+					.arg(i)
+					.arg(sourceSlot)
+					.arg(this->flipMirroredColumn ? QStringLiteral("on") : QStringLiteral("off")));
+			}
 			// Its player has nothing to draw into: the picture is the left band's. Destroying it is what makes the
 			// pair cost one decoder.
 			if (rightBand->video())
@@ -804,6 +793,20 @@ void MascotController::syncMirrorBindings()
 				rightBand->setVideoOutputVisible(false);
 			continue;
 		}
+		// Mirror off while this band has no picture of its own yet: it keeps sampling the left band's live stage while
+		// it loads one, which is what stops the column blanking for the length of that load. The commit releases it --
+		// not `videoOutputVisible()`, which the load sets before the first frame arrives.
+		if (current >= 0 && rightBand->media().path.isEmpty()) {
+			surface->setSlotMirrorHold(slot, true);
+			this->logVideo(QStringLiteral("MASCOT-STAGE hold band=%1 source=%2").arg(i).arg(current));
+			if (!rightBand->video() && this->bandMayOwnPlayer(MascotPanel::Right, i))
+				this->createVideoSlot(this->rightState, MascotPanel::Right, i);
+			continue;
+		}
+		if (current == sourceSlot)
+			continue;
+		rightBand->setMirrorSource(sourceSlot);
+		this->logVideo(QStringLiteral("MASCOT-STAGE unbind band=%1").arg(i));
 
 		if (rightBand->videoOutputVisible())
 			rightBand->setVideoOutputVisible(false);
@@ -2517,9 +2520,10 @@ void MascotController::fadeInVideo(PanelState& state, MascotPanel panel, int ban
 	if (fade <= 0) {
 		slot->retireInactive();
 		// No fade to wait for, so the outgoing player retires now; only then is the idle output the one the next swap uses.
-		if (bandIndex == 0)
+		if (bandIndex == 0) {
 			this->preloadNext(panel);
-		this->preloadPairPanel(panel);
+			this->preloadPairPanel(panel);
+		}
 		return;
 	}
 	QTimer::singleShot(fade, this, [this, panel, bandIndex]() {
@@ -2615,6 +2619,10 @@ void MascotController::onVideoFailed(MascotPanel panel, int bandIndex, const QSt
 	// turn one slow open or one missing delegate into a file the user never sees again.
 	if (!timedOut && kind == MascotVideoSlot::FailKind::Decode)
 		this->source.noteVideoFailure(path);
+	// A held slot is showing another band's live stage. If this band cannot produce a picture, release it: a frozen
+	// mirror reads as "the mirror is still on" and hides the failure, which is worse than the empty cell it replaces.
+	if (state.surface->slotMirrorHeld(band->slotIndex()))
+		state.surface->setSlotMirrorSource(band->slotIndex(), -1);
 	const bool wasLoading = band->requestIsVideo() && band->requestPath() == path;
 	if (wasLoading) {
 		band->setRequestIsVideo(false);

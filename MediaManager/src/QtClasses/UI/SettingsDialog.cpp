@@ -24,17 +24,10 @@
 #include <QUrl>
 #include <shellapi.h>
 
-// ---------------------------------------------------------------------------
-// Mascot keys, as one list
-// ---------------------------------------------------------------------------
-
-// The Cancel snapshot needs a universe that is the *writer's*, not "whatever the ini
-// happens to contain". Four layer keys have no `init_defaults` entry on purpose -- absent means "follow the
-// columns" -- so a dialog opened before anything wrote them snapshotted nothing for them, and a live change
-// that wrote them survived Cancel. An absent key answers empty here, and restoring empty is precisely what
-// "follow the columns" means, so the snapshot and the writer now cover the same keys.
-// The second half is the legacy rows, whose writes live in MainWindow::applySettings(); they were in the old
-// ini walk and have to stay in the snapshot or Cancel would stop reverting them.
+// The snapshot universe has to be the writer's keys, not whatever the ini holds: the four
+// layer keys have no default on purpose (absent means "follow the columns"), so absent is
+// captured as empty and restored as empty. The legacy rows are here too, though MainWindow
+// is what writes them.
 const QStringList& mascotConfigKeys()
 {
     static const QStringList keys = {
@@ -160,9 +153,7 @@ void SettingsDialog::wireApplyEnable()
             connect(sl, &QSlider::valueChanged, this, [applyBtn] { applyBtn->setEnabled(true); });
         else if (auto* le = qobject_cast<QLineEdit*>(w))
             connect(le, &QLineEdit::textChanged, this, [applyBtn] { applyBtn->setEnabled(true); });
-        // Combos were missing from this walk, so choosing a media type, a layout mode or a
-        // fill mode left Apply greyed out. Nothing in the dialog noticed, because every other control
-        // type was covered and the Mascots page is the first one whose main controls are combos.
+        // Every control type has to be walked here: one left out leaves Apply greyed out.
         else if (auto* co = qobject_cast<QComboBox*>(w))
             connect(co, &QComboBox::currentIndexChanged, this, [applyBtn] { applyBtn->setEnabled(true); });
     }
@@ -732,8 +723,6 @@ void SettingsDialog::setupAppearancePage(MainWindow* mw)
     });
 
     // --- Mascots Settings ---
-    // The group box these controls live in now sits on the Mascots category, not
-    // Appearance. The wiring below is untouched; only the box's parent changed.
     setupCheckBox(this->ui.mascotsOnOff, "mascots", mw);
     setupCheckBox(this->ui.mascotsAllFilesRandom, "mascots_allfiles_random", mw);
     setupCheckBox(this->ui.mascotsMirror, "mascots_mirror", mw);
@@ -769,13 +758,11 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
 {
     Config* config = mw->App->config;
 
-    // The snapshot covers exactly the keys the writers own -- see mascotConfigKeys() -- and an absent key is
-    // captured empty, so a live write that Cancel has to undo is always in the snapshot.
     for (const QString& key : mascotConfigKeys())
         mascotConfigSnapshot.insert(key, config->get(key));
 
-    // Build the page programmatically and insert it after Appearance. Both the sidebar and the
-    // stack are given the same index, the way setupStreaksPage() keeps the two in sync.
+    // The sidebar list and the stack get the same index, the way setupStreaksPage() keeps them
+    // in sync.
     QScrollArea* scrollArea = new QScrollArea();
     scrollArea->setFrameShape(QFrame::NoFrame);
     scrollArea->setWidgetResizable(true);
@@ -785,21 +772,11 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     pageLayout->setContentsMargins(4, 4, 4, 4);
     pageLayout->setSpacing(8);
 
-    // The one paragraph that says how the pieces fit together; every control's tooltip
-    // carries the rest, so the feature needs no separate manual.
-    // The first draft wrote the keys as `mascots` and `Scroll` in backticks, which
-    // a QLabel prints literally -- it is plain text, not markup. The sentence below names the
-    // controls the user can see instead of the keys they cannot.
-
-
-    // The existing group box is moved, not copied: adding it to this page's layout reparents it
-    // off Appearance, so its controls and their wiring stay exactly as setupAppearancePage() left
-    // them. Only the title changes, because its contents are no longer just "mascot settings".
+    // The .ui group box is moved, not copied: adding it to this layout reparents it off
+    // Appearance, so its wiring stays as setupAppearancePage() left it; only the title changes.
     this->ui.mascotsGroupBox->setTitle("Sources && Animation");
     pageLayout->addWidget(this->ui.mascotsGroupBox);
 
-    // Rows are all the same shape -- label, stretch, control -- so the three builders below keep
-    // every group's code to one line per key.
     auto makeSpinBox = [this](int minimum, int maximum, int step, int value) {
         QSpinBox* box = new QSpinBox();
         box->setRange(minimum, maximum);
@@ -820,9 +797,8 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     auto makeComboBox = [](const QStringList& items, const QString& value) {
         QComboBox* combo = new QComboBox();
         combo->addItems(items);
-        // A value none of the items carries leaves the first one selected: setCurrentText() is a
-        // no-op for an unknown string on a non-editable combo, and the first item is the
-        // documented fallback in every one of these lists.
+        // An unknown value leaves the first item selected: setCurrentText() is a no-op on a
+        // non-editable combo, and the first item is the documented fallback.
         combo->setCurrentText(value);
         return combo;
     };
@@ -837,7 +813,6 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         layout->addLayout(row);
     };
 
-    // --- Content & Layout (the columns' content) ---
     QGroupBox* contentGroup = new QGroupBox("Content && Layout");
     QVBoxLayout* contentLayout = new QVBoxLayout(contentGroup);
     contentLayout->setSpacing(4);
@@ -860,7 +835,8 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
                                      QStringLiteral("Fit"), QStringLiteral("Stretch"), QStringLiteral("HeightFit"),
                                      QStringLiteral("WidthFit") },
         config->get(QStringLiteral("mascots_fill")));
-    // The engine falls back to HeightFit for an unknown value, so the combo shows that rather than its first item.
+    // An unknown value falls back to HeightFit in the engine, so the combo shows that, not its
+    // first item.
     if (mascotFillCombo->findText(config->get(QStringLiteral("mascots_fill")), Qt::MatchFixedString) < 0)
         mascotFillCombo->setCurrentText(QStringLiteral("HeightFit"));
     addRow(contentLayout, "Fill mode:",
@@ -879,7 +855,6 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
 
     pageLayout->addWidget(contentGroup);
 
-    // --- Columns Playback (the columns' video-only keys) ---
     QGroupBox* playbackGroup = new QGroupBox("Columns Playback");
     QVBoxLayout* playbackLayout = new QVBoxLayout(playbackGroup);
     playbackLayout->setSpacing(4);
@@ -917,9 +892,8 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "Open the next clip in the idle player ahead of the swap, so a swap costs a visibility "
         "change instead of a load. Read only while the columns show videos.");
     playbackLayout->addWidget(mascotPreloadCheckBox);
-    // Qt low-latency playback intent. On is what the mascots have always used; off asks for the
-    // backend normal buffering, which Qt documents as smoother at the cost of a slower first frame. The
-    // intent is fixed for the lifetime of a player, so a change reaches the next player a panel builds.
+    // The intent is fixed for a player's lifetime, so a change reaches the next player a panel
+    // builds; Qt documents normal buffering as smoother with a slower first frame.
     mascotLowLatencyCheckBox = new QCheckBox("Low-latency video playback");
     mascotLowLatencyCheckBox->setChecked(config->get_bool(QStringLiteral("mascots_low_latency")));
     mascotLowLatencyCheckBox->setToolTip(
@@ -928,8 +902,8 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "smooth playback at a slower first frame. Applies to the next player a panel builds.");
     playbackLayout->addWidget(mascotLowLatencyCheckBox);
 
-    // One control, one clear label. Mirror mode already puts the same media in both columns and
-    // flips one against the other; this decides whether they also travel against each other.
+    // Mirror already makes both columns the same media; this decides whether they travel
+    // against each other.
     mascotPairScrollCombo = makeComboBox({ QStringLiteral("Same"), QStringLiteral("Opposite") },
         config->get(QStringLiteral("mascots_pair_scroll")));
     this->mascotPairScrollTip = QStringLiteral(
@@ -937,12 +911,11 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "Opposite makes the pair travel outwards or inwards together.");
     addRow(playbackLayout, "Mirror pair scroll:", this->mascotPairScrollTip, mascotPairScrollCombo);
 
-    // The parity switch, and the only one. Mirror mode already puts the same image or clip in
-    // both columns; this says whether the right column is that media mirrored or a plain repeat of it. The
-    // folder rule keeps deciding which way the pair faces, so this reads the same for images and videos.
+    // Whether the right column is that media mirrored or a plain repeat; the folder rule still
+    // decides which way the pair faces.
     mascotPairFlipCheckBox = new QCheckBox("Flip the mirrored column");
-    // Absent means on: the columns that predate the key were showing the flipped look, and the key is only
-    // written when the page is applied. Same answer the controller gives for a config with no line for it.
+    // Absent means on: the key is only written when the page is applied, and the controller
+    // answers the same way for a config with no line for it.
     const QString pairFlipValue = config->get(QStringLiteral("mascots_pair_flip"));
     mascotPairFlipCheckBox->setChecked(pairFlipValue.isEmpty()
         ? true
@@ -954,8 +927,6 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "is on.");
     playbackLayout->addWidget(mascotPairFlipCheckBox);
 
-    // The label follows the rule the fix gave it. It said "not focused", which is exactly what
-    // it must not do any more.
     mascotPauseUnfocusedCheckBox = new QCheckBox("Pause when the window cannot be seen");
     mascotPauseUnfocusedCheckBox->setChecked(config->get_bool(QStringLiteral("mascots_pause_unfocused")));
     mascotPauseUnfocusedCheckBox->setToolTip(
@@ -972,7 +943,6 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
 
     pageLayout->addWidget(playbackGroup);
 
-    // --- Scroll & Stripes (the columns' moving modes) ---
     QGroupBox* stripesGroup = new QGroupBox("Pan && Stripes");
     QVBoxLayout* stripesLayout = new QVBoxLayout(stripesGroup);
     stripesLayout->setSpacing(4);
@@ -1029,7 +999,6 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
 
     pageLayout->addWidget(stripesGroup);
 
-    // --- Background Layer ---
     QGroupBox* backgroundGroup = new QGroupBox("Background Layer");
     QVBoxLayout* backgroundLayout = new QVBoxLayout(backgroundGroup);
     backgroundLayout->setSpacing(4);
@@ -1059,8 +1028,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "below; the veil above is the whole window.",
         mascotListAlphaSpinBox);
 
-    // Falls back to the list alpha when the key is absent, which is what a config from before this
-    // control existed gets: the list looks exactly as it did.
+    // Falls back to the list alpha for a config that predates this key.
     mascotAltAlphaSpinBox = makeDoubleSpinBox(0.00, 1.00, 0.05,
         config->get_double(QStringLiteral("mascots_background_alternate_alpha"),
             config->get_double(QStringLiteral("mascots_background_list_alpha"), 0.85)));
@@ -1070,8 +1038,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "contrast behind the text. Equal to the line above is an even list.",
         mascotAltAlphaSpinBox);
 
-    // Opaque unless it is asked for: a scrollbar that fades over a bright frame is harder to grab, so
-    // the default is the look it has always had.
+    // Opaque unless asked for: a scrollbar fading over a bright frame is harder to grab.
     mascotScrollbarAlphaSpinBox = makeDoubleSpinBox(0.00, 1.00, 0.05,
         config->get_double(QStringLiteral("mascots_background_scrollbar_alpha"), 1.0));
     addRow(backgroundLayout, "Scrollbar opacity:",
@@ -1080,9 +1047,8 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "readable at any value.",
         mascotScrollbarAlphaSpinBox);
 
-    // The row said "Columns:", which reads as if it were about layout columns rather
-    // than about the mascots' relation to the veil. The values carry the meaning now, and both the old
-    // spellings (Above/Below) and the new ones are accepted, so an existing config keeps its setting.
+    // Old (Above/Below) and current spellings are both accepted, so an existing config keeps
+    // its setting.
     const QString storedZ = config->get(QStringLiteral("mascots_columns_z"));
     const bool storedBelow = storedZ.compare(QStringLiteral("Below"), Qt::CaseInsensitive) == 0
         || storedZ.compare(QStringLiteral("Below the veil"), Qt::CaseInsensitive) == 0;
@@ -1166,12 +1132,8 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "Ping-pong: reverse at the end of a layer band instead of wrapping around to its start.");
     backgroundLayout->addWidget(mascotBackgroundScrollPingpongCheckBox);
 
-    // The layer's own cadence. Until now the layer borrowed `mascots_clip_seconds`,
-    // `mascots_swap_on_beat` and the image dice from the columns; these four rows are its own, and each
-    // one starts from the columns' value so a config that never touches them behaves as before.
-    // "starts from the columns' value" is over -- on the user's call the four keys are
-    // ordinary settings with defaults in config.cpp, so each row starts from its own key and falls back to
-    // that documented default (the columns' own default) when the file predates the key.
+    // The layer's four cadence keys are ordinary settings with defaults in config.cpp; each row
+    // falls back to that default for a config that predates the key.
     const auto mascotIntDefault = [config](const QString& key, int fallback) {
         bool ok = false;
         const int parsed = config->get(key).toInt(&ok);
@@ -1204,9 +1166,6 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "layer clip length does. 100% means every beat.");
     mascotBackgroundChanceSpinBox = makeSpinBox(0, 100, 1,
         mascotIntDefault(QStringLiteral("mascots_background_random_chance"), 10));
-    // One row, the way the Mascots page shows the same pair -- the checkbox on the left, its
-    // chance right-aligned on the same line. It was a checkbox followed by its own labelled row, which read
-    // as two unrelated controls.
     QHBoxLayout* layerDiceRow = new QHBoxLayout();
     layerDiceRow->addWidget(mascotBackgroundRandomChangeCheckBox);
     layerDiceRow->addStretch();
@@ -1219,16 +1178,9 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     layerDiceRow->addWidget(mascotBackgroundChanceSpinBox);
     backgroundLayout->addLayout(layerDiceRow);
 
-    // The layer group is appearance, not behaviour -- it decides how the window looks and
-    // nothing about what runs -- so it is built here and added to the Appearance page, above that page's
-    // trailing spacer. One tab for "make it look different", one for "make it behave differently": the
-    // group is built here because its controls are wired into this page's one writer and one matrix, and
-    // reparenting the built box is the smaller change than moving twelve control definitions.
-    // "nothing about what runs" stopped being true when the layer got its own cadence.
-    // Clip length, beat swap, random change and chance are behaviour, and they live in this group because
-    // the layer does -- keeping the layer's controls together matters more to a user looking for them than
-    // the appearance/behaviour split does. The sentence above is kept because it is why the group is here at
-    // all; the four cadence rows are the deliberate exception.
+    // The layer group is appearance, so it is added to the Appearance page; it is built here
+    // because its controls feed this page's one writer and one matrix, and reparenting the built
+    // box is smaller than moving twelve control definitions. Its cadence rows stay with it.
     this->ui.appearancePageLayout->insertWidget(
         this->ui.appearancePageLayout->count() - 1, backgroundGroup);
 
@@ -1258,13 +1210,9 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     this->ui.settingsStack->insertWidget(3, scrollArea);
     this->ui.categoryList->insertItem(3, "Mascots");
 
-    // One writer and one applier. Every control on the page feeds the same writer, so a
-    // change cannot write its key and skip the apply, and the matrix is recomputed from the same
-    // widget state the apply reads.
-    // Each control also names the key it owns, so the *apply* can be scoped to what
-    // changed. The writer still writes every key -- that is a few string assignments and it keeps OK/Apply
-    // and Cancel's baseline simple -- but a change to "Cache entries" no longer repaints the window and
-    // restarts every clip timer, and a change to the veil no longer re-presents three panels.
+    // One writer and one applier: every control feeds the same writer, so a change cannot write
+    // its key and skip the apply. Each control also names its key, so the apply is scoped to what
+    // changed instead of repainting the window and restarting every clip timer.
     const auto live = [this](QWidget* widget, const QString& key) {
         const QString owned = key;
         if (auto* combo = qobject_cast<QComboBox*>(widget))
@@ -1323,9 +1271,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     live(mascotBackgroundScrollPingpongCheckBox, QStringLiteral("mascots_background_scroll_pingpong"));
     live(mascotCacheMbSpinBox, QStringLiteral("mascots_image_cache_mb"));
     live(mascotCacheItemsSpinBox, QStringLiteral("mascots_image_cache_max_items"));
-    // The legacy rows, in the same live path, each with its own key. Their runtime side
-    // effects are MainWindow::applyLiveMascotRows()'s; the config writes are at the top of
-    // syncMascotConfig().
+    // The legacy rows' runtime half is MainWindow::applyLiveMascotRows().
     live(this->ui.mascotsOnOff, QStringLiteral("mascots"));
     live(this->ui.mascotsAnimated, QStringLiteral("mascots_animated"));
     live(this->ui.mascotsRandomChange, QStringLiteral("mascots_random_change"));
@@ -1335,8 +1281,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     live(this->ui.mascotsExtractColor, QStringLiteral("mascots_color_theme"));
     live(this->ui.mascotsCenterContent, QStringLiteral("mascots_center_content"));
     live(this->ui.mascotsMirror, QStringLiteral("mascots_mirror"));
-    // The master switch is not one of the page's own keys, but row 1 of the matrix is about it: the
-    // groups have to follow the checkbox at once, not on the next Apply.
+    // The master switch is row 1 of the matrix: the groups follow the checkbox at once.
     connect(this->ui.mascotsOnOff, &QCheckBox::toggled, this, [this] { updateMascotControlStates(); });
 
     updateMascotControlStates();
@@ -1347,8 +1292,8 @@ void SettingsDialog::syncMascotConfig(const QString& changedKey)
     MainWindow* mw = static_cast<MainWindow*>(this->parent());
     Config* config = mw->App->config;
 
-    // One write per key, and the combos write their exact item text: the controller compares those
-    // strings case-insensitively and warns about anything else, so no other spelling may leave here.
+    // One write per key, with the combos writing their exact item text: the controller compares
+    // those strings case-insensitively and warns about anything else.
     config->set("mascots_media", mascotMediaCombo->currentText());
     config->set("mascots_mode", mascotModeCombo->currentText());
     config->set("mascots_fill", mascotFillCombo->currentText());
@@ -1362,17 +1307,11 @@ void SettingsDialog::syncMascotConfig(const QString& changedKey)
     config->set("mascots_low_latency", mascotLowLatencyCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_pair_scroll", mascotPairScrollCombo->currentText());
     config->set("mascots_pair_flip", mascotPairFlipCheckBox->isChecked() ? "True" : "False");
-    // Mirror is written here now, and the checkbox is part of the live wiring below.
-    // It was one of the legacy rows that only took effect on Apply, which made the two pair controls that
-    // depend on it live while the switch itself was not -- and it also meant the controller could not see
-    // the 0->1 transition it needs in order to re-pair the columns.
+    // Mirror is live like the rest: the controller needs the 0->1 transition to re-pair the columns.
     config->set("mascots_mirror", this->ui.mascotsMirror->isChecked() ? "True" : "False");
-    // The legacy rows on this page -- master switch, Animated, the dice, frequency, width,
-    // colour theme, centre -- are written here too, because they are on the same page as the controls that
-    // were already live and the user asked for one rule: a control that decides something on screen takes
-    // effect when it is clicked. Their runtime half is MainWindow::applyLiveMascotRows(), called at the end
-    // of this function; the two that are *not* here -- All files random and Use seed -- change which pool is
-    // built, not a live property, so they stay with applySettings() on Apply.
+    // The legacy rows are written here because they share this page with the live controls;
+    // All files random and Use seed stay on Apply: they change which pool is built, not a live
+    // property.
     config->set("mascots", this->ui.mascotsOnOff->isChecked() ? "True" : "False");
     config->set("mascots_animated", this->ui.mascotsAnimated->isChecked() ? "True" : "False");
     config->set("mascots_random_change", this->ui.mascotsRandomChange->isChecked() ? "True" : "False");
@@ -1415,10 +1354,9 @@ void SettingsDialog::syncMascotConfig(const QString& changedKey)
     config->set("mascots_image_cache_max_items", QString::number(mascotCacheItemsSpinBox->value()));
 
     updateMascotControlStates();
-    // A live change applies only what it can have affected -- `applyMascotKey()` reads
-    // the key. The empty-key form is the Apply/OK/Cancel baseline and still runs the whole path, because
-    // those are the moments everything is expected to be consistent. The legacy rows' runtime half is part
-    // of both: `applyMascotKey()` reaches it through applyLiveMascotRows() for the rows that need it.
+    // A live change applies only what it can have affected -- applyMascotKey() reads the key.
+    // The empty-key form is the Apply/OK/Cancel baseline and runs the whole path, legacy runtime
+    // included.
     if (changedKey.isEmpty())
         mw->applyLiveMascotRows();
     else
@@ -1431,19 +1369,17 @@ void SettingsDialog::restoreMascotConfig()
     Config* config = mw->App->config;
     for (auto it = mascotConfigSnapshot.constBegin(); it != mascotConfigSnapshot.constEnd(); ++it)
         config->set(it.key(), it.value());
-    // Cancel restores the legacy rows' keys too, so their runtime half has to follow the
-    // restore -- an engine started by a live Animated tick would otherwise keep beating after Cancel put
-    // the key back to False.
+    // Cancel restores the legacy rows' keys, so their runtime half has to follow: an engine
+    // started by a live Animated tick would otherwise keep beating.
     mw->applyLiveMascotRows();
     updateMascotControlStates();
 }
 
 void SettingsDialog::rebaseMascotConfigSnapshot()
 {
-    // Apply is a new baseline. Without this, Apply followed by Cancel wrote the
-    // dialog-opening values back over the ones Apply had just kept -- Apply would have been the only
-    // button in this dialog whose effect a later Cancel undid. The legacy controls do not have the
-    // problem because applySettings() refreshes their `old_*` members as it writes.
+    // Apply is a new baseline: without the rebase, Cancel would write the dialog-opening values
+    // back over what Apply kept. The legacy controls avoid that by refreshing their `old_*`
+    // members as they write.
     Config* config = static_cast<MainWindow*>(this->parent())->App->config;
     for (auto it = mascotConfigSnapshot.begin(); it != mascotConfigSnapshot.end(); ++it)
         it.value() = config->get(it.key());
@@ -1452,14 +1388,14 @@ void SettingsDialog::rebaseMascotConfigSnapshot()
 void SettingsDialog::updateMascotControlStates()
 {
     const bool columnsOn = this->ui.mascotsOnOff->isChecked();
-    // Row 1: the columns' three groups are one switch; the legacy group box, the layer and the
-    // cache describe sources or presentation and stay usable while the columns are off.
+    // Row 1: the columns' three groups are one switch; the legacy box, the layer and the cache
+    // stay usable while the columns are off.
     mascotContentGroup->setEnabled(columnsOn);
     mascotPlaybackGroup->setEnabled(columnsOn);
     mascotStripesGroup->setEnabled(columnsOn);
 
     // Row 2: Images never opens a player, so the five video-only keys are dead until Videos/Mixed;
-    // the ceiling and the pause keep their meaning for images and the background.
+    // the ceiling and the pause keep their meaning.
     const bool videoColumns = mascotMediaCombo->currentText() != QLatin1String("Images");
     mascotClipSecondsSpinBox->setEnabled(videoColumns);
     mascotCrossfadeSpinBox->setEnabled(videoColumns);
@@ -1469,10 +1405,9 @@ void SettingsDialog::updateMascotControlStates()
     mascotMaxDecodersSpinBox->setEnabled(true);
     mascotPauseUnfocusedCheckBox->setEnabled(true);
     mascotLowLatencyCheckBox->setEnabled(true);
-    // The pair's travel is a property of the two columns, not of the mirror: with each column drawing its own picture
-    // -- images, or videos with the mirror off -- reversing the right column's travel is a real choice, and the engine
-    // has always honoured it there. The one shape that cannot express it is a *bound* video pair: one decoded picture
-    // drawn twice, flipped, so the mirrored column's travel is that picture's and nothing else.
+    // The pair's travel belongs to the two columns, not to the mirror, and the engine honours it
+    // whenever each column draws its own picture. A bound video pair is one decoded picture drawn
+    // twice, so it has no second travel to reverse.
     const bool boundPair = this->ui.mascotsMirror->isChecked() && videoColumns;
     mascotPairScrollCombo->setEnabled(!boundPair);
     mascotPairScrollCombo->setToolTip(boundPair
@@ -1480,17 +1415,15 @@ void SettingsDialog::updateMascotControlStates()
             "picture, so its travel is that picture's. Turn the mirror off, or set Media to Images, to set the two "
             "columns against each other.")
         : this->mascotPairScrollTip);
-    // The parity switch keeps its meaning for images and videos alike -- it is about the pair,
-    // not about a player -- so it never goes dark.
+    // The parity switch is about the pair, not about a player, so it never goes dark.
     mascotPairFlipCheckBox->setEnabled(this->ui.mascotsMirror->isChecked());
 
 
-    // Rows 3-5: Scroll and Stripes share this group, so the rows go dark individually instead of
-    // the whole box: each mode owns its half and neither owns the other's.
+    // Scroll and Stripes share this group, so the rows go dark individually, not the whole box.
     const QString mode = mascotModeCombo->currentText();
     const bool stripesColumns = mode == QLatin1String("Stripes");
-    // The pan is a switch of its own: it works on one band (the whole panel travelling past) and on striped bands
-    // alike, so it is never tied to a mode. The speed, direction and ping-pong rows only describe how it travels.
+    // The pan is its own switch and works on one band as well as on striped bands; the speed,
+    // direction and ping-pong rows only describe how it travels.
     mascotPanCheckBox->setEnabled(true);
     const bool panEnabled = mascotPanCheckBox->isChecked();
     mascotScrollSpeedSpinBox->setEnabled(panEnabled);
@@ -1501,7 +1434,7 @@ void SettingsDialog::updateMascotControlStates()
     mascotStripesOrientationCombo->setEnabled(stripesColumns);
     mascotStripesAlternateCheckBox->setEnabled(stripesColumns);
 
-    // Row 6: with the layer off nothing in its box has an effect -- except the switch itself.
+    // Row 6: with the layer off nothing in its box has an effect except the switch itself.
     const bool backgroundOn = mascotBackgroundCheckBox->isChecked();
     mascotBackgroundOpacitySpinBox->setEnabled(backgroundOn);
     mascotListAlphaSpinBox->setEnabled(backgroundOn);
@@ -1511,7 +1444,7 @@ void SettingsDialog::updateMascotControlStates()
     mascotBackgroundModeCombo->setEnabled(backgroundOn);
     mascotBackgroundFillCombo->setEnabled(backgroundOn);
 
-    // The layer follows the columns' rule: a mode is a shape (one band or stripes), the pan is its own switch.
+    // The layer follows the columns' rule: a mode is a shape, the pan is its own switch.
     const QString backgroundMode = mascotBackgroundModeCombo->currentText();
     const bool stripesLayer = backgroundMode == QLatin1String("Stripes");
     const bool layerPan = mascotBackgroundPanCheckBox->isChecked();
@@ -2487,7 +2420,7 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent)
     setupPlaybackPage(mw);
     setupAppearancePage(mw);
     // After Appearance, because the page takes over its mascots group box, and before
-    // wireApplyEnable(), so the page's controls are picked up by the generic wiring.
+    // wireApplyEnable(), so the generic wiring picks up the page's controls.
     setupMascotsPage(mw);
     setupAudioPage(mw);
     setupDatabasePage(mw);

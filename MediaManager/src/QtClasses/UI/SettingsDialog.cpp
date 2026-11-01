@@ -982,7 +982,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     mascotScrollSpeedSpinBox = makeSpinBox(0, 2000, 5,
         config->get(QStringLiteral("mascots_scroll_speed")).toInt());
     addRow(stripesLayout, "Scroll speed (px/s):",
-        "Pixels per second a scrolling band travels. 0 stands still. Read only in Scroll.",
+        "Pixels per second a panning band travels, in Scroll and Stripes alike. 0 stands still.",
         mascotScrollSpeedSpinBox);
 
     mascotScrollDirectionCombo = makeComboBox({ QStringLiteral("LeftToRight"), QStringLiteral("RightToLeft"),
@@ -995,8 +995,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     mascotScrollPingpongCheckBox = new QCheckBox("Reverse at the end instead of wrapping");
     mascotScrollPingpongCheckBox->setChecked(config->get_bool(QStringLiteral("mascots_scroll_pingpong")));
     mascotScrollPingpongCheckBox->setToolTip(
-        "Ping-pong: reverse at the end of the band instead of wrapping around to its start. Read "
-        "only in Scroll.");
+        "Ping-pong: reverse at the end of the band instead of wrapping around to its start.");
     stripesLayout->addWidget(mascotScrollPingpongCheckBox);
 
     mascotStripesLeftSpinBox = makeSpinBox(1, 8, 1,
@@ -1463,9 +1462,13 @@ void SettingsDialog::updateMascotControlStates()
     const QString mode = mascotModeCombo->currentText();
     const bool scrollColumns = mode == QLatin1String("Scroll");
     const bool stripesColumns = mode == QLatin1String("Stripes");
-    mascotScrollSpeedSpinBox->setEnabled(scrollColumns);
-    mascotScrollDirectionCombo->setEnabled(scrollColumns);
-    mascotScrollPingpongCheckBox->setEnabled(scrollColumns);
+    // Speed, direction and ping-pong are the pan's own rows and both panning modes read them (the controller's
+    // scroll tick takes them from the panel's layout whatever the mode); only the rows that name one mode's shape --
+    // marquee cells here, bands there -- belong to that mode alone.
+    const bool panningColumns = scrollColumns || stripesColumns;
+    mascotScrollSpeedSpinBox->setEnabled(panningColumns);
+    mascotScrollDirectionCombo->setEnabled(panningColumns);
+    mascotScrollPingpongCheckBox->setEnabled(panningColumns);
     mascotStripesLeftSpinBox->setEnabled(stripesColumns);
     mascotStripesRightSpinBox->setEnabled(stripesColumns);
     mascotStripesOrientationCombo->setEnabled(stripesColumns);

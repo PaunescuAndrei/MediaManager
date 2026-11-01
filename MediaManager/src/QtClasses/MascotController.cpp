@@ -701,14 +701,18 @@ ScrollDirection MascotController::scrollDirectionFromString(const QString& value
 
 MascotSurface::FillMode MascotController::effectiveFillMode(MascotPanel panel) const
 {
-	// `mascots_fill` is the user's choice in every mode; the two normalised modes are the defaults the dialog offers
-	// for the two stripe orientations, and a vertical band still on the horizontal default is read as the vertical one
-	// so that switching orientation does not turn every band into a sliver.
+	// A panning band cannot use an arbitrary fill mode: the pan slides the *item* inside its clipped slot, so the item
+	// has to be larger than the band along the pan axis. Exactly that is what the normalised modes give -- HeightFit
+	// keeps the band's height and lets the width follow the clip, WidthFit the other way round -- while Cover/Crop/Fit
+	// size the item to the band itself, so the band either cannot move or slides its own crop out of the slot. The
+	// user's choice therefore decides Static's framing (and the layer's own), not the panning framing.
 	const PanelLayout& layout = this->layoutFor(panel);
-	if (layout.mode == MascotMode::Stripes && layout.orientation == StripesOrientation::Vertical
-		&& layout.fill == MascotSurface::FillMode::HeightFit)
-		return MascotSurface::FillMode::WidthFit;
-	return layout.fill;
+	if (layout.mode == MascotMode::Static)
+		return layout.fill;
+	const bool vertical = layout.mode == MascotMode::Stripes
+		? layout.orientation == StripesOrientation::Vertical
+		: this->scrollPanIsVertical(panel);
+	return vertical ? MascotSurface::FillMode::WidthFit : MascotSurface::FillMode::HeightFit;
 }
 
 int MascotController::bandCount(MascotPanel panel) const
@@ -884,6 +888,17 @@ void MascotController::syncBands(PanelState& state, MascotPanel panel)
 	}
 	for (auto& owned : state.bands)
 		owned->setGroup(this->slotGroupFor(panel));
+	// A slot outlives the band that filled it, and the surface keeps the slot's scroll offset along with its other
+	// properties. A band re-created into that slot starts at zero and only writes an offset when it has travel, so
+	// the previous band's translation would sit on the item for ever and slide the new content out of its band.
+	// Clearing it here is what makes a band-count change start the pan from the band rather than from the slot.
+	for (auto& owned : state.bands) {
+		MascotBand* band = owned.get();
+		if (!band)
+			continue;
+		surface->setSlotScrollOffset(band->slotIndex(), 0.0, 0.0);
+		band->setScrollOffset(0.0);
+	}
 	state.configuredBandCount = wanted;
 	state.scrollZeroTravelLogged.resize(wanted);
 	for (const QString& path : removedShown)

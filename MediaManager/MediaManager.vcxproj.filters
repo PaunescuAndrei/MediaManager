@@ -68,6 +68,9 @@
     <Filter Include="Header Files\QtClasses\Models">
       <UniqueIdentifier>{3ac3dc68-38a9-413f-b434-dc1ce7d0fa43}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Form Files\QML Files">
+      <UniqueIdentifier>{e8c44da2-437c-44d8-98a5-5ad7285663cc}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp">
@@ -214,9 +217,6 @@
     <ClCompile Include="src\QtClasses\Widgets\generalEventFilter.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
-    <ClCompile Include="srcQtClassesWidgetsTooltipEventFilter.cpp">
-      <Filter>Source FilesQtClassesWidgets</Filter>
-    </ClCompile>
     <ClCompile Include="src\general\RawInputKeyboard.cpp">
       <Filter>Source Files\general</Filter>
     </ClCompile>
@@ -348,6 +348,9 @@
     </ClCompile>
     <ClCompile Include="src\QtClasses\Widgets\ContributionHeatmapWidget.cpp">
       <Filter>Source Files\QtClasses\Widgets</Filter>
+    </ClCompile>
+    <ClCompile Include="src\QtClasses\Widgets\TooltipEventFilter.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -537,7 +540,6 @@
     <QtUic Include="src\QtClasses\UI\Form Files\LogDialog.ui">
       <Filter>Form Files</Filter>
     </QtUic>
-
     <QtUic Include="src\QtClasses\UI\Form Files\FilterDialog.ui">
       <Filter>Form Files</Filter>
     </QtUic>
@@ -654,9 +656,6 @@
     <QtMoc Include="src\QtClasses\Widgets\generalEventFilter.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
-    <QtMoc Include="srcQtClassesWidgetsTooltipEventFilter.h">
-      <Filter>Header FilesQtClassesWidgets</Filter>
-    </QtMoc>
     <QtMoc Include="src\QtClasses\UI\starDelegate.h">
       <Filter>Header Files\QtClasses\UI</Filter>
     </QtMoc>
@@ -747,6 +746,9 @@
     <QtMoc Include="src\QtClasses\Widgets\MascotSurface.h">
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
+    <QtMoc Include="src\QtClasses\Widgets\TooltipEventFilter.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="src\MediaManager.rc">
@@ -757,13 +759,14 @@
     <None Include="src\MediaManager.rc2">
       <Filter>Resource Files</Filter>
     </None>
-  </ItemGroup>
-  <ItemGroup>
     <None Include="src\qml\MascotSurface.qml">
-      <Filter>Source Files</Filter>
+      <Filter>Form Files\QML Files</Filter>
     </None>
     <None Include="src\qml\MascotSlot.qml">
-      <Filter>Source Files</Filter>
+      <Filter>Form Files\QML Files</Filter>
+    </None>
+    <None Include="src\qml\PreviewVideo.qml">
+      <Filter>Form Files\QML Files</Filter>
     </None>
   </ItemGroup>
 </Project>

@@ -936,6 +936,7 @@ void MascotController::syncBands(PanelState& state, MascotPanel panel)
 	}
 	for (auto& owned : state.bands)
 		owned->setSurface(surface);
+	const std::size_t firstNew = state.bands.size();
 	while (static_cast<int>(state.bands.size()) < wanted) {
 		const int index = static_cast<int>(state.bands.size());
 		auto created = std::make_unique<MascotBand>(state.slotBase + index);
@@ -949,14 +950,19 @@ void MascotController::syncBands(PanelState& state, MascotPanel panel)
 	// travel, and only fades in once its own first frame arrives, so the previous band's translation would sit on the
 	// item and its output would be shown over the stale frame. Clearing both here makes a band-count change start from
 	// the band rather than from the slot.
-	for (auto& owned : state.bands) {
-		MascotBand* band = owned.get();
+	for (std::size_t index = 0; index < state.bands.size(); ++index) {
+		MascotBand* band = state.bands[index].get();
 		if (!band)
 			continue;
 		surface->setSlotScrollOffset(band->slotIndex(), 0.0, 0.0);
-		surface->setSlotVideoOpacity(band->slotIndex(), 0, 0.0, 0);
-		surface->setSlotVideoOpacity(band->slotIndex(), 1, 0.0, 0);
 		band->setScrollOffset(0.0);
+		// Only a band that re-created a slot writes both opacities: the slot still holds the previous band's fade and
+		// nothing else would clear it. A band that survived keeps its own -- zeroing them for every band is what
+		// blacked out every visible video whenever the band count changed, which every pan and mode switch does.
+		if (index >= firstNew) {
+			surface->setSlotVideoOpacity(band->slotIndex(), 0, 0.0, 0);
+			surface->setSlotVideoOpacity(band->slotIndex(), 1, 0.0, 0);
+		}
 	}
 	state.configuredBandCount = wanted;
 	state.scrollZeroTravelLogged.resize(wanted);

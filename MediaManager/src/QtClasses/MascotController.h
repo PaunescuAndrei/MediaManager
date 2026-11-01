@@ -151,7 +151,7 @@ private:
 	void detachPanel(PanelState& state);
 	void dropPanel(PanelState& state);
 	MascotSurface::SlotGroup slotGroupFor(MascotPanel panel) const;
-	// Columns at z 2, layer at z 0: the veil is z 1 (above the columns) or z 3 (below them).
+	// Columns at z 2, layer at z 0: a veil at z 1 sits under the columns, one at z 3 over them.
 	bool mascotsBelowVeil() const;
 	// The window-sized host is the sheet's parent, so its frame is the origin and its size, not its pos().
 	QRectF panelFrame(MascotPanel panel) const;

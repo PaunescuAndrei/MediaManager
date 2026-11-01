@@ -262,7 +262,7 @@ public:
     bool backupDB(QWidget* parent = nullptr);
     void resetWatchedDB(QWidget* parent = nullptr);
     void cleanMissingFilesDialog(QWidget* parent = nullptr);
-    void handleMascotClickEvents(MascotSide mascot, Qt::MouseButton button, Qt::KeyboardModifiers modifiers);
+    void handleMascotClickEvents(MascotSide mascot, int bandIndex, Qt::MouseButton button, Qt::KeyboardModifiers modifiers);
     void applySettings(SettingsDialog* dialog);
     // M5 Task 1: the mascot live-apply entry point. Reads the mascot keys from config (already
     // written by the caller), runs the columns/background state machine and then everything that
@@ -330,9 +330,9 @@ public:
     void setIcon(QIcon icon);
     void closeEvent(QCloseEvent* event) override;
     void initMascotAnimation();
-    void updateMascot(MascotSide mascot, bool update_highlight_color);
+    void updateMascot(MascotSide mascot, int bandIndex);
     void updateMascots(bool forced_mirror = false);
-    void updateThemeHighlightColorFromMascot(MascotSide mascot, bool weighted = true);
+    void updateThemeHighlightColorFromMascot(MascotSide mascot, int bandIndex, bool weighted = true);
     void setThemeHighlightColor(QColor color);
     void openThumbnails(QString path);
     PreviewVideoWindow* createPreviewPopup(const QString& path, QWidget* parent = nullptr, bool rememberPosition = false, bool randomHover = false);

@@ -135,8 +135,8 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
         this->App->mascotPrefetcher, this->ui.mascotLeftHost, this->ui.mascotRightHost,
         this->ui.centralwidget, this);
     connect(this->mascotController, &MascotController::clicked, this,
-        [this](MascotSide side, Qt::MouseButton button, Qt::KeyboardModifiers modifiers) {
-            this->handleMascotClickEvents(side, button, modifiers);
+        [this](MascotSide side, int bandIndex, Qt::MouseButton button, Qt::KeyboardModifiers modifiers) {
+            this->handleMascotClickEvents(side, bandIndex, button, modifiers);
         });
     connect(this->mascotController, &MascotController::themeColorChanged, this, [this](const color_area& color) {
         if (this->App->MascotsExtractColor and color.color.isValid())
@@ -1547,11 +1547,11 @@ void MainWindow::initMascotAnimation()
     }
 }
 
-void MainWindow::updateMascot(MascotSide mascot, bool update_highlight_color) {
+void MainWindow::updateMascot(MascotSide mascot, int bandIndex) {
     // The side-directory flip rule, the swap latency and the theme colour move with the media
     // now: the controller commits from its own prefetched candidate, implements flipForSide()
     // and emits themeColorChanged() when the media it picked has landed.
-    this->mascotController->nextImage(mascot, update_highlight_color);
+    this->mascotController->advanceBand(mascot, bandIndex);
 }
 
 void MainWindow::updateMascots(bool forced_mirror)
@@ -1565,10 +1565,10 @@ void MainWindow::updateMascots(bool forced_mirror)
     }
 }
 
-void MainWindow::updateThemeHighlightColorFromMascot(MascotSide mascot, bool weighted) {
+void MainWindow::updateThemeHighlightColorFromMascot(MascotSide mascot, int bandIndex, bool weighted) {
     // The palette comes from the MascotMedia the controller received (amendment H5): the
     // decode already extracted it, so there is nothing to re-extract and no cache accessor.
-    color_area color = this->mascotController->colorFor(mascot, weighted);
+    color_area color = this->mascotController->colorForBand(mascot, bandIndex, weighted);
     if (color.color.isValid())
         this->setThemeHighlightColor(color.color);
 }
@@ -2928,29 +2928,23 @@ void MainWindow::cleanMissingFilesDialog(QWidget* parent) {
     }
 }
 
-void MainWindow::handleMascotClickEvents(MascotSide mascot, Qt::MouseButton button, Qt::KeyboardModifiers modifiers) {
+void MainWindow::handleMascotClickEvents(MascotSide mascot, int bandIndex, Qt::MouseButton button, Qt::KeyboardModifiers modifiers) {
     if (modifiers.testFlag(Qt::ControlModifier)) {
         switch (button)
         {
         case Qt::LeftButton:
-            this->updateThemeHighlightColorFromMascot(mascot, true);
+            this->updateThemeHighlightColorFromMascot(mascot, bandIndex, true);
             break;
         case Qt::RightButton:
-            this->updateThemeHighlightColorFromMascot(mascot, false);
+            this->updateThemeHighlightColorFromMascot(mascot, bandIndex, false);
             break;
         case Qt::MiddleButton:
-            if (this->App->config->get_bool("mascots_mirror")) {
-                if (modifiers.testFlag(Qt::ShiftModifier))
-                    this->updateMascot(mascot, true);
-                else 
-                    this->updateMascots(false);
-            }
-            else {
-                if (modifiers.testFlag(Qt::ShiftModifier))
-                    this->updateMascots(true);
-                else
-                    this->updateMascot(mascot, true);
-            }
+            // Shift is the strip's unit, a plain ctrl-click the band under the pointer. The mirror pair is one clip
+            // per band, so both paths advance the pair's band rather than half of it.
+            if (modifiers.testFlag(Qt::ShiftModifier))
+                this->mascotController->advanceStrip(mascot);
+            else
+                this->updateMascot(mascot, bandIndex);
             break;
         default:
             break;

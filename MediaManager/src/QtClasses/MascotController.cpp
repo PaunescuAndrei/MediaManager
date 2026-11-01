@@ -701,16 +701,14 @@ ScrollDirection MascotController::scrollDirectionFromString(const QString& value
 
 MascotSurface::FillMode MascotController::effectiveFillMode(MascotPanel panel) const
 {
-	// Vertical `Stripes` needs `WidthFit`: with `HeightFit` every band's content would fit its height exactly and the travel would be 0.
+	// `mascots_fill` is the user's choice in every mode; the two normalised modes are the defaults the dialog offers
+	// for the two stripe orientations, and a vertical band still on the horizontal default is read as the vertical one
+	// so that switching orientation does not turn every band into a sliver.
 	const PanelLayout& layout = this->layoutFor(panel);
-	if (panel == MascotPanel::Background && layout.mode == MascotMode::Scroll)
-		return layout.fill;
-	if (layout.mode == MascotMode::Static)
-		return layout.fill;
-	if (layout.mode == MascotMode::Stripes
-		&& layout.orientation == StripesOrientation::Vertical)
+	if (layout.mode == MascotMode::Stripes && layout.orientation == StripesOrientation::Vertical
+		&& layout.fill == MascotSurface::FillMode::HeightFit)
 		return MascotSurface::FillMode::WidthFit;
-	return MascotSurface::FillMode::HeightFit;
+	return layout.fill;
 }
 
 int MascotController::bandCount(MascotPanel panel) const
@@ -1305,11 +1303,6 @@ void MascotController::onScrollTick()
 	}
 }
 
-void MascotController::nextImage(MascotSide side, bool updateHighlight)
-{
-	this->pickFor(this->stateFor(panelOf(side)), panelOf(side), 0, updateHighlight);
-}
-
 void MascotController::nextImages(bool forcedMirror)
 {
 	this->nextBandImages(0, forcedMirror);
@@ -1367,6 +1360,28 @@ void MascotController::nextBandImages(int bandIndex, bool forcedMirror)
 	}
 }
 
+void MascotController::advanceBand(MascotSide side, int bandIndex)
+{
+	if (!this->running || bandIndex < 0)
+		return;
+	// A mirrored pair draws one clip per band, so a band advanced on either side is the pair's band: advancing half
+	// of it would leave the two panels on different frames at the same height.
+	if (this->mirrorEnabled()) {
+		this->nextBandImages(bandIndex, false);
+		return;
+	}
+	this->pickFor(this->stateFor(panelOf(side)), panelOf(side), bandIndex, bandIndex == 0);
+}
+
+void MascotController::advanceStrip(MascotSide side)
+{
+	if (!this->running)
+		return;
+	const int count = this->bandCount(panelOf(side));
+	for (int i = 0; i < count; ++i)
+		this->advanceBand(side, i);
+}
+
 void MascotController::flipSide(MascotSide side)
 {
 	PanelState& state = this->stateFor(panelOf(side));
@@ -1398,8 +1413,13 @@ bool MascotController::flipForSide(const QString& path, MascotSide side) const
 
 color_area MascotController::colorFor(MascotSide side, bool weighted)
 {
+	return this->colorForBand(side, 0, weighted);
+}
+
+color_area MascotController::colorForBand(MascotSide side, int bandIndex, bool weighted)
+{
 	const PanelState& state = this->stateFor(panelOf(side));
-	const MascotBand* band = state.band(0);
+	const MascotBand* band = state.band(bandIndex);
 	color_area color;
 	if (!band)
 		return color;
@@ -1586,7 +1606,7 @@ void MascotController::createSheet()
 			MascotSide side = MascotSide::Left;
 			if (!this->pairSideOf(this->stateFor(panel), &side))
 				return;
-			emit this->clicked(side, button, modifiers);
+			emit this->clicked(side, band, button, modifiers);
 		});
 	connect(surface, &MascotSurface::imageDropped, this, [this](int slot, QString path) {
 		MascotPanel panel = MascotPanel::Left;
@@ -2170,11 +2190,11 @@ bool MascotController::bandMayOwnPlayer(MascotPanel panel, int bandIndex) const
 
 bool MascotController::videoCrossfades(MascotPanel panel) const
 {
-	// Only `Static` keeps the two-player design; a panning band has one player and takes the hard cut, never consulting `mascots_crossfade_ms`.
 	if (panel == MascotPanel::Background)
 		return this->backgroundCrossfades;
-	return this->layoutFor(panel).mode == MascotMode::Static
-		&& this->videoMode == VideoMode::Crossfade;
+	// A panning band crossfades the same way a static one does -- two players taking turns -- so the only question is
+	// whether the decoder ceiling can pay for the pairs, which applyBandBudget() answers.
+	return this->videoMode == VideoMode::Crossfade;
 }
 
 void MascotController::invalidateVideoPoolIfStale()
@@ -2696,37 +2716,64 @@ void MascotController::destroyVideoSlot(PanelState& state)
 
 void MascotController::applyDecoderBudget()
 {
+	// The ceiling is spent in pairs: `Static` keeps two players on each panel, and a panning mode keeps two on each
+	// *band*, so the same crossfade reaches every mode and only the count of pairs differs. Crossfading every band is
+	// the mode only when the ceiling covers a pair for each of them; below that every band the budget reaches takes
+	// the hard cut, which is still better than showing images.
 	const int crossfadeWant = PLAYERS_PER_PANEL * VIDEO_PANEL_COUNT;
-	VideoMode mode;
-	if (this->maxDecoders >= crossfadeWant)
-		mode = VideoMode::Crossfade;
-	else if (this->maxDecoders >= VIDEO_PANEL_COUNT)
-		mode = VideoMode::SinglePlayer;
-	else
-		mode = VideoMode::Off;
-	this->videoMode = mode;
-	if (this->columnsLayout.mode != MascotMode::Static) {
-		this->videoMode = this->maxDecoders > 0 ? VideoMode::SinglePlayer : VideoMode::Off;
-		return;
+	const int wantedBands = this->bandCount(MascotPanel::Left) + this->bandCount(MascotPanel::Right);
+	VideoMode mode = VideoMode::Off;
+	if (this->columnsLayout.mode == MascotMode::Static) {
+		if (this->maxDecoders >= crossfadeWant)
+			mode = VideoMode::Crossfade;
+		else if (this->maxDecoders >= VIDEO_PANEL_COUNT)
+			mode = VideoMode::SinglePlayer;
 	}
+	else if (wantedBands > 0) {
+		if (this->maxDecoders >= wantedBands * PLAYERS_PER_PANEL)
+			mode = VideoMode::Crossfade;
+		else if (this->maxDecoders > 0)
+			mode = VideoMode::SinglePlayer;
+	}
+	this->videoMode = mode;
 	if (this->loggedDecoderBudget == this->maxDecoders || !this->mediaSettingWantsVideo())
 		return;
 	this->loggedDecoderBudget = this->maxDecoders;
+	if (this->columnsLayout.mode == MascotMode::Static) {
+		switch (mode) {
+		case VideoMode::Crossfade:
+			this->logVideo(QStringLiteral("mascots_max_decoders=%1 covers the %2 players two panels crossfade with; crossfade on")
+				.arg(this->maxDecoders)
+				.arg(crossfadeWant));
+			break;
+		case VideoMode::SinglePlayer:
+			this->logVideo(QStringLiteral("mascots_max_decoders=%1 is below the %2 two panels crossfading want; one player per panel, hard cut")
+				.arg(this->maxDecoders)
+				.arg(crossfadeWant));
+			break;
+		case VideoMode::Off:
+			this->logVideo(QStringLiteral("mascots_max_decoders=%1 is below the %2 players two panels need; no video")
+				.arg(this->maxDecoders)
+				.arg(VIDEO_PANEL_COUNT));
+			break;
+		}
+		return;
+	}
 	switch (mode) {
 	case VideoMode::Crossfade:
-		this->logVideo(QStringLiteral("mascots_max_decoders=%1 covers the %2 players two panels crossfade with; crossfade on")
+		this->logVideo(QStringLiteral("mascots_max_decoders=%1 covers %2 %3 bands with two players each; crossfade on")
 			.arg(this->maxDecoders)
-			.arg(crossfadeWant));
+			.arg(wantedBands)
+			.arg(modeLabel(this->columnsLayout.mode)));
 		break;
 	case VideoMode::SinglePlayer:
-		this->logVideo(QStringLiteral("mascots_max_decoders=%1 is below the %2 two panels crossfading want; one player per panel, hard cut")
+		this->logVideo(QStringLiteral("mascots_max_decoders=%1 is below the %2 players %3 bands want for a crossfade; one player each, hard cut")
 			.arg(this->maxDecoders)
-			.arg(crossfadeWant));
+			.arg(wantedBands * PLAYERS_PER_PANEL)
+			.arg(modeLabel(this->columnsLayout.mode)));
 		break;
 	case VideoMode::Off:
-		this->logVideo(QStringLiteral("mascots_max_decoders=%1 is below the %2 players two panels need; no video")
-			.arg(this->maxDecoders)
-			.arg(VIDEO_PANEL_COUNT));
+		this->logVideo(QStringLiteral("mascots_max_decoders=%1 leaves no players; no video").arg(this->maxDecoders));
 		break;
 	}
 }
@@ -2746,24 +2793,27 @@ void MascotController::applyBandBudget()
 	const int wantedLeft = this->bandCount(MascotPanel::Left);
 	const int wantedRight = this->bandCount(MascotPanel::Right);
 	const int wanted = wantedLeft + wantedRight;
+	// What one band costs the ceiling: a crossfading band holds two players, a hard-cutting one holds a single player.
+	const int perBand = this->videoCrossfades(MascotPanel::Left) ? PLAYERS_PER_PANEL : 1;
 	int allowedLeft = wantedLeft;
 	int allowedRight = wantedRight;
-	if (wanted > this->maxDecoders) {
-		// Spend a short budget one player at a time, alternating panels and taking each panel's bands from index 0, so both
-		// keep video for as long as the budget lasts and the spare goes to the left -- the band the mirror pair follows.
+	if (wanted * perBand > this->maxDecoders) {
+		// Spend a short budget one band's worth of players at a time, alternating panels and taking each panel's bands
+		// from index 0, so both keep video for as long as the budget lasts and the spare goes to the left -- the band
+		// the mirror pair follows.
 		allowedLeft = 0;
 		allowedRight = 0;
 		int remaining = std::max(0, this->maxDecoders);
-		while (remaining > 0) {
+		while (remaining >= perBand) {
 			bool took = false;
 			for (MascotSide side : { MascotSide::Left, MascotSide::Right }) {
-				if (remaining <= 0)
+				if (remaining < perBand)
 					break;
 				int& allowed = side == MascotSide::Left ? allowedLeft : allowedRight;
 				const int want = side == MascotSide::Left ? wantedLeft : wantedRight;
 				if (allowed < want) {
 					++allowed;
-					--remaining;
+					remaining -= perBand;
 					took = true;
 				}
 			}
@@ -2798,10 +2848,11 @@ void MascotController::applyBandBudget()
 	this->loggedBandBudgetRight = allowedRight;
 	this->loggedBandBudgetMode = this->columnsLayout.mode;
 	if (pairDegraded) {
-		this->logVideo(QStringLiteral("mascots_max_decoders=%1 cannot give both panels a player (%2 %3 bands ask for one each); neither panel keeps one, so both show images on the beat")
+		this->logVideo(QStringLiteral("mascots_max_decoders=%1 cannot give both panels a player set (%2 %3 bands ask for %4 each); neither panel keeps one, so both show images on the beat")
 			.arg(this->maxDecoders)
 			.arg(wanted)
-			.arg(modeLabel(this->columnsLayout.mode)));
+			.arg(modeLabel(this->columnsLayout.mode))
+			.arg(perBand));
 		return;
 	}
 	if (allowed < wanted) {
@@ -2814,12 +2865,14 @@ void MascotController::applyBandBudget()
 			.arg(allowedRight));
 		return;
 	}
-	this->logVideo(QStringLiteral("mascots_max_decoders=%1 covers %2 %3 bands, one player each (left %4, right %5), hard cut")
+	this->logVideo(QStringLiteral("mascots_max_decoders=%1 covers %2 %3 bands with %4 players each (left %5, right %6); %7")
 		.arg(this->maxDecoders)
 		.arg(wanted)
 		.arg(modeLabel(this->columnsLayout.mode))
+		.arg(perBand)
 		.arg(allowedLeft)
-		.arg(allowedRight));
+		.arg(allowedRight)
+		.arg(perBand == PLAYERS_PER_PANEL ? QStringLiteral("crossfade on") : QStringLiteral("hard cut")));
 }
 
 void MascotController::applyBackgroundBudget()
@@ -2831,6 +2884,10 @@ void MascotController::applyBackgroundBudget()
 		const int perPanel = this->videoMode == VideoMode::Crossfade ? PLAYERS_PER_PANEL
 			: (this->videoMode == VideoMode::SinglePlayer ? 1 : 0);
 		pairPlayers = perPanel * VIDEO_PANEL_COUNT;
+	}
+	else if (this->videoMode == VideoMode::Crossfade) {
+		// Each of those bands is holding a pair, so the layer may only spend what the pairs leave.
+		pairPlayers *= PLAYERS_PER_PANEL;
 	}
 	if (!this->mediaMayBeVideo(MascotPanel::Left) && !this->mediaMayBeVideo(MascotPanel::Right))
 		pairPlayers = 0;

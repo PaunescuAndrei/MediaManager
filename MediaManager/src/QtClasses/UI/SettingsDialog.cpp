@@ -964,7 +964,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "running. Off keeps them decoding while you are elsewhere.");
     playbackLayout->addWidget(mascotPauseUnfocusedCheckBox);
 
-    mascotMaxDecodersSpinBox = makeSpinBox(0, 32, 1,
+    mascotMaxDecodersSpinBox = makeSpinBox(0, 64, 1,
         config->get(QStringLiteral("mascots_max_decoders")).toInt());
     addRow(playbackLayout, "Decoder ceiling:",
         "The hard ceiling on open video players. The moving modes spend one player per band (cells "

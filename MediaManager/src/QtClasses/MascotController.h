@@ -67,20 +67,25 @@ public:
 	double scrollTravel(MascotPanel panel, const MascotBand& band) const;
 	static ScrollDirection scrollDirectionFromString(const QString& value, bool* ok);
 
-	void nextImage(MascotSide side, bool updateHighlight = false);
 	void nextImages(bool forcedMirror);
 	void nextBandImages(int bandIndex, bool forcedMirror);
+	// One band of one panel, and every band of a panel: the two shapes a click acts in. A mirrored pair shows one
+	// clip per band, so either call advances the pair's band rather than half of it.
+	void advanceBand(MascotSide side, int bandIndex);
+	void advanceStrip(MascotSide side);
 
 	void flipSide(MascotSide side);
 	void flipBoth();
 	// A file under `right` is drawn mirrored on the left panel and vice versa.
 	bool flipForSide(const QString& path, MascotSide side) const;
 	color_area colorFor(MascotSide side, bool weighted);
+	color_area colorForBand(MascotSide side, int bandIndex, bool weighted);
 
 	void showDroppedImage(MascotSide side, const QString& path);
 
 signals:
-	void clicked(MascotSide side, Qt::MouseButton button, Qt::KeyboardModifiers modifiers);
+	// `bandIndex` is the stripe the click landed on; the side alone would make every band act on the first.
+	void clicked(MascotSide side, int bandIndex, Qt::MouseButton button, Qt::KeyboardModifiers modifiers);
 	void themeColorChanged(color_area color);
 
 protected:

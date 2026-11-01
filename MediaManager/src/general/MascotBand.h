@@ -41,6 +41,11 @@ public:
 	void forgetMedia();
 
 	void applyMirror(bool mirrored);
+	// The slot draws `sourceSlot`'s video stage instead of this band's players; -1 restores its own picture.
+	void setMirrorSource(int sourceSlot);
+	int mirrorSourceSlot() const;
+	// Whether the mirror view is drawn flipped. Written only when it differs, so a left commit does not rewrite it.
+	void setMirrorFlip(bool flipped);
 	// Writes only when the mode differs, so an image commit writes no fill mode at all.
 	void applyFill(MascotSurface::FillMode mode);
 	void setContentOffset(const QPointF& offset);
@@ -61,8 +66,6 @@ public:
 	struct Playback {
 		QString prefetchPath;
 		MascotMedia candidate;
-		// Set on the right band while the left band's mirrored pick is still loading; the copy starts from that pick's firstFrame(), where its offset exists.
-		bool mirrorCopyPending = false;
 		quint64 videoSeq = 0;
 		qint64 requestedAtMs = 0;
 		qint64 committedAtMs = 0;
@@ -101,6 +104,9 @@ private:
 	MascotSurface::FillMode m_fillMode = MascotSurface::FillMode::HeightFit;
 	bool m_fillModeKnown = false;
 	bool m_videoOutputVisible = false;
+	int m_mirrorSourceSlot = -1;
+	bool m_mirrorFlip = false;
+	bool m_mirrorFlipKnown = false;
 	double m_scrollOffset = 0.0;
 	QRectF m_rect;
 	WrapCommit m_wrapCommit;

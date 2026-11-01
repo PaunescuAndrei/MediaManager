@@ -232,7 +232,6 @@ private:
 	void onVideoFailed(MascotPanel panel, int bandIndex, const QString& path,
 		MascotVideoSlot::FailKind kind, bool timedOut);
 	void fadeInVideo(PanelState& state, MascotPanel panel, int bandIndex, int ab);
-	void startMirrorVideo(int bandIndex, const QString& path, qint64 offsetMs);
 
 	void preloadNext(MascotPanel panel);
 	void startPreload(MascotPanel panel);
@@ -256,6 +255,11 @@ private:
 	void onClipTimer(MascotPanel panel, int bandIndex);
 	void stopClipTimers();
 	bool bandMirrorsLeft(int bandIndex) const;
+	// True while `panel`'s band draws the left band's stage: it then needs no player of its own.
+	bool bandUsesMirrorView(MascotPanel panel, int bandIndex) const;
+	// Binds and unbinds the right band's view to the left band's stage. Idempotent: it writes only the bands whose
+	// binding the current media disagrees with.
+	void syncMirrorBindings();
 	void queueBandRefill(MascotPanel panel, int bandIndex, bool onlyIfEmpty);
 
 	void applyVideoPaused();

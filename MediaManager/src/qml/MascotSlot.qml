@@ -21,6 +21,10 @@ Item {
 	// True only while the picture is painted smaller than its resolution -- the case mipmapping helps.
 	// Video has no filtering knob in Qt, so it is always linear.
 	property bool minifying: false
+	// The other column's stage item while this band is the mirror view of it, null otherwise. Set by the surface,
+	// which resolves the slot index the controller names.
+	property Item mirrorSource: null
+
 
 	// Image and the two outputs are exclusive per slot; the outputs keep their geometry, so a swap costs no relayout.
 	property bool videoVisible: false
@@ -52,7 +56,7 @@ Item {
 		anchors.centerIn: parent
 		fillMode: Image.Stretch
 		mirror: slot.mirrored
-		visible: slot.mediaIsImage
+		visible: slot.mediaIsImage && !slot.mirrorSource
 		smooth: true
 		mipmap: slot.minifying
 		// The provider answers from the cache inside the same property write, so a synchronous load is the frame after a swap.
@@ -63,37 +67,73 @@ Item {
 		}
 	}
 
-	VideoOutput {
-		id: videoA
+	// The slot's own picture, one item so a mirrored band can sample it as a texture. Both outputs in one place is
+	// also what keeps the crossfade inside the picture the other column draws.
+	Item {
+		id: stage
 
-		objectName: "videoA" + index
-		width: slot.paintedWidth
-		height: slot.paintedHeight
-		anchors.centerIn: parent
-		fillMode: VideoOutput.Stretch
-		mirrored: slot.mirrored
-		visible: slot.videoVisible
-		opacity: slot.videoOpacityA
-		transform: Translate {
-			x: slot.scrollOffsetX
-			y: slot.scrollOffsetY
+		objectName: "stage" + index
+		width: slot.width
+		height: slot.height
+		visible: slot.videoVisible && !slot.mirrorSource
+
+		VideoOutput {
+			id: videoA
+
+			objectName: "videoA" + index
+			width: slot.paintedWidth
+			height: slot.paintedHeight
+			anchors.centerIn: parent
+			fillMode: VideoOutput.Stretch
+			mirrored: slot.mirrored
+			visible: slot.videoVisible
+			opacity: slot.videoOpacityA
+			transform: Translate {
+				x: slot.scrollOffsetX
+				y: slot.scrollOffsetY
+			}
+		}
+
+		VideoOutput {
+			id: videoB
+
+			objectName: "videoB" + index
+			width: slot.paintedWidth
+			height: slot.paintedHeight
+			anchors.centerIn: parent
+			fillMode: VideoOutput.Stretch
+			mirrored: slot.mirrored
+			visible: slot.videoVisible
+			opacity: slot.videoOpacityB
+			transform: Translate {
+				x: slot.scrollOffsetX
+				y: slot.scrollOffsetY
+			}
 		}
 	}
 
-	VideoOutput {
-		id: videoB
+	// A mirrored band draws the other column's stage instead of running its own player, so the pair shows one decoded
+	// frame rather than two decoders racing. The flip is a negative scale, not a shader: Qt 6's ShaderEffect takes
+	// .qsb files only. `hideSource` stays false because the source item is the other column's own picture, and hiding
+	// it would blank that column.
+	Item {
+		id: mirrorView
 
-		objectName: "videoB" + index
-		width: slot.paintedWidth
-		height: slot.paintedHeight
-		anchors.centerIn: parent
-		fillMode: VideoOutput.Stretch
-		mirrored: slot.mirrored
-		visible: slot.videoVisible
-		opacity: slot.videoOpacityB
-		transform: Translate {
-			x: slot.scrollOffsetX
-			y: slot.scrollOffsetY
+		width: slot.width
+		height: slot.height
+		clip: true
+		visible: slot.mirrorSource !== null
+
+		ShaderEffectSource {
+			width: slot.width
+			height: slot.height
+			sourceItem: slot.mirrorSource
+			live: true
+			hideSource: false
+			transform: Scale {
+				origin.x: slot.width / 2
+				xScale: slot.mirrored ? -1 : 1
+			}
 		}
 	}
 }

@@ -207,6 +207,14 @@ void MascotSurface::setSlotMirrored(int i, bool mirrored)
 	this->applySlot(i);
 }
 
+void MascotSurface::setSlotMirrorSource(int i, int sourceSlot)
+{
+	if (!this->isValidSlot(i))
+		return;
+	this->slotStates[i].mirrorSourceSlot = sourceSlot;
+	this->applySlot(i);
+}
+
 void MascotSurface::setSlotMedia(int i, const MascotMedia& media)
 {
 	if (!this->isValidSlot(i))
@@ -276,10 +284,9 @@ void MascotSurface::clearSlot(int i)
 
 void MascotSurface::setMirror(bool mirror)
 {
+	// Only the default for slots created later. Writing it over the live slots would undo the per-slot parity the
+	// controller has already decided, and a slot that shows another band's stage has no media commit to restore it.
 	this->mirror = mirror;
-	for (int i = 0; i < this->slotStates.size(); ++i)
-		this->slotStates[i].mirrored = mirror;
-	this->applyAllSlots();
 }
 
 void MascotSurface::setSurfaceOpacity(double opacity)
@@ -419,6 +426,11 @@ bool MascotSurface::resolveSlot(int i)
 		if (slot.videoB.isNull())
 			slot.videoB = slot.item->findChild<QQuickItem*>(QStringLiteral("videoB%1").arg(i));
 	}
+	if (slot.stage.isNull()) {
+		slot.stage = findItemByObjectName(slot.item, QStringLiteral("stage%1").arg(i));
+		if (slot.stage.isNull())
+			slot.stage = slot.item->findChild<QQuickItem*>(QStringLiteral("stage%1").arg(i));
+	}
 	return true;
 }
 
@@ -465,6 +477,16 @@ void MascotSurface::applySlot(int i)
 	item->setProperty("videoVisible", slot.videoVisible);
 	item->setProperty("videoOpacityA", slot.videoOpacityA);
 	item->setProperty("videoOpacityB", slot.videoOpacityB);
+
+	// The mirror view samples the other slot's stage, so the QML item is resolved here rather than held: the delegate
+	// that owns the stage can be recreated, and a stale pointer would draw nothing.
+	QQuickItem* mirrorSource = nullptr;
+	if (slot.mirrorSourceSlot >= 0 && this->isValidSlot(slot.mirrorSourceSlot)) {
+		this->resolveSlot(slot.mirrorSourceSlot);
+		mirrorSource = this->slotStates.at(slot.mirrorSourceSlot).stage.data();
+	}
+	item->setProperty("mirrorSource", QVariant::fromValue<QQuickItem*>(mirrorSource));
+
 
 	if (image) {
 		// The id is already percent-encoded, and writing the same URL again is a no-op inside QQuickImage.

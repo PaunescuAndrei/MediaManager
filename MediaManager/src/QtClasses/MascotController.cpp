@@ -31,7 +31,6 @@ namespace {
 	constexpr int VIDEO_FAILURE_LIMIT = 3;
 
 
-
 	constexpr qint64 VIDEO_LOG_INTERVAL_MS = 5000;
 
 	constexpr int PANEL_SLOT_STRIDE = 8;
@@ -146,7 +145,6 @@ namespace {
 		return QRectF(panel.left() + pos, panel.top(), cellLen, panel.height());
 	}
 
-
 	// A precise timer is the one Qt will not coalesce into 15 ms/1 s buckets, which at 40 px/s would stutter.
 	constexpr int SCROLL_TICK_MS = 16;
 
@@ -179,7 +177,6 @@ namespace {
 		const double travelled = reverse ? 1.0 - fraction : fraction;
 		return (0.5 - travelled) * travel;
 	}
-
 
 
 	QString modeLabel(MascotMode mode)
@@ -437,7 +434,6 @@ void MascotController::applyConfig()
 			<< "is not one of LeftToRight, RightToLeft, TopToBottom or BottomToTop; using LeftToRight.";
 	}
 
-
 	this->columnsEnabled = config->get_bool(QStringLiteral("mascots"));
 	this->backgroundEnabled = config->get_bool(QStringLiteral("mascots_background"));
 	bool backgroundModeOk = false;
@@ -499,7 +495,6 @@ void MascotController::applyConfig()
 			<< "is not one of LeftToRight, RightToLeft, TopToBottom or BottomToTop; using LeftToRight.";
 	}
 
-
 	this->source.setAllFilesRandom(config->get_bool("mascots_allfiles_random"));
 	this->source.setWeightedChoice(this->weightedRandom);
 	this->applySeedSource();
@@ -559,6 +554,9 @@ void MascotController::applyConfig()
 	this->applyDisplay(this->leftState, MascotPanel::Left);
 	this->applyDisplay(this->rightState, MascotPanel::Right);
 	this->applyDisplay(this->backgroundState, MascotPanel::Background);
+	// Before the toggle below acts on it: the binding decides whether the right band may own a player, and the off
+	// direction picks one for it here.
+	this->syncMirrorBindings();
 	// Turning Mirror on must make both columns show one media now: the parity repaint cannot change what the
 	// right band holds, and a static configuration never advances. The first Apply records the value instead of filling.
 	const bool mirrorNow = this->mirrorEnabled();
@@ -574,7 +572,6 @@ void MascotController::applyConfig()
 				MascotBand* rightBand = this->rightState.band(i);
 				if (!rightBand)
 					continue;
-				rightBand->playback().mirrorCopyPending = false;
 				if (this->leftState.band(i))
 					this->pickFor(this->rightState, MascotPanel::Right, i, false);
 			}
@@ -724,6 +721,67 @@ bool MascotController::backgroundMarqueeActive(MascotPanel panel) const
 bool MascotController::bandMirrorsLeft(int bandIndex) const
 {
 	return this->mirrorEnabled() && bandIndex >= 0 && bandIndex < this->bandCount(MascotPanel::Left);
+}
+
+bool MascotController::bandUsesMirrorView(MascotPanel panel, int bandIndex) const
+{
+	if (panel != MascotPanel::Right || !this->bandMirrorsLeft(bandIndex))
+		return false;
+	const MascotBand* rightBand = this->rightState.band(bandIndex);
+	return rightBand && rightBand->mirrorSourceSlot() >= 0;
+}
+
+void MascotController::syncMirrorBindings()
+{
+	if (!this->rightState.surface)
+		return;
+	const bool mirror = this->mirrorEnabled();
+	const int leftCount = this->bandCount(MascotPanel::Left);
+	const int rightCount = static_cast<int>(this->rightState.bands.size());
+	for (int i = 0; i < rightCount; ++i) {
+		MascotBand* rightBand = this->rightState.band(i);
+		if (!rightBand)
+			continue;
+		MascotBand* leftBand = i < leftCount ? this->leftState.band(i) : nullptr;
+		// Only a video is shared: an image already reaches both slots through the cache, so it keeps the pick-level
+		// pairing it has and neither column pays for a second texture.
+		const bool bind = mirror && leftBand && leftBand->media().type == MascotMedia::Video;
+		const int sourceSlot = bind ? leftBand->slotIndex() : -1;
+		if (rightBand->mirrorSourceSlot() == sourceSlot)
+			continue;
+		rightBand->setMirrorSource(sourceSlot);
+		this->logVideo(QStringLiteral("MASCOT-STAGE %1 band=%2 source=%3 pairFlip=%4")
+			.arg(bind ? QStringLiteral("bind") : QStringLiteral("unbind"))
+			.arg(i)
+			.arg(sourceSlot)
+			.arg(this->flipMirroredColumn ? QStringLiteral("on") : QStringLiteral("off")));
+		if (bind) {
+			// The view's parity is the pair's, not the file's: the folder rule has already turned the shared picture
+			// inside the stage, so flipping the copy here is what makes the right column its mirror and nothing else.
+			rightBand->setMirrorFlip(this->flipMirroredColumn);
+			// Its player has nothing to draw into: the picture is the left band's. Destroying it is what makes the
+			// pair cost one decoder.
+			if (rightBand->video())
+				this->destroyVideoSlot(this->rightState, i);
+			// And the clip it was showing goes with the player: leaving the media behind would have every apply
+			// present a file this band no longer decodes, and the band would claim a picture it cannot fade.
+			const QString shown = rightBand->media().path;
+			if (!shown.isEmpty()) {
+				rightBand->forgetMedia();
+				this->syncPin(shown);
+			}
+			if (rightBand->videoOutputVisible())
+				rightBand->setVideoOutputVisible(false);
+			continue;
+		}
+
+		if (rightBand->videoOutputVisible())
+			rightBand->setVideoOutputVisible(false);
+		// The mirror took this band's player away, and a video pick needs one before it can reach the sink, so the
+		// toggle back has to rebuild it here: ensureVideoSlots() runs after this and would only fill a silent band.
+		if (!rightBand->video() && this->bandMayOwnPlayer(MascotPanel::Right, i))
+			this->createVideoSlot(this->rightState, MascotPanel::Right, i);
+	}
 }
 
 QVector<QRectF> MascotController::bandRects(MascotPanel panel) const
@@ -912,29 +970,20 @@ void MascotController::fillEmptyBands()
 				continue;
 			if (mirror && side == MascotSide::Right && this->bandMirrorsLeft(i)) {
 				MascotBand* leftBand = this->leftState.band(i);
-				const bool mayOwn = this->bandMayOwnPlayer(panelOf(side), i);
-				if (mayOwn && leftBand
-					&& (leftBand->requestIsVideo() || leftBand->playback().videoPickRetryPending)) {
-					band->playback().mirrorCopyPending = true;
+				// The pair shares one picture: while the left band draws a video, or is about to, the right band's
+				// slot shows the left band's stage, so it needs no pick of its own and must not be filled with an
+				// image the other column is not showing.
+				if (leftBand && (leftBand->requestIsVideo() || leftBand->media().type == MascotMedia::Video))
 					continue;
-				}
 				if (leftBand && !leftBand->media().path.isEmpty()) {
-					if (leftBand->media().type == MascotMedia::Video) {
-						if (mayOwn) {
-							this->startMirrorVideo(i, leftBand->media().path,
-								leftBand->media().startOffsetMs);
-							continue;
-						}
-					}
-					else {
-						this->preparePick(state, i, false);
-						this->showMedia(state, MascotPanel::Right, leftBand->media(), false, true, i);
-						continue;
-					}
-				}
-				if (leftBand && !leftBand->requestPath().isEmpty() && !leftBand->requestIsVideo())
+					// An image reaches both slots through the cache, so this is the one case that still copies a pick.
+					this->preparePick(state, i, false);
+					this->showMedia(state, MascotPanel::Right, leftBand->media(), false, true, i);
 					continue;
-				if (mayOwn || !this->mediaSettingWantsVideo())
+				}
+				if (leftBand && !leftBand->requestPath().isEmpty())
+					continue;
+				if (!this->mediaSettingWantsVideo())
 					continue;
 			}
 			if (!band->requestPath().isEmpty()) {
@@ -1001,7 +1050,6 @@ double MascotController::scrollTravel(MascotPanel panel, const MascotBand& band)
 	const double travel = contentExtent - bandExtent;
 	return travel > 0.0 ? travel : 0.0;
 }
-
 
 
 void MascotController::startScrollDriver()
@@ -1096,7 +1144,6 @@ bool MascotController::panModeActive() const
 	}
 	return false;
 }
-
 
 bool MascotController::scrollDirectionReverses(MascotPanel panel) const
 {
@@ -1331,27 +1378,11 @@ void MascotController::nextBandImages(int bandIndex, bool forcedMirror)
 		MascotBand* rightBand = this->rightState.band(bandIndex);
 		if (!rightBand)
 			return;
-		// A video's media does not exist until a frame reaches the sink, so the pair shares the file *and the start
-		// offset*, which only the left load reports.
-		if (leftBand->requestIsVideo() || leftBand->playback().videoPickRetryPending) {
-			MascotVideoSlot* leftVideo = leftBand->video();
-			if (leftVideo && leftVideo->isBusy()) {
-				this->preparePick(this->rightState, bandIndex, false);
-				rightBand->playback().mirrorCopyPending = true;
-				return;
-			}
-			if (leftBand->playback().videoPickRetryPending) {
-				this->preparePick(this->rightState, bandIndex, false);
-				rightBand->playback().mirrorCopyPending = true;
-				return;
-			}
-			if (leftBand->media().type == MascotMedia::Video && !leftBand->media().path.isEmpty()) {
-				this->startMirrorVideo(bandIndex, leftBand->media().path,
-					leftBand->media().startOffsetMs);
-				return;
-			}
+		// A video is one decoded picture shared by both bands, so there is nothing to arm and no second load to
+		// start: the right band's slot draws the left band's stage and follows it frame for frame.
+		if (leftBand->requestIsVideo() || leftBand->playback().videoPickRetryPending
+			|| leftBand->media().type == MascotMedia::Video)
 			return;
-		}
 		if (!left.path.isEmpty()) {
 			this->preparePick(this->rightState, bandIndex, false);
 			this->showMedia(this->rightState, MascotPanel::Right, left, false, true, bandIndex);
@@ -1924,6 +1955,10 @@ void MascotController::presentMedia(PanelState& state, MascotPanel panel, const 
 		.arg(media.type == MascotMedia::Video ? QStringLiteral("video") : QStringLiteral("image"))
 		.arg(QFileInfo(media.path).fileName())
 		.arg(media.startOffsetMs));
+	// The left band's media is what the pair draws, so a commit here is when the binding can change: video binds the
+	// right band's view, an image releases it.
+	if (panel == MascotPanel::Left)
+		this->syncMirrorBindings();
 	if (media.type == MascotMedia::Video) {
 		band->setContentOffset(QPointF(0.0, 0.0));
 		band->setVideoOutputVisible(true);
@@ -1943,7 +1978,6 @@ void MascotController::presentMedia(PanelState& state, MascotPanel panel, const 
 	if (!this->centerContentEnabled())
 		band->setContentOffset(QPointF(0.0, 0.0));
 }
-
 
 void MascotController::applyMirror(PanelState& state, MascotPanel panel, const QString& path,
 	int bandIndex)
@@ -1969,6 +2003,7 @@ void MascotController::applyMirror(PanelState& state, MascotPanel panel, const Q
 	}
 	if (state.flipToggled)
 		mirrored = !mirrored;
+
 	band->applyMirror(mirrored);
 }
 
@@ -1979,7 +2014,6 @@ void MascotController::requestPath(PanelState& state, const QString& path, int b
 		return;
 	band->setRequestPath(path);
 	band->setRequestIsVideo(false);
-	band->playback().mirrorCopyPending = false;
 	MascotPrefetcher* source = this->prefetcher.data();
 	if (source)
 		source->request(path);
@@ -2091,11 +2125,6 @@ void MascotController::showMedia(PanelState& state, MascotPanel panel, const Mas
 	if (armCandidate)
 		this->armSpeculation(panel, bandIndex);
 
-	if (panel == MascotPanel::Left && media.type == MascotMedia::Image) {
-		if (MascotBand* rightBand = this->rightState.band(bandIndex))
-			rightBand->playback().mirrorCopyPending = false;
-	}
-
 	if (policyBand && state.highlightOnApply) {
 		state.highlightOnApply = false;
 		MascotSide pairSide = MascotSide::Left;
@@ -2153,7 +2182,6 @@ void MascotController::speculate(PanelState& state, MascotPanel panel, int bandI
 		source->request(path);
 }
 
-
 bool MascotController::mediaSettingWantsVideo() const
 {
 	return this->mediaSetting.compare(QStringLiteral("Videos"), Qt::CaseInsensitive) == 0
@@ -2187,7 +2215,10 @@ bool MascotController::bandMayOwnPlayer(MascotPanel panel, int bandIndex) const
 {
 	return bandIndex >= 0
 		&& bandIndex < this->bandCount(panel)
-		&& bandIndex < this->videoBandsFor(panel);
+		&& bandIndex < this->videoBandsFor(panel)
+		// A mirrored band draws the left band's stage, so a decoder of its own would decode the pair twice for a
+		// picture it does not show.
+		&& !this->bandUsesMirrorView(panel, bandIndex);
 }
 
 bool MascotController::videoCrossfades(MascotPanel panel) const
@@ -2384,11 +2415,7 @@ void MascotController::startVideoLoad(PanelState& state, MascotPanel panel, int 
 	band->setWantedOffsetMs(effectiveOffsetMs);
 	band->playback().requestedAtMs = QDateTime::currentMSecsSinceEpoch();
 	++band->playback().videoSeq;
-	// A left video load is what the pair follows: arm the right band's copy here, because a swap served from a preload completes before nextImages() could.
-	if (panel == MascotPanel::Left && this->mirrorEnabled()) {
-		if (MascotBand* rightBand = this->rightState.band(bandIndex))
-			rightBand->playback().mirrorCopyPending = true;
-	}
+
 	this->logVideo(QStringLiteral("%1 swap #%2 pool=%3 offset=%4 path=\"%5\" preloaded=%6")
 		.arg(bandLabel(panel, bandIndex))
 		.arg(band->playback().videoSeq)
@@ -2432,17 +2459,6 @@ void MascotController::onVideoFirstFrame(MascotPanel panel, int bandIndex, const
 		.arg(offsetMs)
 		.arg(delta)
 		.arg(path));
-
-	// The left frame is where the shared offset finally exists, so this is the moment the right band can start on it.
-	if (panel == MascotPanel::Left) {
-		MascotBand* rightBand = this->rightState.band(bandIndex);
-		if (rightBand && rightBand->playback().mirrorCopyPending) {
-			rightBand->playback().mirrorCopyPending = false;
-			// The copy is the mirror key's work, so it asks the key: a copy armed while the pair was mirrored must not survive Mirror off.
-			if (this->mirrorEnabled() && this->rightState.surface && rightBand->video())
-				this->startMirrorVideo(bandIndex, path, offsetMs);
-		}
-	}
 }
 
 void MascotController::fadeInVideo(PanelState& state, MascotPanel panel, int bandIndex, int ab)
@@ -2524,28 +2540,6 @@ void MascotController::onVideoPreloaded(MascotPanel panel, int bandIndex, const 
 		.arg(offsetMs)
 		.arg(frameSize.width())
 		.arg(frameSize.height()));
-	if (panel != MascotPanel::Left || !this->mirrorEnabled())
-		return;
-	PanelState& right = this->rightState;
-	MascotBand* rightBand = right.band(bandIndex);
-	MascotVideoSlot* rightVideo = rightBand ? rightBand->video() : nullptr;
-	if (!right.surface || !rightBand || !rightVideo)
-		return;
-	if (rightVideo->isBusy() || rightVideo->hasPreload())
-		return;
-	if (!rightBand->ensureVideo(0))
-		return;
-	rightVideo->preload(path, offsetMs);
-}
-
-void MascotController::startMirrorVideo(int bandIndex, const QString& path, qint64 offsetMs)
-{
-	PanelState& right = this->rightState;
-	MascotBand* rightBand = right.band(bandIndex);
-	if (!right.surface || !rightBand || !rightBand->video() || path.isEmpty())
-		return;
-	this->preparePick(right, bandIndex, false);
-	this->startVideoLoad(right, MascotPanel::Right, bandIndex, path, offsetMs);
 }
 
 void MascotController::onVideoFailed(MascotPanel panel, int bandIndex, const QString& path,
@@ -2569,12 +2563,8 @@ void MascotController::onVideoFailed(MascotPanel panel, int bandIndex, const QSt
 		band->setWantedOffsetMs(-1);
 		++band->playback().videoFailures;
 	}
-	if (panel == MascotPanel::Left) {
-		if (MascotBand* rightBand = this->rightState.band(bandIndex))
-			rightBand->playback().mirrorCopyPending = false;
-		if (wasLoading)
-			this->logVideo(QStringLiteral("the mirrored pair is unpaired for now; the next swap re-pairs it"));
-	}
+	if (panel == MascotPanel::Left && wasLoading)
+		this->logVideo(QStringLiteral("the mirrored pair is unpaired for now; the next swap re-pairs it"));
 	const QString kindLabel = timedOut ? QStringLiteral("timeout")
 		: (kind == MascotVideoSlot::FailKind::Decode ? QStringLiteral("decode") : QStringLiteral("wiring"));
 	const QString key = path + QStringLiteral("|") + kindLabel;
@@ -2703,7 +2693,6 @@ void MascotController::destroyVideoSlot(PanelState& state, int bandIndex)
 	band->destroyVideo();
 	band->setRequestIsVideo(false);
 	band->setWantedOffsetMs(-1);
-	band->playback().mirrorCopyPending = false;
 	band->playback().videoPickRetryPending = false;
 	band->playback().videoLoadRetries = 0;
 }

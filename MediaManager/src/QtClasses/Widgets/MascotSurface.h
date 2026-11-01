@@ -44,6 +44,9 @@ public:
 	void setSlotOpacity(int i, double opacity);
 	void setSlotFillMode(int i, FillMode mode);
 	void setSlotMirrored(int i, bool mirrored);
+	// The slot draws `sourceSlot`'s video stage instead of its own players; -1 restores its own. Slot indices, not
+	// item pointers, so the caller never holds a QML object across a delegate rebuild.
+	void setSlotMirrorSource(int i, int sourceSlot);
 	void setSlotMedia(int i, const MascotMedia& media);
 	// Null while the delegate does not exist and after any setSlotCount() that shrank the panel; query again, never hold it.
 	QVideoSink* slotSink(int i, int ab);
@@ -77,6 +80,8 @@ private:
 		QPointer<QQuickItem> image;
 		QPointer<QQuickItem> videoA;
 		QPointer<QQuickItem> videoB;
+		QPointer<QQuickItem> stage;
+		int mirrorSourceSlot = -1;
 
 		QRectF rect;
 		double opacity = 1.0;

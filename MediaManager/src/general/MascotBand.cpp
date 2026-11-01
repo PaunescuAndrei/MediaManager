@@ -24,6 +24,8 @@ void MascotBand::setSurface(MascotSurface* surface)
 	this->m_fillMode = MascotSurface::FillMode::Fit;
 	this->m_fillModeKnown = false;
 	this->m_videoOutputVisible = false;
+	this->m_mirrorSourceSlot = -1;
+	this->m_mirrorFlipKnown = false;
 	this->m_scrollOffset = 0.0;
 }
 
@@ -116,6 +118,28 @@ void MascotBand::applyMirror(bool mirrored)
 	if (!this->m_surface)
 		return;
 	this->m_surface->setSlotMirrored(this->m_slotIndex, mirrored);
+}
+
+void MascotBand::setMirrorSource(int sourceSlot)
+{
+	if (this->m_surface)
+		this->m_surface->setSlotMirrorSource(this->m_slotIndex, sourceSlot);
+	this->m_mirrorSourceSlot = sourceSlot;
+}
+
+int MascotBand::mirrorSourceSlot() const
+{
+	return this->m_mirrorSourceSlot;
+}
+
+void MascotBand::setMirrorFlip(bool flipped)
+{
+	if (this->m_mirrorFlipKnown && this->m_mirrorFlip == flipped)
+		return;
+	if (this->m_surface)
+		this->m_surface->setSlotMirrored(this->m_slotIndex, flipped);
+	this->m_mirrorFlip = flipped;
+	this->m_mirrorFlipKnown = true;
 }
 
 void MascotBand::applyFill(MascotSurface::FillMode mode)

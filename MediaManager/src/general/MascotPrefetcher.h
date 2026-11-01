@@ -37,7 +37,7 @@ signals:
 	void mediaFailed(QString path);
 
 private:
-	struct DecodeResult; // defined in MascotPrefetcher.cpp: the worker's payload
+	struct DecodeResult;
 
 	static DecodeResult decode(const QString& path, const QString& providerId, bool extractColors);
 	void handleDecoded(DecodeResult result, quint64 requestGeneration);
@@ -52,6 +52,6 @@ private:
 	bool extractColors = false;
 	QSet<QString> pendingPaths;                  // GUI thread only
 	QSet<QString> failedPaths;                   // GUI thread only, so a failure logs once
-	QHash<QString, MascotMedia> rememberedMedia; // GUI thread only, keyed by path
+	QHash<QString, MascotMedia> rememberedMedia; // GUI thread only
 	std::atomic<quint64> generation{ 0 };        // bumped by clear(), read by workers
 };

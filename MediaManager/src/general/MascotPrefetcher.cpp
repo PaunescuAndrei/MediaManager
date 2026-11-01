@@ -83,8 +83,7 @@ void MascotPrefetcher::request(const QString& path)
 		return;
 
 	const auto remembered = this->rememberedMedia.constFind(path);
-	// Already decoded and still cached: hand the media back rather than decode again. Posted rather than emitted, so
-	// request() never runs a consumer's slot synchronously, and it carries the generation so clear() drops it.
+	// Posted rather than emitted, so request() never runs a consumer's slot synchronously.
 	if (remembered != this->rememberedMedia.constEnd() && this->cache->contains(cacheIdForPath(path))) {
 		const MascotMedia media = *remembered;
 		const quint64 republishGeneration = this->generation.load();
@@ -159,7 +158,7 @@ MascotPrefetcher::DecodeResult MascotPrefetcher::decode(const QString& path, con
 	const double centerX = mascotMediaUtils::contentCenterX(image, ALPHA_THRESHOLD);
 	result.contentCenterX = result.hasContentCenter ? centerX : std::numeric_limits<double>::quiet_NaN();
 
-	// Skipped while the palette switch is off: both lists stay empty, which is the "no palette" state colorFor() degrades from.
+	// Empty lists are the "no palette" state colorFor() degrades from.
 	if (extractColors) {
 		const QPixmap paletteSource = clamped ? QPixmap::fromImage(image) : pixmap;
 		const QPair<QList<color_area>, QList<color_area>> palette =

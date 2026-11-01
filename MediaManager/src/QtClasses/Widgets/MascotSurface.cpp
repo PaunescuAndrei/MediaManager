@@ -66,28 +66,6 @@ namespace {
 		return true;
 	}
 
-	int qmlFillModeValue(MascotSurface::FillMode mode)
-	{
-		switch (mode) {
-		case MascotSurface::FillMode::Crop:
-			return 2; // Image.PreserveAspectCrop
-		case MascotSurface::FillMode::Fit:
-			return 1; // Image.PreserveAspectFit
-		case MascotSurface::FillMode::Stretch:
-			return 0; // Image.Stretch
-		// Stretch is the honest value for the normalised modes: the slot's QML sizes the item from the painted
-		// width/height applySlot() writes, so the Image is already the right size and has nothing to fit.
-		case MascotSurface::FillMode::HeightFit:
-			return 0; // Image.Stretch
-		case MascotSurface::FillMode::WidthFit:
-			return 0; // Image.Stretch
-		case MascotSurface::FillMode::Cover:
-			return 2; // Image.PreserveAspectCrop
-		case MascotSurface::FillMode::CoverScroll:
-			return 0; // Image.Stretch: the item is already the covered-plus-overscan box, so there is nothing to fit
-		}
-		return 1;
-	}
 }
 
 MascotSurface::MascotSurface(MascotImageCache* cache, QWidget* parent, bool alwaysStackOnTop)
@@ -464,13 +442,12 @@ void MascotSurface::applySlot(int i)
 
 	const bool mirrored = slot.mirrored;
 	item->setProperty("mirrored", mirrored);
-	item->setProperty("fillMode", qmlFillModeValue(slot.fillMode));
 	const QSizeF contentSize = this->contentSizeFor(slot);
-	// `CoverScroll` sizes the item on both axes from the painted box (the pan needs it larger than the slot and the
-	// crop is the painted box's), so it sets both flags and is stretched into that box.
-	const bool panFit = slot.fillMode == FillMode::CoverScroll;
-	item->setProperty("heightFill", slot.fillMode == FillMode::HeightFit || panFit);
-	item->setProperty("widthFill", slot.fillMode == FillMode::WidthFit || panFit);
+	// Every mode is drawn as its painted box, stretched onto it: that box already carries the picture's aspect (or is
+	// the slot itself for Stretch), so stretching never distorts it, and an item larger than the slot -- which is what
+	// Cover and the panning modes produce -- is clipped by the slot while still being something the pan can slide.
+	item->setProperty("heightFill", true);
+	item->setProperty("widthFill", true);
 	item->setProperty("paintedWidth", contentSize.width());
 	item->setProperty("paintedHeight", contentSize.height());
 	const QSize nativeSize = slot.nativeSize;
@@ -530,18 +507,11 @@ QSizeF MascotSurface::contentSizeFor(const Slot& slot) const
 		const double scale = std::min(slotWidth / nativeWidth, slotHeight / nativeHeight);
 		return QSizeF(nativeWidth * scale, nativeHeight * scale);
 	}
-	case FillMode::Crop: {
-		const double scale = std::max(slotWidth / nativeWidth, slotHeight / nativeHeight);
-		return QSizeF(nativeWidth * scale, nativeHeight * scale);
-	}
-	case FillMode::Cover: {
-		const double scale = std::max(slotWidth / nativeWidth, slotHeight / nativeHeight);
-		return QSizeF(nativeWidth * scale, nativeHeight * scale);
-	}
+	case FillMode::Crop:
+	case FillMode::Cover:
 	case FillMode::CoverScroll: {
-		// Exactly `Cover`: the band is filled and the overflow is what the pan travels through, so the picture passes the
-		// band instead of being cut off for good. Which axis that is belongs to the controller (it follows the scroll
-		// direction); the cover itself leaves the slack on one axis and is exact on the other.
+		// Both covers are the same box: the picture scaled until it covers the slot, which is exact on one axis and
+		// larger on the other. `CoverScroll` only differs in what the controller does with that overflow.
 		const double scale = std::max(slotWidth / nativeWidth, slotHeight / nativeHeight);
 		return QSizeF(nativeWidth * scale, nativeHeight * scale);
 	}

@@ -1,4 +1,4 @@
-import QtQuick
+﻿import QtQuick
 import QtMultimedia
 
 // Object names carry the slot index, so C++ finds a slot and its children by name and child order can never mismatch a sink.
@@ -9,10 +9,7 @@ Item {
 	objectName: "mascotSlot" + index
 	clip: true
 
-	property int fillMode: Image.PreserveAspectFit
-	property bool heightFill: false
 	property real paintedWidth: 0.0
-	property bool widthFill: false
 	property real paintedHeight: 0.0
 	// The single authoritative mirror: C++ derives the content shift from the same value it writes here.
 	property bool mirrored: false
@@ -50,10 +47,10 @@ Item {
 		id: img
 
 		objectName: "img" + index
-		width: slot.heightFill ? slot.paintedWidth : parent.width
-		height: slot.widthFill ? slot.paintedHeight : parent.height
+		width: slot.paintedWidth
+		height: slot.paintedHeight
 		anchors.centerIn: parent
-		fillMode: slot.heightFill || slot.widthFill ? Image.Stretch : slot.fillMode
+		fillMode: Image.Stretch
 		mirror: slot.mirrored
 		visible: slot.mediaIsImage
 		smooth: true
@@ -70,10 +67,10 @@ Item {
 		id: videoA
 
 		objectName: "videoA" + index
-		width: slot.heightFill ? slot.paintedWidth : parent.width
-		height: slot.widthFill ? slot.paintedHeight : parent.height
+		width: slot.paintedWidth
+		height: slot.paintedHeight
 		anchors.centerIn: parent
-		fillMode: slot.heightFill || slot.widthFill ? VideoOutput.Stretch : slot.fillMode
+		fillMode: VideoOutput.Stretch
 		mirrored: slot.mirrored
 		visible: slot.videoVisible
 		opacity: slot.videoOpacityA
@@ -87,10 +84,10 @@ Item {
 		id: videoB
 
 		objectName: "videoB" + index
-		width: slot.heightFill ? slot.paintedWidth : parent.width
-		height: slot.widthFill ? slot.paintedHeight : parent.height
+		width: slot.paintedWidth
+		height: slot.paintedHeight
 		anchors.centerIn: parent
-		fillMode: slot.heightFill || slot.widthFill ? VideoOutput.Stretch : slot.fillMode
+		fillMode: VideoOutput.Stretch
 		mirrored: slot.mirrored
 		visible: slot.videoVisible
 		opacity: slot.videoOpacityB

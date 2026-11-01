@@ -703,22 +703,11 @@ ScrollDirection MascotController::scrollDirectionFromString(const QString& value
 
 MascotSurface::FillMode MascotController::effectiveFillMode(MascotPanel panel) const
 {
-	// A band that pans by translating its item needs the item larger than the band along the pan axis, and a slot that
-	// does not pan only ever wants the user's framing. `CoverScroll` is the one mode that satisfies both, so it is
-	// honoured wherever the item may travel and reduced to plain `Cover` where there is nothing to travel through.
-	// The other modes cannot pan -- Cover/Crop/Fit size the item to the slot -- so a panning band keeps the
-	// orientation's normalised scaling instead of letting them slide their own crop out of the slot.
-	const PanelLayout& layout = this->layoutFor(panel);
-	const bool pansByOffset = layout.mode != MascotMode::Static
-		&& !(panel == MascotPanel::Background && layout.mode == MascotMode::Scroll);
-	if (!pansByOffset)
-		return layout.fill == MascotSurface::FillMode::CoverScroll ? MascotSurface::FillMode::Cover : layout.fill;
-	if (layout.fill == MascotSurface::FillMode::CoverScroll)
-		return MascotSurface::FillMode::CoverScroll;
-	const bool vertical = layout.mode == MascotMode::Stripes
-		? layout.orientation == StripesOrientation::Vertical
-		: this->scrollPanIsVertical(panel);
-	return vertical ? MascotSurface::FillMode::WidthFit : MascotSurface::FillMode::HeightFit;
+	// The chosen mode is the framing, in every mode of every panel. It used to be normalised for a panning band
+	// (HeightFit horizontally, WidthFit vertically) because the QML used to apply those modes itself and only a
+	// painted-box item can be slid; the surface now draws every mode as its painted box, so honouring the choice costs
+	// nothing and the modes no longer collapse into one another.
+	return this->layoutFor(panel).fill;
 }
 
 int MascotController::bandCount(MascotPanel panel) const
@@ -1005,6 +994,12 @@ double MascotController::scrollTravel(MascotPanel panel, const MascotBand& band)
 	MascotSurface* surface = band.surface();
 	if (!surface)
 		return 0.0;
+	// `Cover`/`Crop` are the static framings: they fill the band and stay put, which is what separates them from
+	// `CoverScroll`. `Fit`/`Stretch` fit the band and have no overflow to travel anyway.
+	const MascotSurface::FillMode fill = this->effectiveFillMode(panel);
+	if (fill == MascotSurface::FillMode::Cover || fill == MascotSurface::FillMode::Crop
+		|| fill == MascotSurface::FillMode::Fit || fill == MascotSurface::FillMode::Stretch)
+		return 0.0;
 	const bool vertical = this->scrollPansVertically(panel);
 	const QSizeF content = surface->slotContentSize(band.slotIndex());
 	const QRectF rect = band.rect();
@@ -1016,10 +1011,8 @@ double MascotController::scrollTravel(MascotPanel panel, const MascotBand& band)
 
 bool MascotController::scrollPansVertically(MascotPanel panel) const
 {
-	// `CoverScroll` frames the band exactly like `Cover` and travels along the axis the Direction names -- never the
-	// axis a picture happens to overflow, so a band cannot drift vertically because of one clip's aspect. A picture
-	// that overflows only the other way has nothing to travel on this axis and stands still, still framed like Cover.
-	// Every other mode keeps the axis its own mode implies.
+	// `CoverScroll` travels along the axis the Direction names, so a band never drifts sideways because of one clip's
+	// aspect; the normalised modes are the ones whose framing is built on a single axis, so that axis is theirs.
 	if (this->effectiveFillMode(panel) == MascotSurface::FillMode::CoverScroll)
 		return this->scrollDirectionIsVertical(panel);
 	return this->scrollPanIsVertical(panel);

@@ -731,8 +731,10 @@ bool MascotController::bandUsesMirrorView(MascotPanel panel, int bandIndex) cons
 	if (!rightBand || !this->rightState.surface)
 		return false;
 	// What the surface draws is the truth: it outlives a band being detached and re-attached around it, so its slot is
-	// the only record that cannot go stale behind the controller's back.
-	return this->rightState.surface->slotMirrorSource(rightBand->slotIndex()) >= 0;
+	// the only record that cannot go stale behind the controller's back. A held slot is drawing, but it is covering a
+	// gap rather than showing the mirror, so the band is free to own a player again.
+	const int slot = rightBand->slotIndex();
+	return this->rightState.surface->slotMirrorSource(slot) >= 0 && !this->rightState.surface->slotMirrorHeld(slot);
 }
 
 void MascotController::syncMirrorBindings()
@@ -751,12 +753,27 @@ void MascotController::syncMirrorBindings()
 		// pairing it has and neither column pays for a second texture.
 		const bool bind = mirror && leftBand && leftBand->media().type == MascotMedia::Video;
 		const int sourceSlot = bind ? leftBand->slotIndex() : -1;
+		MascotSurface* surface = this->rightState.surface.data();
+		const int slot = rightBand->slotIndex();
+		const int current = surface->slotMirrorSource(slot);
 		// The view's parity is the pair's, not the file's: the folder rule has already turned the shared picture inside
 		// the stage, so flipping the copy is what makes the right column its mirror. Asserted on every pass, not only on
 		// a bind, because the parity key is a live checkbox and the slot's value is not ours to trust.
-		if (bind)
+		if (bind) {
 			rightBand->setMirrorFlip(this->flipMirroredColumn);
-		if (this->rightState.surface->slotMirrorSource(rightBand->slotIndex()) == sourceSlot)
+			// A binding that comes back takes the slot out of its hold; nothing else would clear it.
+			surface->setSlotMirrorHold(slot, false);
+		}
+		// Mirror off while this band has no picture of its own yet: it keeps the last shared frame on screen while it
+		// loads one, which is what stops the column blanking for the length of that load. The release is the commit.
+		if (!bind && current >= 0 && rightBand->media().path.isEmpty() && !rightBand->videoOutputVisible()) {
+			surface->setSlotMirrorHold(slot, true);
+			this->logVideo(QStringLiteral("MASCOT-STAGE hold band=%1 source=%2").arg(i).arg(current));
+			if (!rightBand->video() && this->bandMayOwnPlayer(MascotPanel::Right, i))
+				this->createVideoSlot(this->rightState, MascotPanel::Right, i);
+			continue;
+		}
+		if (current == sourceSlot)
 			continue;
 		rightBand->setMirrorSource(sourceSlot);
 		this->logVideo(QStringLiteral("MASCOT-STAGE %1 band=%2 source=%3 pairFlip=%4")
@@ -1965,6 +1982,11 @@ void MascotController::presentMedia(PanelState& state, MascotPanel panel, const 
 	MascotBand* band = state.band(bandIndex);
 	if (!state.surface || !band)
 		return;
+	// A held view yields here, before the outputs are made visible, so this band's own picture is what fades in.
+	if (state.surface->slotMirrorHeld(band->slotIndex())) {
+		state.surface->setSlotMirrorSource(band->slotIndex(), -1);
+		this->logVideo(QStringLiteral("MASCOT-STAGE release band=%1").arg(bandIndex));
+	}
 	this->applyMirror(state, panel, media.path, bandIndex);
 	band->applyFill(this->effectiveFillMode(panel));
 	band->setMedia(media);
@@ -2497,6 +2519,7 @@ void MascotController::fadeInVideo(PanelState& state, MascotPanel panel, int ban
 		// No fade to wait for, so the outgoing player retires now; only then is the idle output the one the next swap uses.
 		if (bandIndex == 0)
 			this->preloadNext(panel);
+		this->preloadPairPanel(panel);
 		return;
 	}
 	QTimer::singleShot(fade, this, [this, panel, bandIndex]() {
@@ -2504,14 +2527,26 @@ void MascotController::fadeInVideo(PanelState& state, MascotPanel panel, int ban
 		MascotBand* panelBand = panelState.band(bandIndex);
 		if (MascotVideoSlot* panelSlot = panelBand ? panelBand->video() : nullptr)
 			panelSlot->retireInactive();
-		if (bandIndex == 0)
+		if (bandIndex == 0) {
 			this->preloadNext(panel);
+			this->preloadPairPanel(panel);
+		}
 	});
 }
 
 void MascotController::preloadNext(MascotPanel panel)
 {
 	QMetaObject::invokeMethod(this, [this, panel] { this->startPreload(panel); }, Qt::QueuedConnection);
+}
+
+void MascotController::preloadPairPanel(MascotPanel panel)
+{
+	// A bound right band never fades, so the right panel's preload would never run under the mirror: the left band that
+	// shares the picture drives it. startPreload() itself skips the bands that draw another band's stage, so what this
+	// reaches is the bands that keep their own player -- the ones with no left counterpart.
+	if (panel != MascotPanel::Left || !this->mirrorEnabled() || !this->rightState.surface)
+		return;
+	this->preloadNext(MascotPanel::Right);
 }
 
 void MascotController::startPreload(MascotPanel panel)
@@ -2522,9 +2557,7 @@ void MascotController::startPreload(MascotPanel panel)
 	MascotSurface* surface = state.surface.data();
 	if (!surface || this->videoPaused || !surface->isVisible())
 		return;
-	// A mirrored pair shows the same pick on both sides, so the left column's preload serves both.
-	if (panel == MascotPanel::Right && this->mirrorEnabled())
-		return;
+
 	if (this->pickType(state, panel) != MascotMedia::Video)
 		return;
 	this->applySeedSource();
@@ -2535,6 +2568,10 @@ void MascotController::startPreload(MascotPanel panel)
 		// A preload parks the next file on the band's second player, so a band running a single player has nowhere to
 		// put it and the visible clip would be replaced instead of preloaded.
 		if (!band || !slot || slot->isSinglePlayer() || slot->isBusy() || slot->hasPreload())
+			continue;
+		// A band drawing another band's stage has no player to park a clip on; the bands that keep their own --
+		// including a right band with no left counterpart -- still preload.
+		if (this->bandUsesMirrorView(panel, index))
 			continue;
 		if (band->media().type != MascotMedia::Video || band->media().path.isEmpty())
 			continue;

@@ -1469,7 +1469,10 @@ void SettingsDialog::updateMascotControlStates()
     mascotMaxDecodersSpinBox->setEnabled(true);
     mascotPauseUnfocusedCheckBox->setEnabled(true);
     mascotLowLatencyCheckBox->setEnabled(true);
-    mascotPairScrollCombo->setEnabled(this->ui.mascotsMirror->isChecked());
+    // A bound video pair draws one picture, and a single texture has no spare pixels to travel into: the mirrored
+    // column's motion is the left band's, reversed by the flip. With images each column keeps its own copy, so the
+    // choice is real there and stays live.
+    mascotPairScrollCombo->setEnabled(this->ui.mascotsMirror->isChecked() && !videoColumns);
     // The parity switch keeps its meaning for images and videos alike -- it is about the pair,
     // not about a player -- so it never goes dark.
     mascotPairFlipCheckBox->setEnabled(this->ui.mascotsMirror->isChecked());

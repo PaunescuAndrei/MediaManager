@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include "MascotMedia.h"
 #include "MascotMediaSource.h"
 #include "MascotPrefetcher.h"
@@ -234,6 +234,8 @@ private:
 	void fadeInVideo(PanelState& state, MascotPanel panel, int bandIndex, int ab);
 
 	void preloadNext(MascotPanel panel);
+	// Under the mirror the pair shares one cadence: the left band's fade is what drives the right panel's preload too.
+	void preloadPairPanel(MascotPanel panel);
 	void startPreload(MascotPanel panel);
 	void onVideoPreloaded(MascotPanel panel, int bandIndex, const QString& path, qint64 offsetMs,
 		const QSize& frameSize);

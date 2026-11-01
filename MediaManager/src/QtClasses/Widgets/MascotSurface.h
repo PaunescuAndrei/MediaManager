@@ -50,6 +50,10 @@ public:
 	// What the slot is drawing right now -- the only record that matters, since a surface outlives a band being
 	// detached and re-attached around it.
 	int slotMirrorSource(int i) const;
+	// A held slot keeps drawing the other band's stage but is no longer the mirror's business: it is covering the
+	// gap while the band that owns the slot loads a picture of its own.
+	void setSlotMirrorHold(int i, bool held);
+	bool slotMirrorHeld(int i) const;
 	void setSlotMedia(int i, const MascotMedia& media);
 	// Null while the delegate does not exist and after any setSlotCount() that shrank the panel; query again, never hold it.
 	QVideoSink* slotSink(int i, int ab);
@@ -85,6 +89,7 @@ private:
 		QPointer<QQuickItem> videoB;
 		QPointer<QQuickItem> stage;
 		int mirrorSourceSlot = -1;
+		bool mirrorHeld = false;
 
 		QRectF rect;
 		double opacity = 1.0;

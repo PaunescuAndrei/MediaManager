@@ -212,6 +212,8 @@ void MascotSurface::setSlotMirrorSource(int i, int sourceSlot)
 	if (!this->isValidSlot(i))
 		return;
 	this->slotStates[i].mirrorSourceSlot = sourceSlot;
+	// Whoever writes the source decides what the slot is: a held view is released by the same call that ends it.
+	this->slotStates[i].mirrorHeld = false;
 	this->applySlot(i);
 }
 
@@ -220,6 +222,19 @@ int MascotSurface::slotMirrorSource(int i) const
 	if (!this->isValidSlot(i))
 		return -1;
 	return this->slotStates.at(i).mirrorSourceSlot;
+}
+
+void MascotSurface::setSlotMirrorHold(int i, bool held)
+{
+	if (!this->isValidSlot(i) || this->slotStates[i].mirrorHeld == held)
+		return;
+	// Not written to QML: the view keeps drawing the same source, which is the point of the hold.
+	this->slotStates[i].mirrorHeld = held;
+}
+
+bool MascotSurface::slotMirrorHeld(int i) const
+{
+	return this->isValidSlot(i) && this->slotStates.at(i).mirrorHeld;
 }
 
 void MascotSurface::setSlotMedia(int i, const MascotMedia& media)

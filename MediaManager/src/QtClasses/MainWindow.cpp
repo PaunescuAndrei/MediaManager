@@ -1567,40 +1567,9 @@ void MainWindow::showPreviewTooltip(const QModelIndex& proxyIndex)
     QSize popupSize(popupW, popupH);
     popup->resize(popupSize);
 
-    auto clampPoint = [&](int x, int y) -> QPoint {
-        if (!screenRect.isValid())
-            return QPoint(x, y);
-        int clampedX = std::max(screenRect.left(), std::min(x, screenRect.right() - popupW));
-        int clampedY = std::max(screenRect.top(), std::min(y, screenRect.bottom() - popupH));
-        return QPoint(clampedX, clampedY);
-    };
-
-    QPoint target = globalPos;
-    int halfW = popupW / 2;
-    // Try above, centered on cursor
-    QPoint above(target.x() - halfW, target.y() - popupH - 12);
-    bool fitsAbove = !screenRect.isValid() || (above.y() >= screenRect.top());
-    if (fitsAbove) {
-        target = above;
-    } else {
-        // Try below, centered on cursor
-        QPoint below(target.x() - halfW, target.y() + 12);
-        bool fitsBelow = !screenRect.isValid() || (below.y() + popupH <= screenRect.bottom());
-        if (fitsBelow) {
-            target = below;
-        } else if (screenRect.isValid()) {
-            // Fallback: clamp inside screen near cursor
-            target = clampPoint(target.x() - halfW, target.y() - popupH / 2);
-        }
-    }
-
-    const QPoint anchorTarget = target;
+    const QPoint anchorTarget = PreviewVideoWindow::popupPosition(screenRect, globalPos, popupSize);
     auto clampForSize = [screenRect, anchorTarget](int w, int h) {
-        if (!screenRect.isValid())
-            return QPoint(anchorTarget.x(), anchorTarget.y());
-        int clampedX = std::max(screenRect.left(), std::min(anchorTarget.x(), screenRect.right() - w));
-        int clampedY = std::max(screenRect.top(), std::min(anchorTarget.y(), screenRect.bottom() - h));
-        return QPoint(clampedX, clampedY);
+        return PreviewVideoWindow::clampToScreen(screenRect, anchorTarget, QSize(w, h));
     };
 
     popup->setPosition(clampForSize(popupW, popupH));

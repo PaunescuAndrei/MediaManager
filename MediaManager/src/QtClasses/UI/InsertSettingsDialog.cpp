@@ -8,6 +8,8 @@
 #include <QStringList>
 #include <QSignalBlocker>
 #include <QGuiApplication>
+#include <QCursor>
+#include <memory>
 #include "AutoToolTipDelegate.h"
 #include "stylesQt.h"
 #include <filesystem>
@@ -484,7 +486,7 @@ void InsertSettingsDialog::showRowPreview(QTreeWidgetItem* item) {
 	this->rowPreview = popup;
 
 	QRect screenRect;
-	const QPoint anchor = this->ui.newFilesTreeWidget->viewport()->mapToGlobal(this->ui.newFilesTreeWidget->visualItemRect(item).topRight());
+	const QPoint anchor = QCursor::pos();
 	if (QScreen* screen = QGuiApplication::screenAt(anchor)) {
 		screenRect = screen->availableGeometry();
 	}
@@ -494,19 +496,29 @@ void InsertSettingsDialog::showRowPreview(QTreeWidgetItem* item) {
 
 	const int screenMaxW = screenRect.isValid() ? screenRect.width() : 1920;
 	const int screenMaxH = screenRect.isValid() ? screenRect.height() : 1080;
-	const int popupW = qBound(160, this->MW->App->config->get("preview_main_width").toInt(), screenMaxW);
-	const int popupH = qBound(120, this->MW->App->config->get("preview_main_height").toInt(), screenMaxH);
-	popup->resize(popupW, popupH);
+	const QSize popupSize(qBound(160, this->MW->App->config->get("preview_main_width").toInt(), screenMaxW),
+		qBound(120, this->MW->App->config->get("preview_main_height").toInt(), screenMaxH));
+	popup->resize(popupSize);
 
-	int x = anchor.x() + 12;
-	int y = anchor.y() - popupH / 2;
-	if (screenRect.isValid()) {
-		if (x + popupW > screenRect.right())
-			x = anchor.x() - popupW - 12;
-		x = std::clamp(x, screenRect.left(), std::max(screenRect.left(), screenRect.right() - popupW));
-		y = std::clamp(y, screenRect.top(), std::max(screenRect.top(), screenRect.bottom() - popupH));
-	}
-	popup->setPosition(x, y);
+	// The main list's placement rule, so a preview opens in the same spot whichever list asked for it.
+	const QPoint anchorTarget = PreviewVideoWindow::popupPosition(screenRect, anchor, popupSize);
+	popup->setPosition(anchorTarget);
+
+	auto popupSizeState = std::make_shared<QSize>(popupSize);
+	QObject::connect(popup, &PreviewVideoWindow::videoSizeKnown, popup, [popup, popupSizeState, screenRect, anchorTarget, screenMaxW, screenMaxH](const QSize& videoSize) {
+		if (!videoSize.isValid() || videoSize.height() == 0 || !popup)
+			return;
+		QSize baseSize = *popupSizeState;
+		const double aspect = static_cast<double>(videoSize.width()) / static_cast<double>(videoSize.height());
+		const QSize adjusted = utils::adjustSizeForAspect(baseSize, 1.0, 0, { aspect });
+		const int newW = qBound(160, adjusted.width(), screenMaxW);
+		const int newH = qBound(120, adjusted.height(), screenMaxH);
+		popupSizeState->setWidth(newW);
+		popupSizeState->setHeight(newH);
+		popup->resize(*popupSizeState);
+		popup->setPosition(PreviewVideoWindow::clampToScreen(screenRect, anchorTarget, *popupSizeState));
+	});
+
 	popup->show();
 	popup->prepareInitialFrame(true);
 }

@@ -2,6 +2,8 @@
 #include <QQuickView>
 #include <QString>
 #include <QSize>
+#include <QPoint>
+#include <QRect>
 
 class QQuickItem;
 class QWidget;
@@ -38,6 +40,13 @@ public:
     void restoreLastPosition(qint64 positionMs);
     qint64 positionForResume() const;
     bool isPlaying() const;
+
+    // Placement rule shared by every preview surface (main list and InsertSettingsDialog), so the
+    // popup opens in the same place regardless of which list requested it: above the anchor and
+    // horizontally centered on it, below when that would leave the screen, then clamped inside it.
+    static QPoint popupPosition(const QRect& screenRect, const QPoint& anchor, const QSize& size, int gap = 12);
+    // Keeps a position chosen by popupPosition() on-screen after the popup resized.
+    static QPoint clampToScreen(const QRect& screenRect, const QPoint& topLeft, const QSize& size);
 
 public slots:
     void startPreview();

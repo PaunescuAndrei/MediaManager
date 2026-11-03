@@ -167,6 +167,31 @@ bool PreviewVideoWindow::isPlaying() const
     return this->controller && this->controller->isPlaying();
 }
 
+QPoint PreviewVideoWindow::popupPosition(const QRect& screenRect, const QPoint& anchor, const QSize& size, int gap)
+{
+    const int centeredX = anchor.x() - size.width() / 2;
+
+    const QPoint above(centeredX, anchor.y() - size.height() - gap);
+    if (!screenRect.isValid() || above.y() >= screenRect.top())
+        return above;
+
+    const QPoint below(centeredX, anchor.y() + gap);
+    if (!screenRect.isValid() || below.y() + size.height() <= screenRect.bottom())
+        return below;
+
+    return clampToScreen(screenRect, QPoint(centeredX, anchor.y() - size.height() / 2), size);
+}
+
+QPoint PreviewVideoWindow::clampToScreen(const QRect& screenRect, const QPoint& topLeft, const QSize& size)
+{
+    if (!screenRect.isValid())
+        return topLeft;
+    const int maxX = std::max(screenRect.left(), screenRect.right() - size.width());
+    const int maxY = std::max(screenRect.top(), screenRect.bottom() - size.height());
+    return QPoint(std::max(screenRect.left(), std::min(topLeft.x(), maxX)),
+                  std::max(screenRect.top(), std::min(topLeft.y(), maxY)));
+}
+
 void PreviewVideoWindow::startPreview()
 {
     this->controller->startPreview();

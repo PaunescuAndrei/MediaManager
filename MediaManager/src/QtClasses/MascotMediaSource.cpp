@@ -4,6 +4,7 @@
 #include "MainWindow.h"
 #include "definitions.h"
 #include "utils.h"
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QRandomGenerator>
 
@@ -24,6 +25,17 @@ namespace {
 	}
 
 	constexpr int VIDEO_DRAW_ATTEMPTS = 8;
+
+	// One key per pool. Anything that is not an explicit Yes or No is All, which is also what the
+	// query means by an empty watched array.
+	QString normalizedWatched(const QString& watched)
+	{
+		if (watched.compare(QStringLiteral("Yes"), Qt::CaseInsensitive) == 0)
+			return QStringLiteral("Yes");
+		if (watched.compare(QStringLiteral("No"), Qt::CaseInsensitive) == 0)
+			return QStringLiteral("No");
+		return QStringLiteral("All");
+	}
 }
 
 MascotMediaSource::MascotMediaSource(MainApp* App)
@@ -118,11 +130,14 @@ QString MascotMediaSource::nextImagePath()
 	return path;
 }
 
-QString MascotMediaSource::nextVideoPath()
+QString MascotMediaSource::nextVideoPath(const QString& watched)
 {
-	this->ensureVideoPool();
-	if (this->videoPool.isEmpty())
+	const QString key = normalizedWatched(watched);
+	this->ensureVideoPool(key);
+	auto poolIt = this->videoPools.constFind(key);
+	if (poolIt == this->videoPools.cend() || poolIt->isEmpty())
 		return "";
+	const QList<VideoWeightedData>& pool = *poolIt;
 
 	this->refreshRng();
 	if (!this->videoGenerator) {
@@ -140,7 +155,7 @@ QString MascotMediaSource::nextVideoPath()
 	// No exclusion: a pick may land on the file the main player has, which is the user's explicit call.
 	// A known-failed path is re-drawn, and an exhausted draw answers "" -- the fallback to images.
 	for (int attempt = 0; attempt < VIDEO_DRAW_ATTEMPTS; ++attempt) {
-		const QString path = drawVideoPath(this->videoPool, this->weightedChoice, weightedSettings,
+		const QString path = drawVideoPath(pool, this->weightedChoice, weightedSettings,
 			*this->videoGenerator);
 		if (path.isEmpty() || !this->failedVideoPaths.contains(path))
 			return path;
@@ -157,21 +172,29 @@ void MascotMediaSource::noteVideoFailure(const QString& path)
 	this->failedVideoPaths.insert(path);
 }
 
+bool MascotMediaSource::isVideoFailed(const QString& path) const
+{
+	return !path.isEmpty() && this->failedVideoPaths.contains(path);
+}
+
 void MascotMediaSource::invalidateVideoPool()
 {
-	this->videoPoolInitialized = false;
-	this->videoPool.clear();
+	this->videoPoolsInitialized.clear();
+	this->videoPools.clear();
 }
 
-int MascotMediaSource::videoPoolSize() const
+int MascotMediaSource::videoPoolSize(const QString& watched) const
 {
-	this->ensureVideoPool();
-	return static_cast<int>(this->videoPool.size());
+	const QString key = normalizedWatched(watched);
+	this->ensureVideoPool(key);
+	const auto poolIt = this->videoPools.constFind(key);
+	return poolIt == this->videoPools.cend() ? 0 : static_cast<int>(poolIt->size());
 }
 
-void MascotMediaSource::ensureVideoPool() const
+void MascotMediaSource::ensureVideoPool(const QString& watched) const
 {
-	if (this->videoPoolInitialized)
+	const QString key = normalizedWatched(watched);
+	if (this->videoPoolsInitialized.contains(key))
 		return;
 	if (!this->App || !this->App->db || !this->App->mainWindow)
 		return;
@@ -180,7 +203,13 @@ void MascotMediaSource::ensureVideoPool() const
 	// "watched only" does not. getVideos() never reads that key itself -- the `watched` array filters.
 	QJsonObject settings = this->App->mainWindow->filterSettings.json;
 	settings.insert("ignore_defaults", "True");
+	// The layer's own watched switch replaces the list's: All is both statuses, not "whatever the
+	// list filter says", or a hidden watched filter would quietly empty the pool.
+	QJsonArray watchedValues;
+	if (key != QStringLiteral("All"))
+		watchedValues = QJsonArray{ key };
+	settings.insert("watched", watchedValues);
 	// A failed getVideos() comes back empty too, so videoPoolSize() == 0 means "no row passed" *or* "the query failed".
-	this->videoPool = this->App->db->getVideos(this->App->currentDB, settings);
-	this->videoPoolInitialized = true;
+	this->videoPools[key] = this->App->db->getVideos(this->App->currentDB, settings);
+	this->videoPoolsInitialized.insert(key);
 }

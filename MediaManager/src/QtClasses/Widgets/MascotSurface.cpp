@@ -190,6 +190,17 @@ void MascotSurface::setSlotOpacity(int i, double opacity)
 	this->applySlot(i);
 }
 
+void MascotSurface::setSlotImageOpacity(int i, double opacity, int fadeMs)
+{
+	if (!this->isValidSlot(i) || !(opacity >= 0.0))
+		return;
+	Slot& slot = this->slotStates[i];
+	// The same knob as the video fade: one transition duration for every media kind.
+	slot.crossfadeMs = fadeMs > 0 ? fadeMs : 0;
+	slot.imageOpacity = opacity > 1.0 ? 1.0 : opacity;
+	this->applySlot(i);
+}
+
 void MascotSurface::setSlotFillMode(int i, FillMode mode)
 {
 	if (!this->isValidSlot(i))
@@ -303,6 +314,8 @@ void MascotSurface::clearSlot(int i)
 	// created here would inherit it.
 	slot.mirrorSourceSlot = -1;
 	slot.mirrorHeld = false;
+	// A fade cut short would otherwise leave the next band's picture at that opacity for good.
+	slot.imageOpacity = 1.0;
 	this->applySlot(i);
 }
 
@@ -497,6 +510,7 @@ void MascotSurface::applySlot(int i)
 	// The duration goes first: the Behavior reads crossfadeMs when the opacity write arrives, so writing opacity first
 	// would animate with the previous duration.
 	item->setProperty("crossfadeMs", slot.crossfadeMs);
+	item->setProperty("imageOpacity", slot.imageOpacity);
 	item->setProperty("videoVisible", slot.videoVisible);
 	item->setProperty("videoOpacityA", slot.videoOpacityA);
 	item->setProperty("videoOpacityB", slot.videoOpacityB);

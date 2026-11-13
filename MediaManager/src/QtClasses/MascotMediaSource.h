@@ -1,5 +1,6 @@
 #pragma once
 #include "definitions.h"
+#include <QHash>
 #include <QRandomGenerator>
 #include <QSet>
 #include <QString>
@@ -11,7 +12,7 @@ class MainApp;
 
 class MascotMediaSource {
 public:
-	explicit MascotMediaSource(MainApp* App = nullptr);
+	explicit MascotMediaSource(MainApp* app = nullptr);
 
 	void setAllFilesRandom(bool allFilesRandom);
 
@@ -23,13 +24,18 @@ public:
 
 	QString nextImagePath();
 
-	QString nextVideoPath();
+	// `watched` is the layer's own switch (All/Yes/No). Each value has its own cached pool, so the
+	// columns and the layer can filter differently without re-running the query on every pick.
+	QString nextVideoPath(const QString& watched);
 
 	void invalidateVideoPool();
 
 	void noteVideoFailure(const QString& path);
 
-	int videoPoolSize() const;
+	// A pinned source is not drawn from the pool, so it can only be skipped by asking.
+	bool isVideoFailed(const QString& path) const;
+
+	int videoPoolSize(const QString& watched) const;
 
 private:
 	void initPaths();
@@ -37,7 +43,7 @@ private:
 	// The pool scan is one `getVideos` query -- the expensive half of a pick -- so it is cached
 	// until invalidateVideoPool(). Leaves the cache uninitialised when there is nothing to scan
 	// against, so a source used before the app is up is not left empty for good.
-	void ensureVideoPool() const;
+	void ensureVideoPool(const QString& watched) const;
 
 	MainApp* App = nullptr;
 	bool allFilesRandom = false;
@@ -54,8 +60,9 @@ private:
 	std::optional<QRandomGenerator> videoGenerator;
 	// Mutable so the const videoPoolSize() can answer before the first pick: a caller that asks the
 	// size to decide whether video is possible would never take the pick that fills the pool.
-	mutable QList<VideoWeightedData> videoPool;
-	mutable bool videoPoolInitialized = false;
+	// Keyed by the normalised watched value, so the two layers' filters do not evict each other.
+	mutable QHash<QString, QList<VideoWeightedData>> videoPools;
+	mutable QSet<QString> videoPoolsInitialized;
 	// Paths, not pool indices: the pool is re-scanned, so an index would later name a different file.
 	QSet<QString> failedVideoPaths;
 };

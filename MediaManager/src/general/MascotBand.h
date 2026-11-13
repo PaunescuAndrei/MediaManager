@@ -63,6 +63,9 @@ public:
 	struct Playback {
 		QString prefetchPath;
 		MascotMedia candidate;
+		// Set by a refresh that wants a transition: consumed by the next commit of either media kind,
+		// because a video fades through its own pair and must not fade the slot a second time.
+		int imageFadeMs = 0;
 		quint64 videoSeq = 0;
 		qint64 requestedAtMs = 0;
 		qint64 committedAtMs = 0;

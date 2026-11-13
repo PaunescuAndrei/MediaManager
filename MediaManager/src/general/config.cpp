@@ -137,6 +137,16 @@ void Config::init_defaults() {
 		{"mascots_retry_interval_ms", "150"},
 		{"mascots_retry_attempts", "5"},
 		{"mascots_busy_defer_ms", "250"},
+		// Where video picks come from: the category pool, the list cursor's file, or the app's
+		// current video. A single-file source still advances on the clip timer, landing at a
+		// random position inside that file. The background layer has its own copies below.
+		{"mascots_video_source", "Category"},
+		// Watched status of the columns' category pool: All, Yes or No. All is a real value, not
+		// "follow the list filter" -- it keeps both statuses in the pool.
+		{"mascots_watched", "All"},
+		// Re-pick the columns as soon as the category changes, so an old category's clips do not
+		// linger behind the new list.
+		{"mascots_refresh_on_category", "True"},
 	});
 
 	group("mascots_background", {
@@ -169,6 +179,11 @@ void Config::init_defaults() {
 		// Where the two columns sit relative to the veil: Above draws them after it at full
 		// brightness, Below puts the veil between them and the rest of the UI so they dim with it.
 		{"mascots_columns_z", "Above the veil"},
+		// The layer's own source and watched filter: independent of the columns', so the layer can
+		// follow the current video while the columns stay on the category pool (or the reverse).
+		{"mascots_background_video_source", "Category"},
+		{"mascots_background_watched", "All"},
+		{"mascots_background_refresh_on_category", "True"},
 	});
 
 	group("preview", {

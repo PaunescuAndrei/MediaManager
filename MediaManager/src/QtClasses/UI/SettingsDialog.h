@@ -105,6 +105,15 @@ public:
 
     // The legacy .ui group box is reparented onto this page rather than rebuilt here.
     QComboBox* mascotMediaCombo = nullptr;
+    // Where the columns' video picks come from: the category pool or one pinned file.
+    QComboBox* mascotVideoSourceCombo = nullptr;
+    // Watched status of the columns' category pool: All, Yes or No.
+    QComboBox* mascotWatchedCombo = nullptr;
+    QCheckBox* mascotRefreshOnCategoryCheckBox = nullptr;
+    // The layer's copies of the same three switches, independent of the columns'.
+    QComboBox* mascotBackgroundVideoSourceCombo = nullptr;
+    QComboBox* mascotBackgroundWatchedCombo = nullptr;
+    QCheckBox* mascotBackgroundRefreshOnCategoryCheckBox = nullptr;
     QComboBox* mascotModeCombo = nullptr;
     QComboBox* mascotFillCombo = nullptr;
     QCheckBox* mascotWeightedCheckBox = nullptr;
@@ -187,6 +196,9 @@ private:
 
     // `mascots` disables these as a unit; the rows inside follow the media and the mode individually.
     QGroupBox* mascotContentGroup = nullptr;
+    // Video pick source, watched filter and the category refresh belong to both the columns and the
+    // layer, and apply only while some video can be drawn.
+    QGroupBox* mascotVideoSourceGroup = nullptr;
     QGroupBox* mascotPlaybackGroup = nullptr;
     QGroupBox* mascotStripesGroup = nullptr;
 

@@ -29,6 +29,8 @@ Item {
 	property bool videoVisible: false
 	property real videoOpacityA: 0.0
 	property real videoOpacityB: 0.0
+	// Separate from the slot's own opacity so a picture swap fades the picture and not the framing.
+	property real imageOpacity: 1.0
 	// 0 is a zero-duration animation, not a second code path.
 	property int crossfadeMs: 0
 
@@ -45,6 +47,12 @@ Item {
 			easing.type: Easing.InOutQuad
 		}
 	}
+	Behavior on imageOpacity {
+		NumberAnimation {
+			duration: slot.crossfadeMs
+			easing.type: Easing.InOutQuad
+		}
+	}
 
 	Image {
 		id: img
@@ -56,6 +64,7 @@ Item {
 		fillMode: Image.Stretch
 		mirror: slot.mirrored
 		visible: slot.mediaIsImage && !slot.mirrorSource
+		opacity: slot.imageOpacity
 		smooth: true
 		mipmap: slot.minifying
 		// The provider answers from the cache inside the same property write, so a synchronous load is the frame after a swap.

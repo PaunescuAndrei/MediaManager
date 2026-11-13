@@ -172,6 +172,8 @@ public:
     QPersistentModelIndex modelIndexFromAny(const QPersistentModelIndex& index) const;
     QStringList selectedPaths() const;
     QList<int> selectedIds() const;
+    // The list cursor's file, as opposed to the app's current video. Empty when nothing is selected.
+    QString currentSelectionPath() const;
     QString pathById(int id) const;
     // Model-based batch operations
     void updateAuthors(const QList<int>& ids);

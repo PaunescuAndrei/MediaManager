@@ -316,6 +316,32 @@ void MascotController::applyConfig()
 	Config* config = this->App->config;
 
 	this->mediaSetting = config->get(QStringLiteral("mascots_media"));
+	bool videoSourceOk = false;
+	const QString videoSourceValue = config->get(QStringLiteral("mascots_video_source"));
+	const MascotVideoSource parsedVideoSource =
+		MascotController::videoSourceFromString(videoSourceValue, &videoSourceOk);
+	const bool videoSourceChanged = parsedVideoSource != this->columnsVideoSource;
+	this->columnsVideoSource = parsedVideoSource;
+	bool backgroundVideoSourceOk = false;
+	const QString backgroundVideoSourceValue = config->get(QStringLiteral("mascots_background_video_source"));
+	const MascotVideoSource parsedBackgroundVideoSource =
+		MascotController::videoSourceFromString(backgroundVideoSourceValue, &backgroundVideoSourceOk);
+	const bool backgroundVideoSourceChanged = parsedBackgroundVideoSource != this->backgroundVideoSource;
+	this->backgroundVideoSource = parsedBackgroundVideoSource;
+	// The watched switches are part of the pool queries, so a change has to drop the cached pools even
+	// when nothing else in this apply touches them.
+	const QString watched = config->get(QStringLiteral("mascots_watched"));
+	const bool watchedChanged = watched != this->columnsWatchedCache;
+	if (watchedChanged) {
+		this->columnsWatchedCache = watched;
+		this->source.invalidateVideoPool();
+	}
+	const QString backgroundWatched = config->get(QStringLiteral("mascots_background_watched"));
+	const bool backgroundWatchedChanged = backgroundWatched != this->backgroundWatchedCache;
+	if (backgroundWatchedChanged) {
+		this->backgroundWatchedCache = backgroundWatched;
+		this->source.invalidateVideoPool();
+	}
 	this->clipSeconds = clampedClipSeconds(config);
 	this->swapOnBeat = config->get_bool(QStringLiteral("mascots_swap_on_beat"));
 	this->backgroundClipSeconds = clampedConfigInt(config, QStringLiteral("mascots_background_clip_seconds"), 0, MAX_CLIP_SECONDS);
@@ -374,6 +400,23 @@ void MascotController::applyConfig()
 		// qWarning() because the debug log line alone is invisible in a release run.
 		qWarning() << "mascots_media:" << this->mediaSetting
 			<< "is not one of Images, Videos or Mixed; showing images.";
+	}
+
+	if (!this->warnedUnsupportedVideoSource && !videoSourceValue.isEmpty() && !videoSourceOk) {
+		this->warnedUnsupportedVideoSource = true;
+		this->logVideo(QStringLiteral("mascots_video_source=\"%1\" is not one of Category, Selected or Current; using Category")
+			.arg(videoSourceValue));
+		qWarning() << "mascots_video_source:" << videoSourceValue
+			<< "is not one of Category, Selected or Current; using Category.";
+	}
+
+	if (!this->warnedUnsupportedBackgroundVideoSource && !backgroundVideoSourceValue.isEmpty()
+		&& !backgroundVideoSourceOk) {
+		this->warnedUnsupportedBackgroundVideoSource = true;
+		this->logBackground(QStringLiteral("mascots_background_video_source=\"%1\" is not one of Category, Selected or Current; using Category")
+			.arg(backgroundVideoSourceValue));
+		qWarning() << "mascots_background_video_source:" << backgroundVideoSourceValue
+			<< "is not one of Category, Selected or Current; using Category.";
 	}
 
 	if (!this->warnedUnsupportedMode && !modeValue.isEmpty() && !modeOk) {
@@ -482,6 +525,11 @@ void MascotController::applyConfig()
 
 	this->source.setAllFilesRandom(config->get_bool("mascots_allfiles_random"));
 	this->source.setWeightedChoice(this->weightedRandom);
+	// Baselines for onPinnedSourceChanged(): a re-application of the settings is not a source change.
+	this->lastPinnedPathColumns = this->videoSourceIsPinned(MascotPanel::Left)
+		? this->pinnedVideoPath(MascotPanel::Left) : QString();
+	this->lastPinnedPathBackground = this->videoSourceIsPinned(MascotPanel::Background)
+		? this->pinnedVideoPath(MascotPanel::Background) : QString();
 	this->applySeedSource();
 	// Before the panels are built, so the mode the log names is the mode the players are created with.
 	this->applyDecoderBudget();
@@ -516,7 +564,7 @@ void MascotController::applyConfig()
 				continue;
 			// Also re-arms the clip timer: a slot left with the old length would pick its start offset from a range
 			// that length no longer means (30 s down to 5 s leaves a 30 s range).
-			band->video()->setRandomStart(this->randomStart, this->clipSeconds);
+			band->video()->setRandomStart(this->randomStart || this->videoSourceIsPinned(MascotPanel::Left), this->clipSeconds);
 			band->video()->setTimings(this->swapTimeoutMs, this->retryIntervalMs, this->retryAttempts);
 			band->video()->setLowLatency(this->lowLatency);
 			// Discard a parked clip so "off" means off from the next swap, not one clip later.
@@ -529,7 +577,8 @@ void MascotController::applyConfig()
 			MascotBand* band = owned.get();
 			if (!band || !band->video())
 				continue;
-			band->video()->setRandomStart(this->randomStart, this->clipSecondsFor(MascotPanel::Background));
+			band->video()->setRandomStart(this->randomStart || this->videoSourceIsPinned(MascotPanel::Background),
+				this->clipSecondsFor(MascotPanel::Background));
 			band->video()->setTimings(this->swapTimeoutMs, this->retryIntervalMs, this->retryAttempts);
 			band->video()->setLowLatency(this->lowLatency);
 			if (!this->preloadEnabled)
@@ -596,6 +645,16 @@ void MascotController::applyConfig()
 			}, Qt::QueuedConnection);
 		}
 	}
+	// A changed source or watched filter is a different set of files, and the bands keep what they
+	// are showing: re-pick the layer that changed so an Apply or a Cancel is as visible as the live path.
+	const bool columnsChanged = videoSourceChanged || watchedChanged;
+	const bool backgroundChanged = backgroundVideoSourceChanged || backgroundWatchedChanged;
+	if ((columnsChanged || backgroundChanged) && this->running) {
+		const MediaRefreshScope scope = (columnsChanged && backgroundChanged)
+			? MediaRefreshScope::All
+			: (columnsChanged ? MediaRefreshScope::Columns : MediaRefreshScope::Background);
+		this->refreshMedia(scope, true);
+	}
 }
 
 void MascotController::applySeedSource()
@@ -631,6 +690,21 @@ StripesOrientation MascotController::stripesOrientationFromString(const QString&
 	if (ok)
 		*ok = false;
 	return StripesOrientation::Horizontal;
+}
+
+MascotVideoSource MascotController::videoSourceFromString(const QString& value, bool* ok)
+{
+	if (ok)
+		*ok = true;
+	if (value.compare(QStringLiteral("Selected"), Qt::CaseInsensitive) == 0)
+		return MascotVideoSource::Selected;
+	if (value.compare(QStringLiteral("Current"), Qt::CaseInsensitive) == 0)
+		return MascotVideoSource::Current;
+	if (value.isEmpty() || value.compare(QStringLiteral("Category"), Qt::CaseInsensitive) == 0)
+		return MascotVideoSource::Category;
+	if (ok)
+		*ok = false;
+	return MascotVideoSource::Category;
 }
 
 MascotSurface::FillMode MascotController::fillModeFromString(const QString& value, bool* ok)
@@ -961,6 +1035,7 @@ void MascotController::syncBands(PanelState& state, MascotPanel panel)
 		if (index >= firstNew) {
 			surface->setSlotVideoOpacity(band->slotIndex(), 0, 0.0, 0);
 			surface->setSlotVideoOpacity(band->slotIndex(), 1, 0.0, 0);
+			surface->setSlotImageOpacity(band->slotIndex(), 1.0, 0);
 		}
 	}
 	state.configuredBandCount = wanted;
@@ -1953,7 +2028,7 @@ void MascotController::applyDisplay(PanelState& state, MascotPanel panel)
 }
 
 void MascotController::presentMedia(PanelState& state, MascotPanel panel, const MascotMedia& media,
-	int bandIndex)
+	int bandIndex, int imageFadeMs)
 {
 	MascotBand* band = state.band(bandIndex);
 	if (!state.surface || !band)
@@ -1963,9 +2038,15 @@ void MascotController::presentMedia(PanelState& state, MascotPanel panel, const 
 		state.surface->setSlotMirrorSource(band->slotIndex(), -1);
 		this->logVideo(QStringLiteral("MASCOT-STAGE release band=%1").arg(bandIndex));
 	}
+	// The caller resolved whether this commit wants a picture fade (a refresh, while the panels can be
+	// seen). A video fades through its own player pair; only a picture swap uses this.
+	if (imageFadeMs > 0)
+		state.surface->setSlotImageOpacity(band->slotIndex(), 0.0, 0);
 	this->applyMirror(state, panel, media.path, bandIndex);
 	band->applyFill(this->effectiveFillMode(panel));
 	band->setMedia(media);
+	if (imageFadeMs > 0)
+		state.surface->setSlotImageOpacity(band->slotIndex(), 1.0, imageFadeMs);
 	this->logVideo(QStringLiteral("MASCOT-COMMIT %1 band=%2 kind=%3 file=%4 offset=%5")
 		.arg(panelLabel(panel))
 		.arg(bandIndex)
@@ -1979,6 +2060,12 @@ void MascotController::presentMedia(PanelState& state, MascotPanel panel, const 
 	if (media.type == MascotMedia::Video) {
 		band->setContentOffset(QPointF(0.0, 0.0));
 		band->setVideoOutputVisible(true);
+		// A mirrored pair's picture is the left band's, so the right slot has no commit of its own to
+		// spend the refresh fade on: drop the flag rather than let a later image fade carry it.
+		if (panel == MascotPanel::Left) {
+			if (MascotBand* rightBand = this->rightState.band(bandIndex))
+				rightBand->playback().imageFadeMs = 0;
+		}
 		return;
 	}
 	if (band->videoOutputVisible()) {
@@ -2073,7 +2160,7 @@ MascotMedia MascotController::pickFor(PanelState& state, MascotPanel panel, int 
 			state.lastTypeLogMs = now;
 			this->logVideo(QStringLiteral("%1 pick=image pool=%2 media=%3")
 				.arg(bandLabel(panel, bandIndex))
-				.arg(this->source.videoPoolSize())
+				.arg(this->source.videoPoolSize(this->watchedFor(panel)))
 				.arg(this->mediaSetting));
 		}
 	}
@@ -2126,6 +2213,15 @@ void MascotController::showMedia(PanelState& state, MascotPanel panel, const Mas
 
 	const QString previousShown = band->media().path;
 	const QString previousCandidate = band->playback().candidate.path;
+	const bool hadMedia = !previousShown.isEmpty();
+	// A refresh flags the commit it wants faded. Consumed here, on the one path that commits media,
+	// so a re-presentation (applyDisplay) can never spend it on a picture that did not change.
+	const int fadeRequested = band->playback().imageFadeMs;
+	band->playback().imageFadeMs = 0;
+	// A hidden surface does not tick QML animations reliably, so a fade that started there could sit
+	// at opacity 0; the same reason fadeInVideo() forces its duration to 0 while paused.
+	const int imageFadeMs = (hadMedia && media.type == MascotMedia::Image && !this->videoPaused)
+		? fadeRequested : 0;
 	if (fromReady)
 		band->playback().candidate = MascotMedia();
 	band->playback().committedAtMs = QDateTime::currentMSecsSinceEpoch();
@@ -2136,7 +2232,7 @@ void MascotController::showMedia(PanelState& state, MascotPanel panel, const Mas
 	band->setRequestIsVideo(false);
 	band->playback().prefetchPath.clear();
 	this->syncPin(media.path);
-	this->presentMedia(state, panel, media, bandIndex);
+	this->presentMedia(state, panel, media, bandIndex, imageFadeMs);
 	this->syncPin(previousShown);
 	this->syncPin(previousCandidate);
 	band->playback().videoFailures = 0;
@@ -2249,6 +2345,209 @@ bool MascotController::videoCrossfades(MascotPanel panel) const
 	return this->videoMode == VideoMode::Crossfade;
 }
 
+MascotVideoSource MascotController::videoSourceFor(MascotPanel panel) const
+{
+	return panel == MascotPanel::Background ? this->backgroundVideoSource : this->columnsVideoSource;
+}
+
+QString MascotController::watchedFor(MascotPanel panel) const
+{
+	return panel == MascotPanel::Background ? this->backgroundWatchedCache : this->columnsWatchedCache;
+}
+
+bool MascotController::videoSourceIsPinned(MascotPanel panel) const
+{
+	return this->videoSourceFor(panel) != MascotVideoSource::Category;
+}
+
+QString MascotController::pinnedVideoPath(MascotPanel panel) const
+{
+	if (!this->videoSourceIsPinned(panel))
+		return QString();
+	MainWindow* window = this->App ? this->App->mainWindow : nullptr;
+	if (!window)
+		return QString();
+	const QString path = this->videoSourceFor(panel) == MascotVideoSource::Selected
+		? window->currentSelectionPath()
+		: window->ui.currentVideo->path;
+	// An empty cursor, a missing file or one this session already failed to decode all fall back to
+	// the pool: pinning a layer to nothing would leave it blank.
+	if (path.isEmpty() || this->source.isVideoFailed(path) || !QFileInfo::exists(path))
+		return QString();
+	return path;
+}
+
+QString MascotController::nextVideoPathFor(MascotPanel panel)
+{
+	const QString pinned = this->pinnedVideoPath(panel);
+	if (!pinned.isEmpty())
+		return pinned;
+	return this->source.nextVideoPath(this->watchedFor(panel));
+}
+
+void MascotController::refreshMedia(MediaRefreshScope scope, bool force)
+{
+	if (!this->running)
+		return;
+	if (scope != MediaRefreshScope::Background) {
+		this->refreshPendingColumns = true;
+		this->refreshPendingForceColumns = this->refreshPendingForceColumns || force;
+	}
+	if (scope != MediaRefreshScope::Columns) {
+		this->refreshPendingBackground = true;
+		this->refreshPendingForceBackground = this->refreshPendingForceBackground || force;
+	}
+	if (this->refreshScheduled)
+		return;
+	this->refreshScheduled = true;
+	// Queued, not synchronous: a category switch resets the model and reloads the filter on the same
+	// call stack, and both fire this; one pass after they settle is the pick that sees the new pool.
+	QMetaObject::invokeMethod(this, [this]() {
+		this->refreshScheduled = false;
+		const bool columns = this->refreshPendingColumns;
+		const bool background = this->refreshPendingBackground;
+		const bool forceColumns = this->refreshPendingForceColumns;
+		const bool forceBackground = this->refreshPendingForceBackground;
+		this->refreshPendingColumns = false;
+		this->refreshPendingBackground = false;
+		this->refreshPendingForceColumns = false;
+		this->refreshPendingForceBackground = false;
+		this->refreshMediaPass(columns, background, forceColumns, forceBackground);
+	}, Qt::QueuedConnection);
+}
+
+void MascotController::refreshMediaPass(bool columns, bool background, bool forceColumns,
+	bool forceBackground)
+{
+	if (!this->running)
+		return;
+	// The category and its filter changed, so the cached queries are the old ones.
+	this->source.invalidateVideoPool();
+	this->poolFingerprintValid = false;
+
+	Config* config = this->App ? this->App->config : nullptr;
+	const bool columnsAllowed = forceColumns || !config
+		|| config->get_bool(QStringLiteral("mascots_refresh_on_category"));
+	const bool backgroundAllowed = forceBackground || !config
+		|| config->get_bool(QStringLiteral("mascots_background_refresh_on_category"));
+	// A pinned layer draws the same file whatever the category is, so a category-driven pass leaves it
+	// alone; a forced pass (the pinned file itself changed) still re-picks it. An empty pin falls back
+	// to the pool, which the category does change.
+	const bool columnsPinned = !forceColumns && this->videoSourceIsPinned(MascotPanel::Left)
+		&& !this->pinnedVideoPath(MascotPanel::Left).isEmpty();
+	const bool backgroundPinned = !forceBackground && this->videoSourceIsPinned(MascotPanel::Background)
+		&& !this->pinnedVideoPath(MascotPanel::Background).isEmpty();
+
+	// Columns only re-pick when a video can be drawn there: an image-only pair draws from the mascots
+	// folder, which the category has no say in.
+	if (columns && columnsAllowed && !columnsPinned && this->columnsEnabled
+		&& this->leftState.surface && this->mediaSettingWantsVideo()) {
+		for (int i = 0; i < this->bandCount(MascotPanel::Left); ++i)
+			this->refreshBand(MascotPanel::Left, i, 0);
+		// Under the mirror the left pick drives both slots; only a right band past its left
+		// counterpart owns a pick of its own.
+		const int rightFirst = this->mirrorEnabled() ? this->bandCount(MascotPanel::Left) : 0;
+		for (int i = rightFirst; i < this->bandCount(MascotPanel::Right); ++i)
+			this->refreshBand(MascotPanel::Right, i, 0);
+		this->logVideo(QStringLiteral("MASCOT-REFRESH columns bands=%1 fade=%2ms")
+			.arg(this->bandCount(MascotPanel::Left))
+			.arg(this->crossfadeMs));
+	}
+	if (background && backgroundAllowed && !backgroundPinned
+		&& this->backgroundEnabled && this->backgroundState.surface) {
+		for (int i = 0; i < static_cast<int>(this->backgroundState.bands.size()); ++i)
+			this->refreshBand(MascotPanel::Background, i, 0);
+		this->logBackground(QStringLiteral("MASCOT-BG-REFRESH bands=%1 fade=%2ms")
+			.arg(static_cast<int>(this->backgroundState.bands.size()))
+			.arg(this->crossfadeMs));
+	}
+}
+
+void MascotController::refreshBand(MascotPanel panel, int bandIndex, int attempt)
+{
+	if (!this->running)
+		return;
+	PanelState& state = this->stateFor(panel);
+	if (!state.surface)
+		return;
+	MascotBand* band = state.band(bandIndex);
+	if (!band)
+		return;
+	// A band drawing the left band's stage has no pick of its own.
+	if (this->bandUsesMirrorView(panel, bandIndex))
+		return;
+	// A parked clip was opened from the previous source: consuming it would draw the old pick. A
+	// load in flight is the clip that is about to be shown, so it is waited out, not overwritten.
+	if (MascotVideoSlot* slot = band->video()) {
+		slot->discardPreload();
+		if (slot->isBusy() && !slot->preloading()) {
+			// Budgeted in time, not attempts: the retry interval is a setting, and a slow open may
+			// legitimately take the whole swap deadline before this band can be re-picked.
+			const int maxAttempts = std::max(5,
+				this->swapTimeoutMs / std::max(1, this->retryIntervalMs) + 5);
+			if (attempt < maxAttempts) {
+				QTimer::singleShot(this->retryIntervalMs, this, [this, panel, bandIndex, attempt]() {
+					this->refreshBand(panel, bandIndex, attempt + 1);
+				});
+			}
+			return;
+		}
+	}
+	band->playback().imageFadeMs = this->crossfadeMs;
+	if (panel == MascotPanel::Background) {
+		// The layer never draws an image, so a band without a player has nothing to show.
+		if (!band->video())
+			return;
+		this->pickFor(state, panel, bandIndex, bandIndex == 0);
+		return;
+	}
+	if (panel == MascotPanel::Left && this->mirrorEnabled()) {
+		// One pick drives both slots -- an image is copied into the right, a video is drawn there
+		// from the left stage -- so the pair advances together, exactly as its beat does.
+		if (MascotBand* rightBand = this->rightState.band(bandIndex))
+			rightBand->playback().imageFadeMs = this->crossfadeMs;
+		this->nextBandImages(bandIndex, false);
+		return;
+	}
+	this->pickFor(state, panel, bandIndex, bandIndex == 0);
+}
+
+void MascotController::onPinnedSourceChanged()
+{
+	if (!this->running)
+		return;
+	bool columnsChanged = false;
+	if (this->videoSourceIsPinned(MascotPanel::Left)) {
+		const QString path = this->pinnedVideoPath(MascotPanel::Left);
+		// Every re-presentation of the same file would otherwise re-pick the whole layer. A pin that
+		// resolves to nothing clears the baseline, so the same file coming back counts as a change.
+		if (path.isEmpty())
+			this->lastPinnedPathColumns.clear();
+		else if (path != this->lastPinnedPathColumns) {
+			this->lastPinnedPathColumns = path;
+			columnsChanged = true;
+		}
+	}
+	bool backgroundChanged = false;
+	if (this->videoSourceIsPinned(MascotPanel::Background)) {
+		const QString path = this->pinnedVideoPath(MascotPanel::Background);
+		if (path.isEmpty())
+			this->lastPinnedPathBackground.clear();
+		else if (path != this->lastPinnedPathBackground) {
+			this->lastPinnedPathBackground = path;
+			backgroundChanged = true;
+		}
+	}
+	if (!columnsChanged && !backgroundChanged)
+		return;
+	// Only the layer whose pinned file changed: a Next press must not cut the columns' clip short
+	// when they are still drawing from the category pool.
+	const MediaRefreshScope scope = (columnsChanged && backgroundChanged)
+		? MediaRefreshScope::All
+		: (columnsChanged ? MediaRefreshScope::Columns : MediaRefreshScope::Background);
+	this->refreshMedia(scope, true);
+}
+
 void MascotController::invalidateVideoPoolIfStale()
 {
 	MainWindow* window = this->App ? this->App->mainWindow : nullptr;
@@ -2269,14 +2568,20 @@ void MascotController::invalidateVideoPoolIfStale()
 
 MascotMedia::Type MascotController::pickType(PanelState& state, MascotPanel panel)
 {
+	// A pinned file needs no pool query at all, and the pool may legitimately be empty while the
+	// pinned one still plays.
+	const bool pinned = this->videoSourceIsPinned(panel) && !this->pinnedVideoPath(panel).isEmpty();
 	if (panel == MascotPanel::Background) {
-		this->invalidateVideoPoolIfStale();
+		if (!pinned)
+			this->invalidateVideoPoolIfStale();
 		return MascotMedia::Video;
 	}
 	if (!this->mediaMayBeVideo(panel))
 		return MascotMedia::Image;
+	if (pinned)
+		return MascotMedia::Video;
 	this->invalidateVideoPoolIfStale();
-	const int pool = this->source.videoPoolSize();
+	const int pool = this->source.videoPoolSize(this->watchedFor(panel));
 	if (this->mediaSetting.compare(QStringLiteral("Videos"), Qt::CaseInsensitive) == 0 && pool <= 0) {
 		const qint64 now = QDateTime::currentMSecsSinceEpoch();
 		if (state.lastTypeLogMs == 0 || (now - state.lastTypeLogMs) >= VIDEO_LOG_INTERVAL_MS) {
@@ -2369,7 +2674,7 @@ MascotController::VideoPick MascotController::pickVideo(PanelState& state, Masco
 	}
 	this->applySeedSource();
 	this->source.setWeightedChoice(this->weightedRandom);
-	const QString path = this->source.nextVideoPath();
+	const QString path = this->nextVideoPathFor(panel);
 	if (path.isEmpty())
 		return VideoPick::Fallback;
 	if (!band->playback().candidate.path.isEmpty()) {
@@ -2422,6 +2727,13 @@ void MascotController::startVideoLoad(PanelState& state, MascotPanel panel, int 
 	band->playback().videoPickRetryPending = false;
 	if (panel == MascotPanel::Background)
 		this->backgroundEmptyPoolLogged = false;
+	// A paused slot never plays, so while the panels cannot be seen its load would open and then wait:
+	// nothing is painted until they are visible again, which is the delay seen there. Every load that
+	// starts while paused -- the first seed, a refresh, a retry -- is allowed to play through its
+	// first frame; onVideoFirstFrame() freezes it again, so the sink keeps one decoded frame and stops.
+	const bool primeHidden = this->videoPaused;
+	if (primeHidden)
+		slot->setPaused(false);
 	// The output is made visible before the clip is asked for, so the sink receives frames while the first-frame gate waits.
 	if (!band->videoOutputVisible())
 		band->setVideoOutputVisible(true);
@@ -2438,7 +2750,8 @@ void MascotController::startVideoLoad(PanelState& state, MascotPanel panel, int 
 	this->logVideo(QStringLiteral("%1 swap #%2 pool=%3 offset=%4 path=\"%5\" preloaded=%6")
 		.arg(bandLabel(panel, bandIndex))
 		.arg(band->playback().videoSeq)
-		.arg(this->source.videoPoolSize())
+		.arg(this->videoSourceIsPinned(panel) ? QStringLiteral("pinned")
+			: QString::number(this->source.videoPoolSize(this->watchedFor(panel))))
 		.arg(effectiveOffsetMs < 0 ? QStringLiteral("random") : QString::number(effectiveOffsetMs))
 		.arg(path)
 		.arg(fromPreload ? QStringLiteral("yes") : QStringLiteral("no")));
@@ -2469,6 +2782,12 @@ void MascotController::onVideoFirstFrame(MascotPanel panel, int bandIndex, const
 	this->showMedia(state, panel, media, false, false, bandIndex);
 	this->fadeInVideo(state, panel, bandIndex, ab);
 	this->restartClipTimer(panel, bandIndex);
+	// The clip was played only far enough to paint while the window is hidden; freezing it now keeps
+	// the decoded frame on the sink and stops the decoder. applyVideoPaused() resumes it on show.
+	if (this->videoPaused) {
+		if (MascotVideoSlot* panelSlot = band->video())
+			panelSlot->setPaused(true);
+	}
 	this->logVideo(QStringLiteral("%1 first frame #%2 ab=%3 %4x%5 offset=%6ms delta=%7ms path=\"%8\"")
 		.arg(bandLabel(panel, bandIndex))
 		.arg(band->playback().videoSeq)
@@ -2486,7 +2805,9 @@ void MascotController::fadeInVideo(PanelState& state, MascotPanel panel, int ban
 	MascotVideoSlot* slot = band ? band->video() : nullptr;
 	if (!state.surface || !band || !slot || ab < 0 || ab > 1)
 		return;
-	const int fade = this->videoCrossfades(panel) ? this->crossfadeMs : 0;
+	// A hidden QQuickWidget does not tick its animations reliably, so a fade written now could sit at
+	// opacity 0 forever; a primed frame must land at full strength in one hard write.
+	const int fade = (this->videoCrossfades(panel) && !this->videoPaused) ? this->crossfadeMs : 0;
 	band->setVideoOpacity(ab, 1.0, fade);
 	band->setVideoOpacity(1 - ab, 0.0, fade);
 	if (fade <= 0) {
@@ -2550,7 +2871,7 @@ void MascotController::startPreload(MascotPanel panel)
 			continue;
 		if (!band->ensureVideo(0))
 			continue;
-		const QString path = this->source.nextVideoPath();
+		const QString path = this->nextVideoPathFor(panel);
 		if (path.isEmpty())
 			continue;
 		slot->preload(path, -1);
@@ -2696,7 +3017,7 @@ void MascotController::createVideoSlot(PanelState& state, MascotPanel panel, int
 	if (!slot)
 		return;
 	slot->setSinglePlayer(!this->videoCrossfades(panel));
-	slot->setRandomStart(this->randomStart, this->clipSecondsFor(panel));
+	slot->setRandomStart(this->randomStart || this->videoSourceIsPinned(panel), this->clipSecondsFor(panel));
 	slot->setLowLatency(this->lowLatency);
 	slot->setTimings(this->swapTimeoutMs, this->retryIntervalMs, this->retryAttempts);
 	connect(slot, &MascotVideoSlot::firstFrame, this,

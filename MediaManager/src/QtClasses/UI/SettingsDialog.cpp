@@ -33,6 +33,9 @@ const QStringList& mascotConfigKeys()
     static const QStringList keys = {
         // Written by SettingsDialog::syncMascotConfig().
         QStringLiteral("mascots_media"),
+        QStringLiteral("mascots_video_source"),
+        QStringLiteral("mascots_watched"),
+        QStringLiteral("mascots_refresh_on_category"),
         QStringLiteral("mascots_mode"),
         QStringLiteral("mascots_fill"),
         QStringLiteral("mascots_weighted_random"),
@@ -74,6 +77,9 @@ const QStringList& mascotConfigKeys()
         QStringLiteral("mascots_background_random_change"),
         QStringLiteral("mascots_background_random_chance"),
         QStringLiteral("mascots_background_scroll_pingpong"),
+        QStringLiteral("mascots_background_video_source"),
+        QStringLiteral("mascots_background_watched"),
+        QStringLiteral("mascots_background_refresh_on_category"),
         QStringLiteral("mascots_image_cache_mb"),
         QStringLiteral("mascots_image_cache_max_items"),
         // Written by MainWindow::applySettings() from the legacy rows on this page.
@@ -855,6 +861,42 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
 
     pageLayout->addWidget(contentGroup);
 
+    // The columns' source; the layer's own copy lives in the Background Layer box on Appearance.
+    QGroupBox* videoSourceGroup = new QGroupBox("Mascots Video Source");
+    QVBoxLayout* videoSourceLayout = new QVBoxLayout(videoSourceGroup);
+    videoSourceLayout->setSpacing(4);
+    mascotVideoSourceGroup = videoSourceGroup;
+
+    mascotVideoSourceCombo = makeComboBox(
+        { QStringLiteral("Category"), QStringLiteral("Selected"), QStringLiteral("Current") },
+        config->get(QStringLiteral("mascots_video_source")));
+    addRow(videoSourceLayout, "Videos come from:",
+        "Category draws a random video from the category pool. Selected plays the file of the row the "
+        "list cursor is on, and Current plays the app's current video. Either single-file source still "
+        "advances on the clip timer -- at a random position inside that same file -- and falls back to "
+        "the category pool while the file is empty or missing.",
+        mascotVideoSourceCombo);
+
+    mascotWatchedCombo = makeComboBox(
+        { QStringLiteral("All"), QStringLiteral("Yes"), QStringLiteral("No") },
+        config->get(QStringLiteral("mascots_watched")));
+    addRow(videoSourceLayout, "Watched status:",
+        "Which watched states the category pool may draw from. All keeps both watched and unwatched "
+        "videos, whatever the list's own watched filter says; Yes or No keeps only that state. Has no "
+        "effect while Videos come from a single file.",
+        mascotWatchedCombo);
+
+    mascotRefreshOnCategoryCheckBox = new QCheckBox("Re-pick when the category changes");
+    mascotRefreshOnCategoryCheckBox->setChecked(
+        config->get_bool(QStringLiteral("mascots_refresh_on_category")));
+    mascotRefreshOnCategoryCheckBox->setToolTip(
+        "Switching between the two categories re-picks every band at once and fades the old clips out, "
+        "so the previous category's videos do not stay behind the new list until their own timer. Off "
+        "lets each band finish its clip.");
+    videoSourceLayout->addWidget(mascotRefreshOnCategoryCheckBox);
+
+    pageLayout->addWidget(videoSourceGroup);
+
     QGroupBox* playbackGroup = new QGroupBox("Columns Playback");
     QVBoxLayout* playbackLayout = new QVBoxLayout(playbackGroup);
     playbackLayout->setSpacing(4);
@@ -1009,6 +1051,36 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "Draw a media layer behind the list. It is independent of `mascots`: it runs whether or "
         "not the columns are on, and it always plays videos.");
     backgroundLayout->addWidget(mascotBackgroundCheckBox);
+
+    // The layer's source and watched filter are its own: it can follow the current video while the
+    // columns stay on the category pool, or filter watched status differently.
+    mascotBackgroundVideoSourceCombo = makeComboBox(
+        { QStringLiteral("Category"), QStringLiteral("Selected"), QStringLiteral("Current") },
+        config->get(QStringLiteral("mascots_background_video_source")));
+    addRow(backgroundLayout, "Layer videos come from:",
+        "Category draws a random video from the category pool. Selected plays the file of the row the "
+        "list cursor is on, and Current plays the app's current video. Either single-file source still "
+        "advances on the layer's clip timer -- at a random position inside that same file -- and falls "
+        "back to the category pool while the file is empty or missing.",
+        mascotBackgroundVideoSourceCombo);
+
+    mascotBackgroundWatchedCombo = makeComboBox(
+        { QStringLiteral("All"), QStringLiteral("Yes"), QStringLiteral("No") },
+        config->get(QStringLiteral("mascots_background_watched")));
+    addRow(backgroundLayout, "Layer watched status:",
+        "Which watched states the layer's category pool may draw from. All keeps both watched and "
+        "unwatched videos, whatever the list's own watched filter says; Yes or No keeps only that "
+        "state. Has no effect while Layer videos come from a single file.",
+        mascotBackgroundWatchedCombo);
+
+    mascotBackgroundRefreshOnCategoryCheckBox = new QCheckBox("Re-pick the layer when the category changes");
+    mascotBackgroundRefreshOnCategoryCheckBox->setChecked(
+        config->get_bool(QStringLiteral("mascots_background_refresh_on_category")));
+    mascotBackgroundRefreshOnCategoryCheckBox->setToolTip(
+        "Switching between the two categories re-picks the layer at once and fades the old clip out, so "
+        "the previous category's video does not stay behind the new list until its timer. Off lets the "
+        "layer finish its clip.");
+    backgroundLayout->addWidget(mascotBackgroundRefreshOnCategoryCheckBox);
 
     mascotBackgroundOpacitySpinBox = makeDoubleSpinBox(0.00, 1.00, 0.05,
         config->get_double(QStringLiteral("mascots_background_opacity")));
@@ -1227,6 +1299,9 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
                 [this, owned] { this->syncMascotConfig(owned); });
     };
     live(mascotMediaCombo, QStringLiteral("mascots_media"));
+    live(mascotVideoSourceCombo, QStringLiteral("mascots_video_source"));
+    live(mascotWatchedCombo, QStringLiteral("mascots_watched"));
+    live(mascotRefreshOnCategoryCheckBox, QStringLiteral("mascots_refresh_on_category"));
     live(mascotModeCombo, QStringLiteral("mascots_mode"));
     live(mascotFillCombo, QStringLiteral("mascots_fill"));
     live(mascotWeightedCheckBox, QStringLiteral("mascots_weighted_random"));
@@ -1249,6 +1324,9 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     live(mascotStripesOrientationCombo, QStringLiteral("mascots_stripes_orientation"));
     live(mascotStripesAlternateCheckBox, QStringLiteral("mascots_stripes_alternate"));
     live(mascotBackgroundCheckBox, QStringLiteral("mascots_background"));
+    live(mascotBackgroundVideoSourceCombo, QStringLiteral("mascots_background_video_source"));
+    live(mascotBackgroundWatchedCombo, QStringLiteral("mascots_background_watched"));
+    live(mascotBackgroundRefreshOnCategoryCheckBox, QStringLiteral("mascots_background_refresh_on_category"));
     live(mascotBackgroundOpacitySpinBox, QStringLiteral("mascots_background_opacity"));
     live(mascotColumnsZCombo, QStringLiteral("mascots_columns_z"));
     live(mascotListAlphaSpinBox, QStringLiteral("mascots_background_list_alpha"));
@@ -1293,6 +1371,10 @@ void SettingsDialog::syncMascotConfig(const QString& changedKey)
     // One write per key, with the combos writing their exact item text: the controller compares
     // those strings case-insensitively and warns about anything else.
     config->set("mascots_media", mascotMediaCombo->currentText());
+    config->set("mascots_video_source", mascotVideoSourceCombo->currentText());
+    config->set("mascots_watched", mascotWatchedCombo->currentText());
+    config->set("mascots_refresh_on_category",
+        mascotRefreshOnCategoryCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_mode", mascotModeCombo->currentText());
     config->set("mascots_fill", mascotFillCombo->currentText());
     config->set("mascots_weighted_random", mascotWeightedCheckBox->isChecked() ? "True" : "False");
@@ -1328,6 +1410,10 @@ void SettingsDialog::syncMascotConfig(const QString& changedKey)
     config->set("mascots_stripes_orientation", mascotStripesOrientationCombo->currentText());
     config->set("mascots_stripes_alternate", mascotStripesAlternateCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_background", mascotBackgroundCheckBox->isChecked() ? "True" : "False");
+    config->set("mascots_background_video_source", mascotBackgroundVideoSourceCombo->currentText());
+    config->set("mascots_background_watched", mascotBackgroundWatchedCombo->currentText());
+    config->set("mascots_background_refresh_on_category",
+        mascotBackgroundRefreshOnCategoryCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_background_opacity", QString::number(mascotBackgroundOpacitySpinBox->value(), 'f', 2));
     config->set("mascots_columns_z", mascotColumnsZCombo->currentText());
     config->set("mascots_background_list_alpha", QString::number(mascotListAlphaSpinBox->value(), 'f', 2));
@@ -1403,6 +1489,16 @@ void SettingsDialog::updateMascotControlStates()
     mascotMaxDecodersSpinBox->setEnabled(true);
     mascotPauseUnfocusedCheckBox->setEnabled(true);
     mascotLowLatencyCheckBox->setEnabled(true);
+    // The columns' source and watched filter describe a columns video pick: neither has an effect
+    // while the columns draw no video. The layer's copies are gated with its own box below.
+    const bool columnsVideo = columnsOn && videoColumns;
+    mascotVideoSourceGroup->setEnabled(columnsVideo);
+    // A single pinned file is not a pool, so the watched filter and the category re-pick have
+    // nothing to act on (the pinned file does not change with the category).
+    const bool columnsPool = columnsVideo
+        && mascotVideoSourceCombo->currentText() == QLatin1String("Category");
+    mascotWatchedCombo->setEnabled(columnsPool);
+    mascotRefreshOnCategoryCheckBox->setEnabled(columnsPool);
     // The pair's travel belongs to the two columns, not to the mirror, and the engine honours it
     // whenever each column draws its own picture. A bound video pair is one decoded picture drawn
     // twice, so it has no second travel to reverse.
@@ -1441,6 +1537,13 @@ void SettingsDialog::updateMascotControlStates()
     mascotColumnsZCombo->setEnabled(backgroundOn);
     mascotBackgroundModeCombo->setEnabled(backgroundOn);
     mascotBackgroundFillCombo->setEnabled(backgroundOn);
+    mascotBackgroundVideoSourceCombo->setEnabled(backgroundOn);
+    // A single pinned file is not a pool, so neither the watched filter nor the category re-pick has
+    // anything to act on.
+    const bool layerPool = backgroundOn
+        && mascotBackgroundVideoSourceCombo->currentText() == QLatin1String("Category");
+    mascotBackgroundRefreshOnCategoryCheckBox->setEnabled(layerPool);
+    mascotBackgroundWatchedCombo->setEnabled(layerPool);
 
     // The layer follows the columns' rule: a mode is a shape, the pan is its own switch.
     const QString backgroundMode = mascotBackgroundModeCombo->currentText();

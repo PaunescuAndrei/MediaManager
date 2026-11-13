@@ -20,6 +20,7 @@
 #include <QMenu>
 #include <QAction>
 #include <QModelIndex>
+#include <QItemSelectionModel>
 #include <QPushButton>
 #include "VideosTreeView.h"
 #include "VideosModel.h"
@@ -284,6 +285,11 @@ MainWindow::MainWindow(QWidget *parent,MainApp *App)
     });
     connect(this->ui.videosWidget, &VideosTreeView::itemAltClicked, this, [this](const QModelIndex& proxyIndex) {
         this->showPreviewTooltip(proxyIndex);
+    });
+    // The list cursor is one of the pinned video sources, so landing on a new row is a new source.
+    connect(this->ui.videosWidget->selectionModel(), &QItemSelectionModel::currentChanged, this, [this] {
+        if (this->mascotController)
+            this->mascotController->onPinnedSourceChanged();
     });
     connect(this, &MainWindow::fileDropped, this, [this](QStringList files, QWidget *widget) {
         if (files.size() == 1) {
@@ -847,6 +853,25 @@ QStringList MainWindow::selectedPaths() const {
         out.push_back(persistent.data(Qt::DisplayRole).toString());
     }
     return out;
+}
+
+QString MainWindow::currentSelectionPath() const {
+    if (!this->videosProxy || !this->ui.videosWidget || !this->ui.videosWidget->selectionModel())
+        return QString();
+    // The cursor, not `selectedRows()` first: with a multi-row selection the cursor is the row the
+    // user last landed on, which is the one "selected" means here.
+    QModelIndex proxyIdx = this->ui.videosWidget->currentIndex();
+    if (!proxyIdx.isValid()) {
+        const auto rows = this->ui.videosWidget->selectionModel()->selectedRows(ListColumns["PATH_COLUMN"]);
+        if (rows.isEmpty())
+            return QString();
+        proxyIdx = rows.first();
+    }
+    const QPersistentModelIndex pathProxyIdx(
+        proxyIdx.sibling(proxyIdx.row(), ListColumns["PATH_COLUMN"]));
+    if (!pathProxyIdx.isValid())
+        return QString();
+    return pathProxyIdx.data(Qt::DisplayRole).toString();
 }
 
 QList<int> MainWindow::selectedIds() const {
@@ -2591,6 +2616,9 @@ void MainWindow::resetDB(QString directory) {
     this->App->db->setMainInfoValue("sv_target_count", "ALL", QString::number(this->calculate_sv_target()));
     this->initListDetails();
     this->updateTotalListLabel();
+    // The reset replaced the category's files; the bands must not keep the old pool's clips.
+    if (this->mascotController)
+        this->mascotController->refreshMedia();
 }
 
 void MainWindow::resetDBDialogButton(QWidget* parent) {
@@ -2640,6 +2668,9 @@ bool MainWindow::loadDB(QString path, QWidget* parent) {
             this->updateTotalListLabel();
             this->init_icons();
             this->filterSettings = FilterSettings(this->App->db->getFilterSettings(this->App->currentDB));
+            // A restore replaces the category's files; the bands must not keep the old backup's clips.
+            if (return_code == 0 && this->mascotController)
+                this->mascotController->refreshMedia();
             if (this->App->VW->mainPlayer) {
                 this->changePlayerVideo(this->App->VW->mainPlayer, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
             }
@@ -3744,6 +3775,9 @@ bool MainWindow::randomVideo(RandomModes::Mode random_mode, bool ignore_filters_
 
 void MainWindow::refreshCurrentVideo() {
     this->ui.currentVideo->setValues(this->App->db->getCurrentVideo(this->App->currentDB));
+    // The DB current video is a pinnable mascot source and this path bypasses setCurrentVideo().
+    if (this->mascotController)
+        this->mascotController->onPinnedSourceChanged();
 }
 
 void MainWindow::syncCurrentVideoFromModel() {
@@ -3766,6 +3800,9 @@ void MainWindow::syncCurrentVideoFromModel() {
     const QString author = srcModelIdx.sibling(row, ListColumns["AUTHOR_COLUMN"]).data(Qt::DisplayRole).toString();
     const QString tags = srcModelIdx.sibling(row, ListColumns["TAGS_COLUMN"]).data(Qt::DisplayRole).toString();
     this->ui.currentVideo->setValues(id, path, name, author, tags);
+    // The DB current video is a pinnable mascot source and this path bypasses setCurrentVideo().
+    if (this->mascotController)
+        this->mascotController->onPinnedSourceChanged();
 }
 
 void MainWindow::initListDetails() {
@@ -4460,6 +4497,10 @@ void MainWindow::switchCurrentDB(QString db) {
         this->changePlayerVideo(player, this->ui.currentVideo->path, this->ui.currentVideo->id, this->position);
     }
     this->updateSearchCompleter();
+    // The other category's pool is a different set of files: re-pick each layer unless that layer
+    // opted out, so the old category's clips do not sit behind the new list until their timer.
+    if (this->mascotController)
+        this->mascotController->refreshMedia();
 }
 
 void MainWindow::initUpdateWatchedToggleButton() {
@@ -6035,6 +6076,9 @@ void MainWindow::setCurrentVideo(int id, QString path, QString name, QString aut
         this->updateProgressBar(this->App->db->getVideoProgress(this->ui.currentVideo->id), utils::getVideoDuration(this->ui.currentVideo->path));
     this->App->db->setMainInfoValue("current", this->App->currentDB, path);
     qMainApp->logger->log(QStringLiteral("Setting current Video to \"%1\"").arg(path), "Video",path);
+    // One of the pinned mascot sources is the current video, so a new current video is a new source.
+    if (this->mascotController)
+        this->mascotController->onPinnedSourceChanged();
 }
 
 QString MainWindow::getWatchedVisibilityOption(bool watched_yes, bool watched_no, bool watched_mixed, bool search_bar_visible, bool visible_only_checkbox) {

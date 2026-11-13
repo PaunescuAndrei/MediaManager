@@ -27,6 +27,11 @@ enum class MascotPanel { Left, Right, Background };
 
 enum class MascotMode { Static, Stripes };
 
+// Category draws from the filtered pool. The other two pin one file: Selected is the list cursor's
+// file and Current is the app's current video. A pinned file is reloaded on every swap, so it still
+// advances -- at a random position inside itself.
+enum class MascotVideoSource { Category, Selected, Current };
+
 enum class ScrollDirection { LeftToRight, RightToLeft, TopToBottom, BottomToTop };
 
 enum class StripesOrientation { Horizontal, Vertical };
@@ -51,6 +56,7 @@ public:
 
 	static MascotMode modeFromString(const QString& value, bool* ok);
 	static StripesOrientation stripesOrientationFromString(const QString& value, bool* ok);
+	static MascotVideoSource videoSourceFromString(const QString& value, bool* ok);
 
 	int bandCount(MascotPanel panel) const;
 	QVector<QRectF> bandRects(MascotPanel panel) const;
@@ -66,6 +72,16 @@ public:
 
 	void nextImages(bool forcedMirror);
 	void nextBandImages(int bandIndex, bool forcedMirror);
+	// Which layers a refresh may touch. A category switch respects each layer's own setting; a
+	// source change is forced on the layer that changed.
+	enum class MediaRefreshScope { All, Columns, Background };
+	// Re-picks the requested layers. `force` bypasses the per-layer "refresh on category" switches:
+	// a source/watched change is not the category changing and must always show itself. Coalesced,
+	// so the model reset and the explicit call in the same switch are one pass.
+	void refreshMedia(MediaRefreshScope scope = MediaRefreshScope::All, bool force = false);
+	// A pinned source whose file changed: re-pick only the layer whose source changed, and only when
+	// the file is actually different from the one that layer holds.
+	void onPinnedSourceChanged();
 	// A mirrored pair shows one clip per band, so either call advances the pair's band, never half of it.
 	void advanceBand(MascotSide side, int bandIndex);
 	void advanceStrip(MascotSide side);
@@ -139,6 +155,17 @@ private:
 
 	bool mirrorEnabled() const;
 	bool centerContentEnabled() const;
+	MascotVideoSource videoSourceFor(MascotPanel panel) const;
+	QString watchedFor(MascotPanel panel) const;
+	bool videoSourceIsPinned(MascotPanel panel) const;
+	// The panel's resolved pinned file, or empty when the panel should draw from the pool (source
+	// Category, no usable cursor/current file, or a file that failed this session).
+	QString pinnedVideoPath(MascotPanel panel) const;
+	QString nextVideoPathFor(MascotPanel panel);
+	void refreshMediaPass(bool columns, bool background, bool forceColumns, bool forceBackground);
+	// One band's re-pick; a load already in flight defers it instead of overwriting a clip that is
+	// about to be shown.
+	void refreshBand(MascotPanel panel, int bandIndex, int attempt);
 	void applySeedSource();
 	QString nextSourcePath();
 
@@ -185,7 +212,8 @@ private:
 	// The mode the user picked is the framing in every panel; what may travel is decided separately.
 	MascotSurface::FillMode effectiveFillMode(MascotPanel panel) const;
 	void applyDisplay(PanelState& state, MascotPanel panel);
-	void presentMedia(PanelState& state, MascotPanel panel, const MascotMedia& media, int bandIndex);
+	void presentMedia(PanelState& state, MascotPanel panel, const MascotMedia& media, int bandIndex,
+		int imageFadeMs = 0);
 	void applyMirror(PanelState& state, MascotPanel panel, const QString& path, int bandIndex);
 	void requestPath(PanelState& state, const QString& path, int bandIndex);
 	void showMedia(PanelState& state, MascotPanel panel, const MascotMedia& media, bool fromReady,
@@ -285,6 +313,8 @@ private:
 	// loop, so commits run after it and applyMode() re-queues.
 	int wrapCommitDepth = 0;
 	bool warnedUnsupportedMedia = false;
+	bool warnedUnsupportedVideoSource = false;
+	bool warnedUnsupportedBackgroundVideoSource = false;
 	bool warnedUnsupportedMode = false;
 	bool warnedUnsupportedFill = false;
 	bool warnedUnsupportedStripesOrientation = false;
@@ -324,6 +354,23 @@ private:
 	QElapsedTimer scrollClock;
 
 	QString mediaSetting = QStringLiteral("Images");
+	// The columns and the layer pick independently: their source and watched filter are separate
+	// settings, so they can follow different files or filter differently.
+	MascotVideoSource columnsVideoSource = MascotVideoSource::Category;
+	MascotVideoSource backgroundVideoSource = MascotVideoSource::Category;
+	QString lastPinnedPathColumns;
+	QString lastPinnedPathBackground;
+	bool refreshScheduled = false;
+	bool refreshPendingColumns = false;
+	bool refreshPendingBackground = false;
+	// Forced per layer: a coalesced pass may mix a forced re-pick of one layer with a category
+	// switch of the other, and the second layer's opt-out must survive that.
+	bool refreshPendingForceColumns = false;
+	bool refreshPendingForceBackground = false;
+	// The watched switches the pools were built under, so changing one invalidates the cache without
+	// rebuilding on every unrelated apply.
+	QString columnsWatchedCache;
+	QString backgroundWatchedCache;
 	int clipSeconds = 30;
 	bool lowLatency = true;
 	bool pairScrollOpposite = false;

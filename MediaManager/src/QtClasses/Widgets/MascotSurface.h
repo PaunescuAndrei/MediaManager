@@ -39,8 +39,10 @@ public:
 	QSizeF slotContentSize(int i) const;
 	void setSlotContentOffset(int i, const QPointF& offset);
 	void setSlotScrollOffset(int i, double dx, double dy);
-	// The only per-slot opacity a still image has; an image crossfade needs exactly this.
 	void setSlotOpacity(int i, double opacity);
+	// `Image.opacity`, separate from the slot's: a picture swap is a fade of the picture, not of the
+	// slot, so the fill and the backdrop behave the same before, during and after it.
+	void setSlotImageOpacity(int i, double opacity, int fadeMs);
 	void setSlotFillMode(int i, FillMode mode);
 	void setSlotMirrored(int i, bool mirrored);
 	// -1 restores the slot's own players; indices, not item pointers, since the delegate can be recreated.
@@ -88,6 +90,7 @@ private:
 
 		QRectF rect;
 		double opacity = 1.0;
+		double imageOpacity = 1.0;
 		SlotGroup group = SlotGroup::Columns;
 		FillMode fillMode = FillMode::Fit;
 		bool mirrored = false;

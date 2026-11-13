@@ -281,7 +281,7 @@
       <Filter>Source Files\general</Filter>
     </ClCompile>
     <ClCompile Include="src\general\definitions.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\general</Filter>
     </ClCompile>
     <ClCompile Include="src\QtClasses\UI\loadBackupDialog.cpp">
       <Filter>Source Files\QtClasses\UI</Filter>
@@ -356,7 +356,7 @@
       <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
     <ClCompile Include="src\QtClasses\Widgets\TooltipEventFilter.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\QtClasses\Widgets</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -457,7 +457,7 @@
       <Filter>Header Files\thirdparty</Filter>
     </ClInclude>
     <ClInclude Include="src\general\definitions.h">
-      <Filter>Header Files\thirdparty</Filter>
+      <Filter>Header Files\general</Filter>
     </ClInclude>
     <ClInclude Include="src\general\PlayerCommands.h">
       <Filter>Header Files\general</Filter>
@@ -756,7 +756,7 @@
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
     <QtMoc Include="src\QtClasses\Widgets\TooltipEventFilter.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\QtClasses\Widgets</Filter>
     </QtMoc>
   </ItemGroup>
   <ItemGroup>

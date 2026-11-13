@@ -151,6 +151,12 @@
     <ClCompile Include="src\general\config.cpp">
       <Filter>Source Files\general</Filter>
     </ClCompile>
+    <ClCompile Include="src\general\crashhandler.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
+    <ClCompile Include="src\general\crashhandler_win.cpp">
+      <Filter>Source Files\general</Filter>
+    </ClCompile>
     <ClCompile Include="src\general\EventLock.cpp">
       <Filter>Source Files\general</Filter>
     </ClCompile>
@@ -364,6 +370,9 @@
       <Filter>Header Files\QtClasses\Widgets</Filter>
     </ClInclude>
     <ClInclude Include="src\general\config.h">
+      <Filter>Header Files\general</Filter>
+    </ClInclude>
+    <ClInclude Include="src\general\crashhandler.h">
       <Filter>Header Files\general</Filter>
     </ClInclude>
     <ClInclude Include="src\general\EventLock.h">

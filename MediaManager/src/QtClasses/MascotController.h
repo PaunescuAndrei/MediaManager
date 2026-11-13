@@ -372,7 +372,7 @@ private:
 	QString columnsWatchedCache;
 	QString backgroundWatchedCache;
 	int clipSeconds = 30;
-	bool lowLatency = true;
+	bool lowLatency = false;
 	bool pairScrollOpposite = false;
 	bool flipMirroredColumn = true;
 	bool mirrorAppliedLast = false;

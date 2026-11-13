@@ -46,6 +46,7 @@ const QStringList& mascotConfigKeys()
         QStringLiteral("mascots_preload"),
         QStringLiteral("mascots_pause_unfocused"),
         QStringLiteral("mascots_low_latency"),
+        QStringLiteral("mascots_swap_timeout_ms"),
         QStringLiteral("mascots_pair_scroll"),
         QStringLiteral("mascots_pair_flip"),
         QStringLiteral("mascots_mirror"),
@@ -944,6 +945,16 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
         "smooth playback at a slower first frame. Applies to the next player a panel builds.");
     playbackLayout->addWidget(mascotLowLatencyCheckBox);
 
+    // The load half of a swap, not the clip: how long the player may spend opening the file and presenting
+    // its first frame. A timeout is not a verdict on the file -- the clip is retried -- so this is a patience
+    // budget, and a slower drive or a larger file needs more of it.
+    mascotSwapTimeoutSpinBox = makeSpinBox(500, 60000, 500,
+        config->get(QStringLiteral("mascots_swap_timeout_ms")).toInt());
+    addRow(playbackLayout, "Swap timeout (ms):",
+        "How long a clip may take to open and present its first frame before the load is given up on and "
+        "the file retried. A slow drive or a large file needs a larger value; the file itself is never "
+        "dropped for a timeout. Takes effect on a load that is already waiting.", mascotSwapTimeoutSpinBox);
+
     // Mirror already makes both columns the same media; this decides whether they travel
     // against each other.
     mascotPairScrollCombo = makeComboBox({ QStringLiteral("Same"), QStringLiteral("Opposite") },
@@ -1312,6 +1323,7 @@ void SettingsDialog::setupMascotsPage(MainWindow* mw)
     live(mascotPreloadCheckBox, QStringLiteral("mascots_preload"));
     live(mascotPauseUnfocusedCheckBox, QStringLiteral("mascots_pause_unfocused"));
     live(mascotLowLatencyCheckBox, QStringLiteral("mascots_low_latency"));
+    live(mascotSwapTimeoutSpinBox, QStringLiteral("mascots_swap_timeout_ms"));
     live(mascotPairScrollCombo, QStringLiteral("mascots_pair_scroll"));
     live(mascotPairFlipCheckBox, QStringLiteral("mascots_pair_flip"));
     live(mascotMaxDecodersSpinBox, QStringLiteral("mascots_max_decoders"));
@@ -1385,6 +1397,7 @@ void SettingsDialog::syncMascotConfig(const QString& changedKey)
     config->set("mascots_preload", mascotPreloadCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_pause_unfocused", mascotPauseUnfocusedCheckBox->isChecked() ? "True" : "False");
     config->set("mascots_low_latency", mascotLowLatencyCheckBox->isChecked() ? "True" : "False");
+    config->set("mascots_swap_timeout_ms", QString::number(mascotSwapTimeoutSpinBox->value()));
     config->set("mascots_pair_scroll", mascotPairScrollCombo->currentText());
     config->set("mascots_pair_flip", mascotPairFlipCheckBox->isChecked() ? "True" : "False");
     // Mirror is live like the rest: the controller needs the 0->1 transition to re-pair the columns.
@@ -1486,6 +1499,7 @@ void SettingsDialog::updateMascotControlStates()
     mascotSwapOnBeatCheckBox->setEnabled(videoColumns);
     mascotRandomStartCheckBox->setEnabled(videoColumns);
     mascotPreloadCheckBox->setEnabled(videoColumns);
+    mascotSwapTimeoutSpinBox->setEnabled(videoColumns);
     mascotMaxDecodersSpinBox->setEnabled(true);
     mascotPauseUnfocusedCheckBox->setEnabled(true);
     mascotLowLatencyCheckBox->setEnabled(true);

@@ -114,7 +114,9 @@ void Config::init_defaults() {
 		{"mascots_clip_seconds", "30"},
 		// Qt's low-latency playback intent. False asks for the backend's normal buffering instead --
 		// smoother playback, a slower first frame.
-		{"mascots_low_latency", "True"},
+		// Off by default: the low-latency intent trades buffering for a higher chance of dropped frames,
+		// which is the wrong trade for the ordinary case of a clip on a spinning or network drive.
+		{"mascots_low_latency", "False"},
 		// Opposite makes a mirrored pair travel outwards or inwards together.
 		{"mascots_pair_scroll", "Same"},
 		{"mascots_pair_flip", "True"},

@@ -123,6 +123,8 @@ public:
     QCheckBox* mascotRandomStartCheckBox = nullptr;
     QCheckBox* mascotPreloadCheckBox = nullptr;
     QCheckBox* mascotPauseUnfocusedCheckBox = nullptr;
+    // How long a clip may take to open and present its first frame before the load counts as timed out.
+    QSpinBox* mascotSwapTimeoutSpinBox = nullptr;
     QSpinBox* mascotMaxDecodersSpinBox = nullptr;
     QCheckBox* mascotPanCheckBox = nullptr;
     QCheckBox* mascotBackgroundPanCheckBox = nullptr;

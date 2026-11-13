@@ -32,6 +32,53 @@ namespace {
 	// readable rate.
 	constexpr qint64 MASCOT_CACHE_LOG_DELTA_BYTES = 2 * BYTES_PER_MB;
 	constexpr qint64 MASCOT_CACHE_LOG_INTERVAL_MS = 2000;
+
+	// The video path reports a missing sink or a failed frame through qWarning only, and those lines
+	// were reaching a debugger no one is attached to. Only a repeat of the same line inside this
+	// window is dropped: a failing video can emit one per frame, and the logger keeps 512 entries.
+	constexpr qint64 QT_MESSAGE_REPEAT_MS = 1000;
+
+	void routeQtMessage(QtMsgType type, const QMessageLogContext& context, const QString& message)
+	{
+		Q_UNUSED(context);
+		// The logger emits a signal, so a consumer of it that logs would re-enter this handler.
+		thread_local bool inside = false;
+		if (inside)
+			return;
+		inside = true;
+
+		// The dedupe state is per thread because Qt delivers messages from the player and decoder
+		// threads as well as from the GUI thread.
+		thread_local QString lastMessage;
+		thread_local qint64 lastMessageMs = 0;
+		const qint64 now = QDateTime::currentMSecsSinceEpoch();
+		if (message != lastMessage || now - lastMessageMs >= QT_MESSAGE_REPEAT_MS) {
+			lastMessage = message;
+			lastMessageMs = now;
+			QString typeText;
+			switch (type) {
+			case QtDebugMsg: typeText = QStringLiteral("QtDebug"); break;
+			case QtInfoMsg: typeText = QStringLiteral("QtInfo"); break;
+			case QtWarningMsg: typeText = QStringLiteral("QtWarning"); break;
+			case QtCriticalMsg: typeText = QStringLiteral("QtCritical"); break;
+			case QtFatalMsg: typeText = QStringLiteral("QtFatal"); break;
+			}
+			if (qMainApp && qMainApp->logger)
+				qMainApp->logger->log(message, typeText);
+		}
+
+		// The default handler's debugger output is kept: the logger is in-memory and dies with the process.
+		std::wstring debugLine(message.toStdWString());
+		debugLine.push_back(L'\n');
+		::OutputDebugStringW(debugLine.c_str());
+
+		inside = false;
+
+		// qFatal only terminates because the default handler aborts; a handler that just logs would let the
+		// application continue from a state Qt declared unrecoverable.
+		if (type == QtFatalMsg)
+			::abort();
+	}
 }
 
 MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
@@ -48,6 +95,9 @@ MainApp::MainApp(int& argc, char** argv) : QApplication(argc,argv)
 	}
 
 	this->logger = new Logger(this,512);
+	// Installed as soon as a logger exists, so a QML or multimedia warning raised during startup is
+	// in the log window instead of only in a debugger.
+	qInstallMessageHandler(&routeQtMessage);
 	qMainApp->logger->log("Application Starting.", "INFO");
 	this->ErrorDialog = new QErrorMessage();
 	this->config = new Config("config.ini");
